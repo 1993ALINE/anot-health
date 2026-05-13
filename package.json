@@ -1,0 +1,15 @@
+{
+  "name": "anot-workspace",
+  "private": true,
+  "description": "Run Anot backend + frontend together from the repo root.",
+  "scripts": {
+    "install:all": "npm install --prefix anot-backend-main/anot-backend-main && npm install --prefix anot-frontend-main/anot-frontend-main",
+    "dev:backend": "npm run dev --prefix anot-backend-main/anot-backend-main",
+    "dev:frontend": "npm run dev --prefix anot-frontend-main/anot-frontend-main",
+    "dev": "concurrently -n api,web -c blue,green \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "seed:dev": "npm run seed:dev --prefix anot-backend-main/anot-backend-main"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

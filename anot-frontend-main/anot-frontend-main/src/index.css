@@ -1,0 +1,49 @@
+/* Remove ALL default Vite styles that were centering and limiting the layout */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+}
+
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--bg-main, #f4f7ff);
+  color: var(--text-main, #0f172a);
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+
+/* Shown only after #anot-splash is removed (see releaseSplash.js + index.html critical CSS) */
+body.anot-app-ready #root {
+  visibility: visible;
+  animation: anot-root-reveal 0.22s ease-out;
+}
+
+@keyframes anot-root-reveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.anot-app-ready #root {
+    animation: none;
+    opacity: 1;
+  }
+}

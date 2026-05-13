@@ -1,0 +1,26 @@
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env
+anot-backend-main/**/.env
+anot-frontend-main/**/.env
+anot-frontend-main/**/.env.local
+
+# Dependencies and build
+node_modules/
+
+dist/
+build/
+.next/
+*.pyc
+__pycache__/
+.venv/
+venv/
+
+# IDE and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
