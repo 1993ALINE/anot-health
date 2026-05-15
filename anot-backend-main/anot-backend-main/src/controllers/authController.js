@@ -5,6 +5,7 @@ const { isDisallowedPassword, DISALLOWED_MSG } = require('../utils/passwordPolic
 const { isSuperAdmin, ASSIGNABLE_ROLES, ELEVATED_CREATABLE_ROLES } = require('../utils/roles')
 const { assertAdminMayUseStaffRole } = require('../utils/adminPortalAccess')
 const { auditLog } = require('../utils/auditLogger')
+const { ensureUserProfileSchema } = require('../utils/ensureUserProfileSchema')
 
 function roleToStaffModule(role) {
     const m = {
@@ -15,15 +16,6 @@ function roleToStaffModule(role) {
         receptionist: 'receptionists',
     }
     return m[role] || 'admins'
-}
-
-let profileColsReady = false
-async function ensureProfileColumns() {
-    if (profileColsReady) return
-    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_data_url TEXT`)
-    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS personal_info TEXT`)
-    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_modules JSONB DEFAULT NULL`)
-    profileColsReady = true
 }
 
 // ─── GENERATE JWT TOKEN ───────────────────────────────────────────────────────
@@ -46,7 +38,7 @@ const generateToken = (user) => {
 
 const login = async (req, res) => {
     try {
-        await ensureProfileColumns()
+        await ensureUserProfileSchema()
         const { email, password, role } = req.body
 
         // Validate input (role optional — server uses the account's role from the database)
@@ -118,7 +110,7 @@ const login = async (req, res) => {
 
 const register = async (req, res) => {
     try {
-        await ensureProfileColumns()
+        await ensureUserProfileSchema()
         const { name, email, password, role, specialty, phone, npi, license } = req.body
 
         // Validate required fields
@@ -201,7 +193,7 @@ const register = async (req, res) => {
 
 const getMe = async (req, res) => {
     try {
-        await ensureProfileColumns()
+        await ensureUserProfileSchema()
         const result = await pool.query(
             'SELECT id, name, email, role, specialty, phone, npi, license, status, avatar_data_url, personal_info, admin_modules, created_at FROM users WHERE id = $1',
             [req.user.id]
@@ -221,7 +213,7 @@ const getMe = async (req, res) => {
 // ─── UPDATE CURRENT USER PROFILE ──────────────────────────────────────────────
 const updateMe = async (req, res) => {
     try {
-        await ensureProfileColumns()
+        await ensureUserProfileSchema()
         const { name, email, phone, avatar_data_url, personal_info } = req.body
         const cleanName = String(name || '').trim()
         const cleanEmail = String(email || '').toLowerCase().trim()

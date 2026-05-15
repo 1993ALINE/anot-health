@@ -5,6 +5,11 @@ const { auditLog } = require('./auditLogger')
 const { loadAiSettings } = require('../services/aiSettings')
 const { processAudioForTranscription, unlinkTempPaths } = require('../services/audioProcessingService')
 const { transcribeFileWithRetries } = require('../services/aiTranscriptionService')
+const { setVisitTranscriptionStatus } = require('./visitSchemaCompat')
+const { isReachableWebhookUrl } = require('./webhookReachability')
+
+const AI_DRAFT_UNAVAILABLE =
+  '[AI draft unavailable — add GROQ_API_KEY to the server .env file, then click Transcribe audio or Refresh.]'
 
 function getGroq() {
   const Groq = require('groq-sdk')
@@ -99,19 +104,22 @@ async function persistTranscriptionAndDraft(id, transcriptions, visit, options =
   const auditOpts = { req: options.req || null, module_key: 'clinical', action_category: 'update' }
   const transcriptionData = JSON.stringify(transcriptions)
 
-  const aiNote = await generateAINote(transcriptions, {
+  let aiNote = await generateAINote(transcriptions, {
     patient_name: visit.patient_name,
     mrn: visit.mrn,
     visit_type: visit.visit_type,
     visit_date: visit.visit_date,
   })
+  if (!aiNote && transcriptions.length > 0) {
+    aiNote = AI_DRAFT_UNAVAILABLE
+  }
 
   const existingNote = await pool.query('SELECT id, status FROM notes WHERE visit_id = $1', [id])
 
   if (existingNote.rows.length > 0) {
     const status = existingNote.rows[0].status
     if (!['pending', 'draft'].includes(status)) {
-      await pool.query(`UPDATE visits SET transcription_status = $1 WHERE id = $2`, ['idle', id])
+      await setVisitTranscriptionStatus(id, 'idle')
       return { ok: false, error: 'note_locked' }
     }
 
@@ -133,7 +141,7 @@ async function persistTranscriptionAndDraft(id, transcriptions, visit, options =
     )
   }
 
-  await pool.query(`UPDATE visits SET transcription_status = $1 WHERE id = $2`, ['completed', id])
+  await setVisitTranscriptionStatus(id, 'completed')
   await auditLog(ctxUser, 'TRANSCRIPTION_COMPLETED', 'visit', String(id), options.completionMessage || 'Transcription and AI draft stored', {
     ...auditOpts,
     status: 'success',
@@ -181,7 +189,7 @@ async function runAIPipeline(visitId, options = {}) {
 
     if (!visit.audio_file) {
       console.warn(`No audio file for visit ${id}`)
-      await pool.query(`UPDATE visits SET transcription_status = $1 WHERE id = $2`, ['idle', id])
+      await setVisitTranscriptionStatus(id, 'idle')
       return
     }
 
@@ -190,7 +198,7 @@ async function runAIPipeline(visitId, options = {}) {
       const st = existingNotePre.rows[0].status
       if (!['pending', 'draft'].includes(st)) {
         console.log(`⏭  Skipping AI pipeline for visit ${id} (note status=${st})`)
-        await pool.query(`UPDATE visits SET transcription_status = $1 WHERE id = $2`, ['idle', id])
+        await setVisitTranscriptionStatus(id, 'idle')
         await auditLog(
           ctxUser,
           'TRANSCRIPTION_SKIPPED',
@@ -203,7 +211,7 @@ async function runAIPipeline(visitId, options = {}) {
       }
     }
 
-    await pool.query(`UPDATE visits SET transcription_status = $1 WHERE id = $2`, ['processing', id])
+    await setVisitTranscriptionStatus(id, 'processing')
     await auditLog(ctxUser, 'TRANSCRIPTION_STARTED', 'visit', String(id), 'AI transcription pipeline started', {
       ...auditOpts,
       status: 'success',
@@ -214,7 +222,7 @@ async function runAIPipeline(visitId, options = {}) {
     console.log(`📁 Found ${audioFiles.length} audio file(s)`)
 
     const useAsyncDeepgram =
-      String(settings.deepgram_webhook_url || '').trim().length > 0 && audioFiles.length === 1
+      isReachableWebhookUrl(settings.deepgram_webhook_url) && audioFiles.length === 1
 
     const transcriptions = []
     let anyDeferred = false
@@ -260,13 +268,13 @@ async function runAIPipeline(visitId, options = {}) {
     }
 
     if (transcriptions.length === 0 && anyDeferred) {
-      console.log(`⏳ Visit ${id}: Deepgram async callback pending (webhook)`)
+      console.log(`⏳ Visit ${id}: Deepgram async callback pending (public webhook)`)
       return
     }
 
     if (transcriptions.length === 0) {
       console.warn(`No transcriptions generated for visit ${id}`)
-      await pool.query(`UPDATE visits SET transcription_status = $1 WHERE id = $2`, ['failed', id])
+      await setVisitTranscriptionStatus(id, 'failed')
       await auditLog(ctxUser, 'TRANSCRIPTION_FAILED', 'visit', String(id), 'No transcript produced from audio', {
         ...auditOpts,
         status: 'failure',
@@ -288,7 +296,7 @@ async function runAIPipeline(visitId, options = {}) {
   } catch (err) {
     console.error(`AI pipeline error for visit ${id}:`, err.message)
     try {
-      await pool.query(`UPDATE visits SET transcription_status = $1 WHERE id = $2`, ['failed', id])
+      await setVisitTranscriptionStatus(id, 'failed')
     } catch { /* */ }
     await auditLog(
       auditUserFromOptions(options),

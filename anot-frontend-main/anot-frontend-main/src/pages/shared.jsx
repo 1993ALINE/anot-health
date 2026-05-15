@@ -197,6 +197,8 @@ export function SfAccountMenu({
     const [panelPos, setPanelPos] = useState(null)
     const triggerRef = useRef(null)
     const panelRef = useRef(null)
+    const openedAtRef = useRef(0)
+    const ignoreOutsideRef = useRef(false)
 
     const close = useCallback(() => {
         setPanelPos(null)
@@ -237,25 +239,30 @@ export function SfAccountMenu({
         let raf2
         const raf1 = requestAnimationFrame(() => {
             updatePanelPosition()
-            raf2 = requestAnimationFrame(() => {
-                updatePanelPosition()
-                const first = panelRef.current?.querySelector('button[role="menuitem"]')
-                first?.focus({ preventScroll: true })
-            })
+            raf2 = requestAnimationFrame(() => updatePanelPosition())
         })
+        const onScroll = () => {
+            if (Date.now() - openedAtRef.current < 450) return
+            updatePanelPosition()
+        }
         window.addEventListener('resize', updatePanelPosition)
-        document.addEventListener('scroll', updatePanelPosition, true)
+        document.addEventListener('scroll', onScroll, true)
         return () => {
             cancelAnimationFrame(raf1)
             if (raf2) cancelAnimationFrame(raf2)
             window.removeEventListener('resize', updatePanelPosition)
-            document.removeEventListener('scroll', updatePanelPosition, true)
+            document.removeEventListener('scroll', onScroll, true)
         }
     }, [open, updatePanelPosition])
 
     useEffect(() => {
         if (!open) return
         const onDoc = (e) => {
+            if (ignoreOutsideRef.current) {
+                ignoreOutsideRef.current = false
+                return
+            }
+            if (Date.now() - openedAtRef.current < 300) return
             if (
                 !triggerRef.current?.contains(e.target) &&
                 !panelRef.current?.contains(e.target)
@@ -263,8 +270,13 @@ export function SfAccountMenu({
                 close()
             }
         }
-        document.addEventListener('mousedown', onDoc)
-        return () => document.removeEventListener('mousedown', onDoc)
+        const timer = window.setTimeout(() => {
+            document.addEventListener('pointerdown', onDoc, true)
+        }, 0)
+        return () => {
+            window.clearTimeout(timer)
+            document.removeEventListener('pointerdown', onDoc, true)
+        }
     }, [open, close])
 
     useEffect(() => {
@@ -305,7 +317,7 @@ export function SfAccountMenu({
         <div
             ref={panelRef}
             id={`${menuId}-panel`}
-            className={`sf-account-menu__panel sf-account-menu__panel--portal${open && panelPos ? ' sf-account-menu__panel--open' : ''}`}
+            className={`sf-account-menu__panel sf-account-menu__panel--portal${open ? ' sf-account-menu__panel--open' : ''}`}
             role="menu"
             aria-hidden={!open}
             style={panelStyle}
@@ -357,10 +369,18 @@ export function SfAccountMenu({
                 aria-expanded={open}
                 aria-haspopup="true"
                 aria-controls={open ? `${menuId}-panel` : undefined}
+                onPointerDown={() => {
+                    ignoreOutsideRef.current = true
+                }}
                 onClick={() =>
                     setOpen((wasOpen) => {
-                        if (wasOpen) setPanelPos(null)
-                        return !wasOpen
+                        if (wasOpen) {
+                            setPanelPos(null)
+                            return false
+                        }
+                        openedAtRef.current = Date.now()
+                        ignoreOutsideRef.current = true
+                        return true
                     })
                 }
             >

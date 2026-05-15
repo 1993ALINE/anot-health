@@ -1,6 +1,8 @@
 const pool = require('../config/db')
 const { decryptString } = require('../utils/settingsEncryption')
 const { ensureMediaAndAiSchema } = require('../utils/ensureMediaSchema')
+const { mergeRowWithExtensions } = require('../utils/settingsExtensions')
+const { getSystemSettingsColumns } = require('../utils/settingsSchemaCompat')
 
 const DEFAULTS = {
   deepgram_enabled: false,
@@ -42,14 +44,10 @@ async function loadAiSettings() {
   const now = Date.now()
   if (cache.value && now - cache.at < TTL_MS) return cache.value
   await ensureMediaAndAiSchema()
-  const r = await pool.query(
-    `SELECT deepgram_enabled, deepgram_api_key_enc, deepgram_model, deepgram_language,
-            deepgram_webhook_url, deepgram_auto_transcribe_on_upload,
-            ffmpeg_enabled, ffmpeg_target_format, ffmpeg_compression,
-            ffmpeg_max_upload_mb, ffmpeg_preprocess_before_transcribe
-       FROM system_settings WHERE id = 1`
-  )
-  const value = rowToRuntime(r.rows[0])
+  const cols = await getSystemSettingsColumns()
+  const r = await pool.query('SELECT * FROM system_settings WHERE id = 1')
+  const merged = mergeRowWithExtensions(r.rows[0] || {}, cols)
+  const value = rowToRuntime(merged)
   cache = { at: now, value }
   return value
 }

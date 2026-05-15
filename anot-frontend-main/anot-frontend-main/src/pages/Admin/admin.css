@@ -2350,13 +2350,22 @@
 }
 
 .adm-sidebar-footer__who {
-    margin: 0 0 12px;
+    margin: 0;
     font-size: 0.875rem;
     font-weight: 700;
     letter-spacing: -0.02em;
     color: #0f172a;
     line-height: 1.3;
     word-break: break-word;
+}
+
+.adm-sidebar-footer__actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid color-mix(in srgb, var(--border) 90%, transparent);
 }
 
 .adm-sidebar-footer__btn {
@@ -2395,6 +2404,24 @@
 
 .adm-sidebar-footer__btn-ico svg {
     display: block;
+}
+
+.adm-sidebar-footer__btn--secondary {
+    background: color-mix(in srgb, var(--brand-primary) 5%, #fff);
+}
+
+.adm-sidebar-footer__btn--signout {
+    margin-top: 2px;
+    color: #be123c;
+    border-color: color-mix(in srgb, #fecaca 80%, rgba(226, 232, 240, 0.98));
+    background: color-mix(in srgb, #fff1f2 70%, #fff);
+    box-shadow: none;
+}
+
+.adm-sidebar-footer__btn--signout:hover {
+    background: #ffe4e6;
+    border-color: #fda4af;
+    color: #9f1239;
 }
 
 /* ─── Admin sidebar: light rail (scoped to .adm-sidebar only)

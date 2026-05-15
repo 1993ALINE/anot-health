@@ -3,6 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { authAPI, usersAPI, notesAPI, API_BASE } from '../../services/api'
 import { useBranding } from '../../services/branding'
 import SystemProfileManager from '../../components/SystemProfileManager'
+import PortalAudioPlayer from '../../components/PortalAudioPlayer'
+import NoteWorkspacePanel from '../../components/NoteWorkspacePanel'
+import PortalSidebarFooter from '../../components/PortalSidebarFooter'
+import { getClinicianTemplateForVisit } from '../../utils/clinicianTemplates'
+import { fmtAppointmentTime } from '../../utils/timeFormat'
 import { parseTranscriptionBlocks, useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, ConfirmDialog, PortalSidebarBrand } from '../shared'
 import './qps.css'
 
@@ -23,164 +28,6 @@ function fmtSecs(s) {
 function fmtDuration(secs) {
   if (!secs) return '—'
   return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2,'0')}`
-}
-
-// ─── AUDIO PLAYER ─────────────────────────────────────────────────────────────
-
-function AudioPlayer({ visitId, durationSecs }) {
-  const [count, setCount]         = useState(1)
-  const [activeIdx, setActiveIdx] = useState(0)
-  const [status, setStatus]       = useState('loading')
-  const [isPlaying, setPlaying]   = useState(false)
-  const [current, setCurrent]     = useState(0)
-  const [duration, setDuration]   = useState(durationSecs || 0)
-  const audioRef   = useRef(null)
-  const blobRef    = useRef(null)
-  const maxTimeRef = useRef(durationSecs || 0)
-
-  // Get count
-  useEffect(() => {
-    if (!visitId) return
-    const token = localStorage.getItem('token')
-    fetch(`${API_BASE}/audio/${visitId}/count`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }).then(r => r.json()).then(d => { if (d.count > 0) setCount(d.count) }).catch(() => {})
-  }, [visitId])
-
-  // Load audio blob
-  useEffect(() => {
-    if (!visitId) { setStatus('error'); return }
-    setStatus('loading'); setPlaying(false); setCurrent(0)
-    const initDur = activeIdx === 0 ? (durationSecs || 0) : 0
-    setDuration(initDur); maxTimeRef.current = initDur
-
-    if (blobRef.current) { URL.revokeObjectURL(blobRef.current); blobRef.current = null }
-
-    const token = localStorage.getItem('token')
-    fetch(`${API_BASE}/audio/${visitId}?index=${activeIdx}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(res => { if (!res.ok) throw new Error('no audio'); return res.blob() })
-      .then(blob => {
-        if (!blob || blob.size === 0) throw new Error('empty')
-        blobRef.current = URL.createObjectURL(blob)
-        if (audioRef.current) { audioRef.current.src = blobRef.current; audioRef.current.load() }
-        setStatus('ready')
-      })
-      .catch(() => setStatus('error'))
-
-    return () => {
-      if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = '' }
-      if (blobRef.current)  { URL.revokeObjectURL(blobRef.current); blobRef.current = null }
-    }
-  }, [visitId, activeIdx])
-
-  // Audio events
-  useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
-    const onMeta = () => {
-      const dur = audio.duration
-      if (dur && isFinite(dur) && dur > 0) { setDuration(Math.floor(dur)); maxTimeRef.current = Math.floor(dur) }
-    }
-    const onTime = () => {
-      const cur = Math.floor(audio.currentTime)
-      setCurrent(cur)
-      if (cur > maxTimeRef.current) { maxTimeRef.current = cur; setDuration(cur) }
-    }
-    const onEnded = () => { setPlaying(false); setCurrent(0); if (maxTimeRef.current > 0) setDuration(maxTimeRef.current) }
-    audio.addEventListener('loadedmetadata', onMeta)
-    audio.addEventListener('durationchange', onMeta)
-    audio.addEventListener('timeupdate',     onTime)
-    audio.addEventListener('ended',          onEnded)
-    return () => {
-      audio.removeEventListener('loadedmetadata', onMeta)
-      audio.removeEventListener('durationchange', onMeta)
-      audio.removeEventListener('timeupdate',     onTime)
-      audio.removeEventListener('ended',          onEnded)
-    }
-  }, [])
-
-  const toggle = () => {
-    const audio = audioRef.current
-    if (!audio || status !== 'ready') return
-    if (isPlaying) { audio.pause(); setPlaying(false) }
-    else           { audio.play().then(() => setPlaying(true)).catch(() => {}) }
-  }
-
-  const skip = (secs) => {
-    const audio = audioRef.current
-    if (!audio || status !== 'ready') return
-    const max = maxTimeRef.current || duration || 0
-    const t = Math.max(0, Math.min(max, audio.currentTime + secs))
-    audio.currentTime = t; setCurrent(Math.floor(t))
-  }
-
-  const seek = (e) => {
-    const audio = audioRef.current
-    if (!audio || status !== 'ready' || !duration) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    const t = Math.round(((e.clientX - rect.left) / rect.width) * duration)
-    audio.currentTime = t; setCurrent(t)
-  }
-
-  const canPlay  = status === 'ready'
-  const progress = duration > 0 ? Math.min(100, (current / duration) * 100) : 0
-  const totalStr = duration > 0 ? fmtSecs(duration) : '--:--'
-
-  return (
-    <div className="sf-audio-bar qps-audio-bar">
-      <audio ref={audioRef} preload="metadata" style={{ display: 'none' }} />
-
-      {/* Row 1 — Tabs + label + time */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        {count > 1 && (
-          <div style={{ display: 'flex', gap: 6 }}>
-            {Array.from({ length: count }, (_, i) => (
-              <button key={i} onClick={() => setActiveIdx(i)} style={{
-                padding: '3px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600,
-                cursor: 'pointer', border: '1px solid',
-                background:  activeIdx === i ? 'linear-gradient(135deg,#4260E9,#7B61FF)' : '#EEF2FF',
-                color:       activeIdx === i ? '#fff'    : '#64748B',
-                borderColor: activeIdx === i ? '#4260E9' : '#E2E8F0',
-              }}>Rec {i + 1}</button>
-            ))}
-          </div>
-        )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: '#1E293B' }}>
-            🎙 Recording {activeIdx + 1}{count > 1 ? ` of ${count}` : ''}
-          </span>
-          {status === 'loading' && <span style={{ fontSize: 10, color: '#64748B', background: '#EEF2FF', padding: '2px 7px', borderRadius: 10 }}>Loading...</span>}
-          {status === 'ready'   && <span style={{ fontSize: 10, color: '#047857', background: '#DDFBF3', padding: '2px 7px', borderRadius: 10 }}>● Ready</span>}
-          {status === 'error'   && <span style={{ fontSize: 10, color: '#64748B', background: '#EEF2FF', padding: '2px 7px', borderRadius: 10 }}>No audio</span>}
-        </div>
-        <span style={{ marginLeft: 'auto', fontSize: 12, color: '#64748B', fontWeight: 500 }}>
-          {fmtSecs(current)} / {totalStr}
-        </span>
-      </div>
-
-      {/* Row 2 — Controls + progress bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          <button onClick={() => skip(-5)} disabled={!canPlay} style={{ padding: '5px 10px', borderRadius: 6, background: '#EEF2FF', color: '#64748B', border: '1px solid #E2E8F0', fontSize: 11, fontWeight: 600, cursor: canPlay ? 'pointer' : 'not-allowed', opacity: canPlay ? 1 : 0.4, fontFamily: 'inherit' }}>−5s</button>
-          <button onClick={toggle} disabled={!canPlay} style={{ width: 38, height: 38, borderRadius: '50%', background: canPlay ? 'linear-gradient(135deg,#4260E9,#7B61FF)' : '#CBD5E1', color: '#fff', border: 'none', fontSize: 14, cursor: canPlay ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            {status === 'loading' ? '⏳' : isPlaying ? '⏸' : '▶'}
-          </button>
-          <button onClick={() => skip(5)} disabled={!canPlay} style={{ padding: '5px 10px', borderRadius: 6, background: '#EEF2FF', color: '#64748B', border: '1px solid #E2E8F0', fontSize: 11, fontWeight: 600, cursor: canPlay ? 'pointer' : 'not-allowed', opacity: canPlay ? 1 : 0.4, fontFamily: 'inherit' }}>+5s</button>
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div onClick={canPlay ? seek : undefined} style={{ height: 6, background: '#E2E8F0', borderRadius: 3, overflow: 'hidden', cursor: canPlay ? 'pointer' : 'default', marginBottom: 4 }}>
-            <div style={{ height: '100%', background: 'linear-gradient(90deg,#4260E9,#7B61FF)', borderRadius: 3, width: `${progress}%`, transition: 'width 0.3s linear' }} />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 10, color: '#64748B' }}>{fmtSecs(current)}</span>
-            <span style={{ fontSize: 10, color: '#64748B', fontWeight: 500 }}>{totalStr}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
 }
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
@@ -372,22 +219,11 @@ export default function QPS() {
           </div>
         </div>
       )}
-      <div className="sf-sidebar-footer sf-sidebar-rich__footer adm-sidebar-footer">
-        <div className="adm-sidebar-footer__card">
-          <p className="adm-sidebar-footer__eyebrow">Account</p>
-          <p className="adm-sidebar-footer__who">{currentUser.name || 'QPS'}</p>
-          <button type="button" className="adm-sidebar-footer__btn" onClick={requestLogout}>
-            <span className="adm-sidebar-footer__btn-ico" aria-hidden>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <polyline points="16 17 21 12 16 7" />
-                <line x1="21" y1="12" x2="9" y2="12" />
-              </svg>
-            </span>
-            Sign out
-          </button>
-        </div>
-      </div>
+      <PortalSidebarFooter
+        userName={currentUser.name || 'QPS'}
+        role="qps"
+        onLogout={requestLogout}
+      />
     </aside>
     </>
   )
@@ -509,7 +345,7 @@ export default function QPS() {
               </div>
             </div>
             <div style={{ marginTop: 16 }}>
-              <SystemProfileManager showToast={showNotif} roleLabel="QPS" compact />
+              <SystemProfileManager showToast={showNotif} roleLabel="QPS" compact readOnly />
             </div>
           </div>
           {notif && <Notif notif={notif} />}
@@ -672,6 +508,7 @@ export default function QPS() {
   // ─── REVIEW / GRADING ─────────────────────────────
 
   const scribeName = selectedNote?.scribe_name || 'Unknown Scribe'
+  const clinicianTemplate = getClinicianTemplateForVisit(selectedNote?.visit_type)
 
   return (
     <div className="sf-page-fixed sf-portal adm-shell qps-portal">
@@ -711,7 +548,7 @@ export default function QPS() {
                   {selectedNote?.patient_name} — {selectedNote?.visit_type}
                 </div>
                 <div className="adm-topbar__brand">
-                  {selectedNote?.mrn} · {selectedNote?.visit_date} · {fmtTime(selectedNote?.visit_time)}
+                  {selectedNote?.mrn} · {selectedNote?.visit_date}{selectedNote?.visit_time ? ` · Appt. ${fmtAppointmentTime(selectedNote.visit_time)}` : ''}
                   {selectedNote?.duration_seconds ? ` · ⏱ ${fmtDuration(selectedNote.duration_seconds)}` : ''}
                   {' · '}📝 <strong>{scribeName}</strong>
                 </div>
@@ -720,23 +557,24 @@ export default function QPS() {
           }
         />
 
-        {/* Audio player — uses visit_id, shows duration */}
-        <AudioPlayer visitId={selectedNote?.visit_id} durationSecs={selectedNote?.duration_seconds} />
-
-        {notif && (
-          <div className={`sf-notif ${notif.type === 'error' ? 'sf-notif-error' : 'sf-notif-green'}`}>
-            {notif.type === 'error' ? '⚠ ' : '✓ '}{notif.msg}
-          </div>
-        )}
-
-        <div className="sf-panels">
-
-          <div className="sf-panel">
-            <div className="sf-panel-head">
-              <span className="sf-panel-title">Transcription</span>
-              <span className="badge badge-gray">Read-only</span>
+        <div className="sf-note-workspace">
+          <div className="sf-note-workspace__top">
+            <PortalAudioPlayer
+              visitId={selectedNote?.visit_id}
+              durationSecs={selectedNote?.duration_seconds || 0}
+              compact
+            />
+            <div className="sf-template-ref">
+              <div className="sf-template-ref__title">Clinician template — {clinicianTemplate.name}</div>
+              <pre className="sf-template-ref__body">{clinicianTemplate.content}</pre>
             </div>
-            <div className="sf-panel-body">
+          </div>
+
+          <div className="sf-note-workspace__panels">
+            <NoteWorkspacePanel
+              title="Transcription"
+              badges={<span className="badge badge-gray">Read-only</span>}
+            >
               {selectedNote?.transcription ? (
                 parseTranscriptionBlocks(selectedNote.transcription).map((block, i) => (
                   <div key={i} className="sf-transcript-block">{block}</div>
@@ -748,33 +586,31 @@ export default function QPS() {
                   <div>Will appear after AI processing.</div>
                 </div>
               )}
-            </div>
-          </div>
+            </NoteWorkspacePanel>
 
-          <div className="sf-panel">
-            <div className="sf-panel-head">
-              <span className="sf-panel-title">Final Note</span>
-              <span className="badge badge-blue">by {scribeName}</span>
-            </div>
-            {selectedNote?.final_note ? (
-              <textarea className="sf-textarea sf-textarea-readonly" value={selectedNote.final_note} readOnly />
-            ) : (
-              <div className="sf-panel-body qps-panel-empty" role="status">
-                <div className="qps-panel-empty__icon" aria-hidden>📄</div>
-                <div className="qps-panel-empty__title">Note not available</div>
-                <div>The scribe has not submitted the final note yet.</div>
-              </div>
-            )}
-          </div>
+            <NoteWorkspacePanel
+              title="Final Note"
+              badges={<span className="badge badge-blue">by {scribeName}</span>}
+            >
+              {selectedNote?.final_note ? (
+                <textarea className="sf-textarea sf-textarea-readonly" value={selectedNote.final_note} readOnly />
+              ) : (
+                <div className="qps-panel-empty" role="status">
+                  <div className="qps-panel-empty__icon" aria-hidden>📄</div>
+                  <div className="qps-panel-empty__title">Note not available</div>
+                  <div>The scribe has not submitted the final note yet.</div>
+                </div>
+              )}
+            </NoteWorkspacePanel>
 
-          <div className="sf-panel">
-            <div className="sf-panel-head">
-              <span className="sf-panel-title">Grade & Comment</span>
-              <span className={`badge ${overallScore >= 90 ? 'badge-green' : overallScore >= 75 ? 'badge-amber' : 'badge-red'}`}>
-                Score: {overallScore}
-              </span>
-            </div>
-            <div className="sf-panel-body">
+            <NoteWorkspacePanel
+              title="Grade & Comment"
+              badges={
+                <span className={`badge ${overallScore >= 90 ? 'badge-green' : overallScore >= 75 ? 'badge-amber' : 'badge-red'}`}>
+                  Score: {overallScore}
+                </span>
+              }
+            >
               <div className="sf-callout sf-callout--compact">
                 📝 Grading note by <strong style={{ color: '#1E293B' }}>{scribeName}</strong>
               </div>
@@ -817,19 +653,25 @@ export default function QPS() {
                 rows={5}
                 readOnly={isGraded}
               />
-            </div>
 
-            <div className="sf-bottom-bar">
-              <button type="button" className="btn btn-sm btn-ghost" onClick={() => setScreen(activeTab === 'graded' ? 'graded' : 'recordings')}>Cancel</button>
-              {!isGraded && (
-                <button type="button" className="btn btn-sm btn-navy" style={{ marginLeft: 'auto' }} onClick={handleSubmit} disabled={submitting}>
-                  {submitting ? 'Submitting...' : 'Submit Grade'}
-                </button>
-              )}
-              {isGraded && <span style={{ fontSize: 12, color: '#047857', fontWeight: 500, marginLeft: 'auto' }}>✓ Already graded</span>}
-            </div>
+              <div className="sf-bottom-bar">
+                <button type="button" className="btn btn-sm btn-ghost" onClick={() => setScreen(activeTab === 'graded' ? 'graded' : 'recordings')}>Cancel</button>
+                {!isGraded && (
+                  <button type="button" className="btn btn-sm btn-navy" style={{ marginLeft: 'auto' }} onClick={handleSubmit} disabled={submitting}>
+                    {submitting ? 'Submitting...' : 'Submit Grade'}
+                  </button>
+                )}
+                {isGraded && <span style={{ fontSize: 12, color: '#047857', fontWeight: 500, marginLeft: 'auto' }}>✓ Already graded</span>}
+              </div>
+            </NoteWorkspacePanel>
           </div>
         </div>
+
+        {notif && (
+          <div className={`sf-notif ${notif.type === 'error' ? 'sf-notif-error' : 'sf-notif-green'}`}>
+            {notif.type === 'error' ? '⚠ ' : '✓ '}{notif.msg}
+          </div>
+        )}
       </div>
     </div>
   )

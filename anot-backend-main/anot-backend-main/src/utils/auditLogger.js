@@ -2,37 +2,95 @@ const pool = require('../config/db')
 
 let colsReady = false
 
+const AUDIT_OPTIONAL_COLUMNS = [
+    { name: 'ip_address', ddl: `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS ip_address VARCHAR(64)` },
+    { name: 'user_agent', ddl: `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS user_agent TEXT` },
+    { name: 'status', ddl: `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS status VARCHAR(24) NOT NULL DEFAULT 'success'` },
+    { name: 'module_key', ddl: `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS module_key VARCHAR(64)` },
+    { name: 'action_category', ddl: `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS action_category VARCHAR(48)` },
+    { name: 'event_metadata', ddl: `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS event_metadata JSONB NOT NULL DEFAULT '{}'::jsonb` },
+    { name: 'request_path', ddl: `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS request_path VARCHAR(512)` },
+]
+
+const AUDIT_INDEXES = [
+    { name: 'idx_audit_logs_created_at', ddl: `CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs (created_at DESC)` },
+    { name: 'idx_audit_logs_user_id', ddl: `CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs (user_id)` },
+    { name: 'idx_audit_logs_action', ddl: `CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs (action)` },
+    { name: 'idx_audit_logs_status', ddl: `CREATE INDEX IF NOT EXISTS idx_audit_logs_status ON audit_logs (status)` },
+    { name: 'idx_audit_logs_module_key', ddl: `CREATE INDEX IF NOT EXISTS idx_audit_logs_module_key ON audit_logs (module_key)` },
+    { name: 'idx_audit_logs_action_category', ddl: `CREATE INDEX IF NOT EXISTS idx_audit_logs_action_category ON audit_logs (action_category)` },
+]
+
+async function tableExists(tableName) {
+    const { rows } = await pool.query(
+        `SELECT 1 FROM information_schema.tables
+         WHERE table_schema = 'public' AND table_name = $1`,
+        [tableName],
+    )
+    return rows.length > 0
+}
+
+async function columnExists(tableName, columnName) {
+    const { rows } = await pool.query(
+        `SELECT 1 FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2`,
+        [tableName, columnName],
+    )
+    return rows.length > 0
+}
+
+async function indexExists(indexName) {
+    const { rows } = await pool.query(
+        `SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = $1`,
+        [indexName],
+    )
+    return rows.length > 0
+}
+
+async function runDdlIfNeeded(ddl, existsCheck) {
+    if (await existsCheck()) return
+    try {
+        await pool.query(ddl)
+    } catch (err) {
+        if (err.code === '42501' && (await existsCheck())) return
+        throw err
+    }
+}
+
 async function ensureAuditColumns() {
     if (colsReady) return
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS audit_logs (
-            id BIGSERIAL PRIMARY KEY,
-            user_id INTEGER,
-            user_name TEXT,
-            user_role TEXT,
-            action TEXT NOT NULL,
-            entity_type TEXT,
-            entity_id TEXT,
-            details TEXT,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-    `)
-    const alters = [
-        `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS ip_address VARCHAR(64)`,
-        `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS user_agent TEXT`,
-        `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS status VARCHAR(24) NOT NULL DEFAULT 'success'`,
-        `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS module_key VARCHAR(64)`,
-        `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS action_category VARCHAR(48)`,
-        `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS event_metadata JSONB NOT NULL DEFAULT '{}'::jsonb`,
-        `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS request_path VARCHAR(512)`,
-    ]
-    for (const sql of alters) await pool.query(sql)
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs (created_at DESC)`)
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs (user_id)`)
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_audit_logs_action ON audit_logs (action)`)
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_audit_logs_status ON audit_logs (status)`)
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_audit_logs_module_key ON audit_logs (module_key)`)
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_audit_logs_action_category ON audit_logs (action_category)`)
+
+    if (!(await tableExists('audit_logs'))) {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS audit_logs (
+                id BIGSERIAL PRIMARY KEY,
+                user_id INTEGER,
+                user_name TEXT,
+                user_role TEXT,
+                action TEXT NOT NULL,
+                entity_type TEXT,
+                entity_id TEXT,
+                details TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                ip_address VARCHAR(64),
+                user_agent TEXT,
+                status VARCHAR(24) NOT NULL DEFAULT 'success',
+                module_key VARCHAR(64),
+                action_category VARCHAR(48),
+                event_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+                request_path VARCHAR(512)
+            )
+        `)
+    } else {
+        for (const col of AUDIT_OPTIONAL_COLUMNS) {
+            await runDdlIfNeeded(col.ddl, () => columnExists('audit_logs', col.name))
+        }
+    }
+
+    for (const idx of AUDIT_INDEXES) {
+        await runDdlIfNeeded(idx.ddl, () => indexExists(idx.name))
+    }
+
     colsReady = true
 }
 
@@ -99,7 +157,7 @@ async function auditLog(user, action, entityType, entityId, details, sixth, seve
             action_category,
             JSON.stringify(metaObj),
             path,
-        ]
+        ],
     )
 }
 

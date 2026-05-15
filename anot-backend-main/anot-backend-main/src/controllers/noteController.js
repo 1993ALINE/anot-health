@@ -2,6 +2,7 @@ const pool = require('../config/db')
 const { withTransaction } = require('../config/db')
 const { auditLog } = require('../utils/auditLogger')
 const { getVisitForUser } = require('../utils/visitAccess')
+const { visitDurationSelect, visitTranscriptionStatusSelect } = require('../utils/visitSchemaCompat')
 
 const NOTE_STATUSES = new Set(['draft', 'pending', 'submitted', 'uploaded'])
 
@@ -16,10 +17,12 @@ const getNoteByVisit = async (req, res) => {
     const visit = await getVisitForUser(visitId, req.user)
     if (!visit) return res.status(404).json({ error: 'Note not found for this visit.' })
 
+    const durationCol = await visitDurationSelect('v')
+    const txStatusCol = await visitTranscriptionStatusSelect('v')
     const result = await pool.query(
       `SELECT n.*,
               v.visit_type, v.visit_date, v.visit_time,
-              v.duration_seconds, v.audio_file, v.transcription_status,
+              ${durationCol}, v.audio_file, ${txStatusCol},
               p.name  AS patient_name, p.mrn,
               c.name  AS clinician_name,
               COALESCE(sb.name, s.name) AS scribe_name,
@@ -45,10 +48,11 @@ const getNoteByVisit = async (req, res) => {
 
 const getMyNotes = async (req, res) => {
   try {
+    const durationCol = await visitDurationSelect('v')
     const result = await pool.query(
       `SELECT n.*,
               v.visit_type, v.visit_date, v.visit_time,
-              v.duration_seconds, v.audio_file,
+              ${durationCol}, v.audio_file,
               p.name AS patient_name, p.mrn,
               c.name AS clinician_name, c.id AS clinician_id,
               COALESCE(sb.name, s.name) AS scribe_name
@@ -75,10 +79,11 @@ const getAllNotes = async (req, res) => {
   try {
     const { provider_id, status } = req.query
 
+    const durationCol = await visitDurationSelect('v')
     let query = `
       SELECT n.*,
              v.visit_type, v.visit_date, v.visit_time,
-             v.duration_seconds, v.audio_file,
+             ${durationCol}, v.audio_file,
              p.name AS patient_name, p.mrn,
              c.name AS clinician_name, c.id AS clinician_id,
              COALESCE(sb.name, s.name) AS scribe_name,
@@ -115,10 +120,11 @@ const getAllNotes = async (req, res) => {
 
 const getClinicianNotes = async (req, res) => {
   try {
+    const durationCol = await visitDurationSelect('v')
     const result = await pool.query(
       `SELECT n.*,
               v.visit_type, v.visit_date, v.visit_time,
-              v.duration_seconds, v.audio_file,
+              ${durationCol}, v.audio_file,
               p.name AS patient_name, p.mrn,
               COALESCE(sb.name, s.name) AS scribe_name
        FROM notes n

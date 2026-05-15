@@ -1,0 +1,178 @@
+/* Scribe portal — mobile layout */
+
+.scribe-portal .scribe-topbar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.scribe-portal .scribe-topbar-row .adm-topbar__titles {
+  min-width: 0;
+  flex: 1 1 140px;
+}
+
+.scribe-portal .scribe-date-panel {
+  max-width: 480px;
+}
+
+.scribe-portal .scribe-date-quick {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.scribe-portal .scribe-date-cta {
+  width: 100%;
+  padding: 14px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #4260e9, #7b61ff);
+  color: #fff;
+  border: none;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: 0 4px 14px rgba(66, 96, 233, 0.35);
+}
+
+.scribe-portal .scribe-change-date-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  background: #eef2ff;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .scribe-portal .sf-body {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .scribe-portal .sf-note-toolbar {
+    margin: 0 10px 10px;
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .scribe-portal .sf-note-toolbar__hint {
+    flex-basis: 100%;
+    order: 2;
+  }
+
+  .scribe-portal .sf-note-toolbar__pill {
+    order: 0;
+  }
+
+  .scribe-portal .sf-note-toolbar__btn {
+    min-height: 44px;
+  }
+
+  .scribe-portal.sf-page-fixed .sf-main-fixed {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .scribe-portal .sf-note-workspace {
+    padding: 0 10px 12px;
+    overflow: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .scribe-portal .sf-note-workspace__panels {
+    overflow: visible;
+  }
+
+  .scribe-portal .sf-note-panel .sf-textarea {
+    min-height: 220px;
+  }
+
+  .scribe-portal .scribe-topbar-row .adm-topbar__brand {
+    white-space: normal;
+    line-height: 1.35;
+  }
+
+  .scribe-portal .sf-row {
+    gap: 12px;
+  }
+
+  .scribe-portal .sf-row-right {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .scribe-portal .sf-row-right .btn {
+    flex: 1 1 auto;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .scribe-portal .sf-bottom-bar {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .scribe-portal .sf-bottom-bar .btn {
+    min-height: 44px;
+    flex: 1 1 calc(50% - 5px);
+  }
+
+  .scribe-portal .sf-bottom-bar .btn-teal {
+    margin-left: 0 !important;
+    flex: 1 1 100%;
+  }
+
+  .scribe-portal .sf-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .scribe-portal .sf-audio-bar--portal.sf-audio-bar--compact {
+    padding: 10px;
+  }
+
+  .scribe-portal .sf-audio-bar__row {
+    gap: 6px;
+  }
+
+  .scribe-portal .sf-audio-timer {
+    margin-left: 0;
+    width: 100%;
+    text-align: center;
+    order: 10;
+  }
+}
+
+@media (max-width: 480px) {
+  .scribe-portal .scribe-date-quick {
+    grid-template-columns: 1fr;
+  }
+
+  .scribe-portal .scribe-date-panel {
+    max-width: none;
+  }
+
+  .scribe-portal .sf-note-panel--expanded {
+    inset: 48px 8px 8px;
+  }
+
+  .scribe-portal .sf-stats {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  .scribe-portal .sf-row-right .btn {
+    flex: 1 1 100%;
+  }
+}

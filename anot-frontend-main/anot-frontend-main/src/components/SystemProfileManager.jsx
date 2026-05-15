@@ -3,7 +3,7 @@ import { authAPI } from '../services/api'
 import { useBranding } from '../services/branding'
 import './systemProfileManager.css'
 
-export default function SystemProfileManager({ showToast, roleLabel = 'User', compact = false }) {
+export default function SystemProfileManager({ showToast, roleLabel = 'User', compact = false, readOnly = false }) {
   const branding = useBranding()
   const [form, setForm] = useState({
     name: '',
@@ -170,10 +170,12 @@ export default function SystemProfileManager({ showToast, roleLabel = 'User', co
                 {(form.name || 'U').slice(0, 1).toUpperCase()}
               </div>
             )}
-            <label className="pm-avatar-upload">
-              {avatarBusy ? '…' : 'Photo'}
-              <input type="file" accept="image/*" onChange={onAvatarPick} hidden disabled={avatarBusy} />
-            </label>
+            {!readOnly ? (
+              <label className="pm-avatar-upload">
+                {avatarBusy ? '…' : 'Photo'}
+                <input type="file" accept="image/*" onChange={onAvatarPick} hidden disabled={avatarBusy} />
+              </label>
+            ) : null}
           </div>
         </div>
         <div className="pm-header-body">
@@ -182,7 +184,9 @@ export default function SystemProfileManager({ showToast, roleLabel = 'User', co
             Profile Management
           </h3>
           <p className="pm-subtitle">
-            Update your name, contact details, and password. Only you can change this profile while signed in.
+            {readOnly
+              ? 'Your account details are managed by your organization administrator.'
+              : 'Update your name, contact details, and password. Only you can change this profile while signed in.'}
           </p>
           <div className="pm-badges" role="list">
             <span className="pm-badge" role="listitem">
@@ -203,29 +207,31 @@ export default function SystemProfileManager({ showToast, roleLabel = 'User', co
       <div className="pm-grid">
         <div className="pm-group">
           <label className="pm-label">Full name *</label>
-          <input className="pm-input" value={form.name} onChange={(e) => setField('name', e.target.value)} />
+          <input className="pm-input" value={form.name} onChange={(e) => setField('name', e.target.value)} readOnly={readOnly} disabled={readOnly} />
         </div>
         <div className="pm-group">
           <label className="pm-label">Email address *</label>
-          <input className="pm-input" value={form.email} onChange={(e) => setField('email', e.target.value)} />
+          <input className="pm-input" value={form.email} onChange={(e) => setField('email', e.target.value)} readOnly={readOnly} disabled={readOnly} />
         </div>
         <div className="pm-group">
           <label className="pm-label">Phone number</label>
-          <input className="pm-input" value={form.phone} onChange={(e) => setField('phone', e.target.value)} />
+          <input className="pm-input" value={form.phone} onChange={(e) => setField('phone', e.target.value)} readOnly={readOnly} disabled={readOnly} />
         </div>
         {!compact && (
           <div className="pm-group">
             <label className="pm-label">Personal information / details</label>
-            <textarea className="pm-input pm-textarea" value={form.personal_info} onChange={(e) => setField('personal_info', e.target.value)} />
+            <textarea className="pm-input pm-textarea" value={form.personal_info} onChange={(e) => setField('personal_info', e.target.value)} readOnly={readOnly} disabled={readOnly} />
           </div>
         )}
         {compact && (
           <div className="pm-group pm-group--full">
             <label className="pm-label">Personal information / details</label>
-            <textarea className="pm-input pm-textarea" value={form.personal_info} onChange={(e) => setField('personal_info', e.target.value)} />
+            <textarea className="pm-input pm-textarea" value={form.personal_info} onChange={(e) => setField('personal_info', e.target.value)} readOnly={readOnly} disabled={readOnly} />
           </div>
         )}
 
+        {!readOnly ? (
+        <>
         <div className="pm-group">
           <label className="pm-label">Current password</label>
           <div className="pm-pass-wrap">
@@ -253,13 +259,17 @@ export default function SystemProfileManager({ showToast, roleLabel = 'User', co
             </button>
           </div>
         </div>
+        </>
+        ) : null}
       </div>
 
-      <div className="pm-actions">
-        <button type="button" className="pm-btn" onClick={save} disabled={saving}>
-          {saving ? 'Updating profile…' : 'Update profile'}
-        </button>
-      </div>
+      {!readOnly ? (
+        <div className="pm-actions">
+          <button type="button" className="pm-btn" onClick={save} disabled={saving}>
+            {saving ? 'Updating profile…' : 'Update profile'}
+          </button>
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -1,4 +1,5 @@
 const pool = require('../config/db')
+const { setVisitTranscriptionStatus } = require('../utils/visitSchemaCompat')
 const { auditLog } = require('../utils/auditLogger')
 const { verifyDeepgramVisitToken } = require('../utils/webhookSignature')
 const { extractTranscriptsFromDeepgramBody } = require('../utils/deepgramPayload')
@@ -25,7 +26,7 @@ const postDeepgramWebhook = async (req, res) => {
 
     const texts = extractTranscriptsFromDeepgramBody(req.body)
     if (!texts.length) {
-      await pool.query(`UPDATE visits SET transcription_status = $1 WHERE id = $2`, ['failed', visitId]).catch(() => {})
+      await setVisitTranscriptionStatus(visitId, 'failed')
       await auditLog(
         WEBHOOK_USER,
         'TRANSCRIPTION_FAILED',

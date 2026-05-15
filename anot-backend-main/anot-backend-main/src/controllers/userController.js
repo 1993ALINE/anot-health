@@ -13,13 +13,8 @@ const {
     assertAdminCanAccessStaffUser,
     assertAdminMayUseStaffRole,
 } = require('../utils/adminPortalAccess')
-
-let schemaReady = false
-async function ensureUserAdminModulesColumn() {
-    if (schemaReady) return
-    await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS admin_modules JSONB DEFAULT NULL')
-    schemaReady = true
-}
+const { ensureUserProfileSchema } = require('../utils/ensureUserProfileSchema')
+const { userSelectList, hasRatePerNoteColumn } = require('../utils/userColumns')
 
 const VALID_ROLES = ['clinician', 'scribe', 'qps', 'admin', 'super_admin']
 
@@ -36,12 +31,9 @@ function normalizeAdminModulesPayload(raw) {
 }
 
 async function loadUserRow(id) {
-    await ensureUserAdminModulesColumn()
-    const r = await pool.query(
-        `SELECT id, name, email, role, specialty, phone, npi, license, status, rate_per_note, admin_modules, created_at
-         FROM users WHERE id = $1`,
-        [id]
-    )
+    await ensureUserProfileSchema()
+    const cols = await userSelectList()
+    const r = await pool.query(`SELECT ${cols} FROM users WHERE id = $1`, [id])
     return r.rows[0] || null
 }
 
@@ -54,9 +46,9 @@ const getAllUsers = async (req, res) => {
         } catch (e) {
             return res.status(e.statusCode || 403).json({ error: e.message })
         }
-        await ensureUserAdminModulesColumn()
-        let sql = `SELECT id, name, email, role, specialty, phone, npi, license, status, rate_per_note, admin_modules, created_at
-             FROM users`
+        await ensureUserProfileSchema()
+        const cols = await userSelectList()
+        let sql = `SELECT ${cols} FROM users`
         const params = []
         if (req.user.role === 'admin' && !isSuperAdmin(req.user.role)) {
             const hasAdminsModule = req.adminModuleKeys && req.adminModuleKeys.has('admins')
@@ -102,7 +94,7 @@ const getUser = async (req, res) => {
 
 const updateUser = async (req, res) => {
     try {
-        await ensureUserAdminModulesColumn()
+        await ensureUserProfileSchema()
         const { id } = req.params
         const { name, email, role, specialty, phone, npi, license, rate_per_note, admin_modules } = req.body
 
@@ -160,8 +152,9 @@ const updateUser = async (req, res) => {
             adminModulesPayload = norm
         }
 
+        const hasRate = await hasRatePerNoteColumn()
         let ratePayload = null
-        if (rate_per_note != null && rate_per_note !== '') {
+        if (hasRate && rate_per_note != null && rate_per_note !== '') {
             const parsed = parseFloat(rate_per_note)
             if (!Number.isFinite(parsed) || parsed < 0) {
                 return res.status(400).json({ error: 'Invalid rate_per_note.' })
@@ -169,9 +162,13 @@ const updateUser = async (req, res) => {
             ratePayload = parsed
         }
 
+        const returning = await userSelectList()
         let sql
         let params
         if (adminModulesPayload !== undefined) {
+            const rateSet = hasRate ? ', rate_per_note = COALESCE($8, rate_per_note)' : ''
+            const modIdx = hasRate ? 9 : 8
+            const idIdx = hasRate ? 10 : 9
             sql = `UPDATE users
              SET name          = $1,
                  email         = $2,
@@ -179,11 +176,10 @@ const updateUser = async (req, res) => {
                  specialty     = $4,
                  phone         = $5,
                  npi           = $6,
-                 license       = $7,
-                 rate_per_note = COALESCE($8, rate_per_note),
-                 admin_modules = $9::jsonb
-             WHERE id = $10
-                 RETURNING id, name, email, role, specialty, phone, npi, license, status, rate_per_note, admin_modules`
+                 license       = $7${rateSet},
+                 admin_modules = $${modIdx}::jsonb
+             WHERE id = $${idIdx}
+                 RETURNING ${returning}`
             params = [
                 name,
                 email.toLowerCase().trim(),
@@ -192,11 +188,12 @@ const updateUser = async (req, res) => {
                 phone || null,
                 npi || null,
                 license || null,
-                ratePayload,
-                adminModulesPayload === null ? null : JSON.stringify(adminModulesPayload),
-                id,
             ]
+            if (hasRate) params.push(ratePayload)
+            params.push(adminModulesPayload === null ? null : JSON.stringify(adminModulesPayload), id)
         } else {
+            const rateSet = hasRate ? ', rate_per_note = COALESCE($8, rate_per_note)' : ''
+            const idIdx = hasRate ? 9 : 8
             sql = `UPDATE users
              SET name          = $1,
                  email         = $2,
@@ -204,10 +201,9 @@ const updateUser = async (req, res) => {
                  specialty     = $4,
                  phone         = $5,
                  npi           = $6,
-                 license       = $7,
-                 rate_per_note = COALESCE($8, rate_per_note)
-             WHERE id = $9
-                 RETURNING id, name, email, role, specialty, phone, npi, license, status, rate_per_note, admin_modules`
+                 license       = $7${rateSet}
+             WHERE id = $${idIdx}
+                 RETURNING ${returning}`
             params = [
                 name,
                 email.toLowerCase().trim(),
@@ -216,9 +212,9 @@ const updateUser = async (req, res) => {
                 phone || null,
                 npi || null,
                 license || null,
-                ratePayload,
-                id,
             ]
+            if (hasRate) params.push(ratePayload)
+            params.push(id)
         }
 
         const result = await pool.query(sql, params)
@@ -262,7 +258,7 @@ const updateUser = async (req, res) => {
 
 const patchAdminModules = async (req, res) => {
     try {
-        await ensureUserAdminModulesColumn()
+        await ensureUserProfileSchema()
         if (!isSuperAdmin(req.user.role)) {
             return res.status(403).json({ error: 'Only a Super Admin can change module permissions.' })
         }
@@ -288,10 +284,11 @@ const patchAdminModules = async (req, res) => {
         if (norm && norm.error) return res.status(400).json({ error: norm.error })
 
         const jsonVal = norm === null ? null : JSON.stringify(norm)
+        const returning = await userSelectList()
         const result = await pool.query(
             `UPDATE users SET admin_modules = $1::jsonb
              WHERE id = $2
-             RETURNING id, name, email, role, specialty, phone, npi, license, status, rate_per_note, admin_modules, created_at`,
+             RETURNING ${returning}`,
             [jsonVal, id],
         )
         if (!result.rows[0]) return res.status(404).json({ error: 'User not found.' })
@@ -312,7 +309,7 @@ const patchAdminModules = async (req, res) => {
 
 const toggleStatus = async (req, res) => {
     try {
-        await ensureUserAdminModulesColumn()
+        await ensureUserProfileSchema()
         const { id } = req.params
         const current = await pool.query(
             'SELECT id, status, name, role FROM users WHERE id = $1',
@@ -362,7 +359,7 @@ const toggleStatus = async (req, res) => {
 
 const deleteUser = async (req, res) => {
     try {
-        await ensureUserAdminModulesColumn()
+        await ensureUserProfileSchema()
         const { id } = req.params
         if (parseInt(id, 10) === req.user.id) {
             return res.status(400).json({ error: 'You cannot delete your own account.' })
@@ -400,7 +397,7 @@ const deleteUser = async (req, res) => {
 
 const getUsersByRole = async (req, res) => {
     try {
-        await ensureUserAdminModulesColumn()
+        await ensureUserProfileSchema()
         const { role } = req.params
         if (role === 'receptionist') {
             return res.status(400).json({ error: 'Role is no longer supported.' })
@@ -422,8 +419,10 @@ const getUsersByRole = async (req, res) => {
                 return res.status(e.statusCode || 403).json({ error: e.message })
             }
         }
+        const hasRate = await hasRatePerNoteColumn()
+        const rateCol = hasRate ? ', rate_per_note' : ''
         const result = await pool.query(
-            `SELECT id, name, email, role, specialty, phone, status, rate_per_note, admin_modules
+            `SELECT id, name, email, role, specialty, phone, status${rateCol}, admin_modules
              FROM users WHERE role = $1 AND status = 'active' ORDER BY name ASC`,
             [role]
         )
@@ -438,10 +437,13 @@ const getUsersByRole = async (req, res) => {
 
 const updateRate = async (req, res) => {
     try {
-        await ensureUserAdminModulesColumn()
+        await ensureUserProfileSchema()
         const { id } = req.params
         const { rate_per_note } = req.body
 
+        if (!(await hasRatePerNoteColumn())) {
+            return res.status(503).json({ error: 'Payroll rates are not available until the database schema is updated.' })
+        }
         if (rate_per_note == null || isNaN(rate_per_note) || rate_per_note < 0) {
             return res.status(400).json({ error: 'Valid rate is required.' })
         }
@@ -478,7 +480,7 @@ const updateRate = async (req, res) => {
 
 const resetPassword = async (req, res) => {
     try {
-        await ensureUserAdminModulesColumn()
+        await ensureUserProfileSchema()
         const { id } = req.params
         const { password } = req.body
 
@@ -556,12 +558,18 @@ const getAdminStats = async (req, res) => {
 
 const getPayroll = async (req, res) => {
     try {
+        const hasRate = await hasRatePerNoteColumn()
+        const rateSel = hasRate ? 'u.rate_per_note' : 'NULL::numeric AS rate_per_note'
+        const totalSel = hasRate
+            ? `COUNT(n.id) FILTER (WHERE n.status IN ('submitted','uploaded')) * u.rate_per_note`
+            : '0'
+        const groupRate = hasRate ? ', u.rate_per_note' : ''
         const result = await pool.query(`
             SELECT
-                u.id, u.name, u.email, u.role, u.status, u.rate_per_note,
+                u.id, u.name, u.email, u.role, u.status, ${rateSel},
                 COUNT(n.id) FILTER (WHERE n.status IN ('submitted','uploaded')) AS notes_completed,
                 COALESCE(ROUND(AVG(g.overall_score)), 0) AS overall_avg,
-                COUNT(n.id) FILTER (WHERE n.status IN ('submitted','uploaded')) * u.rate_per_note AS total_amount
+                ${totalSel} AS total_amount
             FROM users u
                      LEFT JOIN notes n ON (
                 n.submitted_by = u.id
@@ -571,7 +579,7 @@ const getPayroll = async (req, res) => {
                 )
                      LEFT JOIN grades g ON g.note_id = n.id
             WHERE u.role IN ('scribe', 'qps', 'admin', 'super_admin')
-            GROUP BY u.id, u.name, u.email, u.role, u.status, u.rate_per_note
+            GROUP BY u.id, u.name, u.email, u.role, u.status${groupRate}
             ORDER BY u.role ASC, notes_completed DESC
         `)
         res.status(200).json({ payroll: result.rows })
@@ -585,9 +593,12 @@ const getPayroll = async (req, res) => {
 
 const getPerformance = async (req, res) => {
     try {
+        const hasRate = await hasRatePerNoteColumn()
+        const rateSel = hasRate ? 'u.rate_per_note' : 'NULL::numeric AS rate_per_note'
+        const groupRate = hasRate ? ', u.rate_per_note' : ''
         const result = await pool.query(`
             SELECT
-                u.id, u.name, u.email, u.role, u.status, u.rate_per_note,
+                u.id, u.name, u.email, u.role, u.status, ${rateSel},
                 COUNT(n.id) FILTER (WHERE n.status IN ('submitted','uploaded')) AS notes_completed,
                 COALESCE(ROUND(AVG(g.overall_score)), 0)   AS overall_avg,
                 COALESCE(ROUND(AVG(g.accuracy)), 0)        AS accuracy_avg,
@@ -603,7 +614,7 @@ const getPerformance = async (req, res) => {
                 )
                      LEFT JOIN grades g ON g.note_id = n.id
             WHERE u.role IN ('scribe', 'qps', 'admin', 'super_admin')
-            GROUP BY u.id, u.name, u.email, u.role, u.status, u.rate_per_note
+            GROUP BY u.id, u.name, u.email, u.role, u.status${groupRate}
             ORDER BY overall_avg DESC
         `)
         res.status(200).json({ performance: result.rows })

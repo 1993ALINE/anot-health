@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { authAPI, visitsAPI, patientsAPI, notesAPI, API_BASE } from '../../services/api'
 import { useBranding } from '../../services/branding'
 import SystemProfileManager from '../../components/SystemProfileManager'
+import PortalSidebarFooter from '../../components/PortalSidebarFooter'
 import { useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, ConfirmDialog, PortalSidebarBrand } from '../shared'
+import { queueAudioUpload, flushPendingAudioUploads, installOfflineUploadFlush } from '../../utils/offlineUploadQueue'
 import './clinician.css'
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -97,6 +99,11 @@ const ST = {
 function clinicianNoteReturned(h) {
   const ns = h?.note_status
   return ns === 'submitted' || ns === 'uploaded'
+}
+
+/** Preview / view note only after scribe has uploaded (final note available). */
+function canPreviewUploadedNote(h) {
+  return !!(h?.final_note || clinicianNoteReturned(h))
 }
 
 /** Chip / display key for history rows (visit + note workflow). */
@@ -560,7 +567,7 @@ function TemplatesScreen({ showToast }) {
 
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
 
-function Sidebar({ screen, setScreen, sidebar, currentUser, visits, tip, drawerMode, onRequestLogout, confirmDialog, confirmLoading, onDismissConfirm, onConfirmAction, branding }) {
+function Sidebar({ screen, setScreen, sidebar, currentUser, visits, drawerMode, onRequestLogout, confirmDialog, confirmLoading, onDismissConfirm, onConfirmAction, branding }) {
   const badge = visits.filter(v => v.status === 'recording-uploaded').length
   const NAV = [
     { key:'schedule',  label:'Schedule',        icon:'📅', badge },
@@ -612,30 +619,11 @@ function Sidebar({ screen, setScreen, sidebar, currentUser, visits, tip, drawerM
           </div>
         ))}
       </nav>
-      <div className="sf-sidebar-rich__tip">
-        <div className="sf-sidebar-rich__tip-label">Tip</div>
-        <p className="sf-sidebar-rich__tip-text">{tip}</p>
-      </div>
-      <div className="sf-sidebar-footer sf-sidebar-rich__footer adm-sidebar-footer">
-        <div className="adm-sidebar-footer__card">
-          <p className="adm-sidebar-footer__eyebrow">Account</p>
-          <p className="adm-sidebar-footer__who">{currentUser.name || 'Clinician'}</p>
-          <button
-            type="button"
-            className="adm-sidebar-footer__btn"
-            onClick={onRequestLogout}
-          >
-            <span className="adm-sidebar-footer__btn-ico" aria-hidden>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <polyline points="16 17 21 12 16 7" />
-                <line x1="21" y1="12" x2="9" y2="12" />
-              </svg>
-            </span>
-            Sign out
-          </button>
-        </div>
-      </div>
+      <PortalSidebarFooter
+        userName={currentUser.name || 'Clinician'}
+        role="clinician"
+        onLogout={onRequestLogout}
+      />
     </aside>
     </>
   )
@@ -672,9 +660,45 @@ function ProfileScreen({ currentUser, showToast }) {
         </ul>
       </div>
       <div style={{ marginTop: 16 }}>
-        <SystemProfileManager showToast={showToast} roleLabel="Clinician" compact />
+        <SystemProfileManager showToast={showToast} roleLabel="Clinician" compact readOnly />
       </div>
     </>
+  )
+}
+
+/** Stable topbar (must not be defined inside Clinician — live clock re-renders every second). */
+function ClinicianTopbar({
+  drawerMode,
+  sidebar,
+  branding,
+  cu,
+  onViewProfile,
+  onLogout,
+  title,
+  subtitle,
+  children,
+}) {
+  return (
+    <PortalTopbar
+      drawerMode={drawerMode}
+      sidebarOpen={sidebar.open}
+      onMenuClick={sidebar.toggle}
+      moduleTitle={title || 'Clinician'}
+      brandName={subtitle || branding.system_name || 'Anot'}
+      user={cu}
+      avatarFallback="C"
+      navControlsId="clinician-sidebar"
+      onViewProfile={onViewProfile}
+      onLogout={onLogout}
+      menuId="clinician-account-menu"
+      endBeforeAccount={
+        children ? (
+          <div className="cl-schedule-toolbar">
+            {children}
+          </div>
+        ) : null
+      }
+    />
   )
 }
 
@@ -755,8 +779,6 @@ export default function Clinician() {
   const atRef = useRef(null), arRef = useRef(null), acRef = useRef([])
   const DAYS  = [-2, -1, 0, 1, 2]
 
-  const tipOfDay = CLINICIAN_TIPS[(new Date().getDate() + new Date().getMonth() * 7) % CLINICIAN_TIPS.length]
-
   const showToast = (msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500) }
   const [confirmDialog, setConfirmDialog] = useState(null)
   const [confirmLoading, setConfirmLoading] = useState(false)
@@ -821,6 +843,16 @@ export default function Clinician() {
   useEffect(() => {
     const id = setInterval(() => setLiveNow(new Date()), 1000)
     return () => clearInterval(id)
+  }, [])
+
+  useEffect(() => {
+    return installOfflineUploadFlush(() =>
+      flushPendingAudioUploads({
+        uploadPrimary: (visitId, blob) => visitsAPI.uploadAudio(visitId, blob),
+        uploadAppend: (visitId, blob) => visitsAPI.appendAudio(visitId, blob),
+        onSuccess: () => showToast('Queued recording uploaded successfully'),
+      }),
+    )
   }, [])
 
   useEffect(() => {
@@ -893,7 +925,20 @@ export default function Clinician() {
         await new Promise(res => {
           rec.onstop = async () => {
             if (cRef.current.length > 0) {
-              try { const b = new Blob(cRef.current, { type: rec.mimeType || 'audio/webm' }); await visitsAPI.uploadAudio(vid, b) } catch (err) { console.error(err) }
+              try {
+                const b = new Blob(cRef.current, { type: rec.mimeType || 'audio/webm' })
+                await visitsAPI.uploadAudio(vid, b)
+              } catch (err) {
+                console.error(err)
+                try {
+                  const b = new Blob(cRef.current, { type: rec.mimeType || 'audio/webm' })
+                  await queueAudioUpload({ visitId: vid, blob: b, mode: 'primary' })
+                  showToast('Upload failed — recording saved and will retry when online.', 'error')
+                } catch (qErr) {
+                  console.error(qErr)
+                  showToast('Upload failed. Check your connection and try again.', 'error')
+                }
+              }
             }
             rec.stream.getTracks().forEach(t => t.stop()); res()
           }
@@ -939,8 +984,20 @@ export default function Clinician() {
       await new Promise(res => {
         arRef.current.onstop = async () => {
           if (acRef.current.length > 0) {
-            try { const b = new Blob(acRef.current, { type: arRef.current.mimeType || 'audio/webm' }); await visitsAPI.appendAudio(vid, b); showToast('✓ Additional recording uploaded') }
-            catch { showToast('Upload failed', 'error') }
+            try {
+              const b = new Blob(acRef.current, { type: arRef.current.mimeType || 'audio/webm' })
+              await visitsAPI.appendAudio(vid, b)
+              showToast('✓ Additional recording uploaded')
+            } catch (err) {
+              console.error(err)
+              try {
+                const b = new Blob(acRef.current, { type: arRef.current.mimeType || 'audio/webm' })
+                await queueAudioUpload({ visitId: vid, blob: b, mode: 'append' })
+                showToast('Upload failed — saved locally and will retry when online.', 'error')
+              } catch {
+                showToast('Upload failed', 'error')
+              }
+            }
           }
           arRef.current?.stream?.getTracks().forEach(t => t.stop()); res()
         }
@@ -1079,31 +1136,10 @@ export default function Clinician() {
 
   const historyToolbarLayout = screen === 'pending' || screen === 'completed' || screen === 'history'
 
-  const Topbar = ({ children, title, subtitle }) => (
-    <PortalTopbar
-      drawerMode={drawerMode}
-      sidebarOpen={sidebar.open}
-      onMenuClick={sidebar.toggle}
-      moduleTitle={title || 'Clinician'}
-      brandName={subtitle || branding.system_name || 'Anot'}
-      user={cu}
-      avatarFallback="C"
-      navControlsId="clinician-sidebar"
-      onViewProfile={() => {
-        setScreen('profile')
-        sidebar.close()
-      }}
-      onLogout={requestLogout}
-      menuId="clinician-account-menu"
-      endBeforeAccount={
-        children ? (
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-            {children}
-          </div>
-        ) : null
-      }
-    />
-  )
+  const openProfile = () => {
+    setScreen('profile')
+    sidebar.close()
+  }
 
   const sidebarProps = {
     screen,
@@ -1111,7 +1147,6 @@ export default function Clinician() {
     sidebar,
     currentUser: cu,
     visits,
-    tip: tipOfDay,
     drawerMode,
     branding,
     onRequestLogout: requestLogout,
@@ -1259,7 +1294,16 @@ export default function Clinician() {
         {/* TEMPLATES */}
         {screen === 'templates' && (
           <>
-            <Topbar title="Note Templates" subtitle="Structured note starters · Saved in this browser" />
+            <ClinicianTopbar
+              drawerMode={drawerMode}
+              sidebar={sidebar}
+              branding={branding}
+              cu={cu}
+              onViewProfile={openProfile}
+              onLogout={requestLogout}
+              title="Note Templates"
+              subtitle="Structured note starters · Saved in this browser"
+            />
             <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
               <TemplatesScreen showToast={showToast} />
             </div>
@@ -1269,11 +1313,20 @@ export default function Clinician() {
         {/* HISTORY / PENDING / COMPLETED — same UI, different filter */}
         {['history', 'pending', 'completed'].includes(screen) && (
           <>
-            <Topbar title={historyTitle} subtitle={historySubtitle}>
+            <ClinicianTopbar
+              drawerMode={drawerMode}
+              sidebar={sidebar}
+              branding={branding}
+              cu={cu}
+              onViewProfile={openProfile}
+              onLogout={requestLogout}
+              title={historyTitle}
+              subtitle={historySubtitle}
+            >
               <button type="button" className="btn btn-sm" disabled={loading} onClick={() => loadHistory({ notify: true })} title="Reload list">
                 ⟳ Refresh
               </button>
-            </Topbar>
+            </ClinicianTopbar>
             <div className="sf-body">
               {screen === 'pending' && !loading && historyFiltered.length > 0 ? (
                 <div className="cl-pending-hero" aria-label="Pending pipeline summary">
@@ -1434,8 +1487,8 @@ export default function Clinician() {
                             🔊
                           </button>
                         ) : null}
-                        {h.ai_draft ? (
-                          <button type="button" className="cl-icon-btn" title="Preview Draft" onClick={() => setAiVisit(h)}>
+                        {canPreviewUploadedNote(h) ? (
+                          <button type="button" className="cl-icon-btn" title="Preview Note" onClick={() => setAiVisit(h)}>
                             👁
                           </button>
                         ) : null}
@@ -1468,25 +1521,22 @@ export default function Clinician() {
         {/* SCHEDULE */}
         {screen === 'schedule' && (
           <>
-            <Topbar
+            <ClinicianTopbar
+              drawerMode={drawerMode}
+              sidebar={sidebar}
+              branding={branding}
+              cu={cu}
+              onViewProfile={openProfile}
+              onLogout={requestLogout}
               title={`${getGreeting()}, Dr. ${cu.name?.split(' ').pop()}`}
               subtitle={`${localDate(off, 'long')} · ${today} patient${today !== 1 ? 's' : ''} on this day${
                 scheduleSyncedAt ? ` · Updated ${formatSyncedLabel(scheduleSyncedAt)}` : ''
               }`}
             >
               <time
+                className="cl-schedule-clock"
                 dateTime={liveNow.toISOString()}
                 title="Local time"
-                style={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  fontVariantNumeric: 'tabular-nums',
-                  color: 'var(--text-sub)',
-                  padding: '4px 10px',
-                  borderRadius: 8,
-                  background: 'var(--gray-bg)',
-                  border: '1px solid var(--border)',
-                }}
               >
                 {liveNow.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
               </time>
@@ -1496,10 +1546,10 @@ export default function Clinician() {
               <button type="button" className="btn btn-navy btn-sm" onClick={() => { setShowAdd((f) => !f); setPtErr('') }}>
                 + Add Patient
               </button>
-            </Topbar>
+            </ClinicianTopbar>
 
-            <div className="sf-body">
-              <div className="sf-banner sf-banner-past" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <div className="sf-body cl-schedule">
+              <div className="cl-schedule-banner sf-banner sf-banner-past">
                 <div>
                   <div className="sf-section-label" style={{ marginBottom: 4 }}>
                     {off === 0 ? "Today's visits" : `Visits for ${localDate(off, 'long')}`}
@@ -1548,7 +1598,7 @@ export default function Clinician() {
               )}
 
               {addRec && (
-                <div className="sf-banner sf-banner-future" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+                <div className="cl-schedule-add-rec sf-banner sf-banner-future">
                   <span style={{ fontSize: 18 }}>🎙</span>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--brand-primary-dark)' }}>{addRec.patient_name} — Additional Recording</div>
@@ -1648,9 +1698,9 @@ export default function Clinician() {
                 </button>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '18px 0 10px' }}>
+              <div className="cl-schedule-list-head">
                 <span className="sf-section-label" style={{ marginBottom: 0 }}>Patient List</span>
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Sort: Time ▾</span>
+                <span className="cl-schedule-list-head__sort">Sort: Time ▾</span>
               </div>
 
               <div>
@@ -1681,18 +1731,15 @@ export default function Clinician() {
                   const hasAudio = v.audio_file && v.audio_file.trim() !== ''
                   const recCount = v.recording_count || 1
                   return (
-                    <div key={v.id} className={`sf-row${isActive ? ' sf-row-active' : ''}`} style={{ alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 8, justifyContent: 'flex-start', gap: 14 }}>
-                      {/* Time */}
-                      <div style={{ textAlign:'center', minWidth:44, flexShrink:0, paddingTop:2 }}>
-                        <div style={{ fontSize:15, fontWeight:800, color:'#1E293B' }}>{fmtTime(v.visit_time).split(' ')[0]}</div>
-                        <div style={{ fontSize:11, fontWeight:600, color:'#94A3B8' }}>{fmtTime(v.visit_time).split(' ')[1]}</div>
+                    <div key={v.id} className={`cl-schedule-row sf-row${isActive ? ' sf-row-active' : ''}`}>
+                      <div className="cl-schedule-row__time">
+                        <div className="cl-schedule-row__time-main">{fmtTime(v.visit_time).split(' ')[0]}</div>
+                        <div className="cl-schedule-row__time-sub">{fmtTime(v.visit_time).split(' ')[1]}</div>
                       </div>
-                      {/* Avatar */}
-                      <div style={{ width:46, height:46, borderRadius:14, background:avatarBg(v.patient_name), display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, fontWeight:800, color:'#1E293B', flexShrink:0 }}>{initials(v.patient_name)}</div>
-                      {/* Info — improved hierarchy: bolder MRN, more contrast on metadata */}
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontSize:16, fontWeight:700, color:'#1E293B', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{v.patient_name}</div>
-                        <div style={{ fontSize:13, color:'#64748B', marginTop:4, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                      <div className="cl-schedule-row__avatar" style={{ background: avatarBg(v.patient_name) }}>{initials(v.patient_name)}</div>
+                      <div className="cl-schedule-row__info">
+                        <div className="cl-schedule-row__name">{v.patient_name}</div>
+                        <div className="cl-schedule-row__meta">
                           <span style={{ fontWeight:600, color:'#475569' }}>📋 {v.mrn}</span>
                           <button type="button" className="cl-copy-mrn" onClick={() => copyMrn(v.mrn)} title="Copy MRN">
                             Copy
@@ -1710,8 +1757,7 @@ export default function Clinician() {
                           <StatusChip st={st} />
                         </div>
                       </div>
-                      {/* Actions */}
-                      <div style={{ display:'flex', gap:8, alignItems:'flex-start', flexShrink:0, flexWrap:'wrap', justifyContent:'flex-end', paddingTop:2, marginLeft:'auto' }}>
+                      <div className="cl-schedule-row__actions">
                         {hasAudio && !['upcoming', 'scheduled', 'in-progress'].includes(v.status) && (
                           <button type="button" className="cl-icon-btn" title="Play recording" onClick={() => setPlayVisit(v)}>
                             🔊
@@ -1719,7 +1765,7 @@ export default function Clinician() {
                         )}
                         {v.status === 'upcoming' && (
                           <>
-                            <button onClick={() => startVisit(v)} disabled={!!active} style={{ display:'inline-flex', alignItems:'center', gap:10, padding:'10px 22px', borderRadius:14, background: active ? '#94A3B8' : 'linear-gradient(135deg,#16A34A,#15803D)', color:'#fff', border:'none', fontSize:15, fontWeight:800, cursor: active ? 'not-allowed' : 'pointer', fontFamily:'inherit', boxShadow: active ? 'none' : '0 4px 16px rgba(22,163,74,0.4)', opacity: active ? 0.6 : 1 }}>
+                            <button type="button" className="cl-schedule-cta" onClick={() => startVisit(v)} disabled={!!active} style={{ display:'inline-flex', alignItems:'center', gap:10, padding:'10px 22px', borderRadius:14, background: active ? '#94A3B8' : 'linear-gradient(135deg,#16A34A,#15803D)', color:'#fff', border:'none', fontSize:15, fontWeight:800, cursor: active ? 'not-allowed' : 'pointer', fontFamily:'inherit', boxShadow: active ? 'none' : '0 4px 16px rgba(22,163,74,0.4)', opacity: active ? 0.6 : 1 }}>
                               <span style={{ width:11, height:11, borderRadius:'50%', background:'#fff', display:'inline-block', flexShrink:0, animation: active ? 'none' : 'pulse 1.4s infinite' }} />
                               Record Encounter
                             </button>
@@ -1738,10 +1784,7 @@ export default function Clinician() {
                             Optional Preview Draft + Add to Encounter for additional audio. */}
                         {v.status === 'recording-uploaded' && (
                           <div style={{ display:'flex', gap:8, flexWrap:'wrap', justifyContent:'flex-end', alignItems:'center' }}>
-                            <button style={{ ...B.outline, padding:'9px 14px', fontSize:13 }} onClick={() => setAiVisit(v)}>
-                              👁 Preview Draft
-                            </button>
-                            <button onClick={() => startAdd(v)} disabled={!!active || !!addRec} style={{ display:'inline-flex', alignItems:'center', gap:10, padding:'10px 22px', borderRadius:14, background: (active||addRec) ? '#94A3B8' : 'linear-gradient(135deg,#16A34A,#15803D)', color:'#fff', border:'none', fontSize:15, fontWeight:800, cursor: (active||addRec) ? 'not-allowed' : 'pointer', fontFamily:'inherit', boxShadow: (active||addRec) ? 'none' : '0 4px 16px rgba(22,163,74,0.4)', opacity: (active||addRec) ? 0.6 : 1 }}>
+                            <button type="button" className="cl-schedule-cta" onClick={() => startAdd(v)} disabled={!!active || !!addRec} style={{ display:'inline-flex', alignItems:'center', gap:10, padding:'10px 22px', borderRadius:14, background: (active||addRec) ? '#94A3B8' : 'linear-gradient(135deg,#16A34A,#15803D)', color:'#fff', border:'none', fontSize:15, fontWeight:800, cursor: (active||addRec) ? 'not-allowed' : 'pointer', fontFamily:'inherit', boxShadow: (active||addRec) ? 'none' : '0 4px 16px rgba(22,163,74,0.4)', opacity: (active||addRec) ? 0.6 : 1 }}>
                               <span style={{ width:11, height:11, borderRadius:'50%', background:'#fff', display:'inline-block', flexShrink:0 }} />
                               Additional Recording
                             </button>
@@ -1749,20 +1792,21 @@ export default function Clinician() {
                         )}
                         {v.status === 'note-ready' && (
                           <>
-                            <button style={{ ...B.action, background:'linear-gradient(135deg,#15803D,#16A34A)', color:'#fff', padding:'10px 18px', fontSize:14, boxShadow:'0 4px 14px rgba(21,128,61,0.35)' }}
+                            <button type="button" className="cl-schedule-btn-review" style={{ ...B.action, background:'linear-gradient(135deg,#15803D,#16A34A)', color:'#fff', padding:'10px 18px', fontSize:14, boxShadow:'0 4px 14px rgba(21,128,61,0.35)' }}
                               onClick={async () => { try { const d = await notesAPI.getByVisit(v.id); setReview({ ...v, final_note:d.note?.final_note, note_id:d.note?.id, scribe_name:d.note?.scribe_name||v.scribe_name }) } catch { showToast('Failed to load note','error') } }}>
                               📋 Review Final Note
                             </button>
-                            <button type="button" className="cl-icon-btn" title="Preview Draft" onClick={() => setAiVisit(v)}>👁</button>
                           </>
                         )}
                         {v.status === 'uploaded' && (
                           <>
-                            <button style={{ ...B.action, background:'linear-gradient(135deg,#1565C0,#1E40AF)', color:'#fff', padding:'10px 18px', fontSize:14, boxShadow:'0 4px 14px rgba(30,64,175,0.35)' }}
+                            <button type="button" className="cl-schedule-btn-review" style={{ ...B.action, background:'linear-gradient(135deg,#1565C0,#1E40AF)', color:'#fff', padding:'10px 18px', fontSize:14, boxShadow:'0 4px 14px rgba(30,64,175,0.35)' }}
                               onClick={async () => { try { const d = await notesAPI.getByVisit(v.id); setReview({ ...v, final_note:d.note?.final_note, note_id:d.note?.id, scribe_name:d.note?.scribe_name||v.scribe_name }) } catch { showToast('Failed to load note','error') } }}>
                               📋 View Final Note
                             </button>
-                            <button type="button" className="cl-icon-btn" title="Preview Draft" onClick={() => setAiVisit(v)}>👁</button>
+                            {canPreviewUploadedNote(v) ? (
+                              <button type="button" className="cl-icon-btn" title="Preview Note" onClick={() => setAiVisit(v)}>👁</button>
+                            ) : null}
                           </>
                         )}
                       </div>

@@ -4,6 +4,11 @@ import { useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, ConfirmDialog, 
 import { authAPI, usersAPI, visitsAPI, notesAPI, API_BASE } from '../../services/api'
 import { useBranding } from '../../services/branding'
 import SystemProfileManager from '../../components/SystemProfileManager'
+import PortalAudioPlayer from '../../components/PortalAudioPlayer'
+import NoteWorkspacePanel from '../../components/NoteWorkspacePanel'
+import PortalSidebarFooter from '../../components/PortalSidebarFooter'
+import { fmtAppointmentTime } from '../../utils/timeFormat'
+import './scribe.css'
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -37,11 +42,6 @@ function fmtTime(t) {
   return `${hour > 12 ? hour - 12 : hour === 0 ? 12 : hour}:${m} ${hour >= 12 ? 'PM' : 'AM'}`
 }
 
-function fmtSecs(s) {
-  if (!s || isNaN(s) || !isFinite(s) || s < 0) return '00:00'
-  return `${String(Math.floor(s / 60)).padStart(2,'0')}:${String(Math.floor(s % 60)).padStart(2,'0')}`
-}
-
 // Parse transcription stored as JSON array or plain string
 function parseTranscriptions(raw) {
   if (!raw) return []
@@ -70,143 +70,6 @@ function ScoreBar({ value }) {
         <div style={{ width: `${value}%`, height: '100%', borderRadius: 3, background: value >= 90 ? '#00C896' : value >= 75 ? '#FFB547' : '#FF5A7A' }} />
       </div>
       <span style={{ fontSize: 12, fontWeight: 600, color: '#1E293B', minWidth: 28 }}>{value}</span>
-    </div>
-  )
-}
-
-// ─── AUDIO PLAYER ─────────────────────────────────────────────────────────────
-
-function AudioPlayer({ visitId, durationSecs, onTabChange }) {
-  const [count, setCount]         = useState(1)
-  const [activeIdx, setActiveIdx] = useState(0)
-  const [status, setStatus]       = useState('loading')
-  const [isPlaying, setPlaying]   = useState(false)
-  const [current, setCurrent]     = useState(0)
-  const [duration, setDuration]   = useState(durationSecs || 0)
-  const audioRef   = useRef(null)
-  const blobRef    = useRef(null)
-  const maxTimeRef = useRef(durationSecs || 0)
-
-  useEffect(() => {
-    if (!visitId) return
-    const token = localStorage.getItem('token')
-    fetch(`${API_BASE}/audio/${visitId}/count`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }).then(r => r.json()).then(d => { if (d.count > 0) setCount(d.count) }).catch(() => {})
-  }, [visitId])
-
-  useEffect(() => {
-    if (!visitId) { setStatus('error'); return }
-    const audioEl = audioRef.current
-    setStatus('loading'); setPlaying(false); setCurrent(0)
-    const initDur = activeIdx === 0 ? (durationSecs || 0) : 0
-    setDuration(initDur); maxTimeRef.current = initDur
-    if (blobRef.current) { URL.revokeObjectURL(blobRef.current); blobRef.current = null }
-    const token = localStorage.getItem('token')
-    fetch(`${API_BASE}/audio/${visitId}?index=${activeIdx}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(res => { if (!res.ok) throw new Error('no audio'); return res.blob() })
-      .then(blob => {
-        if (!blob || blob.size === 0) throw new Error('empty')
-        blobRef.current = URL.createObjectURL(blob)
-        if (audioEl) { audioEl.src = blobRef.current; audioEl.load() }
-        setStatus('ready')
-      })
-      .catch(() => setStatus('error'))
-    return () => {
-      if (audioEl) { audioEl.pause(); audioEl.src = '' }
-      if (blobRef.current) { URL.revokeObjectURL(blobRef.current); blobRef.current = null }
-    }
-  }, [visitId, activeIdx, durationSecs])
-
-  useEffect(() => {
-    const audio = audioRef.current
-    if (!audio) return
-    const onMeta = () => { const dur = audio.duration; if (dur && isFinite(dur) && dur > 0) { setDuration(Math.floor(dur)); maxTimeRef.current = Math.floor(dur) } }
-    const onTime = () => { const cur = Math.floor(audio.currentTime); setCurrent(cur); if (cur > maxTimeRef.current) { maxTimeRef.current = cur; setDuration(cur) } }
-    const onEnded = () => { setPlaying(false); setCurrent(0); if (maxTimeRef.current > 0) setDuration(maxTimeRef.current) }
-    audio.addEventListener('loadedmetadata', onMeta)
-    audio.addEventListener('durationchange', onMeta)
-    audio.addEventListener('timeupdate',     onTime)
-    audio.addEventListener('ended',          onEnded)
-    return () => {
-      audio.removeEventListener('loadedmetadata', onMeta)
-      audio.removeEventListener('durationchange', onMeta)
-      audio.removeEventListener('timeupdate',     onTime)
-      audio.removeEventListener('ended',          onEnded)
-    }
-  }, [])
-
-  const handleTabChange = (i) => {
-    setActiveIdx(i)
-    if (onTabChange) onTabChange(i)
-  }
-
-  const toggle = () => {
-    const audio = audioRef.current
-    if (!audio || status !== 'ready') return
-    if (isPlaying) { audio.pause(); setPlaying(false) }
-    else           { audio.play().then(() => setPlaying(true)).catch(() => {}) }
-  }
-
-  const skip = (secs) => {
-    const audio = audioRef.current
-    if (!audio || status !== 'ready') return
-    const max = maxTimeRef.current || duration || 0
-    const t = Math.max(0, Math.min(max, audio.currentTime + secs))
-    audio.currentTime = t; setCurrent(Math.floor(t))
-  }
-
-  const seek = (e) => {
-    const audio = audioRef.current
-    if (!audio || status !== 'ready' || !duration) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    const t = Math.round(((e.clientX - rect.left) / rect.width) * duration)
-    audio.currentTime = t; setCurrent(t)
-  }
-
-  const canPlay  = status === 'ready'
-  const progress = duration > 0 ? Math.min(100, (current / duration) * 100) : 0
-  const totalStr = duration > 0 ? fmtSecs(duration) : '--:--'
-
-  return (
-    <div className="sf-audio-bar">
-      <audio ref={audioRef} preload="metadata" style={{ display: 'none' }} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        {count > 1 && (
-          <div style={{ display: 'flex', gap: 6 }}>
-            {Array.from({ length: count }, (_, i) => (
-              <button key={i} onClick={() => handleTabChange(i)} style={{ padding: '3px 12px', borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: 'pointer', border: '1px solid', background: activeIdx === i ? 'linear-gradient(135deg,#4260E9,#7B61FF)' : '#EEF2FF', color: activeIdx === i ? '#fff' : '#64748B', borderColor: activeIdx === i ? '#4260E9' : '#E2E8F0' }}>Rec {i + 1}</button>
-            ))}
-          </div>
-        )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: '#1E293B' }}>🎙 Recording {activeIdx + 1}{count > 1 ? ` of ${count}` : ''}</span>
-          {status === 'loading' && <span style={{ fontSize: 10, color: '#64748B', background: '#EEF2FF', padding: '2px 7px', borderRadius: 10 }}>Loading...</span>}
-          {status === 'ready'   && <span style={{ fontSize: 10, color: '#085041', background: '#E1F5EE', padding: '2px 7px', borderRadius: 10 }}>● Ready</span>}
-          {status === 'error'   && <span style={{ fontSize: 10, color: '#64748B', background: '#EEF2FF', padding: '2px 7px', borderRadius: 10 }}>No audio</span>}
-        </div>
-        <span style={{ marginLeft: 'auto', fontSize: 12, color: '#64748B', fontWeight: 500 }}>{fmtSecs(current)} / {totalStr}</span>
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          <button onClick={() => skip(-5)} disabled={!canPlay} style={{ padding: '5px 10px', borderRadius: 6, background: '#EEF2FF', color: '#64748B', border: '1px solid #E2E8F0', fontSize: 11, fontWeight: 600, cursor: canPlay ? 'pointer' : 'not-allowed', opacity: canPlay ? 1 : 0.4, fontFamily: 'inherit' }}>−5s</button>
-          <button onClick={toggle} disabled={!canPlay} style={{ width: 38, height: 38, borderRadius: '50%', background: canPlay ? 'linear-gradient(135deg,#4260E9,#7B61FF)' : '#CBD5E1', color: '#fff', border: 'none', fontSize: 14, cursor: canPlay ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            {status === 'loading' ? '⏳' : isPlaying ? '⏸' : '▶'}
-          </button>
-          <button onClick={() => skip(5)} disabled={!canPlay} style={{ padding: '5px 10px', borderRadius: 6, background: '#EEF2FF', color: '#64748B', border: '1px solid #E2E8F0', fontSize: 11, fontWeight: 600, cursor: canPlay ? 'pointer' : 'not-allowed', opacity: canPlay ? 1 : 0.4, fontFamily: 'inherit' }}>+5s</button>
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div onClick={canPlay ? seek : undefined} style={{ height: 6, background: '#E2E8F0', borderRadius: 3, overflow: 'hidden', cursor: canPlay ? 'pointer' : 'default', marginBottom: 4 }}>
-            <div style={{ height: '100%', background: 'linear-gradient(90deg,#4260E9,#7B61FF)', borderRadius: 3, width: `${progress}%`, transition: 'width 0.3s linear' }} />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 10, color: '#64748B' }}>{fmtSecs(current)}</span>
-            <span style={{ fontSize: 10, color: '#64748B', fontWeight: 500 }}>{totalStr}</span>
-          </div>
-        </div>
-      </div>
     </div>
   )
 }
@@ -331,7 +194,18 @@ export default function Scribe() {
         const data = await notesAPI.getByVisit(visitId)
         const n = data.note
         if (mergeOnly) {
-          if (n) setNote(n)
+          if (n) {
+            setNote(n)
+            setSelectedRec((prev) =>
+              prev && String(prev.id) === String(visitId)
+                ? { ...prev, transcription_status: n.transcription_status }
+                : prev,
+            )
+            if (n.transcription) {
+              const segs = parseTranscriptions(n.transcription)
+              setTxSegments(segs)
+            }
+          }
           return
         }
         if (!n) {
@@ -342,6 +216,11 @@ export default function Scribe() {
           return
         }
         setNote(n)
+        setSelectedRec((prev) =>
+          prev && String(prev.id) === String(visitId)
+            ? { ...prev, transcription_status: n.transcription_status }
+            : prev,
+        )
         const fn = n.final_note || ''
         setFinalNote(fn)
         const segs = parseTranscriptions(n.transcription)
@@ -481,14 +360,25 @@ export default function Scribe() {
     try {
       setTranscribeSubmitting(true)
       await visitsAPI.runTranscription(selectedRec.id)
-      showNotif('Transcription started. Use Refresh when it finishes — your work stays on screen until then.')
-      await loadNote(selectedRec.id)
+      setSelectedRec((prev) => (prev ? { ...prev, transcription_status: 'processing' } : prev))
+      showNotif('Transcription started — updating automatically every few seconds.')
+      await loadNote(selectedRec.id, { mergeOnly: true })
     } catch (err) {
       showNotif(err.message || 'Could not start transcription.', 'red')
     } finally {
       setTranscribeSubmitting(false)
     }
   }
+
+  useEffect(() => {
+    if (screen !== 'note' || !selectedRec?.id) return undefined
+    const st = note?.transcription_status || selectedRec?.transcription_status
+    if (st !== 'processing') return undefined
+    const timer = setInterval(() => {
+      void loadNote(selectedRec.id, { mergeOnly: true })
+    }, 8000)
+    return () => clearInterval(timer)
+  }, [screen, selectedRec?.id, selectedRec?.transcription_status, note?.transcription_status, loadNote])
 
   const openRecording = (rec) => {
     const go = () => {
@@ -572,22 +462,11 @@ export default function Scribe() {
           </div>
         </div>
       )}
-      <div className="sf-sidebar-footer sf-sidebar-rich__footer adm-sidebar-footer">
-        <div className="adm-sidebar-footer__card">
-          <p className="adm-sidebar-footer__eyebrow">Account</p>
-          <p className="adm-sidebar-footer__who">{currentUser.name || 'Scribe'}</p>
-          <button type="button" className="adm-sidebar-footer__btn" onClick={requestLogout}>
-            <span className="adm-sidebar-footer__btn-ico" aria-hidden>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <polyline points="16 17 21 12 16 7" />
-                <line x1="21" y1="12" x2="9" y2="12" />
-              </svg>
-            </span>
-            Sign out
-          </button>
-        </div>
-      </div>
+      <PortalSidebarFooter
+        userName={currentUser.name || 'Scribe'}
+        role="scribe"
+        onLogout={requestLogout}
+      />
     </aside>
     </>
   )
@@ -597,7 +476,7 @@ export default function Scribe() {
   if (screen === 'notes') {
     const byProvider = myNotes.reduce((acc, n) => { const key = n.clinician_name || 'Unknown'; if (!acc[key]) acc[key] = []; acc[key].push(n); return acc }, {})
     return (
-      <div className="sf-page sf-portal adm-shell">
+      <div className="sf-page sf-portal adm-shell scribe-portal">
         <SidebarEl />
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
@@ -654,7 +533,7 @@ export default function Scribe() {
   if (screen === 'grades') {
     const avgScore = grades.length > 0 ? Math.round(grades.reduce((a, g) => a + (g.overall_score || 0), 0) / grades.length) : 0
     return (
-      <div className="sf-page sf-portal adm-shell">
+      <div className="sf-page sf-portal adm-shell scribe-portal">
         <SidebarEl />
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
@@ -735,7 +614,7 @@ export default function Scribe() {
 
   if (screen === 'profile') {
     return (
-      <div className="sf-page sf-portal adm-shell">
+      <div className="sf-page sf-portal adm-shell scribe-portal">
         <SidebarEl />
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
@@ -765,7 +644,7 @@ export default function Scribe() {
               </div>
             </div>
             <div style={{ marginTop: 16 }}>
-              <SystemProfileManager showToast={showNotif} roleLabel="Scribe" compact />
+              <SystemProfileManager showToast={showNotif} roleLabel="Scribe" compact readOnly />
             </div>
           </div>
           {notif && <Notif notif={notif} />}
@@ -778,7 +657,7 @@ export default function Scribe() {
 
   if (screen === 'providers') {
     return (
-      <div className="sf-page sf-portal adm-shell">
+      <div className="sf-page sf-portal adm-shell scribe-portal">
         <SidebarEl />
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
@@ -822,7 +701,7 @@ export default function Scribe() {
   if (screen === 'date') {
     const QUICK = [{ label: 'Today', date: localDateStr(0) },{ label: 'Yesterday', date: localDateStr(-1) },{ label: '2 days ago', date: localDateStr(-2) },{ label: '3 days ago', date: localDateStr(-3) }]
     return (
-      <div className="sf-page sf-portal adm-shell">
+      <div className="sf-page sf-portal adm-shell scribe-portal">
         <SidebarEl />
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
@@ -839,11 +718,11 @@ export default function Scribe() {
             onLogout={requestLogout}
             menuId="scribe-account-menu"
             titleRow={
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
+              <div className="scribe-topbar-row">
                 <span className="sf-back" onClick={() => { setScreen('providers'); setSelectedProvider(null) }}>
                   ← Back
                 </span>
-                <div className="adm-topbar__titles" style={{ minWidth: 0 }}>
+                <div className="adm-topbar__titles">
                   <div className="adm-topbar__module">{selectedProvider?.name}</div>
                   <div className="adm-topbar__brand">Step 2 of 2 — Select a date · {branding.system_name || 'Anot'}</div>
                 </div>
@@ -851,9 +730,9 @@ export default function Scribe() {
             }
           />
           <div className="sf-body">
-            <div style={{ maxWidth: 480 }}>
+            <div className="scribe-date-panel">
               <div className="sf-section-label">Quick Select</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 24 }}>
+              <div className="scribe-date-quick">
                 {QUICK.map(({ label, date }) => {
                   const isSel = selectedDate === date
                   return (
@@ -873,7 +752,7 @@ export default function Scribe() {
                   <div style={{ fontSize: 14, color: '#1E293B', fontWeight: 500 }}>{fmtDateLabel(selectedDate)}</div>
                 </div>
               )}
-              <button style={{ width: '100%', padding: '14px', borderRadius: 12, background: 'linear-gradient(135deg,#4260E9,#7B61FF)', color: '#fff', border: 'none', fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 4px 14px rgba(66,96,233,.35)' }}
+              <button type="button" className="scribe-date-cta"
                 onClick={() => { loadRecordings(selectedProvider.id, selectedDate); setScreen('recordings') }}>
                 View Recordings for {fmtShortDate(selectedDate)} →
               </button>
@@ -890,7 +769,7 @@ export default function Scribe() {
     const pending   = recordings.filter(r => ['recording-uploaded','note-ready'].includes(r.status)).length
     const submitted = recordings.filter(r => ['submitted','uploaded'].includes(r.status)).length
     return (
-      <div className="sf-page sf-portal adm-shell">
+      <div className="sf-page sf-portal adm-shell scribe-portal">
         <SidebarEl />
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
@@ -907,11 +786,11 @@ export default function Scribe() {
             onLogout={requestLogout}
             menuId="scribe-account-menu"
             titleRow={
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1, flexWrap: 'wrap' }}>
+              <div className="scribe-topbar-row">
                 <span className="sf-back" onClick={() => setScreen('date')}>
                   ← Back
                 </span>
-                <div className="adm-topbar__titles" style={{ minWidth: 0, flex: '1 1 160px' }}>
+                <div className="adm-topbar__titles">
                   <div className="adm-topbar__module">{selectedProvider?.name}</div>
                   <div className="adm-topbar__brand">
                     {fmtDateLabel(selectedDate)} · {recordings.length} recording{recordings.length !== 1 ? 's' : ''} ·{' '}
@@ -921,21 +800,7 @@ export default function Scribe() {
               </div>
             }
             endBeforeAccount={
-              <button
-                type="button"
-                onClick={() => setScreen('date')}
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: 8,
-                  fontSize: 12,
-                  fontWeight: 500,
-                  background: '#EEF2FF',
-                  color: '#64748B',
-                  border: '1px solid #E2E8F0',
-                  cursor: 'pointer',
-                  fontFamily: 'inherit',
-                }}
-              >
+              <button type="button" className="scribe-change-date-btn" onClick={() => setScreen('date')}>
                 📅 Change Date
               </button>
             }
@@ -986,9 +851,9 @@ export default function Scribe() {
       : txSt === 'completed' ? { label: 'Completed', cls: 'badge-green' }
         : txSt === 'failed' ? { label: 'Failed', cls: 'badge-gray' }
           : { label: 'Idle', cls: 'badge-amber' }
-
+  const txComplete = txSt === 'completed'
   return (
-    <div className="sf-page-fixed sf-portal adm-shell">
+    <div className="sf-page-fixed sf-portal adm-shell scribe-portal">
       <SidebarEl />
       <div className="sf-main-fixed sf-portal__main">
         <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
@@ -1004,17 +869,18 @@ export default function Scribe() {
           onViewProfile={() => handleNav('profile')}
           onLogout={requestLogout}
           menuId="scribe-account-menu"
-          titleRow={
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
-              <span className="sf-back" onClick={() => leaveNoteScreen(() => setScreen('recordings'))}>
-                ← Back
-              </span>
-              <div className="adm-topbar__titles" style={{ minWidth: 0 }}>
+            titleRow={
+              <div className="scribe-topbar-row">
+                <span className="sf-back" onClick={() => leaveNoteScreen(() => setScreen('recordings'))}>
+                  ← Back
+                </span>
+                <div className="adm-topbar__titles">
                 <div className="adm-topbar__module">
                   {selectedRec?.patient_name} — {selectedRec?.visit_type}
                 </div>
                 <div className="adm-topbar__brand">
-                  {selectedRec?.mrn} · {selectedProvider?.name} · {fmtTime(selectedRec?.visit_time)} · {selectedDate} ·{' '}
+                  {selectedRec?.mrn} · {selectedProvider?.name}
+                  {selectedRec?.visit_time ? ` · Appt. ${fmtAppointmentTime(selectedRec.visit_time)}` : ''} · {selectedDate} ·{' '}
                   {branding.system_name || 'Anot'}
                 </div>
               </div>
@@ -1026,8 +892,10 @@ export default function Scribe() {
           {isDirty ? <span className="sf-note-toolbar__pill">Unsaved changes</span> : null}
           <span className="sf-note-toolbar__hint">
             {txSt === 'processing'
-              ? 'Transcription is running on the server. Use Refresh when it completes — your typing is not interrupted.'
-              : 'Edits stay in your browser until you save a draft or submit to the clinician.'}
+              ? 'Transcription is running on the server (auto-refresh every 8s). You can also click Refresh.'
+              : txSt === 'failed'
+                ? 'Transcription failed — check audio format (install ffmpeg on server for .webm), Deepgram/Groq keys in Admin → Settings, then click Transcribe audio again.'
+                : 'Edits stay in your browser until you save a draft or submit to the clinician.'}
           </span>
           <button
             type="button"
@@ -1057,26 +925,33 @@ export default function Scribe() {
           ) : null}
         </div>
 
-        <div className="sf-transcribe-split">
-          <div className="sf-transcribe-split__audio">
-            <AudioPlayer
+        <div className="sf-note-workspace">
+          <div className="sf-note-workspace__top">
+            <PortalAudioPlayer
               visitId={selectedRec?.id}
               durationSecs={selectedRec?.duration_seconds || 0}
               onTabChange={(idx) => setActiveRecIdx(idx)}
+              compact
             />
           </div>
-          <div className="sf-panel" style={{ borderRadius: 12, border: '1px solid var(--sf-card-edge, #E2E8F0)' }}>
-            <div className="sf-panel-head">
-              <span className="sf-panel-title">Transcription</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          <div className="sf-note-workspace__panels">
+          <NoteWorkspacePanel
+            title="Transcription"
+            className="sf-note-panel--transcription"
+            badges={
+              <>
                 <span className={`badge ${txBadge.cls}`}>{txBadge.label}</span>
-                <span className="badge badge-gray">
-                  {txSegments.length > 1 ? `Rec ${activeRecIdx + 1} of ${txSegments.length}` : 'Auto'}
+                <span
+                  className="badge badge-gray"
+                  title={txSegments.length > 1 ? 'Multiple recordings — use Rec tabs on the player' : 'Single recording — transcript maps to Rec 1 automatically'}
+                >
+                  {txSegments.length > 1 ? `Rec ${activeRecIdx + 1} of ${txSegments.length}` : 'Auto segment'}
                 </span>
-              </div>
-            </div>
-            <div className="sf-panel-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {!isDone && (
+              </>
+            }
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {!isDone && !txComplete && (
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <button type="button" className="btn btn-navy" disabled={transcribeSubmitting || !selectedRec?.id} onClick={runTranscribe}>
                     {transcribeSubmitting ? 'Starting…' : 'Transcribe audio'}
@@ -1102,23 +977,23 @@ export default function Scribe() {
                   style={{ minHeight: 200, flex: 1 }}
                 />
               )}
-              {!loadingNote && !currentSeg && txSt !== 'processing' && (
+              {!loadingNote && !currentSeg && txSt === 'failed' && (
+                <div className="sf-notif sf-notif-amber" style={{ borderRadius: 10, fontSize: 12, lineHeight: 1.6 }}>
+                  Transcription could not be completed. Try Transcribe audio again, or ask an admin to set GROQ_API_KEY and/or Deepgram in Settings.
+                </div>
+              )}
+              {!loadingNote && !currentSeg && txSt !== 'processing' && txSt !== 'failed' && (
                 <div style={{ color: '#64748B', fontSize: 12, lineHeight: 1.6 }}>
                   No transcript yet. Use &quot;Transcribe audio&quot; or wait for the clinician to finish the visit if auto-transcription is enabled.
                 </div>
               )}
             </div>
-          </div>
-        </div>
+          </NoteWorkspacePanel>
 
-        {notif && <div className={`sf-notif sf-notif-${notif.type}`}>✓ {notif.msg}</div>}
-
-        <div className="sf-panels sf-panels--two">
-          <div className="sf-panel">
-            <div className="sf-panel-head">
-              <span className="sf-panel-title">AI Draft</span>
-              <span className="badge badge-blue">AI Generated</span>
-            </div>
+          <NoteWorkspacePanel
+            title="AI Draft"
+            badges={<span className="badge badge-blue">AI Generated</span>}
+          >
             {loadingNote ? <div style={{ padding: 12, color: '#64748B', fontSize: 13 }}>Loading...</div> :
              note?.ai_draft ? (
               <textarea className="sf-textarea sf-textarea-readonly" value={note.ai_draft} readOnly />
@@ -1129,14 +1004,12 @@ export default function Scribe() {
                 <div>Will appear after transcription is processed.</div>
               </div>
             )}
-          </div>
+          </NoteWorkspacePanel>
 
-          {/* Final Note */}
-          <div className="sf-panel">
-            <div className="sf-panel-head">
-              <span className="sf-panel-title">Final Note</span>
-              <span className={`badge ${isDone ? 'badge-green' : 'badge-amber'}`}>{isDone ? 'Submitted' : 'Editing'}</span>
-            </div>
+          <NoteWorkspacePanel
+            title="Final Note"
+            badges={<span className={`badge ${isDone ? 'badge-green' : 'badge-amber'}`}>{isDone ? 'Submitted' : 'Editing'}</span>}
+          >
             {loadingNote ? <div style={{ padding: 12, color: '#64748B', fontSize: 13 }}>Loading...</div> : (
               <textarea className="sf-textarea" value={finalNote} onChange={e => setFinalNote(e.target.value)}
                 readOnly={isDone} style={isDone ? { background: '#EEF2FF', cursor: 'default' } : {}}
@@ -1154,8 +1027,11 @@ export default function Scribe() {
                 <span style={{ fontSize: 13, color: '#047857', fontWeight: 500 }}>✓ Note submitted — clinician has been notified</span>
               </div>
             )}
-          </div>
+          </NoteWorkspacePanel>
         </div>
+        </div>
+
+        {notif && <div className={`sf-notif sf-notif-${notif.type}`}>✓ {notif.msg}</div>}
       </div>
     </div>
   )

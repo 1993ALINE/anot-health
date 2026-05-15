@@ -97,6 +97,29 @@ DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@127.0.0.1:5432/anot_dev
 
 The API **exits on startup** if it cannot connect — fix DB credentials before starting the server.
 
+### Automated local PostgreSQL (Windows)
+
+If **Neon** credentials fail (`password authentication failed for user 'neondb_owner'`) but **PostgreSQL 18** is installed locally, run once from an **elevated** PowerShell if needed:
+
+```powershell
+cd anot-backend-main\anot-backend-main
+.\scripts\setup-local-postgres.ps1
+```
+
+That script creates database **`anot_dev`**, user **`anot_dev`**, applies schema + migrations, seeds dev users, and writes **`.env`** using **`DB_*`** (no SSL — required for local Postgres).
+
+**Local DB credentials (dev only):**
+
+| Item | Value |
+|------|--------|
+| Host | `127.0.0.1` |
+| Port | `5432` |
+| Database | `anot_dev` |
+| User | `anot_dev` |
+| Password | `anot_local_dev_2026` |
+
+After setup, **restart** `npm run dev` so the API reloads `.env`.
+
 ---
 
 ## 5) Backend configuration (`.env`)
@@ -117,13 +140,15 @@ openssl rand -hex 32
 
 ### Database (choose one style)
 
-**Style A — `DATABASE_URL`**
+**Style A — `DATABASE_URL`** (cloud DBs such as Neon)
 
 ```env
-DATABASE_URL=postgresql://USER:PASSWORD@127.0.0.1:5432/anot_dev
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DBNAME?sslmode=require
 ```
 
-Optional for some cloud DBs: `DATABASE_SSL_INSECURE=true` (see `src/config/db.js` — avoid in production if possible).
+Optional: `DATABASE_SSL_INSECURE=true` if the provider needs relaxed SSL (see `src/config/db.js`).
+
+**Style A — local Postgres without SSL:** prefer **Style B** below. Using `DATABASE_URL` against local Postgres often causes **“The server does not support SSL connections”**.
 
 **Style B — discrete variables**
 
@@ -345,6 +370,9 @@ If the preview calls the wrong API, read **`src/services/api.js`** and adjust **
 | **Port 5000 in use (Windows)** | `netstat -ano \| findstr :5000` — stop the other process or set **`PORT=5001`** in backend `.env` and set **`VITE_API_URL=http://127.0.0.1:5001/api`** in frontend `.env.local`. |
 | **Error before sign-in** | Old **`token`** in `localStorage` triggers **`/api/auth/me`**; failing API looks like a login failure. Clear site data or use a private window. |
 | **CORS in production** | Not typical on pure localhost; for deployed APIs set **`CORS_ORIGINS`** — see **AWS** or **cPanel** guides in this folder. |
+| **Scribe: Transcription stuck on “Processing”** | A prior run may have left `transcription_status=processing`. Click **Transcribe audio** again (server now clears stuck jobs) or **Refresh**. Clear a fake Deepgram webhook URL in Admin → Settings if it points to `localhost`. |
+| **Scribe: transcript OK but no AI draft** | Uncomment **`GROQ_API_KEY=...`** in backend `.env` and restart `npm run dev`. |
+| **`.webm` audio / corrupt audio errors** | Install **ffmpeg** on the server PATH, or enable FFmpeg preprocessing in Admin → Settings. |
 
 ---
 

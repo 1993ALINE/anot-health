@@ -2,6 +2,9 @@ const pool = require('../config/db')
 const { encryptString } = require('../utils/settingsEncryption')
 const { invalidateAiSettingsCache } = require('../services/aiSettings')
 const { ensureMediaAndAiSchema } = require('../utils/ensureMediaSchema')
+const { addColumnIfMissing, columnExists } = require('../utils/schemaDdl')
+const { getSystemSettingsColumns, updateSystemSettingsRow, invalidateSettingsColumnCache } = require('../utils/settingsSchemaCompat')
+const { publicSocialLinks, mergeRowWithExtensions, packSocialLinksForSave } = require('../utils/settingsExtensions')
 
 const DEFAULT_SETTINGS = {
   system_name: 'Anot',
@@ -62,10 +65,19 @@ async function ensureSettingsTable() {
     VALUES (1)
     ON CONFLICT (id) DO NOTHING
   `)
-  await pool.query(`ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS audit_retention_days INTEGER NOT NULL DEFAULT 365`)
-  await pool.query(`UPDATE system_settings SET audit_retention_days = GREATEST(30, LEAST(COALESCE(audit_retention_days, 365), 3650)) WHERE id = 1`)
+  await addColumnIfMissing(
+    'system_settings',
+    'audit_retention_days',
+    `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS audit_retention_days INTEGER NOT NULL DEFAULT 365`,
+  )
+  if (await columnExists('system_settings', 'audit_retention_days')) {
+    await pool.query(
+      `UPDATE system_settings SET audit_retention_days = GREATEST(30, LEAST(COALESCE(audit_retention_days, 365), 3650)) WHERE id = 1`,
+    )
+  }
 
   await ensureMediaAndAiSchema()
+  invalidateSettingsColumnCache()
 
   initialized = true
 }
@@ -97,7 +109,7 @@ function mapBaseSettings(row) {
     company_info: row.company_info || '',
     footer_text: row.footer_text || '',
     support_contact: row.support_contact || '',
-    social_links: row.social_links || {},
+    social_links: publicSocialLinks(row.social_links),
     logo_data_url: row.logo_data_url || '',
     favicon_data_url: row.favicon_data_url || '',
     primary_color: row.primary_color || DEFAULT_SETTINGS.primary_color,
@@ -126,11 +138,12 @@ function mapAiSettings(row) {
   }
 }
 
-function mapInternalRow(row) {
+function mapInternalRow(row, columnSet) {
+  const merged = mergeRowWithExtensions(row, columnSet)
   return {
-    ...mapBaseSettings(row),
-    audit_retention_days: row.audit_retention_days != null ? Number(row.audit_retention_days) : 365,
-    ...mapAiSettings(row),
+    ...mapBaseSettings(merged),
+    audit_retention_days: merged.audit_retention_days != null ? Number(merged.audit_retention_days) : 365,
+    ...mapAiSettings(merged),
   }
 }
 
@@ -143,7 +156,8 @@ const getPublicSettings = async (req, res) => {
     await ensureSettingsTable()
     const result = await pool.query('SELECT * FROM system_settings WHERE id = 1')
     const row = result.rows[0] || DEFAULT_SETTINGS
-    res.status(200).json({ settings: mapPublicRow(row) })
+    const cols = await getSystemSettingsColumns()
+    res.status(200).json({ settings: mapPublicRow(mergeRowWithExtensions(row, cols)) })
   } catch (err) {
     console.error('Get settings error:', err.message)
     res.status(500).json({ error: 'Failed to load settings.' })
@@ -162,7 +176,9 @@ const updateSettings = async (req, res) => {
     const footer_text = cleanStr(payload.footer_text, 240)
     const support_contact = cleanStr(payload.support_contact, 240)
     const system_description = cleanStr(payload.system_description, 400)
-    const social_links = typeof payload.social_links === 'object' && payload.social_links ? payload.social_links : {}
+    const socialPayload = typeof payload.social_links === 'object' && payload.social_links ? payload.social_links : {}
+    const userSocial = { ...socialPayload }
+    delete userSocial.__admin_meta
 
     if (system_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(system_email)) {
       return res.status(400).json({ error: 'Enter a valid email address.' })
@@ -237,70 +253,60 @@ const updateSettings = async (req, res) => {
         ? !!payload.ffmpeg_preprocess_before_transcribe
         : cur.ffmpeg_preprocess_before_transcribe !== false
 
-    const result = await pool.query(
-      `UPDATE system_settings
-       SET system_name = $1,
-           system_email = $2,
-           phone = $3,
-           address = $4,
-           company_info = $5,
-           footer_text = $6,
-           support_contact = $7,
-           social_links = $8,
-           logo_data_url = $9,
-           favicon_data_url = $10,
-           primary_color = $11,
-           secondary_color = $12,
-           system_description = $13,
-           audit_retention_days = $14,
-           deepgram_enabled = $15,
-           deepgram_api_key_enc = $16,
-           deepgram_model = $17,
-           deepgram_language = $18,
-           deepgram_webhook_url = $19,
-           deepgram_auto_transcribe_on_upload = $20,
-           ffmpeg_enabled = $21,
-           ffmpeg_target_format = $22,
-           ffmpeg_compression = $23,
-           ffmpeg_max_upload_mb = $24,
-           ffmpeg_preprocess_before_transcribe = $25,
-           updated_at = NOW()
-       WHERE id = 1
-       RETURNING *`,
-      [
-        system_name,
-        system_email || null,
-        phone || null,
-        address || null,
-        company_info || null,
-        footer_text || null,
-        support_contact || null,
-        JSON.stringify(social_links),
-        logo_data_url || null,
-        favicon_data_url || null,
-        primary_color,
-        secondary_color,
-        system_description || null,
-        audit_retention_days,
-        deepgram_enabled,
-        deepgram_api_key_enc,
-        deepgram_model,
-        deepgram_language,
-        deepgram_webhook_raw || '',
-        deepgram_auto_transcribe_on_upload,
-        ffmpeg_enabled,
-        ffmpeg_target_format,
-        ffmpeg_compression,
-        ffmpeg_max_upload_mb,
-        ffmpeg_preprocess_before_transcribe,
-      ]
-    )
+    const columnSet = await getSystemSettingsColumns()
+    const packedSocial = packSocialLinksForSave(userSocial, {
+      audit_retention_days,
+      deepgram_enabled,
+      deepgram_api_key_enc,
+      deepgram_model,
+      deepgram_language,
+      deepgram_webhook_url: deepgram_webhook_raw || '',
+      deepgram_auto_transcribe_on_upload,
+      ffmpeg_enabled,
+      ffmpeg_target_format,
+      ffmpeg_compression,
+      ffmpeg_max_upload_mb,
+      ffmpeg_preprocess_before_transcribe,
+    }, columnSet)
+
+    const result = await updateSystemSettingsRow({
+      system_name,
+      system_email: system_email || null,
+      phone: phone || null,
+      address: address || null,
+      company_info: company_info || null,
+      footer_text: footer_text || null,
+      support_contact: support_contact || null,
+      social_links: packedSocial,
+      logo_data_url: logo_data_url || null,
+      favicon_data_url: favicon_data_url || null,
+      primary_color,
+      secondary_color,
+      system_description: system_description || null,
+      audit_retention_days,
+      deepgram_enabled,
+      deepgram_api_key_enc,
+      deepgram_model,
+      deepgram_language,
+      deepgram_webhook_url: deepgram_webhook_raw || '',
+      deepgram_auto_transcribe_on_upload,
+      ffmpeg_enabled,
+      ffmpeg_target_format,
+      ffmpeg_compression,
+      ffmpeg_max_upload_mb,
+      ffmpeg_preprocess_before_transcribe,
+    })
 
     invalidateAiSettingsCache()
-    res.status(200).json({ message: 'Settings saved successfully.', settings: mapInternalRow(result.rows[0]) })
+    invalidateSettingsColumnCache()
+    res.status(200).json({ message: 'Settings saved successfully.', settings: mapInternalRow(result.rows[0], columnSet) })
   } catch (err) {
     console.error('Update settings error:', err.message)
-    res.status(500).json({ error: 'Failed to save settings.' })
+    const hint =
+      /does not exist/i.test(String(err.message))
+        ? ' Database schema is out of date — run scripts/fix-local-schema-gaps.ps1 as postgres, or apply migrations/20260515_local_schema_gaps.sql.'
+        : ''
+    res.status(500).json({ error: `Failed to save settings.${hint}` })
   }
 }
 
@@ -309,7 +315,8 @@ const getInternalSettings = async (req, res) => {
     await ensureSettingsTable()
     const result = await pool.query('SELECT * FROM system_settings WHERE id = 1')
     const row = result.rows[0] || DEFAULT_SETTINGS
-    res.status(200).json({ settings: mapInternalRow(row) })
+    const cols = await getSystemSettingsColumns()
+    res.status(200).json({ settings: mapInternalRow(row, cols) })
   } catch (err) {
     console.error('Get internal settings error:', err.message)
     res.status(500).json({ error: 'Failed to load settings.' })

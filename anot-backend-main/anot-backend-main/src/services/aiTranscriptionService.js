@@ -1,5 +1,6 @@
 const fs = require('fs')
 const { loadAiSettings, useDeepgram } = require('./aiSettings')
+const { isReachableWebhookUrl } = require('../utils/webhookReachability')
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms))
@@ -70,7 +71,7 @@ async function transcribeWithDeepgram(absPath, settings, visitId) {
   const stream = fs.createReadStream(absPath)
   const baseCallback = String(settings.deepgram_webhook_url || '').trim()
   const id = parseInt(String(visitId), 10)
-  if (baseCallback && Number.isInteger(id)) {
+  if (baseCallback && Number.isInteger(id) && isReachableWebhookUrl(baseCallback)) {
     const callbackUrl = appendDeepgramVisitQuery(baseCallback, id)
     if (callbackUrl) {
       const callbackObj = { toString: () => callbackUrl }
@@ -101,7 +102,14 @@ async function transcribeWithDeepgram(absPath, settings, visitId) {
 async function transcribeFile(absPath, settingsOverride, visitId) {
   const settings = settingsOverride || (await loadAiSettings())
   if (useDeepgram(settings)) {
-    return transcribeWithDeepgram(absPath, settings, visitId)
+    const text = await transcribeWithDeepgram(absPath, settings, visitId)
+    if (text) return text
+    const groq = await transcribeWithGroq(absPath)
+    if (groq) {
+      console.warn('[aiTranscription] Deepgram returned no text; used Groq Whisper fallback.')
+      return groq
+    }
+    return null
   }
   return transcribeWithGroq(absPath)
 }

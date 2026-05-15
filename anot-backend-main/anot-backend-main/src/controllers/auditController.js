@@ -344,10 +344,16 @@ const exportAuditLogs = async (req, res) => {
     }
 }
 
+const { addColumnIfMissing } = require('../utils/schemaDdl')
+
 let settingsColsReady = false
 async function ensureAuditRetentionColumn() {
     if (settingsColsReady) return
-    await pool.query(`ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS audit_retention_days INTEGER NOT NULL DEFAULT 365`)
+    await addColumnIfMissing(
+        'system_settings',
+        'audit_retention_days',
+        `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS audit_retention_days INTEGER NOT NULL DEFAULT 365`,
+    )
     await pool.query(`UPDATE system_settings SET audit_retention_days = GREATEST(30, LEAST(COALESCE(audit_retention_days, 365), 3650)) WHERE id = 1`)
     settingsColsReady = true
 }

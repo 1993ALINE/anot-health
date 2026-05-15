@@ -658,7 +658,8 @@ export default function Admin() {
     }, [])
 
     const hydrateSettingsForm = useCallback((raw) => {
-        const social = raw?.social_links || {}
+        const social = { ...(raw?.social_links || {}) }
+        delete social.__admin_meta
         setSettingsForm({
             ...DEFAULT_SETTINGS_FORM,
             ...raw,
@@ -827,12 +828,13 @@ export default function Admin() {
         return () => clearInterval(interval)
     }, [tab, currentUser, loadPayroll, loadPerformance, loadAuditLogs])
 
+    // Settings tab loads from GET /settings/internal; syncing branding here races refreshBranding and clears social/AI fields.
     useEffect(() => {
-        if (!branding) return
+        if (!branding || tab === 'settings') return
         queueMicrotask(() => {
             hydrateSettingsForm(branding)
         })
-    }, [branding, hydrateSettingsForm])
+    }, [branding, hydrateSettingsForm, tab])
 
     const handleSettingInput = (key, value) => {
         setSettingsForm((prev) => ({ ...prev, [key]: value }))
@@ -930,8 +932,10 @@ export default function Admin() {
                 payload.deepgram_clear_api_key = true
             }
             const data = await settingsAPI.update(payload)
-            hydrateSettingsForm(data.settings || payload)
-            setBranding(data.settings || payload)
+            const saved = data.settings || payload
+            hydrateSettingsForm(saved)
+            setBranding(saved)
+            await loadSettings()
             showToast('Settings saved successfully')
         } catch (err) {
             showToast(err.message || 'Failed to save settings.', 'error')

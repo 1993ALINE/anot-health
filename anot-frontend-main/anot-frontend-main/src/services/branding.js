@@ -24,7 +24,13 @@ const STORAGE_KEY = 'anot_branding_settings'
 const EVENT_NAME = 'anot:branding-updated'
 
 export function normalizeBranding(data = {}) {
-  return { ...DEFAULT_BRANDING, ...(data || {}) }
+  const next = { ...DEFAULT_BRANDING, ...(data || {}) }
+  if (next.social_links && typeof next.social_links === 'object') {
+    const social = { ...next.social_links }
+    delete social.__admin_meta
+    next.social_links = social
+  }
+  return next
 }
 
 export function getCachedBranding() {

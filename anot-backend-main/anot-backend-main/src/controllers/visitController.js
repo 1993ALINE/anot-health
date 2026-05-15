@@ -4,6 +4,11 @@ const pool = require('../config/db')
 const { withTransaction } = require('../config/db')
 const { auditLog } = require('../utils/auditLogger')
 const { runAIPipeline } = require('../utils/aiPipeline')
+const {
+  visitDurationSelect,
+  visitTranscriptionStatusSelect,
+  visitHasDurationSeconds,
+} = require('../utils/visitSchemaCompat')
 
 function isIsoDate(s) {
   return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s))
@@ -33,10 +38,11 @@ const getVisitsByDate = async (req, res) => {
       return res.status(400).json({ error: 'date must be YYYY-MM-DD.' })
     }
 
+    const durationCol = await visitDurationSelect('v')
     const result = await pool.query(
       `SELECT
          v.id, v.visit_date, v.visit_time, v.visit_type, v.status,
-         v.duration_seconds, v.audio_file,
+         ${durationCol}, v.audio_file,
          p.id as patient_id, p.name as patient_name, p.mrn, p.date_of_birth,
          u.name as scribe_name, u.id as scribe_id,
          n.id as note_id, n.status as note_status,
@@ -67,10 +73,12 @@ const getAllVisits = async (req, res) => {
     const user_id  = req.user.id
     const userRole = req.user.role
 
+    const durationCol = await visitDurationSelect('v')
+    const txStatusCol = await visitTranscriptionStatusSelect('v')
     let query = `
       SELECT
         v.id, v.visit_date, v.visit_time, v.visit_type, v.status,
-        v.duration_seconds, v.audio_file, v.transcription_status,
+        ${durationCol}, v.audio_file, ${txStatusCol},
         p.id as patient_id, p.name as patient_name, p.mrn,
         c.name as clinician_name, c.id as clinician_id,
         s.name as scribe_name, s.id as scribe_id,
@@ -236,13 +244,19 @@ const endVisit = async (req, res) => {
         return { noAudio: true }
       }
 
-      const updated = await client.query(
-        `UPDATE visits
-            SET status = 'recording-uploaded', duration_seconds = $1
-          WHERE id = $2
-          RETURNING *`,
-        [duration_seconds || 0, id]
-      )
+      const hasDuration = await visitHasDurationSeconds()
+      const updated = hasDuration
+        ? await client.query(
+            `UPDATE visits
+                SET status = 'recording-uploaded', duration_seconds = $1
+              WHERE id = $2
+              RETURNING *`,
+            [duration_seconds || 0, id]
+          )
+        : await client.query(
+            `UPDATE visits SET status = 'recording-uploaded' WHERE id = $1 RETURNING *`,
+            [id]
+          )
 
       // Auto-create note if not exists. Inside the transaction + visit lock
       // this is now race-free.
@@ -375,10 +389,12 @@ const getVisitHistory = async (req, res) => {
   try {
     const clinician_id = req.user.id
 
+    const durationCol = await visitDurationSelect('v')
+    const txStatusCol = await visitTranscriptionStatusSelect('v')
     const result = await pool.query(
       `SELECT
          v.id, v.visit_date, v.visit_time, v.visit_type, v.status,
-         v.duration_seconds, v.audio_file, v.transcription_status,
+         ${durationCol}, v.audio_file, ${txStatusCol},
          p.name as patient_name, p.mrn,
          COALESCE(sb.name, s.name) as scribe_name,
          n.final_note, n.ai_draft, n.transcription, n.id as note_id,
