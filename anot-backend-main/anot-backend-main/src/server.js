@@ -110,6 +110,7 @@ app.use('/api/assignments', require('./routes/assignments'))
 app.use('/api/audio',       require('./routes/audio'))
 app.use('/api/audit',       require('./routes/audit'))
 app.use('/api/settings',    require('./routes/settings'))
+app.use('/api/support',     require('./routes/support'))
 
 // ─── 404 HANDLER ─────────────────────────────────────────────────────────────
 

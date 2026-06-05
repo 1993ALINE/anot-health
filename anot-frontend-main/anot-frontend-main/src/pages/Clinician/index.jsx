@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authAPI, visitsAPI, patientsAPI, notesAPI, API_BASE } from '../../services/api'
 import { useBranding } from '../../services/branding'
@@ -7,14 +7,173 @@ import PortalSidebarFooter from '../../components/PortalSidebarFooter'
 import { useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, ConfirmDialog, PortalSidebarBrand } from '../shared'
 import { queueAudioUpload, flushPendingAudioUploads, installOfflineUploadFlush } from '../../utils/offlineUploadQueue'
 import './clinician.css'
+import './clinician-redesign.css'
+import PortalCalendarDayPreview from '../../components/PortalCalendarDayPreview'
+import ContactScreen from './ContactScreen'
+import { getPatientAvatarColor } from '../../utils/avatarColor'
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
+/** Display-only badge class for With Scribe (alias of badge-processing styles). */
+const BADGE_WITH_SCRIBE_CLASS = 'badge-processing badge-with-scribe'
+
 function getGreeting() {
-  const h = new Date().getHours()
-  if (h < 12) return 'Good morning'
-  if (h < 17) return 'Good afternoon'
+  const now = new Date()
+  const mins = now.getHours() * 60 + now.getMinutes()
+  if (mins < 5 * 60) return 'Good evening'
+  if (mins < 12 * 60) return 'Good morning'
+  if (mins < 18 * 60) return 'Good afternoon'
   return 'Good evening'
+}
+
+function isScheduleToday(off = 0) {
+  return localDate(off, 'input') === localDate(0, 'input')
+}
+
+function visitsSectionTitle(off = 0) {
+  if (isScheduleToday(off)) return "TODAY'S VISITS"
+  const d = new Date()
+  d.setDate(d.getDate() + off)
+  const day = d.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase()
+  const month = d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()
+  return `VISITS FOR ${day}, ${month} ${d.getDate()}`
+}
+
+function isScribePipelineVisit(v) {
+  return ['recording-uploaded', 'submitted', 'in-progress'].includes(v?.status)
+}
+
+function showScribeTurnaroundOnSchedule(v) {
+  if (!isScribePipelineVisit(v)) return false
+  return v.status === 'recording-uploaded' || v.status === 'in-progress'
+}
+
+/** Duration only (e.g. "19h", "45m") when audio is with the scribe pipeline. */
+function scribeTurnaroundDuration(v) {
+  if (!isScribePipelineVisit(v)) return null
+  const raw = v.note_updated_at || v.updated_at
+  if (!raw) return null
+  const ms = Date.now() - new Date(raw).getTime()
+  if (Number.isNaN(ms) || ms < 0) return null
+  const mins = Math.max(1, Math.floor(ms / 60000))
+  if (mins < 60) return `${mins}m`
+  const hours = Math.floor(mins / 60)
+  return `${hours}h`
+}
+
+function scribeWaitingTier(v) {
+  if (!['recording-uploaded', 'submitted'].includes(v?.status)) return 'fresh'
+  const raw = v.note_updated_at || v.updated_at
+  if (!raw) return 'fresh'
+  const ms = Date.now() - new Date(raw).getTime()
+  if (Number.isNaN(ms) || ms < 0) return 'fresh'
+  const hours = ms / 3600000
+  if (hours < 24) return 'fresh'
+  if (hours < 72) return 'warn'
+  return 'urgent'
+}
+
+function withScribeBadgeClassName(v) {
+  const tier = scribeWaitingTier(v)
+  if (tier === 'warn') return `${BADGE_WITH_SCRIBE_CLASS} badge-processing--warn`
+  if (tier === 'urgent') return `${BADGE_WITH_SCRIBE_CLASS} badge-processing--urgent`
+  return BADGE_WITH_SCRIBE_CLASS
+}
+
+function withScribeBadgeLabel(item, { schedule = false } = {}) {
+  let duration = scribeTurnaroundDuration(item)
+  if (schedule && !showScribeTurnaroundOnSchedule(item)) duration = null
+  if (!duration) return WITH_SCRIBE_LABEL
+  const tier = scribeWaitingTier(item)
+  const timeIcon = tier === 'warn' ? '⚠️' : tier === 'urgent' ? '!' : '🕐'
+  const iconClass =
+    tier === 'urgent'
+      ? 'cl-status-badge__urgency cl-status-badge__urgency--critical'
+      : tier === 'warn'
+        ? 'cl-status-badge__urgency'
+        : 'cl-status-badge__clock'
+  return (
+    <>
+      {WITH_SCRIBE_LABEL} · <span className={iconClass} aria-hidden>{timeIcon}</span> {duration}
+    </>
+  )
+}
+
+function notesMatchesDateRange(h, from, to) {
+  if (!from && !to) return true
+  const visitDate = h?.visit_date ? String(h.visit_date).slice(0, 10) : ''
+  if (!visitDate) return false
+  if (from && visitDate < from) return false
+  if (to && visitDate > to) return false
+  return true
+}
+
+function visitMinutesFromMidnight(timeStr) {
+  if (!timeStr) return 0
+  const [h, m] = timeStr.split(':').map((x) => parseInt(x, 10) || 0)
+  return h * 60 + m
+}
+
+function shouldInsertNowBefore(visits, index, off, now) {
+  if (off !== 0 || !visits.length) return false
+  const nowMins = now.getHours() * 60 + now.getMinutes()
+  const curMins = visitMinutesFromMidnight(visits[index]?.visit_time)
+  if (index === 0) return nowMins < curMins
+  const prevMins = visitMinutesFromMidnight(visits[index - 1]?.visit_time)
+  return prevMins <= nowMins && curMins > nowMins
+}
+
+function shouldInsertNowAfterAll(visits, off, now) {
+  if (off !== 0 || !visits.length) return false
+  const nowMins = now.getHours() * 60 + now.getMinutes()
+  const lastMins = visitMinutesFromMidnight(visits[visits.length - 1]?.visit_time)
+  return lastMins <= nowMins
+}
+
+function isScheduleVisitOverdue(v, off) {
+  if (v.status !== 'upcoming') return false
+  return isScheduleVisitOverdueForDay(v, off)
+}
+
+function schedulePatientCardAccentClass(v, off) {
+  if (isScheduleVisitOverdue(v, off)) return 'cl-patient-card--overdue'
+  switch (v.status) {
+    case 'upcoming':
+      return 'cl-patient-card--upcoming'
+    case 'note-ready':
+      return 'cl-patient-card--review'
+    case 'uploaded':
+    case 'done':
+      return 'cl-patient-card--completed'
+    case 'recording-uploaded':
+    case 'in-progress':
+    case 'submitted':
+      return 'cl-patient-card--processing'
+    default:
+      return 'cl-patient-card--upcoming'
+  }
+}
+
+function notesWaitingTier(h) {
+  const raw = h?.updated_at || h?.created_at || h?.visit_date
+  if (!raw) return 'fresh'
+  const ms = Date.now() - new Date(raw).getTime()
+  if (Number.isNaN(ms) || ms < 0) return 'fresh'
+  const hours = ms / 3600000
+  if (hours < 24) return 'fresh'
+  if (hours < 72) return 'warn'
+  return 'urgent'
+}
+
+function notesWaitingLabel(h) {
+  const raw = h?.updated_at || h?.created_at || h?.visit_date
+  if (!raw) return 'Waiting'
+  const ms = Date.now() - new Date(raw).getTime()
+  if (Number.isNaN(ms) || ms < 0) return 'Waiting'
+  const hours = Math.floor(ms / 3600000)
+  if (hours < 24) return hours < 1 ? 'Waiting < 1h' : `Waiting ${hours}h`
+  const days = Math.floor(hours / 24)
+  return `Waiting ${days}d`
 }
 
 function localDate(off = 0, fmt = 'input') {
@@ -44,28 +203,243 @@ function fmtDate(d) {
   catch { return String(d).slice(0,10) }
 }
 
+function initials(n) {
+  if (!n) return '?'
+  const parts = String(n).trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
 function audiofmt(s) {
   if (!s || isNaN(s)) return '0:00'
   return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(Math.floor(s%60)).padStart(2,'0')}`
 }
 
-function initials(n) {
-  if (!n) return '?'
-  return n.split(' ').map(x=>x[0]).join('').slice(0,2).toUpperCase()
+function daysOffsetFromToday(year, month, day) {
+  const today = new Date()
+  today.setHours(12, 0, 0, 0)
+  const target = new Date(year, month, day, 12, 0, 0, 0)
+  return Math.round((target - today) / 86400000)
 }
 
-async function copyToClipboard(text) {
-  try {
-    await navigator.clipboard.writeText(text)
-    return true
-  } catch {
-    return false
+function normalizeScheduleDay(date = new Date()) {
+  const d = new Date(date)
+  d.setHours(12, 0, 0, 0)
+  return d
+}
+
+function scheduleOffFromDate(date) {
+  return daysOffsetFromToday(date.getFullYear(), date.getMonth(), date.getDate())
+}
+
+function IconCalendar() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+      <line x1="16" y1="2" x2="16" y2="6" />
+      <line x1="8" y1="2" x2="8" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+    </svg>
+  )
+}
+
+function IconMic() {
+  return (
+    <svg className="cl-schedule-cta__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+      <line x1="12" y1="19" x2="12" y2="23" />
+      <line x1="8" y1="23" x2="16" y2="23" />
+    </svg>
+  )
+}
+
+function IconPenEdit() {
+  return (
+    <svg className="cl-schedule-cta__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+    </svg>
+  )
+}
+
+function ClinicianTooltip({ tip, placement = 'above', compact = false, icon = false, filterTip = false, children }) {
+  if (!tip) return children
+  return (
+    <span
+      className={`cl-schedule-tooltip-wrap cl-schedule-tooltip-wrap--${placement}${compact ? ' cl-schedule-tooltip-wrap--compact' : ''}${icon ? ' cl-schedule-tooltip-wrap--icon' : ''}${filterTip ? ' cl-schedule-tooltip-wrap--filter' : ''}`}
+    >
+      {children}
+      <span
+        className={`cl-schedule-tooltip cl-schedule-tooltip--${placement}${compact ? ' cl-schedule-tooltip--compact' : ''}${icon ? ' cl-schedule-tooltip--icon' : ''}${filterTip ? ' cl-schedule-tooltip--filter' : ''}`}
+        role="tooltip"
+      >
+        {tip}
+      </span>
+    </span>
+  )
+}
+
+function isScheduleVisitOverdueForDay(v, dayOff) {
+  if (v.status !== 'upcoming') return false
+  const timePart = v.visit_time || '23:59:59'
+  const normalized = timePart.length === 5 ? `${timePart}:00` : timePart
+  const appt = new Date(`${localDate(dayOff)}T${normalized}`)
+  return !Number.isNaN(appt.getTime()) && appt < new Date()
+}
+
+function scheduleDayStatusBreakdown(visitList, dayOff) {
+  const counts = { upcoming: 0, withScribe: 0, overdue: 0, completed: 0 }
+  for (const v of visitList) {
+    if (v.status === 'upcoming') {
+      if (isScheduleVisitOverdueForDay(v, dayOff)) counts.overdue += 1
+      else counts.upcoming += 1
+    } else if (['recording-uploaded', 'in-progress', 'submitted'].includes(v.status)) {
+      counts.withScribe += 1
+    } else if (['note-ready', 'uploaded', 'done'].includes(v.status)) {
+      counts.completed += 1
+    }
   }
+  return counts
+}
+
+function scheduleDayBreakdownFor(dayOff, selectedOff, currentVisits, scheduleDayBreakdown) {
+  const key = localDate(dayOff)
+  if (dayOff === selectedOff) return scheduleDayStatusBreakdown(currentVisits, dayOff)
+  if (Object.prototype.hasOwnProperty.call(scheduleDayBreakdown, key)) {
+    return scheduleDayBreakdown[key]
+  }
+  return null
+}
+
+function scheduleDayPatientTotal(dayOff, breakdown, scheduleDayCounts) {
+  if (breakdown) {
+    return breakdown.upcoming + breakdown.withScribe + breakdown.overdue + breakdown.completed
+  }
+  const key = localDate(dayOff)
+  if (Object.prototype.hasOwnProperty.call(scheduleDayCounts, key)) {
+    return scheduleDayCounts[key]
+  }
+  return 0
+}
+
+function scheduleDayPreviewLabel(dayOff, total) {
+  if (total === 0) return 'No patients'
+  const word = total === 1 ? 'patient' : 'patients'
+  if (dayOff === 0) return `${total} ${word} today`
+  return `${total} ${word}`
+}
+
+function ScheduleDayPreview({ dayOff, breakdown, scheduleDayCounts }) {
+  const total = scheduleDayPatientTotal(dayOff, breakdown, scheduleDayCounts)
+  return (
+    <span className="portal-cal-strip__day-preview cl-date-nav__day-preview" role="tooltip">
+      {scheduleDayPreviewLabel(dayOff, total)}
+    </span>
+  )
+}
+
+function ScheduleDatePicker({ off, onSelectDate, onClose, anchorRef }) {
+  const selectedDate = useMemo(() => {
+    const d = new Date()
+    d.setDate(d.getDate() + off)
+    d.setHours(12, 0, 0, 0)
+    return d
+  }, [off])
+
+  const [viewYear, setViewYear] = useState(selectedDate.getFullYear())
+  const [viewMonth, setViewMonth] = useState(selectedDate.getMonth())
+  const popupRef = useRef(null)
+
+  useEffect(() => {
+    setViewYear(selectedDate.getFullYear())
+    setViewMonth(selectedDate.getMonth())
+  }, [selectedDate])
+
+  useEffect(() => {
+    const onDocClick = (e) => {
+      if (popupRef.current?.contains(e.target)) return
+      if (anchorRef?.current?.contains(e.target)) return
+      onClose()
+    }
+    const t = setTimeout(() => document.addEventListener('mousedown', onDocClick), 0)
+    return () => {
+      clearTimeout(t)
+      document.removeEventListener('mousedown', onDocClick)
+    }
+  }, [onClose, anchorRef])
+
+  const firstDay = new Date(viewYear, viewMonth, 1)
+  const startPad = firstDay.getDay()
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate()
+  const cells = []
+  for (let i = 0; i < startPad; i++) cells.push(null)
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d)
+
+  const monthLabel = new Date(viewYear, viewMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+
+  const prevMonth = () => {
+    if (viewMonth === 0) {
+      setViewMonth(11)
+      setViewYear((y) => y - 1)
+    } else {
+      setViewMonth((m) => m - 1)
+    }
+  }
+
+  const nextMonth = () => {
+    if (viewMonth === 11) {
+      setViewMonth(0)
+      setViewYear((y) => y + 1)
+    } else {
+      setViewMonth((m) => m + 1)
+    }
+  }
+
+  return (
+    <div className="cl-calendar-popup" ref={popupRef} role="dialog" aria-label="Choose date">
+      <div className="cl-calendar-popup__head">
+        <button type="button" className="cl-calendar-popup__nav" onClick={prevMonth} aria-label="Previous month">
+          ‹
+        </button>
+        <span className="cl-calendar-popup__month">{monthLabel}</span>
+        <button type="button" className="cl-calendar-popup__nav" onClick={nextMonth} aria-label="Next month">
+          ›
+        </button>
+      </div>
+      <div className="cl-calendar-popup__weekdays" aria-hidden>
+        {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => (
+          <span key={d}>{d}</span>
+        ))}
+      </div>
+      <div className="cl-calendar-popup__grid">
+        {cells.map((day, i) => {
+          if (day === null) {
+            return <span key={`empty-${i}`} className="cl-calendar-popup__cell cl-calendar-popup__cell--empty" aria-hidden />
+          }
+          const dayOff = daysOffsetFromToday(viewYear, viewMonth, day)
+          const isToday = dayOff === 0
+          const isSelected = dayOff === off
+          return (
+            <button
+              key={day}
+              type="button"
+              className={`cl-calendar-popup__day${isToday ? ' cl-calendar-popup__day--today' : ''}${isSelected ? ' cl-calendar-popup__day--selected' : ''}`}
+              onClick={() => onSelectDate(dayOff)}
+            >
+              {day}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
 }
 
 const CLINICIAN_TIPS = [
   'Start recording as soon as you enter the room — you can pause anytime.',
-  'Pending notes appear under Pending Notes when audio is still processing.',
+  'Pending notes appear under Notes when audio is still with the scribe.',
   'Use Templates to match your preferred note structure for each visit type.',
   'Additional recordings append to the same visit when you need more audio.',
 ]
@@ -79,20 +453,90 @@ function formatSyncedLabel(iso) {
   }
 }
 
-const AV_COLORS = ['#E0F2FE','#DCF8E8','#FEF9C3','#FCE7F3','#EDE9FE','#CCFBF1','#FFF3E0','#E8EAF6']
-function avatarBg(n) { return AV_COLORS[(n||'A').charCodeAt(0) % AV_COLORS.length] }
+// Status labels — colors live in clinician.css (`.badge-*` classes).
+const WITH_SCRIBE_LABEL = 'With Scribe'
+const READY_FOR_REVIEW_LABEL = 'Ready for Review'
 
-// Status definitions — bigger, higher-contrast chips with borders.
-// Labels rewritten to remove technical/EMR jargon and feel automatic.
 const ST = {
-  'upcoming':           { label:'Upcoming',          bg:'#FFF8E1', color:'#92400E', border:'#FCD34D', dot:'#F59E0B' },
-  'in-progress':        { label:'Recording',         bg:'#FEE2E2', color:'#991B1B', border:'#FCA5A5', dot:'#DC2626' },
-  'recording-uploaded': { label:'Processing',        bg:'#FFEDD5', color:'#9A3412', border:'#FDBA74', dot:'#EA580C' },
-  'note-ready':         { label:'Ready for Review',  bg:'#DCFCE7', color:'#15803D', border:'#86EFAC', dot:'#16A34A' },
-  'uploaded':           { label:'Completed',         bg:'#DBEAFE', color:'#1E40AF', border:'#93C5FD', dot:'#2563EB' },
-  'done':               { label:'Completed',         bg:'#DCFCE7', color:'#15803D', border:'#86EFAC', dot:'#16A34A' },
-  /** Note row: scribe submitted final note; visit may still be `note-ready` until clinician files to chart */
-  submitted:            { label:'Scribe submitted',  bg:'#EEF2FF', color:'#3730A3', border:'#A5B4FC', dot:'#4F46E5' },
+  'upcoming':           { label:'Upcoming' },
+  'in-progress':        { label:'Recording' },
+  processing:           { label: WITH_SCRIBE_LABEL },
+  'recording-uploaded': { label: WITH_SCRIBE_LABEL },
+  'note-ready':         { label: READY_FOR_REVIEW_LABEL },
+  'uploaded':           { label:'Completed' },
+  'done':               { label:'Completed' },
+  submitted:            { label:'Scribe submitted' },
+}
+
+/** Schedule/Notes chip text only — never show legacy "Processing" or standalone "Review". */
+function scheduleStatusDisplayLabel(status) {
+  const label = ST[status]?.label
+  if (label === 'Processing') return WITH_SCRIBE_LABEL
+  if (label === 'Review') return READY_FOR_REVIEW_LABEL
+  return label || ST.upcoming.label
+}
+
+function normalizeStatusBadgeLabel(label) {
+  if (label === 'Review' || label === 'Ready for review') return READY_FOR_REVIEW_LABEL
+  return label
+}
+
+function transcriptionStatusBadgeClass(txSt) {
+  if (txSt === 'completed') return 'badge-completed'
+  if (txSt === 'failed') return 'badge-overdue'
+  return BADGE_WITH_SCRIBE_CLASS
+}
+
+function scheduleVisitBadgeClass(status) {
+  switch (status) {
+    case 'upcoming':
+      return 'badge-upcoming'
+    case 'note-ready':
+      return 'badge-review'
+    case 'uploaded':
+    case 'done':
+      return 'badge-completed'
+    case 'recording-uploaded':
+    case 'in-progress':
+    case 'submitted':
+      return BADGE_WITH_SCRIBE_CLASS
+    default:
+      return BADGE_WITH_SCRIBE_CLASS
+  }
+}
+
+const NOTES_FILTER_TABS = [
+  { key: 'all', label: 'All', tip: 'Show all encounters regardless of status' },
+  { key: 'with-scribe', label: 'With Scribe', tip: 'Encounters where scribe is actively drafting the note' },
+  {
+    key: 'ready-for-review',
+    label: READY_FOR_REVIEW_LABEL,
+    tip: 'Notes completed by scribe and waiting for your review and signature',
+  },
+]
+
+const NOTES_BADGE_META = {
+  processing: { label: WITH_SCRIBE_LABEL, className: BADGE_WITH_SCRIBE_CLASS },
+  ready: { label: READY_FOR_REVIEW_LABEL, className: 'badge-review' },
+  completed: { label: 'Completed', className: 'badge-completed' },
+  overdue: { label: 'Overdue', className: 'badge-review' },
+  closed: { label: 'Visit Closed', className: 'badge-visit-closed' },
+}
+
+function NowDivider({ now }) {
+  const label = now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  return (
+    <div className="cl-now-divider" role="separator" aria-label={`Current time ${label}`}>
+      <span className="cl-now-divider__line" aria-hidden />
+      <span className="cl-now-divider__label">NOW · {label}</span>
+      <span className="cl-now-divider__line" aria-hidden />
+    </div>
+  )
+}
+
+function StatusBadge({ label, className }) {
+  const text = typeof label === 'string' ? normalizeStatusBadgeLabel(label) : label
+  return <span className={`cl-status-badge ${className}`}>{text}</span>
 }
 
 /** True when the scribe has returned a final note (or QPS graded upload) — visit may still be `note-ready`. */
@@ -114,6 +558,150 @@ function historyRowDisplayStatus(h) {
   if (h.note_status === 'submitted') return 'submitted'
   return h.status
 }
+
+function notesVisitHasRecording(h) {
+  return !!(h?.audio_file && String(h.audio_file).trim() !== '')
+}
+
+function notesVisitAppointmentPast(h) {
+  if (!h?.visit_date) return false
+  const timePart = h.visit_time || '23:59:59'
+  const normalizedTime = timePart.length === 5 ? `${timePart}:00` : timePart
+  const appt = new Date(`${h.visit_date}T${normalizedTime}`)
+  return !Number.isNaN(appt.getTime()) && appt < new Date()
+}
+
+/** Notes page card badge — rendering only; defaults to With Scribe when status is unknown. */
+function notesCardBadgeKey(h) {
+  if (!h) return 'processing'
+  if (h.status === 'done') return 'closed'
+  if (h.status === 'uploaded' || h.note_status === 'uploaded') return 'completed'
+  if (h.status === 'note-ready') return 'ready'
+  if (notesVisitAppointmentPast(h) && !notesVisitHasRecording(h)) return 'overdue'
+  return 'processing'
+}
+
+function notesCardActionKind(h) {
+  const key = notesCardBadgeKey(h)
+  if (key === 'overdue') return 'record'
+  if (key === 'ready' && !clinicianNoteReturned(h)) return 'open'
+  if (key === 'processing') return 'awaiting'
+  if (key === 'completed' || key === 'closed') return 'view'
+  if (key === 'ready' && clinicianNoteReturned(h)) return 'view'
+  return null
+}
+
+function notesWithScribeMatch(h) {
+  return notesCardBadgeKey(h) === 'processing'
+}
+
+function notesReadyForReviewMatch(h) {
+  return notesCardBadgeKey(h) === 'ready'
+}
+
+function notesCompletedMatch(h) {
+  const key = notesCardBadgeKey(h)
+  return key === 'completed' || key === 'closed'
+}
+
+function notesTabFilterMatch(h, tabKey) {
+  switch (tabKey) {
+    case 'with-scribe':
+      return notesWithScribeMatch(h)
+    case 'ready-for-review':
+      return notesReadyForReviewMatch(h)
+    default:
+      return true
+  }
+}
+
+function normalizeVisitType(type) {
+  return String(type || '').trim().toLowerCase()
+}
+
+function notesEncounterTypeMatch(h, filterKey) {
+  if (filterKey === 'all') return true
+  const t = normalizeVisitType(h.visit_type)
+  switch (filterKey) {
+    case 'new-patient':
+      return t === 'new patient'
+    case 'follow-up':
+      return t === 'follow-up' || t === 'follow up'
+    case 'urgent-care':
+      return t === 'urgent care'
+    case 'telemedicine':
+      return t === 'telemedicine' || t === 'virtual visit' || t === 'virtual'
+    default:
+      return true
+  }
+}
+
+function notesScribeStatusMatch(h, filterKey) {
+  if (filterKey === 'all') return true
+  switch (filterKey) {
+    case 'with-scribe':
+      return notesWithScribeMatch(h)
+    case 'ready-for-review':
+      return notesReadyForReviewMatch(h)
+    case 'completed':
+      return h.status === 'uploaded' || h.status === 'done' || clinicianNoteReturned(h)
+    default:
+      return true
+  }
+}
+
+function notesDateSortKey(h) {
+  const date = h.visit_date || ''
+  const time = h.visit_time || '00:00:00'
+  const normalized = time.length === 5 ? `${time}:00` : time
+  return `${date}T${normalized}`
+}
+
+function notesWaitingMs(h) {
+  const raw = h?.note_updated_at || h?.updated_at || h?.created_at || h?.visit_date
+  if (!raw) return 0
+  const ms = Date.now() - new Date(raw).getTime()
+  return Number.isNaN(ms) || ms < 0 ? 0 : ms
+}
+
+function sortNotesHistory(list, sortBy) {
+  const sorted = [...list]
+  switch (sortBy) {
+    case 'date-oldest':
+      return sorted.sort((a, b) => notesDateSortKey(a).localeCompare(notesDateSortKey(b)))
+    case 'name-az':
+      return sorted.sort((a, b) =>
+        (a.patient_name || '').localeCompare(b.patient_name || '', undefined, { sensitivity: 'base' }),
+      )
+    case 'waiting-longest':
+      return sorted.sort((a, b) => notesWaitingMs(b) - notesWaitingMs(a))
+    case 'date-newest':
+    default:
+      return sorted.sort((a, b) => notesDateSortKey(b).localeCompare(notesDateSortKey(a)))
+  }
+}
+
+const NOTES_ENCOUNTER_FILTER_OPTS = [
+  { value: 'all', label: 'All Types' },
+  { value: 'new-patient', label: 'New Patient' },
+  { value: 'follow-up', label: 'Follow-up' },
+  { value: 'urgent-care', label: 'Urgent Care' },
+  { value: 'telemedicine', label: 'Telemedicine' },
+]
+
+const NOTES_SCRIBE_FILTER_OPTS = [
+  { value: 'all', label: 'All Statuses' },
+  { value: 'with-scribe', label: 'With Scribe' },
+  { value: 'ready-for-review', label: READY_FOR_REVIEW_LABEL },
+  { value: 'completed', label: 'Completed' },
+]
+
+const NOTES_SORT_OPTS = [
+  { value: 'date-newest', label: 'Date (newest first)' },
+  { value: 'date-oldest', label: 'Date (oldest first)' },
+  { value: 'name-az', label: 'Patient Name (A-Z)' },
+  { value: 'waiting-longest', label: 'Waiting Time (longest first)' },
+]
 
 // ─── TEMPLATES ────────────────────────────────────────────────────────────────
 
@@ -217,17 +805,17 @@ function AudioModal({ visitId, visit, onClose, showToast }) {
     try {
       setTxBusy(true)
       await visitsAPI.runTranscription(visitId)
-      showToast?.('Transcription started.', 'success')
+      showToast?.('Your scribe team has received the recording.', 'success')
     } catch (e) {
-      showToast?.(e.message || 'Could not start transcription', 'error')
+      showToast?.(e.message || 'Could not send recording to scribe', 'error')
     } finally {
       setTxBusy(false)
     }
   }
   const txSt = visit?.transcription_status
   const txLabel =
-    txSt === 'processing' ? 'Status: processing'
-      : txSt === 'completed' ? 'Status: transcribed'
+    txSt === 'processing' ? 'Status: With Scribe'
+      : txSt === 'completed' ? 'Status: Scribe draft ready'
         : txSt === 'failed' ? 'Status: failed'
           : null
 
@@ -268,9 +856,9 @@ function AudioModal({ visitId, visit, onClose, showToast }) {
           </div>
         </div>
         <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #E2E8F0', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, justifyContent: 'space-between' }}>
-          {txLabel ? <span style={{ fontSize: 12, color: '#64748B', fontWeight: 600 }}>{txLabel}</span> : <span />}
+          {txLabel ? <StatusBadge label={txLabel} className={transcriptionStatusBadgeClass(txSt)} /> : <span />}
           <button type="button" disabled={txBusy} onClick={runTx} style={{ marginLeft: 'auto', padding: '10px 16px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#4260E9,#7B61FF)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: txBusy ? 'wait' : 'pointer', opacity: txBusy ? 0.7 : 1, fontFamily: 'inherit' }}>
-            {txBusy ? 'Starting…' : 'Transcribe audio'}
+            {txBusy ? 'Sending…' : 'Send to scribe'}
           </button>
         </div>
       </div>
@@ -279,9 +867,8 @@ function AudioModal({ visitId, visit, onClose, showToast }) {
 }
 
 // ─── NOTE PREVIEW MODAL ───────────────────────────────────────────────────────
-// (Renamed from "AI Modal" — clinicians don't need to know the source.)
 
-function AIModal({ visit, onClose, showToast }) {
+function AIModal({ visit, onClose, showToast, hideAudioControls = false }) {
   const [note, setNote] = useState(null)
   const [loading, setLoad] = useState(true)
   const [tab, setTab] = useState('ai')
@@ -322,10 +909,10 @@ function AIModal({ visit, onClose, showToast }) {
     try {
       setTxBusy(true)
       await visitsAPI.runTranscription(visit.id)
-      showToast?.('Transcription started.', 'success')
+      showToast?.('Your scribe team has received the recording.', 'success')
       await loadNoteData()
     } catch (e) {
-      showToast?.(e.message || 'Could not start transcription', 'error')
+      showToast?.(e.message || 'Could not send recording to scribe', 'error')
     } finally {
       setTxBusy(false)
     }
@@ -333,8 +920,8 @@ function AIModal({ visit, onClose, showToast }) {
 
   const txSt = note?.transcription_status || visit?.transcription_status
   const txBadge =
-    txSt === 'processing' ? 'Transcription: processing'
-      : txSt === 'completed' ? 'Transcription: ready'
+    txSt === 'processing' ? 'Transcription: With Scribe'
+      : txSt === 'completed' ? 'Transcription: Scribe draft ready'
         : txSt === 'failed' ? 'Transcription: failed'
           : null
 
@@ -366,8 +953,17 @@ function AIModal({ visit, onClose, showToast }) {
   ]
 
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:800, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
-      <div style={{ background:'#fff', borderRadius:20, width:'100%', maxWidth:700, maxHeight:'92vh', display:'flex', flexDirection:'column', boxShadow:'0 24px 64px rgba(0,0,0,0.25)' }}>
+    <div
+      style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:800, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
+      onClick={onClose}
+      role="presentation"
+    >
+      <div
+        style={{ background:'#fff', borderRadius:20, width:'100%', maxWidth:700, maxHeight:'92vh', display:'flex', flexDirection:'column', boxShadow:'0 24px 64px rgba(0,0,0,0.25)' }}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+      >
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #E2E8F0', display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap: 12 }}>
           <div>
             <div style={{ fontSize:17, fontWeight:700, color:'#1E293B' }}>📋 Note Preview</div>
@@ -375,27 +971,29 @@ function AIModal({ visit, onClose, showToast }) {
           </div>
           <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap: 10 }}>
             <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap: 8, justifyContent:'flex-end' }}>
-              {txBadge ? (
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#475569', background: '#EEF2FF', padding: '4px 10px', borderRadius: 8 }}>{txBadge}</span>
+              {!hideAudioControls && txBadge ? (
+                <StatusBadge label={txBadge} className={transcriptionStatusBadgeClass(txSt)} />
               ) : null}
-              {visit.audio_file ? (
+              {!hideAudioControls && visit.audio_file ? (
                 <button type="button" disabled={txBusy || loading} onClick={runTx} style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#4260E9,#7B61FF)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: txBusy ? 'wait' : 'pointer', opacity: txBusy ? 0.75 : 1, fontFamily: 'inherit' }}>
-                  {txBusy ? 'Starting…' : 'Transcribe audio'}
+                  {txBusy ? 'Sending…' : 'Send to scribe'}
                 </button>
               ) : null}
               <button type="button" onClick={onClose} style={{ background:'#E2E8F0', border:'none', borderRadius:10, padding:'8px 16px', cursor:'pointer', fontSize:13, fontWeight:600, color:'#64748B', fontFamily: 'inherit' }}>✕</button>
             </div>
           </div>
         </div>
-        <div style={{ display:'flex', borderBottom:'1px solid #E2E8F0', padding:'0 24px' }}>
-          {[['ai','Draft'],['transcription','Transcript']].map(([k,l]) => (
-            <button key={k} onClick={() => setTab(k)} style={{ padding:'12px 0', marginRight:24, fontSize:14, fontWeight: tab===k ? 700 : 400, color: tab===k ? '#4260E9' : '#94A3B8', background:'none', border:'none', borderBottom: tab===k ? '2px solid #4260E9' : '2px solid transparent', cursor:'pointer', fontFamily:'inherit' }}>{l}</button>
-          ))}
-        </div>
+        {!hideAudioControls ? (
+          <div style={{ display:'flex', borderBottom:'1px solid #E2E8F0', padding:'0 24px' }}>
+            {[['ai','Scribe draft'],['transcription','Transcript']].map(([k,l]) => (
+              <button key={k} onClick={() => setTab(k)} style={{ padding:'12px 0', marginRight:24, fontSize:14, fontWeight: tab===k ? 700 : 400, color: tab===k ? '#4260E9' : '#94A3B8', background:'none', border:'none', borderBottom: tab===k ? '2px solid #4260E9' : '2px solid transparent', cursor:'pointer', fontFamily:'inherit' }}>{l}</button>
+            ))}
+          </div>
+        ) : null}
         <div style={{ flex:1, overflowY:'auto', padding:'20px 24px' }}>
           {loading ? (
             <div style={{ textAlign:'center', padding:60, color:'#94A3B8' }}>Loading note...</div>
-          ) : tab === 'ai' ? (
+          ) : tab === 'ai' || hideAudioControls ? (
             secs ? SECS.map(({ k, l, icon }) => (
               <div key={k} style={{ marginBottom:12, border:'1px solid #E2E8F0', borderRadius:14, overflow:'hidden' }}>
                 <div style={{ padding:'10px 16px', background:'#F4F7FF', display:'flex', alignItems:'center', gap:10 }}>
@@ -413,7 +1011,7 @@ function AIModal({ visit, onClose, showToast }) {
             )
           ) : (
             txts.length === 0 ? (
-              <div style={{ textAlign:'center', padding:60, color:'#94A3B8' }}>Transcript not available yet.</div>
+              <div style={{ textAlign:'center', padding:60, color:'#94A3B8' }}>Your scribe team is preparing the transcript.</div>
             ) : (
               <>
                 {txts.length > 1 && (
@@ -565,17 +1163,33 @@ function TemplatesScreen({ showToast }) {
   )
 }
 
+const REVIEW_REMINDER_DISMISS_KEY = 'anot_cl_review_reminder_dismissed'
+
+function ReviewReminderToast({ count, oldestHours, onReview, onDismiss }) {
+  return (
+    <div className="cl-review-reminder" role="alert" aria-live="polite">
+      <p className="cl-review-reminder__text">
+        You have {count} note{count !== 1 ? 's' : ''} ready for review. The oldest has been waiting {oldestHours}h.
+      </p>
+      <div className="cl-review-reminder__actions">
+        <button type="button" className="cl-review-reminder__cta" onClick={onReview}>
+          Review Now
+        </button>
+        <button type="button" className="cl-review-reminder__close" onClick={onDismiss} aria-label="Dismiss reminder">
+          ✕
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
 
-function Sidebar({ screen, setScreen, sidebar, currentUser, visits, drawerMode, onRequestLogout, confirmDialog, confirmLoading, onDismissConfirm, onConfirmAction, branding }) {
-  const badge = visits.filter(v => v.status === 'recording-uploaded').length
+function Sidebar({ screen, setScreen, sidebar, currentUser, scheduleUpcomingBadge, readyForReviewCount, drawerMode, onRequestLogout, confirmDialog, confirmLoading, onDismissConfirm, onConfirmAction, branding }) {
   const NAV = [
-    { key:'schedule',  label:'Schedule',        icon:'📅', badge },
-    { key:'pending',   label:'Pending Notes',   icon:'⏳' },
-    { key:'completed', label:'Completed Notes', icon:'✅' },
-    { key:'history',   label:'All History',     icon:'🕐' },
-    { key:'templates', label:'Templates',       icon:'📄' },
-    { key:'profile',   label:'Profile',         icon:'👤' },
+    { key:'schedule', label:'Schedule', icon:'📅', badge: scheduleUpcomingBadge, badgeVariant: 'schedule' },
+    { key:'notes',    label:'Notes',    icon:'📝', badge: readyForReviewCount, badgeVariant: 'urgent' },
+    { key:'contact',  label:'Contact Us', icon:'💬' },
   ]
   const go = (key) => {
     setScreen(key)
@@ -591,40 +1205,57 @@ function Sidebar({ screen, setScreen, sidebar, currentUser, visits, drawerMode, 
       />
       <aside
         id="clinician-sidebar"
-        className={`sf-sidebar sf-sidebar--rich adm-sidebar${sidebar.open ? ' open' : ''}`}
+        className={`sf-sidebar sf-sidebar--rich adm-sidebar cl-sidebar${sidebar.open ? ' open' : ''}`}
         aria-hidden={drawerMode ? !sidebar.open : undefined}
       >
-      <div className="sf-sidebar-top sf-sidebar-rich__top">
-        <PortalSidebarBrand branding={branding} subtitle="Clinician Portal" />
-      </div>
-      <p className="sf-sidebar-rich__nav-label">Workspace</p>
-      <nav className="sf-nav sf-sidebar-rich__nav" aria-label="Main">
-        {NAV.map(({ key, label, icon, badge: navBadge }) => (
-          <div
-            key={key}
-            role="button"
-            tabIndex={0}
-            className={`sf-nav-item sf-sidebar-rich__nav-item${screen === key ? ' active' : ''}`}
-            onClick={() => go(key)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault()
-                go(key)
-              }
-            }}
+        <div className="cl-sidebar__header sf-sidebar-top sf-sidebar-rich__top">
+          <button
+            type="button"
+            className="cl-sidebar__close"
+            onClick={() => sidebar.close()}
+            aria-label="Close navigation menu"
           >
-            <span className="sf-sidebar-rich__nav-ico">{icon}</span>
-            <span className="sf-sidebar-rich__nav-text">{label}</span>
-            {navBadge > 0 ? <span className="sf-sidebar-rich__nav-badge">{navBadge}</span> : null}
-          </div>
-        ))}
-      </nav>
-      <PortalSidebarFooter
-        userName={currentUser.name || 'Clinician'}
-        role="clinician"
-        onLogout={onRequestLogout}
-      />
-    </aside>
+            ✕
+          </button>
+          <PortalSidebarBrand branding={branding} subtitle="Clinician Portal" />
+        </div>
+        <div className="cl-sidebar__body">
+          <p className="sf-sidebar-rich__nav-label">Workspace</p>
+          <nav className="sf-nav sf-sidebar-rich__nav" aria-label="Main">
+            {NAV.map(({ key, label, icon, badge: navBadge, badgeVariant }) => (
+              <div
+                key={key}
+                role="button"
+                tabIndex={0}
+                className={`sf-nav-item sf-sidebar-rich__nav-item${screen === key ? ' active' : ''}`}
+                onClick={() => go(key)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    go(key)
+                  }
+                }}
+              >
+                <span className="sf-sidebar-rich__nav-ico">{icon}</span>
+                <span className="sf-sidebar-rich__nav-text">{label}</span>
+                {navBadge > 0 ? (
+                  <span className={`sf-sidebar-rich__nav-badge sf-sidebar-rich__nav-badge--${badgeVariant}`}>
+                    {navBadge}
+                  </span>
+                ) : null}
+              </div>
+            ))}
+          </nav>
+        </div>
+        <div className="cl-sidebar__fill" aria-hidden="true" />
+        <div className="cl-sidebar__bottom">
+          <PortalSidebarFooter
+            userName={currentUser.name || 'Clinician'}
+            role="clinician"
+            onLogout={onRequestLogout}
+          />
+        </div>
+      </aside>
     </>
   )
 }
@@ -662,6 +1293,13 @@ function ProfileScreen({ currentUser, showToast }) {
       <div style={{ marginTop: 16 }}>
         <SystemProfileManager showToast={showToast} roleLabel="Clinician" compact readOnly />
       </div>
+      <div className="sf-card sf-card-lg" style={{ marginTop: 16 }}>
+        <div className="sf-card__title">Note templates</div>
+        <p style={{ margin: '0 0 16px', fontSize: 13, color: '#64748b', lineHeight: 1.55 }}>
+          Structured starters for common visit types — saved locally in this browser.
+        </p>
+        <TemplatesScreen showToast={showToast} />
+      </div>
     </>
   )
 }
@@ -673,24 +1311,37 @@ function ClinicianTopbar({
   branding,
   cu,
   onViewProfile,
+  onSettings,
   onLogout,
   title,
   subtitle,
+  belowTitle,
   children,
 }) {
+  const titleRow = belowTitle ? (
+    <div className="adm-topbar__titles cl-topbar__titles">
+      <div className="adm-topbar__module">{title || 'Clinician'}</div>
+      {belowTitle}
+      {subtitle ? <div className="adm-topbar__brand">{subtitle}</div> : null}
+    </div>
+  ) : undefined
+
   return (
     <PortalTopbar
       drawerMode={drawerMode}
       sidebarOpen={sidebar.open}
       onMenuClick={sidebar.toggle}
-      moduleTitle={title || 'Clinician'}
-      brandName={subtitle || branding.system_name || 'Anot'}
+      moduleTitle={titleRow ? undefined : (title || 'Clinician')}
+      brandName={titleRow ? undefined : (subtitle || branding.system_name || 'Anot')}
+      titleRow={titleRow}
       user={cu}
       avatarFallback="C"
       navControlsId="clinician-sidebar"
       onViewProfile={onViewProfile}
+      onSettings={onSettings}
       onLogout={onLogout}
       menuId="clinician-account-menu"
+      accountMenuVariant="clinician"
       endBeforeAccount={
         children ? (
           <div className="cl-schedule-toolbar">
@@ -711,31 +1362,6 @@ const B = {
   small:   { padding:'7px 14px', borderRadius:10, fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'inherit' },
 }
 
-// Reusable status chip — bigger, bolder, with border for high contrast.
-function StatusChip({ st }) {
-  return (
-    <span
-      className="cl-status-chip"
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 7,
-        padding: '6px 14px',
-        borderRadius: 10,
-        fontSize: 13,
-        fontWeight: 700,
-        background: st.bg,
-        color: st.color,
-        border: `1px solid ${st.border}`,
-        whiteSpace: 'nowrap',
-      }}
-    >
-      <span style={{ width: 7, height: 7, borderRadius: '50%', background: st.dot, display: 'inline-block' }} />
-      {st.label}
-    </span>
-  )
-}
-
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 export default function Clinician() {
@@ -743,8 +1369,23 @@ export default function Clinician() {
   const cu          = JSON.parse(localStorage.getItem('user') || '{}')
   const sidebar     = useSidebar()
 
-  const [screen, setScreen]         = useState('schedule')
-  const [off, setOff]               = useState(0)
+  const [screen, setScreenState]    = useState('schedule')
+  const [scheduleDate, setScheduleDate] = useState(() => new Date())
+  const off = useMemo(() => scheduleOffFromDate(scheduleDate), [scheduleDate])
+  const [weekCenterOff, setWeekCenterOff] = useState(0)
+  const [calendarOpen, setCalendarOpen] = useState(false)
+  const calendarBtnRef = useRef(null)
+
+  const applyScheduleOff = useCallback((valueOrFn) => {
+    setScheduleDate((prev) => {
+      const currentOff = scheduleOffFromDate(prev)
+      const nextOff = typeof valueOrFn === 'function' ? valueOrFn(currentOff) : valueOrFn
+      const d = normalizeScheduleDay(new Date())
+      d.setDate(d.getDate() + nextOff)
+      return d
+    })
+  }, [])
+
   const [visits, setVisits]         = useState([])
   const [history, setHistory]       = useState([])
   const [loading, setLoading]       = useState(false)
@@ -758,8 +1399,13 @@ export default function Clinician() {
   const [showAdd, setShowAdd]       = useState(false)
   const [reviewNote, setReview]     = useState(null)
   const [aiVisit, setAiVisit]       = useState(null)
+  const [aiVisitFromNotes, setAiVisitFromNotes] = useState(false)
   const [playVisit, setPlayVisit]   = useState(null)
   const [histQ, setHistQ]           = useState('')
+  const [histDateFromInput, setHistDateFromInput] = useState('')
+  const [histDateToInput, setHistDateToInput] = useState('')
+  const [histDateFrom, setHistDateFrom] = useState('')
+  const [histDateTo, setHistDateTo] = useState('')
   const [toast, setToast]           = useState(null)
   const [editReq, setEditReq]       = useState({})
   const [editV, setEditV]           = useState(null)
@@ -771,13 +1417,83 @@ export default function Clinician() {
   const [historySyncedAt, setHistorySyncedAt]   = useState(null)
   const [liveNow, setLiveNow]       = useState(() => new Date())
   const [histAudioOnly, setHistAudioOnly]       = useState(false)
+  const [notesFilter, setNotesFilter]           = useState('all')
+  const [notesTypeFilter, setNotesTypeFilter]   = useState('all')
+  const [notesScribeFilter, setNotesScribeFilter] = useState('all')
+  const [notesSortBy, setNotesSortBy]           = useState('date-newest')
+
+  const resetNotesViewDefaults = useCallback(() => {
+    setNotesFilter('all')
+    setNotesTypeFilter('all')
+    setNotesScribeFilter('all')
+    setNotesSortBy('date-newest')
+  }, [])
+
+  const setScreen = useCallback((key) => {
+    if (key === 'schedule') {
+      setScheduleDate(new Date())
+      setWeekCenterOff(0)
+    }
+    if (key === 'notes') {
+      resetNotesViewDefaults()
+    }
+    setReview(null)
+    setAiVisit(null)
+    setAiVisitFromNotes(false)
+    setScreenState(key)
+  }, [resetNotesViewDefaults])
+
+  const [scheduleDayCounts, setScheduleDayCounts] = useState({})
+  const [scheduleDayBreakdown, setScheduleDayBreakdown] = useState({})
+  const [todayUpcomingCount, setTodayUpcomingCount] = useState(0)
+  const [reviewReminder, setReviewReminder]     = useState(null)
 
   const drawerMode = usePortalDrawerMode()
   const branding = useBranding()
 
   const tRef  = useRef(null), mRef  = useRef(null), cRef  = useRef([])
   const atRef = useRef(null), arRef = useRef(null), acRef = useRef([])
-  const DAYS  = [-2, -1, 0, 1, 2]
+  const scheduleDays = useMemo(() => [-2, -1, 0, 1, 2].map((d) => weekCenterOff + d), [weekCenterOff])
+
+  const shiftScheduleOff = (delta) => {
+    applyScheduleOff((prev) => {
+      const next = prev + delta
+      setWeekCenterOff((wc) => {
+        if (next < wc - 2 || next > wc + 2) return next
+        return wc
+      })
+      return next
+    })
+  }
+
+  const goToScheduleDate = (pickedOff) => {
+    applyScheduleOff(pickedOff)
+    setWeekCenterOff(pickedOff)
+    setCalendarOpen(false)
+  }
+
+  const goToToday = () => {
+    setScheduleDate(new Date())
+    setWeekCenterOff(0)
+  }
+
+  const goRecordOverdueFromNotes = useCallback((h) => {
+    const visitDate = h?.visit_date ? String(h.visit_date).slice(0, 10) : null
+    if (visitDate && /^\d{4}-\d{2}-\d{2}$/.test(visitDate)) {
+      const [y, m, day] = visitDate.split('-').map((n) => parseInt(n, 10))
+      const d = new Date()
+      d.setFullYear(y, m - 1, day, 12, 0, 0, 0)
+      setScheduleDate(d)
+      setWeekCenterOff(scheduleOffFromDate(d))
+    } else {
+      setScheduleDate(new Date())
+      setWeekCenterOff(0)
+    }
+    setReview(null)
+    setAiVisit(null)
+    setAiVisitFromNotes(false)
+    setScreenState('schedule')
+  }, [])
 
   const showToast = (msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500) }
   const [confirmDialog, setConfirmDialog] = useState(null)
@@ -807,16 +1523,19 @@ export default function Clinician() {
     })
   }
 
-  const copyMrn = async (mrn) => {
-    const ok = await copyToClipboard(mrn || '')
-    showToast(ok ? 'MRN copied to clipboard' : 'Could not copy', ok ? 'success' : 'error')
-  }
-
   const loadVisits = async (opts = {}) => {
     try {
       setLoading(true)
       const d = await visitsAPI.getByDate(localDate(off))
       setVisits(d.visits || [])
+      setScheduleDayCounts((prev) => ({
+        ...prev,
+        [localDate(off)]: (d.visits || []).length,
+      }))
+      setScheduleDayBreakdown((prev) => ({
+        ...prev,
+        [localDate(off)]: scheduleDayStatusBreakdown(d.visits || [], off),
+      }))
       setScheduleSyncedAt(new Date().toISOString())
       if (opts.notify) showToast('Schedule updated')
     } catch (e) {
@@ -828,15 +1547,15 @@ export default function Clinician() {
 
   const loadHistory = async (opts = {}) => {
     try {
-      setLoading(true)
+      if (!opts.silent) setLoading(true)
       const d = await visitsAPI.getHistory()
       setHistory(d.visits || [])
       setHistorySyncedAt(new Date().toISOString())
       if (opts.notify) showToast('History updated')
     } catch (e) {
-      showToast(e.message, 'error')
+      if (!opts.silent) showToast(e.message, 'error')
     } finally {
-      setLoading(false)
+      if (!opts.silent) setLoading(false)
     }
   }
 
@@ -861,17 +1580,32 @@ export default function Clinician() {
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
       if (screen === 'schedule' && e.key === 't' && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault()
-        setOff(0)
+        goToToday()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [screen])
 
-  useEffect(() => { if (screen === 'schedule') loadVisits() }, [off, screen])
-  // History also loads for the Pending and Completed sub-views.
   useEffect(() => {
-    if (['history', 'pending', 'completed'].includes(screen)) loadHistory()
+    goToToday()
+  }, [])
+
+  useEffect(() => { loadHistory({ silent: true }) }, [])
+  useEffect(() => { if (screen === 'schedule') loadVisits() }, [off, screen])
+  useEffect(() => {
+    if (screen !== 'schedule') return
+    setScheduleDayCounts((prev) => ({
+      ...prev,
+      [localDate(off)]: visits.length,
+    }))
+    setScheduleDayBreakdown((prev) => ({
+      ...prev,
+      [localDate(off)]: scheduleDayStatusBreakdown(visits, off),
+    }))
+  }, [visits, off, screen])
+  useEffect(() => {
+    if (screen === 'notes') loadHistory()
   }, [screen])
 
   useEffect(() => {
@@ -893,6 +1627,79 @@ export default function Clinician() {
       alive = false
     }
   }, [screen, off])
+
+  useEffect(() => {
+    const todayKey = localDate(0)
+    if (off === 0) {
+      setTodayUpcomingCount(visits.filter((v) => v.status === 'upcoming').length)
+      return
+    }
+    const breakdown = scheduleDayBreakdown[todayKey]
+    if (breakdown && typeof breakdown.upcoming === 'number') {
+      setTodayUpcomingCount(breakdown.upcoming)
+    }
+  }, [visits, off, scheduleDayBreakdown])
+
+  const scheduleUpcomingBadge = useMemo(() => {
+    const todayKey = localDate(0)
+    if (off === 0) {
+      return visits.filter((v) => v.status === 'upcoming').length
+    }
+    const breakdown = scheduleDayBreakdown[todayKey]
+    if (breakdown && typeof breakdown.upcoming === 'number') {
+      return breakdown.upcoming
+    }
+    return todayUpcomingCount
+  }, [off, visits, scheduleDayBreakdown, todayUpcomingCount])
+
+  const readyForReviewCount = useMemo(
+    () => history.filter(notesReadyForReviewMatch).length,
+    [history],
+  )
+
+  const goToReadyForReview = useCallback(() => {
+    setNotesFilter('ready-for-review')
+    setNotesScribeFilter('all')
+    setScreenState('notes')
+    sidebar.close()
+  }, [sidebar])
+
+  const dismissReviewReminder = useCallback(() => {
+    sessionStorage.setItem(REVIEW_REMINDER_DISMISS_KEY, '1')
+    setReviewReminder(null)
+  }, [])
+
+  useEffect(() => {
+    if (sessionStorage.getItem(REVIEW_REMINDER_DISMISS_KEY)) return
+    const ready = history.filter(notesReadyForReviewMatch)
+    if (!ready.length) return
+    const hasWaitingOver24h = ready.some((h) => notesWaitingMs(h) >= 24 * 3600000)
+    if (!hasWaitingOver24h) return
+    const oldestHours = Math.floor(Math.max(...ready.map(notesWaitingMs)) / 3600000)
+    setReviewReminder((prev) => {
+      if (prev) return prev
+      return { count: readyForReviewCount, oldestHours }
+    })
+  }, [history, readyForReviewCount])
+
+  useEffect(() => {
+    if (!reviewReminder) return
+    if (sessionStorage.getItem(REVIEW_REMINDER_DISMISS_KEY)) {
+      setReviewReminder(null)
+      return
+    }
+    const timer = setTimeout(() => setReviewReminder(null), 10000)
+    return () => clearTimeout(timer)
+  }, [reviewReminder])
+
+  useEffect(() => {
+    document.title = readyForReviewCount > 0
+      ? `(${readyForReviewCount}) Anot — Clinician Portal`
+      : 'Anot — Clinician Portal'
+    return () => {
+      document.title = 'Anot — Clinician Portal'
+    }
+  }, [readyForReviewCount])
 
   const getMime = () => { const t = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4']; return t.find(x => MediaRecorder.isTypeSupported(x)) || '' }
 
@@ -954,7 +1761,7 @@ export default function Clinician() {
             : v
         )
       )
-      if (['history', 'pending', 'completed'].includes(screen)) loadHistory()
+      if (screen === 'notes') loadHistory()
       showToast(`✓ Encounter ended — preparing note for ${pn}`)
       setActive(null); setTimer(0); setPaused(false); cRef.current = []; mRef.current = null
     } catch(e) { showToast(e.message, 'error') } finally { setUploading(false) }
@@ -1067,86 +1874,86 @@ export default function Clinician() {
   const ready  = visits.filter(v => v.status === 'note-ready').length
   const synced = visits.filter(v => v.status === 'uploaded').length
 
-  // Filter history for the Pending / Completed sidebar views.
-  const historyFiltered = (() => {
-    let base =
-      screen === 'pending'
-        ? history.filter(
-            (h) =>
-              h.status === 'recording-uploaded' ||
-              (h.status === 'note-ready' && !clinicianNoteReturned(h)),
-          )
-        : screen === 'completed'
-          ? history.filter(
-              (h) => ['uploaded', 'done'].includes(h.status) || clinicianNoteReturned(h),
-            )
-          : history
-    if (histAudioOnly) {
-      base = base.filter((h) => h.audio_file && String(h.audio_file).trim() !== '')
-    }
-    if (!histQ) return base
-    const q = histQ.toLowerCase()
-    return base.filter(h => h.patient_name?.toLowerCase().includes(q) || h.mrn?.toLowerCase().includes(q))
+  const historyDateFiltered = (() => {
+    let base = histAudioOnly
+      ? history.filter((h) => h.audio_file && String(h.audio_file).trim() !== '')
+      : history
+    return base.filter((h) => notesMatchesDateRange(h, histDateFrom, histDateTo))
   })()
 
-  const historyTitle = screen === 'pending' ? 'Pending Notes' : screen === 'completed' ? 'Completed Notes' : 'All History'
-  const historySubtitle =
-    screen === 'pending'
-      ? `Pipeline status · ${historyFiltered.length} encounter${historyFiltered.length !== 1 ? 's' : ''}${
-          historySyncedAt ? ` · Refreshed ${formatSyncedLabel(historySyncedAt)}` : ''
-        }`
-      : screen === 'completed'
-      ? `Finalized in chart · ${historyFiltered.length} encounter${historyFiltered.length !== 1 ? 's' : ''}${
-          historySyncedAt ? ` · Refreshed ${formatSyncedLabel(historySyncedAt)}` : ''
-        }`
-      : screen === 'history'
-      ? `Full timeline · ${historyFiltered.length} encounter${historyFiltered.length !== 1 ? 's' : ''}${
-          historySyncedAt ? ` · Refreshed ${formatSyncedLabel(historySyncedAt)}` : ''
-        }`
-      : `${historyFiltered.length} encounter${historyFiltered.length !== 1 ? 's' : ''}${
-          historySyncedAt ? ` · Refreshed ${formatSyncedLabel(historySyncedAt)}` : ''
-        }`
+  const notesTabCount = (key) => {
+    if (key === 'all') return historyDateFiltered.length
+    return historyDateFiltered.filter((h) => notesTabFilterMatch(h, key)).length
+  }
 
-  const pendingProcessing =
-    screen === 'pending' ? historyFiltered.filter((h) => h.status === 'recording-uploaded').length : 0
-  const pendingReady =
-    screen === 'pending' ? historyFiltered.filter((h) => h.status === 'note-ready').length : 0
+  const historyFiltered = (() => {
+    let base =
+      notesFilter === 'all'
+        ? historyDateFiltered
+        : historyDateFiltered.filter((h) => notesTabFilterMatch(h, notesFilter))
+    base = base.filter((h) => notesEncounterTypeMatch(h, notesTypeFilter))
+    base = base.filter((h) => notesScribeStatusMatch(h, notesScribeFilter))
+    if (histQ) {
+      const q = histQ.toLowerCase()
+      base = base.filter((h) => h.patient_name?.toLowerCase().includes(q) || h.mrn?.toLowerCase().includes(q))
+    }
+    return sortNotesHistory(base, notesSortBy)
+  })()
 
-  const completedDone =
-    screen === 'completed' ? historyFiltered.filter((h) => h.status === 'done').length : 0
-  const completedReturned =
-    screen === 'completed' ? Math.max(0, historyFiltered.length - completedDone) : 0
+  const notesDateRangeActive = !!(histDateFrom || histDateTo)
 
-  const historyPipeline =
-    screen === 'history'
-      ? historyFiltered.filter(
-          (h) =>
-            h.status === 'recording-uploaded' ||
-            (h.status === 'note-ready' && !clinicianNoteReturned(h)),
-        ).length
-      : 0
-  const historyFinished =
-    screen === 'history'
-      ? historyFiltered.filter((h) => ['uploaded', 'done'].includes(h.status) || clinicianNoteReturned(h)).length
-      : 0
-  const historyScheduled =
-    screen === 'history'
-      ? historyFiltered.filter((h) => ['upcoming', 'in-progress'].includes(h.status)).length
-      : 0
+  const historyTitle = 'Notes'
+  const historySubtitle = (() => {
+    const tabCount = notesTabCount(notesFilter)
+    const countLabel = `${tabCount} encounter${tabCount !== 1 ? 's' : ''}`
+    const refreshed = historySyncedAt ? ` · Refreshed ${formatSyncedLabel(historySyncedAt)}` : ''
+    switch (notesFilter) {
+      case 'with-scribe':
+        return `With scribe · ${countLabel}${refreshed}`
+      case 'ready-for-review':
+        return `Ready for review · ${countLabel}${refreshed}`
+      case 'all':
+      default:
+        return `Full timeline · ${countLabel}${refreshed}`
+    }
+  })()
 
-  const historyToolbarLayout = screen === 'pending' || screen === 'completed' || screen === 'history'
+  const historyToolbarLayout = screen === 'notes'
 
   const openProfile = () => {
-    setScreen('profile')
+    setReview(null)
+    setAiVisit(null)
+    setAiVisitFromNotes(false)
+    setScreenState('profile')
     sidebar.close()
   }
+
+  const openNoteDetail = async (visitRow) => {
+    try {
+      const d = await notesAPI.getByVisit(visitRow.id)
+      sidebar.close()
+      setReview({
+        ...visitRow,
+        final_note: d.note?.final_note,
+        note_id: d.note?.id,
+        scribe_name: d.note?.scribe_name || visitRow.scribe_name,
+      })
+    } catch {
+      showToast('Failed to load note', 'error')
+    }
+  }
+
+  const openNoteFromCard = (h) => openNoteDetail(h)
+
+  const closeNoteDetail = () => setReview(null)
 
   const sidebarProps = {
     screen,
     setScreen,
     sidebar,
     currentUser: cu,
-    visits,
+    scheduleUpcomingBadge,
+    readyForReviewCount,
     drawerMode,
     branding,
     onRequestLogout: requestLogout,
@@ -1154,6 +1961,49 @@ export default function Clinician() {
     confirmLoading,
     onDismissConfirm: () => !confirmLoading && setConfirmDialog(null),
     onConfirmAction: runConfirm,
+  }
+
+  const reviewReminderBanner = reviewReminder ? (
+    <ReviewReminderToast
+      count={reviewReminder.count}
+      oldestHours={reviewReminder.oldestHours}
+      onReview={() => {
+        goToReadyForReview()
+        dismissReviewReminder()
+      }}
+      onDismiss={dismissReviewReminder}
+    />
+  ) : null
+
+  if (screen === 'contact') {
+    return (
+      <div className="sf-page sf-portal adm-shell cl-clinician-shell cl-portal">
+        <Sidebar {...sidebarProps} />
+        <div className="sf-main sf-portal__main">
+          <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
+          {reviewReminderBanner}
+          <PortalTopbar
+            drawerMode={drawerMode}
+            sidebarOpen={sidebar.open}
+            onMenuClick={sidebar.toggle}
+            navControlsId="clinician-sidebar"
+            moduleTitle="Contact Us"
+            brandName={branding.system_name || 'Anot'}
+            user={cu}
+            avatarFallback="C"
+            onViewProfile={openProfile}
+            onSettings={openProfile}
+            onLogout={requestLogout}
+            menuId="clinician-account-menu"
+            accountMenuVariant="clinician"
+          />
+          <div className="sf-body cl-contact-body">
+            <ContactScreen currentUser={cu} showToast={showToast} />
+          </div>
+          {toast && <Toast toast={toast} />}
+        </div>
+      </div>
+    )
   }
 
   if (screen === 'profile') {
@@ -1164,10 +2014,11 @@ export default function Clinician() {
     const todayEnc = visits.length
     const encDayLabel = off === 0 ? 'Encounters today' : `Encounters · ${localDate(off)}`
     return (
-      <div className="sf-page sf-portal adm-shell">
+      <div className="sf-page sf-portal adm-shell cl-clinician-shell cl-portal">
         <Sidebar {...sidebarProps} />
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
+          {reviewReminderBanner}
           <PortalTopbar
             drawerMode={drawerMode}
             sidebarOpen={sidebar.open}
@@ -1181,8 +2032,10 @@ export default function Clinician() {
               setScreen('profile')
               sidebar.close()
             }}
+            onSettings={openProfile}
             onLogout={requestLogout}
             menuId="clinician-account-menu"
+            accountMenuVariant="clinician"
           />
           <div className="sf-body">
             <div className="sf-card sf-card-lg">
@@ -1190,7 +2043,7 @@ export default function Clinician() {
               <div className="sf-metric-grid">
                 {[
                   [encDayLabel, todayEnc, '#4260E9'],
-                  ['In pipeline', pendingEnc, '#FFB547'],
+                  ['With Scribe', pendingEnc, '#FFB547'],
                   ['Completed', completedEnc, '#00C896'],
                 ].map(([label, val, color]) => (
                   <div key={label} className="sf-metric-tile">
@@ -1210,108 +2063,84 @@ export default function Clinician() {
     )
   }
 
-  // ── Review Note ────────────────────────────────────────────────────────────
-
-  if (reviewNote) {
-    return (
-      <div className="sf-page sf-portal adm-shell">
-        <Sidebar {...sidebarProps} />
-        <div className="sf-main sf-portal__main">
-          <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
-          <PortalTopbar
-            drawerMode={drawerMode}
-            sidebarOpen={sidebar.open}
-            onMenuClick={sidebar.toggle}
-            navControlsId="clinician-sidebar"
-            user={cu}
-            avatarFallback="C"
-            onViewProfile={() => {
-              setScreen('profile')
-              sidebar.close()
-            }}
-            onLogout={requestLogout}
-            menuId="clinician-account-menu"
-            moduleTitle=""
-            brandName={branding.system_name || 'Anot'}
-            titleRow={
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
-                <button type="button" className="btn btn-sm" onClick={() => setReview(null)}>
-                  ← Back
-                </button>
-                <div className="adm-topbar__titles" style={{ minWidth: 0 }}>
-                  <div className="adm-topbar__module">{reviewNote.patient_name}</div>
-                  <div className="adm-topbar__brand">
-                    {reviewNote.visit_type} · {fmtDate(reviewNote.visit_date)}
-                  </div>
-                </div>
-              </div>
-            }
-          />
-          <div className="sf-body">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
-              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 999, background: 'var(--blue-light)', border: '1px solid rgba(79, 172, 254, 0.35)' }}>
-                <span style={{ fontSize: 14 }}>📄</span>
-                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--brand-primary-dark)' }}>Final Note — {reviewNote.scribe_name || 'Scribe'}</span>
-              </div>
-              {!editReq[reviewNote.note_id] ? (
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={async () => {
-                    try {
-                      await notesAPI.requestEdit(reviewNote.note_id)
-                      setEditReq((p) => ({ ...p, [reviewNote.note_id]: true }))
-                      showToast('Edit request sent')
-                    } catch (e) {
-                      showToast(e.message, 'error')
-                    }
-                  }}
-                >
-                  ✏️ Request Edit
-                </button>
-              ) : (
-                <span className="badge badge-amber">✓ Edit Requested</span>
-              )}
-            </div>
-            <div className="sf-note-card">
-              <pre className="sf-note-pre">{reviewNote.final_note || 'Note not available.'}</pre>
-            </div>
-          </div>
-          {toast && <Toast toast={toast} />}
-        </div>
-      </div>
-    )
-  }
-
   // ── Main layout ────────────────────────────────────────────────────────────
 
   return (
-    <div className="sf-page sf-portal adm-shell">
+    <div className="sf-page sf-portal adm-shell cl-clinician-shell cl-portal">
       <Sidebar {...sidebarProps} />
       <div className="sf-main sf-portal__main">
         <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
 
-        {/* TEMPLATES */}
-        {screen === 'templates' && (
+        {reviewReminderBanner}
+
+        {reviewNote ? (
           <>
-            <ClinicianTopbar
+            <PortalTopbar
               drawerMode={drawerMode}
-              sidebar={sidebar}
-              branding={branding}
-              cu={cu}
-              onViewProfile={openProfile}
+              sidebarOpen={sidebar.open}
+              onMenuClick={sidebar.toggle}
+              navControlsId="clinician-sidebar"
+              user={cu}
+              avatarFallback="C"
+              onViewProfile={() => {
+                setScreen('profile')
+                sidebar.close()
+              }}
+              onSettings={openProfile}
               onLogout={requestLogout}
-              title="Note Templates"
-              subtitle="Structured note starters · Saved in this browser"
+              menuId="clinician-account-menu"
+              accountMenuVariant="clinician"
+              moduleTitle=""
+              brandName={branding.system_name || 'Anot'}
+              titleRow={
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
+                  <div className="adm-topbar__titles" style={{ minWidth: 0 }}>
+                    <div className="adm-topbar__module">{reviewNote.patient_name}</div>
+                    <div className="adm-topbar__brand">
+                      {reviewNote.visit_type} · {fmtDate(reviewNote.visit_date)}
+                    </div>
+                  </div>
+                </div>
+              }
             />
-            <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-              <TemplatesScreen showToast={showToast} />
+            <div className="sf-body">
+              <button type="button" className="cl-note-detail-back" onClick={closeNoteDetail}>
+                ← Back to Notes
+              </button>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 999, background: 'var(--blue-light)', border: '1px solid rgba(79, 172, 254, 0.35)' }}>
+                  <span style={{ fontSize: 14 }}>📄</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--brand-primary-dark)' }}>Final Note — {reviewNote.scribe_name || 'Scribe'}</span>
+                </div>
+                {!editReq[reviewNote.note_id] ? (
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={async () => {
+                      try {
+                        await notesAPI.requestEdit(reviewNote.note_id)
+                        setEditReq((p) => ({ ...p, [reviewNote.note_id]: true }))
+                        showToast('Edit request sent')
+                      } catch (e) {
+                        showToast(e.message, 'error')
+                      }
+                    }}
+                  >
+                    ✏️ Request Edit
+                  </button>
+                ) : (
+                  <span className="badge badge-amber">✓ Edit Requested</span>
+                )}
+              </div>
+              <div className="sf-note-card">
+                <pre className="sf-note-pre">{reviewNote.final_note || 'Note not available.'}</pre>
+              </div>
             </div>
           </>
-        )}
-
-        {/* HISTORY / PENDING / COMPLETED — same UI, different filter */}
-        {['history', 'pending', 'completed'].includes(screen) && (
+        ) : (
+          <>
+        {/* NOTES — merged pending / completed / history with filter tabs */}
+        {screen === 'notes' && (
           <>
             <ClinicianTopbar
               drawerMode={drawerMode}
@@ -1319,6 +2148,7 @@ export default function Clinician() {
               branding={branding}
               cu={cu}
               onViewProfile={openProfile}
+              onSettings={openProfile}
               onLogout={requestLogout}
               title={historyTitle}
               subtitle={historySubtitle}
@@ -1328,57 +2158,147 @@ export default function Clinician() {
               </button>
             </ClinicianTopbar>
             <div className="sf-body">
-              {screen === 'pending' && !loading && historyFiltered.length > 0 ? (
-                <div className="cl-pending-hero" aria-label="Pending pipeline summary">
-                  <div className="cl-pending-stat cl-pending-stat--processing">
-                    <span className="cl-pending-stat__val">{pendingProcessing}</span>
-                    <span className="cl-pending-stat__lbl">Processing</span>
-                    <span className="cl-pending-stat__hint">Audio or AI draft is still finishing — check back shortly.</span>
-                  </div>
-                  <div className="cl-pending-stat cl-pending-stat--ready">
-                    <span className="cl-pending-stat__val">{pendingReady}</span>
-                    <span className="cl-pending-stat__lbl">Ready for you</span>
-                    <span className="cl-pending-stat__hint">Note is ready to preview, play audio, or open when available.</span>
-                  </div>
-                </div>
-              ) : null}
+              <div className="cl-notes-tabs" role="tablist" aria-label="Notes filter">
+                {NOTES_FILTER_TABS.map(({ key, label, tip }) => (
+                  <ClinicianTooltip key={key} tip={tip} filterTip>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={notesFilter === key}
+                      className={`cl-notes-tab${notesFilter === key ? ' cl-notes-tab--active' : ''}`}
+                      onClick={() => setNotesFilter(key)}
+                    >
+                      <span className="cl-notes-tab__label">{label}</span>
+                      <span className="cl-notes-tab__count" aria-label={`${notesTabCount(key)} notes`}>
+                        {notesTabCount(key)}
+                      </span>
+                    </button>
+                  </ClinicianTooltip>
+                ))}
+              </div>
 
-              {screen === 'completed' && !loading && historyFiltered.length > 0 ? (
-                <div className="cl-pending-hero" aria-label="Completed encounters summary">
-                  <div className="cl-pending-stat cl-pending-stat--completed-emr">
-                    <span className="cl-pending-stat__val">{completedReturned}</span>
-                    <span className="cl-pending-stat__lbl">Returned or filed</span>
-                    <span className="cl-pending-stat__hint">
-                      Scribe-submitted notes, chart uploads, and anything not yet marked visit closed.
-                    </span>
-                  </div>
-                  <div className="cl-pending-stat cl-pending-stat--completed-done">
-                    <span className="cl-pending-stat__val">{completedDone}</span>
-                    <span className="cl-pending-stat__lbl">Visit closed</span>
-                    <span className="cl-pending-stat__hint">Marked complete in your workflow.</span>
-                  </div>
+              <div className="cl-notes-date-filter">
+                <div className="cl-notes-date-filter__field">
+                  <label className="cl-notes-date-filter__label" htmlFor="cl-notes-date-from">
+                    From:
+                  </label>
+                  <input
+                    id="cl-notes-date-from"
+                    type="date"
+                    className="cl-notes-date-filter__input"
+                    value={histDateFromInput}
+                    onChange={(e) => setHistDateFromInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        setHistDateFrom(histDateFromInput)
+                        setHistDateTo(histDateToInput)
+                      }
+                    }}
+                  />
                 </div>
-              ) : null}
+                <div className="cl-notes-date-filter__field">
+                  <label className="cl-notes-date-filter__label" htmlFor="cl-notes-date-to">
+                    To:
+                  </label>
+                  <input
+                    id="cl-notes-date-to"
+                    type="date"
+                    className="cl-notes-date-filter__input"
+                    value={histDateToInput}
+                    onChange={(e) => setHistDateToInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        setHistDateFrom(histDateFromInput)
+                        setHistDateTo(histDateToInput)
+                      }
+                    }}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="cl-notes-date-filter__apply"
+                  onClick={() => {
+                    setHistDateFrom(histDateFromInput)
+                    setHistDateTo(histDateToInput)
+                  }}
+                >
+                  Apply
+                </button>
+                <button
+                  type="button"
+                  className="cl-notes-date-filter__clear"
+                  onClick={() => {
+                    setHistDateFromInput('')
+                    setHistDateToInput('')
+                    setHistDateFrom('')
+                    setHistDateTo('')
+                  }}
+                >
+                  Clear
+                </button>
+              </div>
 
-              {screen === 'history' && !loading && historyFiltered.length > 0 ? (
-                <div className="cl-history-hero" aria-label="All history summary">
-                  <div className="cl-pending-stat cl-pending-stat--history-pipeline">
-                    <span className="cl-pending-stat__val">{historyPipeline}</span>
-                    <span className="cl-pending-stat__lbl">In pipeline</span>
-                    <span className="cl-pending-stat__hint">Processing audio or note ready for review.</span>
+              <div className="cl-notes-advanced-filters">
+                <ClinicianTooltip tip="Filter by the type of clinical encounter" filterTip>
+                  <div className="cl-notes-advanced-filters__field">
+                    <label className="cl-notes-advanced-filters__label" htmlFor="cl-notes-type-filter">
+                      Encounter Type
+                    </label>
+                    <select
+                      id="cl-notes-type-filter"
+                      className="cl-notes-filter-select"
+                      value={notesTypeFilter}
+                      onChange={(e) => setNotesTypeFilter(e.target.value)}
+                    >
+                      {NOTES_ENCOUNTER_FILTER_OPTS.map(({ value, label }) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                  <div className="cl-pending-stat cl-pending-stat--history-finished">
-                    <span className="cl-pending-stat__val">{historyFinished}</span>
-                    <span className="cl-pending-stat__lbl">Completed</span>
-                    <span className="cl-pending-stat__hint">Submitted to chart or visit closed.</span>
+                </ClinicianTooltip>
+                <ClinicianTooltip tip="Filter by the current note processing stage" filterTip>
+                  <div className="cl-notes-advanced-filters__field">
+                    <label className="cl-notes-advanced-filters__label" htmlFor="cl-notes-scribe-filter">
+                      Scribe Status
+                    </label>
+                    <select
+                      id="cl-notes-scribe-filter"
+                      className="cl-notes-filter-select"
+                      value={notesScribeFilter}
+                      onChange={(e) => setNotesScribeFilter(e.target.value)}
+                    >
+                      {NOTES_SCRIBE_FILTER_OPTS.map(({ value, label }) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                  <div className="cl-pending-stat cl-pending-stat--history-scheduled">
-                    <span className="cl-pending-stat__val">{historyScheduled}</span>
-                    <span className="cl-pending-stat__lbl">Scheduled / live</span>
-                    <span className="cl-pending-stat__hint">Upcoming visits or recording in progress.</span>
+                </ClinicianTooltip>
+                <ClinicianTooltip tip="Change the order notes appear in the list" filterTip>
+                  <div className="cl-notes-advanced-filters__field">
+                    <label className="cl-notes-advanced-filters__label" htmlFor="cl-notes-sort-by">
+                      Sort By
+                    </label>
+                    <select
+                      id="cl-notes-sort-by"
+                      className="cl-notes-filter-select"
+                      value={notesSortBy}
+                      onChange={(e) => setNotesSortBy(e.target.value)}
+                    >
+                      {NOTES_SORT_OPTS.map(({ value, label }) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
-                </div>
-              ) : null}
+                </ClinicianTooltip>
+              </div>
 
               <div className={historyToolbarLayout ? 'cl-pending-toolbar' : ''}>
                 <input
@@ -1389,10 +2309,6 @@ export default function Clinician() {
                   aria-label="Search encounters"
                   style={historyToolbarLayout ? undefined : { marginBottom: 12 }}
                 />
-                <label className="cl-filter-toggle">
-                  <input type="checkbox" checked={histAudioOnly} onChange={(e) => setHistAudioOnly(e.target.checked)} />
-                  <span>Only encounters with a recording</span>
-                </label>
               </div>
 
               {loading ? (
@@ -1403,39 +2319,44 @@ export default function Clinician() {
               ) : historyFiltered.length === 0 ? (
                 <div className="sf-empty">
                   <div className="sf-empty-icon">
-                    {screen === 'pending' ? '✨' : screen === 'completed' ? '✅' : screen === 'history' ? '📜' : '📋'}
+                    {notesFilter === 'with-scribe' ? '✨' : notesFilter === 'ready-for-review' ? '📝' : '📜'}
                   </div>
                   <div className="sf-empty-title">
-                    {screen === 'pending' ? 'No pending notes — all caught up.' : screen === 'completed' ? 'No completed notes yet.' : screen === 'history' ? 'No encounters match your filters.' : 'No history found'}
+                    {notesFilter === 'with-scribe'
+                      ? 'No notes with scribe.'
+                      : notesFilter === 'ready-for-review'
+                      ? 'No notes ready for review.'
+                      : 'No encounters match your filters.'}
                   </div>
-                  {screen === 'pending' ? (
-                    <div className="sf-empty-sub">When a visit is still processing or waiting for your review, it will show up here.</div>
+                  {notesFilter === 'with-scribe' ? (
+                    <div className="sf-empty-sub">When audio is still with the scribe, it will show up here.</div>
                   ) : null}
-                  {screen === 'completed' ? (
+                  {notesFilter === 'ready-for-review' ? (
+                    <div className="sf-empty-sub">Notes ready for your review will appear here once the scribe returns them.</div>
+                  ) : null}
+                  {notesFilter === 'all' ? (
                     <div className="sf-empty-sub">
-                      Includes notes the scribe has submitted and visits filed to the chart. If nothing appears, your
-                      scribe may still be drafting, or filters may be hiding visits without audio.
+                      {notesDateRangeActive
+                        ? 'No encounters in this date range. Try adjusting From/To or tap Clear.'
+                        : 'Try clearing search. New activity will show after your next refresh.'}
                     </div>
-                  ) : null}
-                  {screen === 'history' ? (
-                    <div className="sf-empty-sub">Try clearing search or include visits without a recording. New activity will show after your next refresh.</div>
                   ) : null}
                 </div>
               ) : (
                 historyFiltered.map((h) => {
-                  const hst = ST[historyRowDisplayStatus(h)] || ST.upcoming
-                  const modernCard = screen === 'pending' || screen === 'completed' || screen === 'history'
+                  const notesBadge = NOTES_BADGE_META[notesCardBadgeKey(h)] || NOTES_BADGE_META.processing
+                  const actionKind = notesCardActionKind(h)
+                  const isReadyReview = notesCardBadgeKey(h) === 'ready'
+                  const modernCard = screen === 'notes'
                   const cardVariant =
-                    screen === 'pending'
-                      ? h.status === 'note-ready'
-                        ? 'ready'
-                        : 'processing'
-                      : screen === 'completed'
-                      ? h.status === 'done'
-                        ? 'completed-done'
-                        : 'completed-emr'
-                      : screen === 'history'
-                      ? h.status === 'note-ready'
+                    notesFilter === 'with-scribe'
+                      ? 'processing'
+                      :                     notesFilter === 'ready-for-review'
+                      ? 'ready'
+                      : notesFilter === 'all'
+                      ? notesCardBadgeKey(h) === 'overdue'
+                        ? 'overdue'
+                        : h.status === 'note-ready'
                         ? 'ready'
                         : h.status === 'recording-uploaded'
                         ? 'processing'
@@ -1450,63 +2371,60 @@ export default function Clinician() {
                         : 'history-default'
                       : ''
                   const RowWrap = modernCard ? 'article' : 'div'
-                  const rowClass = modernCard ? `cl-pending-card cl-pending-card--${cardVariant}` : 'sf-row'
-                  const rowProps = modernCard ? { 'aria-label': `${h.patient_name}, ${hst.label}` } : {}
+                  const scribeUrgent = notesBadge.label === 'With Scribe' && scribeWaitingTier(h) === 'urgent'
+                  const rowClass = modernCard
+                    ? `cl-pending-card cl-pending-card--${cardVariant}${isReadyReview ? ' cl-pending-card--ready-review' : ''}${scribeUrgent ? ' cl-pending-card--scribe-urgent' : ''}`
+                    : 'sf-row'
+                  const rowProps = modernCard ? { 'aria-label': `${h.patient_name}, ${notesBadge.label}` } : {}
                   return (
                     <RowWrap key={h.id} className={rowClass} style={modernCard ? undefined : { alignItems: 'flex-start', flexWrap: 'wrap', marginBottom: 8, justifyContent: 'flex-start', gap: 14 }} {...rowProps}>
                       <div className={modernCard ? 'cl-pending-card__main' : ''} style={modernCard ? undefined : { display:'flex', alignItems:'center', gap:14, flex:1, minWidth:0 }}>
                         <div
-                          className={modernCard ? 'cl-pending-card__avatar' : ''}
-                          style={
-                            modernCard
-                              ? { background: avatarBg(h.patient_name) }
-                              : { width:46, height:46, borderRadius:14, background:avatarBg(h.patient_name), display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, fontWeight:800, color:'#1E293B', flexShrink:0 }
-                          }
+                          className={modernCard ? 'cl-pending-card__avatar' : 'cl-schedule-row__avatar'}
+                          style={{ background: getPatientAvatarColor(h.mrn || h.patient_name) }}
+                          aria-hidden
                         >
                           {initials(h.patient_name)}
                         </div>
                         <div style={{ minWidth:0, flex:1 }}>
                           <div className={modernCard ? 'cl-pending-card__title' : ''} style={modernCard ? undefined : { fontSize:15, fontWeight:700, color:'#1E293B' }}>{h.patient_name}</div>
-                          <div className={modernCard ? 'cl-pending-card__meta' : ''} style={modernCard ? undefined : { fontSize:13, color:'#64748B', marginTop:3, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
-                            <span style={{ fontWeight:600, color:'#475569' }}>📋 {h.mrn}</span>
-                            <button type="button" className="cl-copy-mrn" onClick={() => copyMrn(h.mrn)} title="Copy MRN">
-                              Copy
-                            </button>
-                            <span style={{ color:'#CBD5E1' }}>·</span>
-                            <span style={{ fontWeight:500 }}>{fmtDate(h.visit_date)}</span>
-                            <span style={{ color:'#CBD5E1' }}>·</span>
-                            <span>{h.visit_type}</span>
-                            {h.duration_seconds ? <><span style={{ color:'#CBD5E1' }}>·</span><span>{fmtSecs(h.duration_seconds)}</span></> : null}
+                          <div className="cl-notes-status-row">
+                            <StatusBadge
+                              label={notesBadge.label === 'With Scribe' ? withScribeBadgeLabel(h) : notesBadge.label}
+                              className={notesBadge.label === 'With Scribe' ? withScribeBadgeClassName(h) : notesBadge.className}
+                            />
+                            {notesBadge.label !== 'With Scribe' && notesFilter === 'all' && notesBadge.className?.includes('badge-processing') ? (
+                              <span className={`cl-waiting-badge cl-waiting-badge--${notesWaitingTier(h)}`}>
+                                {notesWaitingLabel(h)}
+                              </span>
+                            ) : null}
                           </div>
-                          <div style={{ marginTop:8 }}><StatusChip st={hst} /></div>
+                          <div className={modernCard ? 'cl-pending-card__meta' : ''} style={modernCard ? undefined : { fontSize:13, color:'#64748B', marginTop:3, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                            <span className="cl-pending-card__meta-mrn" style={{ fontWeight:600, color:'#475569' }}>📋 {h.mrn}</span>
+                            <span style={{ color:'#CBD5E1' }} aria-hidden="true">·</span>
+                            <span className="cl-pending-card__meta-date">{fmtDate(h.visit_date)}</span>
+                            <span style={{ color:'#CBD5E1' }} aria-hidden="true">·</span>
+                            <span className="cl-pending-card__meta-type">{h.visit_type}</span>
+                          </div>
                         </div>
                       </div>
                       <div className={modernCard ? 'cl-pending-card__actions' : ''} style={modernCard ? undefined : { display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end', marginLeft: 'auto' }}>
-                        {h.audio_file ? (
-                          <button type="button" className="cl-icon-btn" title="Play recording" onClick={() => setPlayVisit(h)}>
-                            🔊
+                        {actionKind === 'open' ? (
+                          <button type="button" className="cl-notes-btn-open" onClick={() => openNoteFromCard(h)}>
+                            Open Note
                           </button>
                         ) : null}
-                        {canPreviewUploadedNote(h) ? (
-                          <button type="button" className="cl-icon-btn" title="Preview Note" onClick={() => setAiVisit(h)}>
-                            👁
+                        {actionKind === 'awaiting' ? (
+                          <span className="cl-notes-awaiting">Awaiting Note</span>
+                        ) : null}
+                        {actionKind === 'view' ? (
+                          <button type="button" className="cl-notes-btn-view" onClick={() => openNoteFromCard(h)}>
+                            View Note
                           </button>
                         ) : null}
-                        {h.final_note ? (
-                          <button
-                            type="button"
-                            className="cl-icon-btn"
-                            title="Final Note"
-                            onClick={async () => {
-                              try {
-                                const d = await notesAPI.getByVisit(h.id)
-                                setReview({ ...h, final_note: d.note?.final_note, note_id: d.note?.id, scribe_name: d.note?.scribe_name || h.scribe_name })
-                              } catch {
-                                showToast('Failed', 'error')
-                              }
-                            }}
-                          >
-                            📋
+                        {actionKind === 'record' ? (
+                          <button type="button" className="cl-notes-btn-record" onClick={() => goRecordOverdueFromNotes(h)}>
+                            Record Now
                           </button>
                         ) : null}
                       </div>
@@ -1527,8 +2445,17 @@ export default function Clinician() {
               branding={branding}
               cu={cu}
               onViewProfile={openProfile}
+              onSettings={openProfile}
               onLogout={requestLogout}
               title={`${getGreeting()}, Dr. ${cu.name?.split(' ').pop()}`}
+              belowTitle={
+                readyForReviewCount > 0 ? (
+                  <button type="button" className="cl-schedule-pending-reviews" onClick={goToReadyForReview}>
+                    <span className="cl-schedule-pending-reviews__icon" aria-hidden>🔔</span>
+                    {readyForReviewCount} note{readyForReviewCount !== 1 ? 's' : ''} waiting for your review
+                  </button>
+                ) : null
+              }
               subtitle={`${localDate(off, 'long')} · ${today} patient${today !== 1 ? 's' : ''} on this day${
                 scheduleSyncedAt ? ` · Updated ${formatSyncedLabel(scheduleSyncedAt)}` : ''
               }`}
@@ -1540,9 +2467,11 @@ export default function Clinician() {
               >
                 {liveNow.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
               </time>
-              <button type="button" className="btn btn-sm" disabled={loading} onClick={() => loadVisits({ notify: true })} title="Reload schedule">
-                ⟳ Refresh
-              </button>
+              <ClinicianTooltip tip="Update visit statistics and patient list" placement="below">
+                <button type="button" className="btn btn-sm" disabled={loading} onClick={() => loadVisits({ notify: true })}>
+                  ⟳ Refresh
+                </button>
+              </ClinicianTooltip>
               <button type="button" className="btn btn-navy btn-sm" onClick={() => { setShowAdd((f) => !f); setPtErr('') }}>
                 + Add Patient
               </button>
@@ -1551,41 +2480,42 @@ export default function Clinician() {
             <div className="sf-body cl-schedule">
               <div className="cl-schedule-banner sf-banner sf-banner-past">
                 <div>
-                  <div className="sf-section-label" style={{ marginBottom: 4 }}>
-                    {off === 0 ? "Today's visits" : `Visits for ${localDate(off, 'long')}`}
+                  <div className="sf-section-label cl-schedule-section-title" style={{ marginBottom: 4 }}>
+                    {visitsSectionTitle(off)}
                   </div>
                   <div style={{ fontSize: 13, color: 'var(--text-sub)' }}>
                     Press <kbd className="cl-kbd">T</kbd> to jump to today
-                    {off !== 0 ? (
+                    {!isScheduleToday(off) ? (
                       <>
                         {' · '}
-                        <button type="button" className="sf-back" style={{ display: 'inline', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }} onClick={() => setOff(0)}>
+                        <button type="button" className="sf-back" style={{ display: 'inline', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }} onClick={goToToday}>
                           Go to today
                         </button>
                       </>
                     ) : null}
                   </div>
                 </div>
-                <span className="badge badge-blue">Clinical workspace</span>
               </div>
 
-              <div className="sf-stats">
+              <div className="cl-stat-cards sf-stats">
                 {[
-                  ['Total Visits', today, '#4260E9'],
-                  ['Processing', action, '#EA580C'],
-                  ['Ready for Review', ready, '#16A34A'],
-                  ['Completed', synced, '#2563EB'],
-                ].map(([label, val, color]) => (
-                  <div key={label} className="sf-stat">
-                    <div className="sf-stat-val" style={{ color }}>{val}</div>
-                    <div className="sf-stat-lbl">{label}</div>
+                  ['Total Visits', today, 'cl-stat-card--total', '📅'],
+                  ['With Scribe', action, 'cl-stat-card--processing', '🎙'],
+                  [READY_FOR_REVIEW_LABEL, ready, 'cl-stat-card--review', '✏️'],
+                  ['Completed', synced, 'cl-stat-card--completed', '✓'],
+                ].map(([label, val, mod, icon]) => (
+                  <div key={label} className={`cl-stat-card sf-stat ${mod}`}>
+                    <span className="cl-stat-card__icon" aria-hidden>
+                      {mod === 'cl-stat-card--total' ? <IconCalendar /> : icon}
+                    </span>
+                    <div className="cl-stat-card__val sf-stat-val">{val}</div>
+                    <div className="cl-stat-card__lbl sf-stat-lbl">{label}</div>
                   </div>
                 ))}
               </div>
 
               {active && (
                 <div className="sf-rec-banner" style={{ marginBottom: 14 }}>
-                  <div className="sf-rec-dot" />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div className="sf-audio-label" style={{ color: '#9F1239' }}>{active.patient_name}</div>
                     <div style={{ fontSize: 12, color: '#E11D48', marginTop: 2 }}>{fmtSecs(timer)} · {paused ? 'Paused' : 'Recording live...'}</div>
@@ -1659,42 +2589,59 @@ export default function Clinician() {
                 </div>
               )}
 
-              <div className="sf-date-nav">
-                <button type="button" className="btn btn-sm" onClick={() => setOff((d) => d - 1)} aria-label="Previous day">
+              <div className="sf-date-nav cl-date-nav portal-cal-strip">
+                <button type="button" className="btn btn-sm cl-date-nav__arrow portal-cal-strip__arrow portal-cal-strip__arrow--week" onClick={() => shiftScheduleOff(-7)} aria-label="Previous week">
+                  ‹‹
+                </button>
+                <button type="button" className="btn btn-sm cl-date-nav__arrow portal-cal-strip__arrow" onClick={() => shiftScheduleOff(-1)} aria-label="Previous day">
                   ‹
                 </button>
-                <div className="sf-date-nav-days">
-                  {DAYS.map((o) => (
-                    <div
-                      key={o}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => setOff(o)}
-                      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setOff(o)}
-                      className={`sf-date-nav-day${o === off ? ' active' : ''}`}
-                    >
-                      <div className="sf-date-nav-day-name">{localDate(o, 'day')}</div>
-                      <div className="sf-date-nav-day-date" style={{ fontSize: 16, fontWeight: 800, lineHeight: 1.2, color: o === off ? '#fff' : undefined }}>{localDate(o, 'date')}</div>
-                      {o === 0 ? (
+                <div className="sf-date-nav-days cl-date-nav__days portal-cal-strip__days">
+                  {scheduleDays.map((o) => {
+                    const breakdown = scheduleDayBreakdownFor(o, off, visits, scheduleDayBreakdown)
+                    return (
+                      <div key={o} className="cl-date-nav__day-wrap portal-cal-strip__day-wrap">
+                        <ScheduleDayPreview dayOff={o} breakdown={breakdown} />
                         <div
-                          className="sf-date-nav-day-date"
-                          style={{
-                            fontSize: 9,
-                            fontWeight: 700,
-                            marginTop: 2,
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.06em',
-                            color: o === off ? 'rgba(255,255,255,0.75)' : undefined,
-                          }}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => goToScheduleDate(o)}
+                          onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && goToScheduleDate(o)}
+                          className={`sf-date-nav-day cl-date-nav__day portal-cal-strip__day${o === off ? ' active' : ''}${localDate(o, 'input') === localDate(0, 'input') ? ' cl-date-nav__day--today portal-cal-strip__day--today' : ''}`}
                         >
-                          Today
+                          <div className="sf-date-nav-day-name cl-date-nav__day-name portal-cal-strip__day-name">{localDate(o, 'day')}</div>
+                          <div className="sf-date-nav-day-date cl-date-nav__day-num portal-cal-strip__day-num">{localDate(o, 'date')}</div>
+                          {localDate(o, 'input') === localDate(0, 'input') ? <div className="cl-date-nav__today-label portal-cal-strip__today-label">Today</div> : null}
                         </div>
-                      ) : null}
-                    </div>
-                  ))}
+                      </div>
+                    )
+                  })}
                 </div>
-                <button type="button" className="btn btn-sm" onClick={() => setOff((d) => d + 1)} aria-label="Next day">
+                <div className="cl-date-nav__calendar-wrap">
+                  <button
+                    ref={calendarBtnRef}
+                    type="button"
+                    className="cl-calendar-btn"
+                    aria-label="Jump to date"
+                    aria-expanded={calendarOpen}
+                    onClick={() => setCalendarOpen((open) => !open)}
+                  >
+                    <IconCalendar />
+                  </button>
+                  {calendarOpen ? (
+                    <ScheduleDatePicker
+                      off={off}
+                      anchorRef={calendarBtnRef}
+                      onSelectDate={goToScheduleDate}
+                      onClose={() => setCalendarOpen(false)}
+                    />
+                  ) : null}
+                </div>
+                <button type="button" className="btn btn-sm cl-date-nav__arrow portal-cal-strip__arrow" onClick={() => shiftScheduleOff(1)} aria-label="Next day">
                   ›
+                </button>
+                <button type="button" className="btn btn-sm cl-date-nav__arrow portal-cal-strip__arrow portal-cal-strip__arrow--week" onClick={() => shiftScheduleOff(7)} aria-label="Next week">
+                  ››
                 </button>
               </div>
 
@@ -1725,97 +2672,118 @@ export default function Clinician() {
                     </button>
                   </div>
                 ) : (
-                  visits.map((v) => {
-                  const st = ST[v.status] || ST.upcoming
+                  visits.map((v, visitIdx) => {
                   const isActive = active?.id === v.id
-                  const hasAudio = v.audio_file && v.audio_file.trim() !== ''
-                  const recCount = v.recording_count || 1
+                  const scheduleOverdue = isScheduleVisitOverdue(v, off)
+                  const scheduleBadgeText = scheduleOverdue ? 'Overdue' : scheduleStatusDisplayLabel(v.status)
+                  const scheduleBadgeClass = scheduleOverdue ? 'badge-review' : scheduleVisitBadgeClass(v.status)
+                  const unifiedWithScribeBadge = !scheduleOverdue && scheduleBadgeText === WITH_SCRIBE_LABEL
+                  const scribeUrgentOnSchedule = unifiedWithScribeBadge && scribeWaitingTier(v) === 'urgent'
+                  const accentClass = scheduleOverdue
+                    ? 'cl-patient-card--overdue'
+                    : schedulePatientCardAccentClass(v, off)
+                  const showNowBefore = shouldInsertNowBefore(visits, visitIdx, off, liveNow)
                   return (
-                    <div key={v.id} className={`cl-schedule-row sf-row${isActive ? ' sf-row-active' : ''}`}>
+                    <div key={v.id} className="cl-schedule-visit-wrap">
+                      {showNowBefore ? <NowDivider now={liveNow} /> : null}
+                    <div className={`cl-schedule-row sf-row cl-patient-card ${accentClass}${scribeUrgentOnSchedule ? ' cl-patient-card--scribe-urgent' : ''}${isActive ? ' sf-row-active' : ''}`}>
                       <div className="cl-schedule-row__time">
                         <div className="cl-schedule-row__time-main">{fmtTime(v.visit_time).split(' ')[0]}</div>
                         <div className="cl-schedule-row__time-sub">{fmtTime(v.visit_time).split(' ')[1]}</div>
                       </div>
-                      <div className="cl-schedule-row__avatar" style={{ background: avatarBg(v.patient_name) }}>{initials(v.patient_name)}</div>
+                      <div
+                        className="cl-schedule-row__avatar"
+                        style={{ background: getPatientAvatarColor(v.mrn || v.patient_name) }}
+                        aria-hidden
+                      >
+                        {initials(v.patient_name)}
+                      </div>
                       <div className="cl-schedule-row__info">
                         <div className="cl-schedule-row__name">{v.patient_name}</div>
                         <div className="cl-schedule-row__meta">
                           <span style={{ fontWeight:600, color:'#475569' }}>📋 {v.mrn}</span>
-                          <button type="button" className="cl-copy-mrn" onClick={() => copyMrn(v.mrn)} title="Copy MRN">
-                            Copy
-                          </button>
                           <span style={{ color:'#CBD5E1' }}>·</span>
                           <span style={{ fontWeight:500 }}>{v.visit_type}</span>
-                          {v.duration_seconds > 0 && (
-                            <>
-                              <span style={{ color:'#CBD5E1' }}>·</span>
-                              <span style={{ color:'#16A34A', fontWeight:600 }}>🎙 {fmtSecs(v.duration_seconds)} total{recCount > 1 ? ` (${recCount} recordings)` : ''}</span>
-                            </>
-                          )}
                         </div>
-                        <div style={{ marginTop:8 }}>
-                          <StatusChip st={st} />
+                        <div className="cl-schedule-status-row">
+                          <StatusBadge
+                            label={unifiedWithScribeBadge ? withScribeBadgeLabel(v, { schedule: true }) : scheduleBadgeText}
+                            className={unifiedWithScribeBadge ? withScribeBadgeClassName(v) : scheduleBadgeClass}
+                          />
                         </div>
                       </div>
                       <div className="cl-schedule-row__actions">
-                        {hasAudio && !['upcoming', 'scheduled', 'in-progress'].includes(v.status) && (
-                          <button type="button" className="cl-icon-btn" title="Play recording" onClick={() => setPlayVisit(v)}>
-                            🔊
-                          </button>
-                        )}
                         {v.status === 'upcoming' && (
                           <>
-                            <button type="button" className="cl-schedule-cta" onClick={() => startVisit(v)} disabled={!!active} style={{ display:'inline-flex', alignItems:'center', gap:10, padding:'10px 22px', borderRadius:14, background: active ? '#94A3B8' : 'linear-gradient(135deg,#16A34A,#15803D)', color:'#fff', border:'none', fontSize:15, fontWeight:800, cursor: active ? 'not-allowed' : 'pointer', fontFamily:'inherit', boxShadow: active ? 'none' : '0 4px 16px rgba(22,163,74,0.4)', opacity: active ? 0.6 : 1 }}>
-                              <span style={{ width:11, height:11, borderRadius:'50%', background:'#fff', display:'inline-block', flexShrink:0, animation: active ? 'none' : 'pulse 1.4s infinite' }} />
-                              Record Encounter
-                            </button>
-                            <button type="button" className="cl-icon-btn" title="Edit" onClick={() => { setEditV(v); setEditD({ visit_time: v.visit_time, visit_type: v.visit_type }) }}>✏️</button>
-                            <button type="button" className="cl-icon-btn" title="Remove" onClick={() => deleteVisit(v)}>🗑</button>
+                            <ClinicianTooltip tip="Start audio recording for this encounter. Your scribe team will receive the audio and draft the note.">
+                              <button type="button" className="cl-schedule-cta" onClick={() => startVisit(v)} disabled={!!active} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'10px 22px', borderRadius:14, background: active ? '#94A3B8' : 'linear-gradient(135deg,#16A34A,#15803D)', color:'#fff', border:'none', fontSize:15, fontWeight:800, cursor: active ? 'not-allowed' : 'pointer', fontFamily:'inherit', boxShadow: active ? 'none' : '0 4px 16px rgba(22,163,74,0.4)', opacity: active ? 0.6 : 1 }}>
+                                <IconMic />
+                                Record Encounter
+                              </button>
+                            </ClinicianTooltip>
+                            <div className="cl-schedule-row__icon-actions">
+                              <ClinicianTooltip tip="Edit patient appointment details" icon>
+                                <button type="button" className="cl-icon-btn" aria-label="Edit patient appointment details" onClick={() => { setEditV(v); setEditD({ visit_time: v.visit_time, visit_type: v.visit_type }) }}>✏️</button>
+                              </ClinicianTooltip>
+                              <ClinicianTooltip tip="Remove this patient from today's schedule" icon>
+                                <button type="button" className="cl-icon-btn" aria-label="Remove this patient from today's schedule" onClick={() => deleteVisit(v)}>🗑</button>
+                              </ClinicianTooltip>
+                            </div>
                           </>
                         )}
                         {v.status === 'in-progress' && (
                           <div style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'8px 16px', borderRadius:10, background:'#FFF1F2', border:'1px solid #FECDD3' }}>
-                            <div style={{ width:8, height:8, borderRadius:'50%', background:'#EF4444', animation:'pulse 1.2s infinite' }} />
                             <span style={{ fontSize:14, color:'#9F1239', fontWeight:700 }}>Recording...</span>
                           </div>
                         )}
                         {/* recording-uploaded: NO "Generate Note" button.
-                            Status chip already says "Processing".
+                            Status chip already says "With Scribe".
                             Optional Preview Draft + Add to Encounter for additional audio. */}
                         {v.status === 'recording-uploaded' && (
                           <div style={{ display:'flex', gap:8, flexWrap:'wrap', justifyContent:'flex-end', alignItems:'center' }}>
-                            <button type="button" className="cl-schedule-cta" onClick={() => startAdd(v)} disabled={!!active || !!addRec} style={{ display:'inline-flex', alignItems:'center', gap:10, padding:'10px 22px', borderRadius:14, background: (active||addRec) ? '#94A3B8' : 'linear-gradient(135deg,#16A34A,#15803D)', color:'#fff', border:'none', fontSize:15, fontWeight:800, cursor: (active||addRec) ? 'not-allowed' : 'pointer', fontFamily:'inherit', boxShadow: (active||addRec) ? 'none' : '0 4px 16px rgba(22,163,74,0.4)', opacity: (active||addRec) ? 0.6 : 1 }}>
-                              <span style={{ width:11, height:11, borderRadius:'50%', background:'#fff', display:'inline-block', flexShrink:0 }} />
-                              Additional Recording
-                            </button>
+                            <ClinicianTooltip tip="Add another audio recording to this encounter">
+                              <button type="button" className="cl-schedule-cta" onClick={() => startAdd(v)} disabled={!!active || !!addRec} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'10px 22px', borderRadius:14, background: (active||addRec) ? '#94A3B8' : 'linear-gradient(135deg,#16A34A,#15803D)', color:'#fff', border:'none', fontSize:15, fontWeight:800, cursor: (active||addRec) ? 'not-allowed' : 'pointer', fontFamily:'inherit', boxShadow: (active||addRec) ? 'none' : '0 4px 16px rgba(22,163,74,0.4)', opacity: (active||addRec) ? 0.6 : 1 }}>
+                                <IconMic />
+                                Additional Recording
+                              </button>
+                            </ClinicianTooltip>
                           </div>
                         )}
                         {v.status === 'note-ready' && (
                           <>
-                            <button type="button" className="cl-schedule-btn-review" style={{ ...B.action, background:'linear-gradient(135deg,#15803D,#16A34A)', color:'#fff', padding:'10px 18px', fontSize:14, boxShadow:'0 4px 14px rgba(21,128,61,0.35)' }}
-                              onClick={async () => { try { const d = await notesAPI.getByVisit(v.id); setReview({ ...v, final_note:d.note?.final_note, note_id:d.note?.id, scribe_name:d.note?.scribe_name||v.scribe_name }) } catch { showToast('Failed to load note','error') } }}>
-                              📋 Review Final Note
-                            </button>
+                            <ClinicianTooltip tip="Review and sign off on the scribe-drafted note">
+                              <button type="button" className="cl-schedule-btn-review" style={{ ...B.action, display:'inline-flex', alignItems:'center', gap:6, background:'linear-gradient(135deg,#15803D,#16A34A)', color:'#fff', padding:'10px 18px', fontSize:14, boxShadow:'0 4px 14px rgba(21,128,61,0.35)' }}
+                                onClick={() => openNoteDetail(v)}>
+                                <IconPenEdit />
+                                Open Note
+                              </button>
+                            </ClinicianTooltip>
                           </>
                         )}
                         {v.status === 'uploaded' && (
                           <>
                             <button type="button" className="cl-schedule-btn-review" style={{ ...B.action, background:'linear-gradient(135deg,#1565C0,#1E40AF)', color:'#fff', padding:'10px 18px', fontSize:14, boxShadow:'0 4px 14px rgba(30,64,175,0.35)' }}
-                              onClick={async () => { try { const d = await notesAPI.getByVisit(v.id); setReview({ ...v, final_note:d.note?.final_note, note_id:d.note?.id, scribe_name:d.note?.scribe_name||v.scribe_name }) } catch { showToast('Failed to load note','error') } }}>
+                              onClick={() => openNoteDetail(v)}>
                               📋 View Final Note
                             </button>
                             {canPreviewUploadedNote(v) ? (
-                              <button type="button" className="cl-icon-btn" title="Preview Note" onClick={() => setAiVisit(v)}>👁</button>
+                              <button type="button" className="cl-icon-btn" title="Preview Note" onClick={() => { setAiVisitFromNotes(false); setAiVisit(v) }}>👁</button>
                             ) : null}
                           </>
                         )}
                       </div>
                     </div>
+                    </div>
                   )
                 })
                 )}
+                {!loading && visits.length > 0 && shouldInsertNowAfterAll(visits, off, liveNow) ? (
+                  <NowDivider now={liveNow} />
+                ) : null}
               </div>
             </div>
+          </>
+        )}
           </>
         )}
       </div>
@@ -1871,8 +2839,8 @@ export default function Clinician() {
         </div>
       )}
 
-      {aiVisit    && <AIModal    visit={aiVisit}    onClose={() => setAiVisit(null)} showToast={showToast} />}
-      {playVisit  && <AudioModal visitId={playVisit.id} visit={playVisit} onClose={() => setPlayVisit(null)} showToast={showToast} />}
+      {aiVisit    && <AIModal    visit={aiVisit}    onClose={() => { setAiVisit(null); setAiVisitFromNotes(false) }} hideAudioControls={aiVisitFromNotes} showToast={showToast} />}
+      {playVisit  && screen !== 'notes' && <AudioModal visitId={playVisit.id} visit={playVisit} onClose={() => setPlayVisit(null)} showToast={showToast} />}
       {toast      && <Toast toast={toast} />}
     </div>
   )

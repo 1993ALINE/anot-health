@@ -450,3 +450,16 @@ export const settingsAPI = {
     return handleResponse(res)
   },
 }
+
+// ─── CLINICIAN SUPPORT CHAT ───────────────────────────────────────────────────
+
+export const supportAPI = {
+  chat: async (messages) => {
+    const res = await fetch(`${BASE_URL}/support/chat`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ messages }),
+    })
+    return handleResponse(res)
+  },
+}

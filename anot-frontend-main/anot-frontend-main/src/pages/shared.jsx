@@ -84,8 +84,10 @@ export function PortalTopbar({
     user,
     avatarFallback = '?',
     onViewProfile,
+    onSettings,
     onLogout,
     menuId = 'portal-account-menu',
+    accountMenuVariant,
     endBeforeAccount = null,
     titleRow = null,
     navControlsId,
@@ -122,8 +124,10 @@ export function PortalTopbar({
                     user={user}
                     fallback={avatarFallback}
                     onViewProfile={onViewProfile}
+                    onSettings={onSettings}
                     onLogout={onLogout}
                     menuId={menuId}
+                    variant={accountMenuVariant}
                 />
             </div>
         </header>
@@ -188,10 +192,12 @@ export function SfAccountMenu({
     user,
     fallback = '?',
     onViewProfile,
+    onSettings,
     onProfilePreview,
     onChangePhoto,
     onLogout,
     menuId = 'sf-account-menu',
+    variant,
 }) {
     const [open, setOpen] = useState(false)
     const [panelPos, setPanelPos] = useState(null)
@@ -317,7 +323,7 @@ export function SfAccountMenu({
         <div
             ref={panelRef}
             id={`${menuId}-panel`}
-            className={`sf-account-menu__panel sf-account-menu__panel--portal${open ? ' sf-account-menu__panel--open' : ''}`}
+            className={`sf-account-menu__panel sf-account-menu__panel--portal${variant === 'clinician' ? ' sf-account-menu__panel--clinician' : ''}${open ? ' sf-account-menu__panel--open' : ''}`}
             role="menu"
             aria-hidden={!open}
             style={panelStyle}
@@ -331,7 +337,13 @@ export function SfAccountMenu({
                 {typeof onViewProfile === 'function' ? (
                     <button type="button" className="sf-account-menu__item" role="menuitem" onClick={() => run(onViewProfile)}>
                         <span className="sf-account-menu__ico" aria-hidden>👤</span>
-                        <span>View profile</span>
+                        <span>{variant === 'clinician' ? 'Profile' : 'View profile'}</span>
+                    </button>
+                ) : null}
+                {typeof onSettings === 'function' ? (
+                    <button type="button" className="sf-account-menu__item" role="menuitem" onClick={() => run(onSettings)}>
+                        <span className="sf-account-menu__ico" aria-hidden>⚙️</span>
+                        <span>Settings</span>
                     </button>
                 ) : null}
                 {typeof onProfilePreview === 'function' ? (
@@ -351,7 +363,7 @@ export function SfAccountMenu({
                         <div className="sf-account-menu__sep" role="separator" />
                         <button type="button" className="sf-account-menu__item sf-account-menu__item--danger" role="menuitem" onClick={() => run(onLogout)}>
                             <span className="sf-account-menu__ico" aria-hidden>🚪</span>
-                            <span>Log out</span>
+                            <span>{variant === 'clinician' ? 'Sign Out' : 'Log out'}</span>
                         </button>
                     </>
                 ) : null}

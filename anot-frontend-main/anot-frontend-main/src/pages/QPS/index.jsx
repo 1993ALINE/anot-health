@@ -10,6 +10,7 @@ import { getClinicianTemplateForVisit } from '../../utils/clinicianTemplates'
 import { fmtAppointmentTime } from '../../utils/timeFormat'
 import { parseTranscriptionBlocks, useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, ConfirmDialog, PortalSidebarBrand } from '../shared'
 import './qps.css'
+import '../portal-sidebar-indigo.css'
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 

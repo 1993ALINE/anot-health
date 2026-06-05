@@ -1,0 +1,1176 @@
+/* Clinician portal visual redesign — scoped to .cl-portal.cl-clinician-shell */
+
+/* ─── Global status badges ─────────────────────────────────────────────────── */
+
+.cl-portal.cl-clinician-shell .cl-status-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 12px;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.cl-portal.cl-clinician-shell .cl-status-badge.badge-processing,
+.cl-portal.cl-clinician-shell .cl-status-badge.badge-with-scribe {
+  background: #fff7ed !important;
+  color: #ea580c !important;
+  border: 1px solid #ea580c !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-status-badge.badge-processing--warn,
+.cl-portal.cl-clinician-shell .cl-status-badge.badge-with-scribe.badge-processing--warn {
+  background: #fff7ed !important;
+  color: #ea580c !important;
+  border: 1px solid #ea580c !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-status-badge.badge-processing--urgent,
+.cl-portal.cl-clinician-shell .cl-status-badge.badge-with-scribe.badge-processing--urgent {
+  background: #fef2f2 !important;
+  color: #dc2626 !important;
+  border: 1px solid #dc2626 !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-status-badge__clock,
+.cl-portal.cl-clinician-shell .cl-status-badge__urgency {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.cl-portal.cl-clinician-shell .cl-status-badge__urgency--critical {
+  font-weight: 800;
+}
+
+.cl-portal.cl-clinician-shell .cl-status-badge.badge-review,
+.cl-portal.cl-clinician-shell .cl-status-badge.badge-ready-for-review,
+.cl-portal.cl-clinician-shell .cl-status-badge.badge-overdue,
+.cl-portal.cl-clinician-shell .cl-schedule-status-row .cl-status-badge.badge-review,
+.cl-portal.cl-clinician-shell .cl-notes-status-row .cl-status-badge.badge-review {
+  background-color: #fef2f2 !important;
+  background: #fef2f2 !important;
+  color: #dc2626 !important;
+  border: 1px solid #dc2626 !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-status-badge.badge-completed {
+  background: #f0fdf4 !important;
+  color: #16a34a !important;
+  border: 1px solid #16a34a !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-status-badge.badge-upcoming {
+  background: #eff6ff !important;
+  color: #2563eb !important;
+  border: 1px solid #2563eb !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-status-badge.badge-visit-closed,
+.cl-portal.cl-clinician-shell .cl-status-badge.badge-closed {
+  background: #f0fdf4 !important;
+  color: #16a34a !important;
+  border: 1px solid #16a34a !important;
+}
+
+/* ─── Sidebar (indigo) ─────────────────────────────────────────────────────── */
+
+.cl-portal.cl-clinician-shell .cl-sidebar.sf-sidebar--rich.adm-sidebar {
+  background: #4f46e5 !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 6px 0 32px rgba(79, 70, 229, 0.25) !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-sidebar .sf-sidebar-rich__top {
+  border-bottom-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-sidebar .sf-logo,
+.cl-portal.cl-clinician-shell .cl-sidebar .sf-sidebar-rich__titles .sf-logo {
+  color: #fff !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-sidebar.sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__titles .sf-logo-sub,
+.cl-portal.cl-clinician-shell .sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__titles .sf-logo-sub {
+  display: block !important;
+  margin-top: 3px !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  box-shadow: none !important;
+  color: #fff !important;
+  font-size: 10px !important;
+  font-weight: 500 !important;
+  letter-spacing: 1px !important;
+  opacity: 0.8 !important;
+  text-transform: uppercase;
+}
+
+.cl-portal.cl-clinician-shell .cl-sidebar .sf-sidebar-rich__nav-label {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-sidebar .sf-nav-item.sf-sidebar-rich__nav-item {
+  color: #fff !important;
+  border-left: 3px solid transparent !important;
+  border-radius: 10px;
+  margin: 0 0.35rem;
+  padding: 10px 14px !important;
+  min-height: 48px;
+}
+
+.cl-portal.cl-clinician-shell .cl-sidebar .sf-nav-item.sf-sidebar-rich__nav-item:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #fff !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-sidebar .sf-nav-item.sf-sidebar-rich__nav-item.active {
+  background: rgba(255, 255, 255, 0.15) !important;
+  border-left-color: #fff !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-sidebar .sf-sidebar-rich__nav-text {
+  color: inherit !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-sidebar .sf-sidebar-rich__nav-ico {
+  color: #fff !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-sidebar .sf-nav-item.sf-sidebar-rich__nav-item:hover .sf-sidebar-rich__nav-ico,
+.cl-portal.cl-clinician-shell .cl-sidebar .sf-nav-item.sf-sidebar-rich__nav-item.active .sf-sidebar-rich__nav-ico {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border-color: rgba(255, 255, 255, 0.28) !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-sidebar .sf-sidebar-rich__nav-badge {
+  border: none !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-sidebar .sf-sidebar-rich__nav-badge--urgent {
+  background: #dc2626 !important;
+  color: #fff !important;
+  box-shadow: 0 2px 10px rgba(220, 38, 38, 0.35) !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-sidebar .sf-sidebar-rich__nav-badge--schedule {
+  background: #2563eb !important;
+  color: #fff !important;
+  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.35) !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-sidebar .adm-sidebar-footer__card {
+  background: #3730a3 !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: none !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-sidebar .adm-sidebar-footer__eyebrow {
+  color: rgba(255, 255, 255, 0.6) !important;
+  font-size: 11px !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-sidebar .adm-sidebar-footer__who {
+  color: #fff !important;
+  font-weight: 600 !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-sidebar .adm-sidebar-footer__identity {
+  border-bottom: none !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-sidebar .adm-sidebar-footer__actions {
+  border-top: none !important;
+  margin-top: 10px !important;
+  padding-top: 0 !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-sidebar .adm-sidebar-footer__btn,
+.cl-portal.cl-clinician-shell .cl-sidebar .portal-guide-trigger.portal-guide-trigger--footer {
+  width: 100% !important;
+  justify-content: center !important;
+  border: none !important;
+  border-radius: 8px !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+  min-height: 44px;
+}
+
+.cl-portal.cl-clinician-shell .cl-sidebar .portal-guide-trigger.portal-guide-trigger--footer {
+  background: rgba(255, 255, 255, 0.15) !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-sidebar .adm-sidebar-footer__btn--signout {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-sidebar .adm-sidebar-footer__btn:hover,
+.cl-portal.cl-clinician-shell .cl-sidebar .portal-guide-trigger.portal-guide-trigger--footer:hover {
+  filter: brightness(1.08);
+}
+
+.cl-portal.cl-clinician-shell .cl-sidebar .adm-sidebar-footer__btn-ico,
+.cl-portal.cl-clinician-shell .cl-sidebar .portal-guide-trigger__ico {
+  color: #fff !important;
+}
+
+/* ─── Main content ─────────────────────────────────────────────────────────── */
+
+.cl-portal.cl-clinician-shell .sf-portal__main .sf-body,
+.cl-portal.cl-clinician-shell .sf-portal__main .sf-body.cl-schedule,
+.cl-portal.cl-clinician-shell .sf-portal__main .sf-body.cl-contact-body {
+  background: #f4f6f9;
+}
+
+.cl-portal.cl-clinician-shell .adm-topbar__module {
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.cl-portal.cl-clinician-shell .adm-topbar__brand {
+  font-size: 13px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+/* ─── Stat cards ───────────────────────────────────────────────────────────── */
+
+.cl-portal.cl-clinician-shell .cl-stat-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.cl-portal.cl-clinician-shell .cl-stat-card {
+  position: relative;
+  border-radius: 12px;
+  padding: 20px;
+  border: 1px solid transparent;
+  box-shadow: none !important;
+  background-color: #fff;
+  background-image: none !important;
+}
+
+.cl-portal.cl-clinician-shell .sf-stats .cl-stat-card.sf-stat:hover {
+  transform: none;
+  box-shadow: none !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-stat-card__icon {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  font-size: 1.25rem;
+  line-height: 1;
+  opacity: 0.85;
+}
+
+.cl-portal.cl-clinician-shell .cl-stat-card__val,
+.cl-portal.cl-clinician-shell .cl-stat-card .sf-stat-val {
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.cl-portal.cl-clinician-shell .cl-stat-card__lbl,
+.cl-portal.cl-clinician-shell .cl-stat-card .sf-stat-lbl {
+  font-size: 13px;
+  color: #6b7280;
+  margin-top: 8px;
+  font-weight: 500;
+  white-space: normal;
+  line-height: 1.3;
+}
+
+.cl-portal.cl-clinician-shell .cl-stat-card.cl-stat-card--total,
+.cl-portal.cl-clinician-shell .cl-stat-card.sf-stat.cl-stat-card--total {
+  background: #eff6ff !important;
+  background-color: #eff6ff !important;
+  background-image: none !important;
+  border: 1px solid #bfdbfe !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-stat-card--total .cl-stat-card__val,
+.cl-portal.cl-clinician-shell .cl-stat-card--total .sf-stat-val {
+  color: #2563eb !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-stat-card--total .cl-stat-card__icon {
+  color: #2563eb !important;
+  opacity: 1;
+}
+
+.cl-portal.cl-clinician-shell .cl-stat-card--total .cl-stat-card__icon svg {
+  stroke: #2563eb;
+}
+
+.cl-portal.cl-clinician-shell .cl-stat-card--processing {
+  background: #fff7ed !important;
+  border: 1px solid #ea580c !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-stat-card--processing .cl-stat-card__val {
+  color: #ea580c !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-stat-card--review {
+  background: #fef2f2 !important;
+  border: 1px solid #dc2626 !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-stat-card--review .cl-stat-card__val {
+  color: #dc2626 !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-stat-card--completed {
+  background: #f0fdf4 !important;
+  border: 1px solid #16a34a !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-stat-card--completed .cl-stat-card__val {
+  color: #16a34a !important;
+}
+
+/* ─── Week date navigator ──────────────────────────────────────────────────── */
+
+.cl-portal.cl-clinician-shell .cl-date-nav {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin-bottom: 16px;
+  align-items: center;
+}
+
+.cl-portal.cl-clinician-shell .cl-date-nav__calendar-wrap {
+  position: relative;
+}
+
+.cl-portal.cl-clinician-shell .cl-date-nav__day-wrap {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.cl-portal.cl-clinician-shell .cl-date-nav__day-preview {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #1f2937;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 150ms ease, visibility 150ms ease;
+}
+
+.cl-portal.cl-clinician-shell .cl-date-nav__day-preview--rich {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 140px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  white-space: normal;
+  text-align: left;
+}
+
+.cl-portal.cl-clinician-shell .cl-date-nav__day-preview-today {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.cl-portal.cl-clinician-shell .cl-date-nav__day-preview-heading {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.04em;
+}
+
+.cl-portal.cl-clinician-shell .cl-date-nav__day-preview-rule {
+  display: block;
+  height: 1px;
+  margin: 2px 0 4px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.cl-portal.cl-clinician-shell .cl-date-nav__day-preview-row {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.cl-portal.cl-clinician-shell .cl-date-nav__day-preview-count {
+  font-weight: 700;
+}
+
+.cl-portal.cl-clinician-shell .cl-date-nav__day-preview-count--upcoming {
+  color: #60a5fa;
+}
+
+.cl-portal.cl-clinician-shell .cl-date-nav__day-preview-count--scribe {
+  color: #fb923c;
+}
+
+.cl-portal.cl-clinician-shell .cl-date-nav__day-preview-count--overdue {
+  color: #f87171;
+}
+
+.cl-portal.cl-clinician-shell .cl-date-nav__day-preview-count--completed {
+  color: #4ade80;
+}
+
+.cl-portal.cl-clinician-shell .cl-date-nav__day-preview::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #1f2937;
+}
+
+.cl-portal.cl-clinician-shell .cl-date-nav__day-wrap:hover .cl-date-nav__day-preview,
+.cl-portal.cl-clinician-shell .cl-date-nav__day-wrap:focus-within .cl-date-nav__day-preview {
+  opacity: 1;
+  visibility: visible;
+}
+
+.cl-portal.cl-clinician-shell .cl-date-nav__day-wrap .cl-date-nav__day {
+  flex: 1;
+  width: 100%;
+}
+
+.cl-portal.cl-clinician-shell .cl-date-nav__day {
+  background: #fff !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 10px !important;
+  padding: 8px 16px !important;
+  text-align: center;
+  min-width: 72px;
+}
+
+.cl-portal.cl-clinician-shell .cl-date-nav__day:hover {
+  border-color: #c7d2fe !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-date-nav__day.active {
+  background: #2563eb !important;
+  border-color: #2563eb !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-date-nav__day-name {
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  color: #374151 !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-date-nav__day-num {
+  font-size: 18px !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+  color: #374151 !important;
+  margin-top: 2px;
+}
+
+.cl-portal.cl-clinician-shell .cl-date-nav__today-label {
+  font-size: 10px;
+  font-weight: 700;
+  margin-top: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #2563eb;
+}
+
+.cl-portal.cl-clinician-shell .cl-date-nav__day.active .cl-date-nav__day-name,
+.cl-portal.cl-clinician-shell .cl-date-nav__day.active .cl-date-nav__day-num,
+.cl-portal.cl-clinician-shell .cl-date-nav__day.active .cl-date-nav__today-label {
+  color: #fff !important;
+}
+
+/* ─── Live chat (Contact) ──────────────────────────────────────────────────── */
+
+.cl-portal.cl-clinician-shell .cl-contact-chat__empty-hint {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 16px;
+  color: #9ca3af;
+  font-size: 13px;
+  font-style: italic;
+  text-align: center;
+}
+
+.cl-portal.cl-clinician-shell .cl-contact-chat__composer {
+  border-top: 1px solid #e5e7eb;
+  padding-top: 12px;
+}
+
+.cl-portal.cl-clinician-shell .cl-contact-chat__composer-icon {
+  color: #9ca3af;
+}
+
+/* ─── Patient cards ───────────────────────────────────────────────────────── */
+
+.cl-portal.cl-clinician-shell .cl-schedule-visit-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.cl-portal.cl-clinician-shell .cl-patient-card {
+  background: #fff !important;
+  border-radius: 12px !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08) !important;
+  border: 1px solid #e5e7eb !important;
+  border-left-width: 3px !important;
+  border-left-style: solid !important;
+  background-image: none !important;
+  align-self: stretch;
+  min-height: 100%;
+  transition: background 200ms ease;
+}
+
+.cl-portal.cl-clinician-shell .cl-patient-card:not(.cl-patient-card--overdue):hover {
+  background: #f9fafb !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-patient-card--overdue:hover {
+  background: #fef2f2 !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-patient-card--processing {
+  border-left: 3px solid #ea580c !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-patient-card--scribe-urgent {
+  border-left: 3px solid #dc2626 !important;
+  border-left-color: #dc2626 !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-patient-card--overdue,
+.cl-portal.cl-clinician-shell .sf-row.cl-patient-card.cl-patient-card--overdue,
+.cl-portal.cl-clinician-shell .cl-schedule-row.cl-patient-card.cl-patient-card--overdue,
+.cl-portal.cl-clinician-shell .cl-patient-card--overdue.sf-row-active {
+  border-left: 3px solid #dc2626 !important;
+  border-left-color: #dc2626 !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-patient-card--upcoming {
+  border-left: 3px solid #2563eb !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-patient-card--review {
+  border-left: 3px solid #dc2626 !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-patient-card--completed {
+  border-left: 3px solid #16a34a !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-schedule-row__avatar,
+.cl-portal.cl-clinician-shell .cl-pending-card__avatar {
+  background: #4f46e5 !important;
+  color: #fff !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-schedule-row__name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.cl-portal.cl-clinician-shell .cl-schedule-row__meta {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.cl-portal.cl-clinician-shell .cl-schedule-row__time-main {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+}
+
+.cl-portal.cl-clinician-shell .cl-schedule-row__time-sub {
+  font-size: 11px;
+  color: #6b7280;
+}
+
+.cl-portal.cl-clinician-shell .cl-schedule-section-title {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.cl-portal.cl-clinician-shell .cl-schedule-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.cl-portal.cl-clinician-shell .cl-scribe-turnaround {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.cl-portal.cl-clinician-shell .cl-scribe-turnaround__ico {
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* ─── NOW divider ─────────────────────────────────────────────────────────── */
+
+.cl-portal.cl-clinician-shell .cl-now-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.cl-portal.cl-clinician-shell .cl-now-divider__line {
+  flex: 1;
+  height: 2px;
+  background: #4f46e5;
+  border-radius: 1px;
+}
+
+.cl-portal.cl-clinician-shell .cl-now-divider__label {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4f46e5;
+  white-space: nowrap;
+}
+
+.cl-portal.cl-clinician-shell .cl-notes-btn-open {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 24px;
+  background: #4f46e5;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(79, 70, 229, 0.3);
+}
+
+.cl-portal.cl-clinician-shell .cl-notes-btn-open:hover {
+  background: #4338ca;
+}
+
+.cl-portal.cl-clinician-shell .cl-pending-card--ready-review {
+  background: #fef2f2 !important;
+  border: 1px solid #fecaca !important;
+  border-left: 3px solid #dc2626 !important;
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.08) !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-notes-btn-view {
+  border: 1px solid #6b7280;
+  border-radius: 8px;
+  padding: 10px 20px;
+  background: transparent;
+  color: #6b7280;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.cl-portal.cl-clinician-shell .cl-notes-btn-record {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  background: #7c3aed;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.cl-portal.cl-clinician-shell .cl-notes-awaiting {
+  font-size: 13px;
+  font-style: italic;
+  color: #9ca3af;
+  padding: 10px 0;
+  white-space: nowrap;
+}
+
+/* ─── Schedule calendar picker ─────────────────────────────────────────────── */
+
+.cl-portal.cl-clinician-shell .cl-calendar-btn {
+  color: #4f46e5 !important;
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.cl-portal.cl-clinician-shell .cl-calendar-btn:hover {
+  background: #eff6ff !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-calendar-popup {
+  background: #fff !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12) !important;
+  padding: 16px !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-calendar-popup__day--today,
+.cl-portal.cl-clinician-shell .cl-calendar-popup__day--selected {
+  background: #4f46e5 !important;
+  color: #fff !important;
+}
+
+/* ─── Notes filter tabs ────────────────────────────────────────────────────── */
+
+.cl-portal.cl-clinician-shell .cl-notes-tab {
+  border-radius: 20px !important;
+  border: 1px solid #e5e7eb !important;
+  background: #fff !important;
+  color: #6b7280 !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  padding: 4px 12px !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-notes-tab--active {
+  background: #4f46e5 !important;
+  border-color: #4f46e5 !important;
+  color: #fff !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-notes-tab--active .cl-notes-tab__count {
+  background: rgba(255, 255, 255, 0.25) !important;
+  color: #fff !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-notes-tab__count {
+  font-size: 11px !important;
+}
+
+/* ─── Notes date range filter ──────────────────────────────────────────────── */
+
+.cl-portal.cl-clinician-shell .cl-notes-date-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.cl-portal.cl-clinician-shell .cl-notes-date-filter__field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.cl-portal.cl-clinician-shell .cl-notes-date-filter__label {
+  font-size: 12px !important;
+  font-weight: 500;
+  color: #6b7280 !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-notes-date-filter__input {
+  border: 1px solid #e5e7eb !important;
+  border-radius: 8px !important;
+  padding: 8px 12px !important;
+  font-size: 13px !important;
+  min-width: 148px;
+}
+
+.cl-portal.cl-clinician-shell .cl-notes-date-filter__input:focus {
+  outline: none !important;
+  border-color: #4f46e5 !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-notes-date-filter__apply:hover {
+  background: #4338ca !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-notes-date-filter__clear:hover {
+  background: #f3f4f6 !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-notes-date-filter__apply {
+  background: #4f46e5 !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 8px !important;
+  padding: 8px 16px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+
+.cl-portal.cl-clinician-shell .cl-notes-date-filter__clear {
+  background: transparent !important;
+  border: 1px solid #e5e7eb !important;
+  color: #6b7280 !important;
+  border-radius: 8px !important;
+  padding: 8px 16px !important;
+  font-size: 13px !important;
+}
+
+/* ─── Notes waiting badges ─────────────────────────────────────────────────── */
+
+.cl-portal.cl-clinician-shell .cl-notes-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.cl-portal.cl-clinician-shell .cl-waiting-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  line-height: 1.4;
+}
+
+.cl-portal.cl-clinician-shell .cl-waiting-badge--fresh {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.cl-portal.cl-clinician-shell .cl-waiting-badge--warn {
+  background: #fff7ed;
+  color: #ea580c;
+}
+
+.cl-portal.cl-clinician-shell .cl-waiting-badge--urgent {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
+.cl-portal.cl-clinician-shell .cl-pending-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  background: #fff !important;
+  border-radius: 12px !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08) !important;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.cl-portal.cl-clinician-shell .cl-pending-card__actions {
+  margin-left: auto;
+  justify-content: flex-end;
+  align-self: center;
+}
+
+/* ─── Account dropdown (clinician) ───────────────────────────────────────── */
+
+.cl-portal.cl-clinician-shell .sf-account-menu__panel.sf-account-menu__panel--clinician {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  padding: 8px;
+  min-width: 180px;
+  border: 1px solid #e5e7eb;
+}
+
+.cl-portal.cl-clinician-shell .sf-account-menu__panel--clinician .sf-account-menu__head {
+  display: none;
+}
+
+.cl-portal.cl-clinician-shell .sf-account-menu__panel--clinician .sf-account-menu__item {
+  padding: 10px 16px;
+  font-size: 14px;
+  color: #111827;
+  border-radius: 8px;
+  width: 100%;
+  text-align: left;
+  min-height: 44px;
+}
+
+.cl-portal.cl-clinician-shell .sf-account-menu__panel--clinician .sf-account-menu__item:hover {
+  background: #f3f4f6;
+}
+
+.cl-portal.cl-clinician-shell .sf-account-menu__panel--clinician .sf-account-menu__item--danger {
+  color: #dc2626;
+}
+
+.cl-portal.cl-clinician-shell .sf-account-menu__panel--clinician .sf-account-menu__sep {
+  display: none;
+}
+
+/* ─── Mobile responsive ────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .cl-portal.cl-clinician-shell .adm-topbar__menu-btn {
+    display: inline-flex !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    color: #4f46e5 !important;
+    font-size: 24px !important;
+    line-height: 1;
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    flex-direction: row;
+    gap: 0;
+    padding: 0;
+  }
+
+  .cl-portal.cl-clinician-shell .adm-topbar__menu-btn .adm-topbar__menu-line {
+    display: none;
+  }
+
+  .cl-portal.cl-clinician-shell .adm-topbar__menu-btn::before {
+    content: '☰';
+    font-size: 24px;
+    line-height: 1;
+    color: #4f46e5;
+  }
+
+  .cl-portal.cl-clinician-shell.sf-portal .sf-sidebar.sf-sidebar--rich.adm-sidebar.cl-sidebar {
+    width: 280px;
+    transform: translateX(-280px);
+  }
+
+  .cl-portal.cl-clinician-shell.sf-portal .sf-sidebar.sf-sidebar--rich.adm-sidebar.cl-sidebar.open {
+    transform: translateX(0);
+  }
+
+  .cl-portal.cl-clinician-shell .sf-portal__main > .sf-overlay.adm-shell-overlay.open {
+    background: rgba(0, 0, 0, 0.5) !important;
+    position: absolute;
+    inset: 0;
+    z-index: 50;
+  }
+
+  .cl-portal.cl-clinician-shell .adm-topbar__module {
+    font-size: 18px;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-stat-cards {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-stat-card__val,
+  .cl-portal.cl-clinician-shell .cl-stat-card .sf-stat-val {
+    font-size: 28px;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-schedule-clock {
+    display: none;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-date-nav__days {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+    justify-content: flex-start;
+    gap: 6px;
+    padding-bottom: 4px;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-date-nav__day-wrap {
+    flex: 0 0 calc((100% - 12px) / 3);
+    min-width: calc((100% - 12px) / 3);
+    scroll-snap-align: start;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-date-nav__day-wrap .cl-date-nav__day {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-patient-card {
+    width: 100%;
+    padding: 12px !important;
+    box-sizing: border-box;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-notes-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-notes-tab {
+    flex-shrink: 0;
+    min-height: 44px;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-notes-date-filter {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-notes-date-filter__field {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-notes-date-filter__input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-notes-date-filter__apply,
+  .cl-portal.cl-clinician-shell .cl-notes-date-filter__clear {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-notes-advanced-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-notes-filter-select {
+    width: 100%;
+    min-width: 0;
+    min-height: 44px;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-schedule-row__actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-schedule-row__actions .cl-schedule-tooltip-wrap {
+    width: 100%;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-schedule-row__actions .cl-schedule-cta,
+  .cl-portal.cl-clinician-shell .cl-schedule-row__actions .cl-schedule-btn-review,
+  .cl-portal.cl-clinician-shell .cl-schedule-row__actions .cl-schedule-tooltip-wrap > .cl-schedule-cta,
+  .cl-portal.cl-clinician-shell .cl-schedule-row__actions .cl-schedule-tooltip-wrap > .cl-schedule-btn-review {
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-schedule-row__icon-actions {
+    display: flex;
+    justify-content: flex-end;
+    width: 100%;
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-schedule-tooltip-wrap .cl-schedule-tooltip,
+  .cl-portal.cl-clinician-shell .cl-date-nav__day-preview,
+  .cl-portal.cl-clinician-shell .portal-cal-strip__day-preview {
+    display: none !important;
+  }
+
+  .cl-portal.cl-clinician-shell .sf-sidebar-rich__nav-item {
+    min-height: 48px;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-contact-chat__messages {
+    height: 250px;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-contact-chat__composer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-contact-chat__input,
+  .cl-portal.cl-clinician-shell .cl-contact-input,
+  .cl-portal.cl-clinician-shell .cl-contact-btn,
+  .cl-portal.cl-clinician-shell .cl-contact-chat__send {
+    width: 100%;
+  }
+
+  .cl-portal.cl-clinician-shell .adm-topbar {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.65rem;
+  }
+
+  .cl-portal.cl-clinician-shell .adm-topbar__end {
+    flex-wrap: wrap;
+    width: 100%;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-schedule-toolbar {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .cl-portal.cl-clinician-shell .btn,
+  .cl-portal.cl-clinician-shell .cl-contact-btn {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 480px) {
+  .cl-portal.cl-clinician-shell .cl-schedule-row__actions .cl-schedule-cta,
+  .cl-portal.cl-clinician-shell .cl-schedule-row__actions .cl-schedule-btn-review {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-pending-card__actions .btn,
+  .cl-portal.cl-clinician-shell .cl-pending-card__actions button {
+    min-height: 44px;
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 400px) {
+  .cl-portal.cl-clinician-shell .cl-contact-chat__composer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-contact-chat__send {
+    width: 100%;
+    min-height: 44px;
+  }
+}

@@ -8,6 +8,7 @@ import AdminAuditDashboard from './AdminAuditDashboard'
 import { SfAccountMenu, useSidebar, Overlay, usePortalDrawerMode, PortalSidebarBrand } from '../shared'
 import { isSuperAdmin, ADMIN_GRANTABLE_MODULE_KEYS, ADMIN_DEFAULT_MODULE_KEYS_FOR_ADMIN, ADMIN_PORTAL_MODULES, adminMayOpenTab, resolvedAdminModuleKeys } from '../../auth/roles'
 import './admin.css'
+import '../portal-sidebar-indigo.css'
 
 const PayrollMiniChart = lazy(() =>
     import('./AdminMiniCharts').then((m) => ({ default: m.PayrollMiniChart }))
@@ -1544,7 +1545,6 @@ export default function Admin() {
                                     ) : (
                                         clinicians.slice(0, 6).map((u, i) => (
                                             <div key={i} className="adm-spotlight-card__row">
-                                                <div className="adm-spotlight-card__dot" style={{ background: u.status === 'active' ? '#34d399' : '#fb7185' }} />
                                                 <div style={{ flex: 1 }}>
                                                     <div className="adm-spotlight-card__name">{u.name}</div>
                                                     <div className="adm-spotlight-card__sub">{u.specialty || 'Clinician'}</div>
@@ -1570,7 +1570,6 @@ export default function Admin() {
                                     ) : (
                                         scribes.map((u, i) => (
                                             <div key={i} className="adm-spotlight-card__row">
-                                                <div className="adm-spotlight-card__dot" style={{ background: u.status === 'active' ? '#34d399' : '#fb7185' }} />
                                                 <div style={{ flex: 1 }}>
                                                     <div className="adm-spotlight-card__name">{u.name}</div>
                                                     <div className="adm-spotlight-card__sub">{u.email}</div>

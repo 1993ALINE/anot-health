@@ -1,0 +1,458 @@
+/* Indigo sidebar theme — Admin, Scribe, QPS (Clinician uses clinician-redesign.css) */
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar,
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar.sf-sidebar--rich.adm-sidebar {
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.35) transparent;
+  background: #4f46e5 !important;
+  background-image: none !important;
+  border-right: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: 6px 0 32px rgba(79, 70, 229, 0.25) !important;
+}
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__top {
+  padding: 1.25rem 1rem 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14) !important;
+  background: none !important;
+  background-image: none !important;
+}
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__mark {
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.15) !important;
+  box-shadow: none !important;
+}
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .sf-logo,
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__titles .sf-logo {
+  color: #fff !important;
+}
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__titles .sf-logo-sub {
+  display: block !important;
+  margin-top: 3px !important;
+  padding: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  color: #fff !important;
+  font-size: 10px !important;
+  font-weight: 500 !important;
+  letter-spacing: 1px !important;
+  opacity: 0.8 !important;
+  text-transform: uppercase;
+}
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__nav-label {
+  padding: 1rem 1.15rem 0.4rem;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .sf-nav.sf-sidebar-rich__nav {
+  padding: 0.25rem 0.65rem 1rem;
+}
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .sf-nav-item.sf-sidebar-rich__nav-item {
+  color: rgba(255, 255, 255, 0.85) !important;
+  font-weight: 500 !important;
+  border-left: 3px solid transparent !important;
+  border-radius: 10px;
+  margin: 0 0.35rem;
+  padding: 10px 14px !important;
+  min-height: 48px;
+  gap: 0.65rem;
+  box-shadow: none !important;
+  transform: none !important;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    border-color 0.18s ease;
+}
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .sf-nav-item.sf-sidebar-rich__nav-item:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #fff !important;
+  transform: none !important;
+}
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .sf-nav-item.sf-sidebar-rich__nav-item.active {
+  background: rgba(255, 255, 255, 0.15) !important;
+  border-left-color: #fff !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__nav-text {
+  color: inherit !important;
+}
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__nav-ico {
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  color: #fff !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  font-size: 1rem;
+  transform: none !important;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease;
+}
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .sf-nav-item.sf-sidebar-rich__nav-item:hover .sf-sidebar-rich__nav-ico,
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .sf-nav-item.sf-sidebar-rich__nav-item.active .sf-sidebar-rich__nav-ico {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border-color: rgba(255, 255, 255, 0.28) !important;
+  color: #fff !important;
+  transform: none !important;
+}
+
+/* Notification badges — keep existing palette; readable on indigo */
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__nav-badge {
+  border: none !important;
+}
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__tip {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  box-shadow: none !important;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__tip-label {
+  color: rgba(255, 255, 255, 0.75) !important;
+}
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__tip-text {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+:is(
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .sf-provider-chip {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  box-shadow: none !important;
+}
+
+:is(
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .sf-chip-label {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+
+:is(
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .sf-chip-name {
+  color: #fff !important;
+  font-weight: 600;
+}
+
+:is(
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .sf-chip-spec,
+:is(
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .sf-chip-date {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+:is(
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .sf-chip-change {
+  color: #fff !important;
+}
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__footer.adm-sidebar-footer {
+  padding: 0;
+  margin: 10px 10px 14px;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .adm-sidebar-footer__card {
+  background: #3730a3 !important;
+  background-image: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  box-shadow: none !important;
+}
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .adm-sidebar-footer__eyebrow {
+  color: rgba(255, 255, 255, 0.6) !important;
+  font-size: 11px !important;
+}
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .adm-sidebar-footer__who {
+  color: #fff !important;
+  font-weight: 600 !important;
+}
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .adm-sidebar-footer__identity {
+  border-bottom: none !important;
+}
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .adm-sidebar-footer__actions {
+  border-top: none !important;
+  margin-top: 10px !important;
+  padding-top: 0 !important;
+}
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .adm-sidebar-footer__btn,
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .portal-guide-trigger.portal-guide-trigger--footer {
+  width: 100% !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px;
+  border: none !important;
+  border-radius: 8px !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+  min-height: 44px;
+}
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .portal-guide-trigger.portal-guide-trigger--footer {
+  background: rgba(255, 255, 255, 0.15) !important;
+}
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .adm-sidebar-footer__btn--signout,
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .adm-sidebar-footer__card > .adm-sidebar-footer__btn {
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: #fff !important;
+}
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .adm-sidebar-footer__btn:hover,
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .portal-guide-trigger.portal-guide-trigger--footer:hover,
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .adm-sidebar-footer__btn--signout:hover {
+  filter: brightness(1.08);
+  border-color: transparent !important;
+  color: #fff !important;
+  background: rgba(255, 255, 255, 0.14) !important;
+}
+
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .adm-sidebar-footer__btn-ico,
+:is(
+  .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+  .adm-shell.sf-portal.scribe-portal,
+  .adm-shell.sf-portal.qps-portal
+) .sf-sidebar--rich.adm-sidebar .portal-guide-trigger__ico {
+  color: #fff !important;
+  opacity: 1;
+}
+
+/* Admin — override per-module colored active states from admin.css */
+.adm-shell.sf-portal:not(.cl-clinician-shell) .adm-sidebar .sf-sidebar-rich__nav-item.active,
+.adm-shell.sf-portal:not(.cl-clinician-shell) .adm-sidebar .sf-sidebar-rich__nav-item.active[data-adm-nav],
+.adm-shell.sf-portal:not(.cl-clinician-shell) .adm-sidebar .sf-sidebar-rich__nav-item.active:not([data-adm-nav]) {
+  background: rgba(255, 255, 255, 0.15) !important;
+  background-image: none !important;
+  border-left: 3px solid #fff !important;
+  border-left-color: #fff !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.adm-shell.sf-portal:not(.cl-clinician-shell) .adm-sidebar .sf-sidebar-rich__nav-item.active .sf-sidebar-rich__nav-ico,
+.adm-shell.sf-portal:not(.cl-clinician-shell) .adm-sidebar .sf-sidebar-rich__nav-item.active[data-adm-nav] .sf-sidebar-rich__nav-ico,
+.adm-shell.sf-portal:not(.cl-clinician-shell) .adm-sidebar .sf-sidebar-rich__nav-item.active:not([data-adm-nav]) .sf-sidebar-rich__nav-ico {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border-color: rgba(255, 255, 255, 0.28) !important;
+  color: #fff !important;
+  transform: none !important;
+}
+
+/* Scribe / QPS — override brand-accent active states from admin.css */
+.adm-shell.sf-portal.scribe-portal .adm-sidebar .sf-sidebar-rich__nav-item.active:not([data-adm-nav]),
+.adm-shell.sf-portal.qps-portal .adm-sidebar .sf-sidebar-rich__nav-item.active:not([data-adm-nav]) {
+  background: rgba(255, 255, 255, 0.15) !important;
+  background-image: none !important;
+  border-left: 3px solid #fff !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+}
+
+.adm-shell.sf-portal.scribe-portal .adm-sidebar .sf-sidebar-rich__nav-item.active:not([data-adm-nav]) .sf-sidebar-rich__nav-ico,
+.adm-shell.sf-portal.qps-portal .adm-sidebar .sf-sidebar-rich__nav-item.active:not([data-adm-nav]) .sf-sidebar-rich__nav-ico {
+  background: rgba(255, 255, 255, 0.2) !important;
+  border-color: rgba(255, 255, 255, 0.28) !important;
+  color: #fff !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :is(
+    .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+    .adm-shell.sf-portal.scribe-portal,
+    .adm-shell.sf-portal.qps-portal
+  ) .sf-sidebar--rich.adm-sidebar .sf-nav-item.sf-sidebar-rich__nav-item,
+  :is(
+    .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
+    .adm-shell.sf-portal.scribe-portal,
+    .adm-shell.sf-portal.qps-portal
+  ) .sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__nav-ico {
+    transition: none;
+  }
+}

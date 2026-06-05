@@ -1,0 +1,104 @@
+﻿--- patch 1 len 1590 ---
+const STATUS_CFG = {
+  'recording-uploaded': { label: 'Pending',   cls: 'badge-amber' },
+  'note-ready':         { label: 'Pending',   cls: 'badge-amber' },
+  draft:                { label: 'Draft',     cls: 'badge-blue'  },
+  submitted:            { label: 'Submitted', cls: 'badge-green' },
+  uploaded:             { label: 'Graded',    cls: 'badge-green' },
+}
+
+const HOVER_CUE_STORAGE_KEY = 'anot_scribe_hover_cue_mode'
+
+const GRADE_BREAKDOWN_TIPS = {
+  accuracy: 'Accuracy ΓÇö correct clinical facts, diagnoses, and medications.',
+  completeness: 'Completeness ΓÇö required sections and key visit details included.',
+  terminology: 'Medical terminology ΓÇö appropriate terms and abbreviations.',
+  formatting: 'Formatting ΓÇö structure, headings, and readability.',
+}
+
+function scribeNoteRowStatusClass(status) {
+  if (status === 'uploaded') return 'scribe-note-row--graded'
+  if (status === 'submitted') return 'scribe-note-row--submitted'
+  return 'scribe-note-row--pending'
+}
+
+function scribeNoteStageIcon(status) {
+  if (status === 'uploaded') return 'Γ£ô'
+  if (status === 'submitted') return 'Γåæ'
+  if (status === 'draft') return 'Γ£Ä'
+  return 'ΓÅ│'
+}
+
+function gradeBreakdownTip(g) {
+  const parts = []
+  if (g.accuracy != null) parts.push(`Accuracy ${g.accuracy}`)
+  if (g.completeness != null) parts.push(`Completeness ${g.completeness}`)
+  if (g.terminology != null) parts.push(`Terminology ${g.terminology}`)
+  if (g.formatting != null) parts.push(`Formatting ${g.formatting}`)
+  return parts.length ? parts.join(' ┬╖ ') : 'Score breakdown from QPS review'
+}
+
+function ScoreBar({ value }) {
+--- patch 2 len 2052 ---
+  const loadProviderPreview = useCallback(async (providerId, specialty, name) => {
+    if (providerPreviews[providerId]) return
+    try {
+      const data = await visitsAPI.getAll(providerId, localDateStr(0))
+      const visits = data.visits || []
+      const pending = visits.filter((v) =>
+        ['recording-uploaded', 'note-ready', 'draft', 'submitted'].includes(scribeEffectiveStatus(v)),
+      ).length
+      setProviderPreviews((prev) => ({
+        ...prev,
+        [providerId]: {
+          name,
+          specialty: specialty || 'Clinician',
+          todayCount: visits.length,
+          pending,
+        },
+      }))
+    } catch {
+      setProviderPreviews((prev) => ({
+        ...prev,
+        [providerId]: { name, specialty: specialty || 'Clinician', todayCount: null, pending: null },
+      }))
+    }
+  }, [providerPreviews])
+
+  const openNoteFromList = (n) => {
+    leaveNoteScreen(() => {
+      const providerId = n.clinician_id
+      const providerName = n.clinician_name || 'Unknown'
+      setSelectedProvider({ id: providerId, name: providerName, specialty: '' })
+      const dateStr = n.visit_date ? String(n.visit_date).slice(0, 10) : localDateStr(0)
+      setSelectedDate(dateStr)
+      const today = localDateStr(0)
+      const offDays = Math.round((new Date(`${dateStr}T12:00:00`) - new Date(`${today}T12:00:00`)) / 86400000)
+      setOff(Number.isFinite(offDays) ? offDays : 0)
+      setActiveTab('recordings')
+      setScreen('recordings')
+      const rec = {
+        id: n.visit_id,
+        patient_name: n.patient_name,
+        mrn: n.mrn,
+        visit_type: n.visit_type,
+        visit_time: n.visit_time,
+        status: n.status,
+        note_status: n.status,
+      }
+      openRecording(rec)
+    })
+  }
+
+  const resubmitNote = async (n) => {
+    if (!n?.id) return
+    try {
+      await notesAPI.submitNote(n.id)
+      showNotif('Note resubmitted to the clinician.')
+      await loadMyNotes()
+    } catch (err) {
+      showNotif(err.message || 'Resubmit failed.', 'red')
+    }
+  }
+
+  const openRecording = (rec) => {

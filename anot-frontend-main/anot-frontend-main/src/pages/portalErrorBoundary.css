@@ -1,0 +1,28 @@
+.portal-error-boundary {
+  margin: 2rem auto;
+  max-width: 520px;
+  padding: 1.5rem 1.75rem;
+  border-radius: 12px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #7f1d1d;
+}
+
+.portal-error-boundary__title {
+  margin: 0 0 0.5rem;
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+
+.portal-error-boundary__msg {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.portal-error-boundary__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

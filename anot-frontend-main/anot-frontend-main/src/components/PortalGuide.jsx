@@ -7,7 +7,7 @@ const GUIDES = {
     title: 'How the Clinician portal works',
     sections: [
       { heading: 'Schedule', body: 'Use the day strip to pick a date, start encounters to record audio, and add patients. Recordings upload when you end the visit.' },
-      { heading: 'Pending & completed notes', body: 'When the scribe submits a note, it appears in Pending. Preview the note only after the scribe has uploaded it.' },
+      { heading: 'Notes', body: 'Use All, Pending, and Completed tabs to track encounters. When your scribe submits a note, open it from Ready for Review. Preview the note only after the scribe has uploaded it.' },
       { heading: 'Templates', body: 'Create visit templates that scribes see as a reference when writing the final note for that visit type.' },
       { heading: 'Recordings offline', body: 'If the internet drops during upload, your recording is saved locally and retried when you are back online.' },
     ],

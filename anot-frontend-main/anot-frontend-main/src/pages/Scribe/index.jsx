@@ -7,10 +7,71 @@ import SystemProfileManager from '../../components/SystemProfileManager'
 import PortalAudioPlayer from '../../components/PortalAudioPlayer'
 import NoteWorkspacePanel from '../../components/NoteWorkspacePanel'
 import PortalSidebarFooter from '../../components/PortalSidebarFooter'
+import ErrorBoundary from '../../components/ErrorBoundary'
+import PortalCalendarDayPreview, { scribeDayPreviewRows } from '../../components/PortalCalendarDayPreview'
 import { fmtAppointmentTime } from '../../utils/timeFormat'
 import './scribe.css'
+import '../portal-sidebar-indigo.css'
+import '../portalErrorBoundary.css'
+
+/** Day offsets in the recordings calendar strip (relative to today). */
+const DAYS = [-2, -1, 0, 1, 2]
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
+
+function localDate(off = 0, fmt = 'input') {
+  const d = new Date()
+  d.setDate(d.getDate() + off)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  if (fmt === 'input') return `${y}-${m}-${day}`
+  if (fmt === 'day') return d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()
+  if (fmt === 'date') return String(d.getDate())
+  return `${y}-${m}-${day}`
+}
+
+function scribeEffectiveStatus(v) {
+  return ['submitted', 'uploaded'].includes(v?.note_status) ? v.note_status : v?.status
+}
+
+function summarizeVisitsForDay(visits) {
+  const counts = { total: 0, pending: 0, submitted: 0, completed: 0, overdue: 0 }
+  const list = (visits || []).filter((v) => !['upcoming', 'scheduled', 'in-progress'].includes(v.status))
+  for (const v of list) {
+    counts.total += 1
+    const st = scribeEffectiveStatus(v)
+    if (st === 'uploaded') counts.completed += 1
+    else if (st === 'submitted') counts.submitted += 1
+    else counts.pending += 1
+  }
+  return counts
+}
+
+function scheduleDayPreviewHeading(dayOff, stats) {
+  const total = stats && typeof stats.total === 'number' ? stats.total : null
+  const countLabel = total == null ? '…' : String(total)
+  const suffix = total === 1 ? '' : 's'
+  return `${localDate(dayOff, 'day')} ${localDate(dayOff, 'date')} · ${countLabel} visit${suffix}`
+}
+
+function ScheduleDayPreview({ dayOff, stats, providerName }) {
+  const safeStats = stats && typeof stats === 'object' ? stats : null
+  const rows = scribeDayPreviewRows(safeStats) ?? []
+  return (
+    <ErrorBoundary portalName="Day preview">
+      <PortalCalendarDayPreview
+        showToday={dayOff === 0}
+        heading={scheduleDayPreviewHeading(dayOff, safeStats)}
+        providerName={providerName ? `Provider: ${providerName}` : null}
+        rows={rows}
+        emptyMessage={safeStats ? 'No visits for this provider' : undefined}
+        loading={safeStats == null}
+        classPrefix="portal-cal-strip"
+      />
+    </ErrorBoundary>
+  )
+}
 
 function localDateStr(offsetDays = 0) {
   const d = new Date()
@@ -76,7 +137,7 @@ function ScoreBar({ value }) {
 
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
 
-export default function Scribe() {
+function Scribe() {
   const navigate    = useNavigate()
   const sidebar     = useSidebar()
   const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
@@ -106,8 +167,11 @@ export default function Scribe() {
   const [confirmDialog, setConfirmDialog]         = useState(null)
   const [confirmLoading, setConfirmLoading]         = useState(false)
   const [noteRefreshing, setNoteRefreshing]         = useState(false)
+  const [off, setOff]                             = useState(0)
+  const [dayStats, setDayStats]                   = useState({})
 
   const [baseline, setBaseline] = useState({ visitId: null, final: '', tx: '' })
+  const dayStatsLoadingRef = useRef(new Set())
 
   const drawerMode = usePortalDrawerMode()
   const branding = useBranding()
@@ -158,15 +222,43 @@ export default function Scribe() {
   }
 
   const runConfirm = async () => {
-    if (!confirmDialog?.onConfirm) return
+    const onConfirm = confirmDialog?.onConfirm
+    if (!onConfirm) return
     setConfirmLoading(true)
     try {
-      await Promise.resolve(confirmDialog.onConfirm())
+      await onConfirm()
     } finally {
       setConfirmLoading(false)
       setConfirmDialog(null)
     }
   }
+
+  const loadDayStats = useCallback(async (dayOff) => {
+    if (!selectedProvider?.id) return
+    if (dayStatsLoadingRef.current.has(dayOff)) return
+    let alreadyLoaded = false
+    setDayStats((prev) => {
+      if (prev[dayOff] !== undefined && prev[dayOff] !== null) {
+        alreadyLoaded = true
+        return prev
+      }
+      return { ...prev, [dayOff]: null }
+    })
+    if (alreadyLoaded) return
+    dayStatsLoadingRef.current.add(dayOff)
+    try {
+      const data = await visitsAPI.getAll(selectedProvider.id, localDate(dayOff))
+      const visits = data.visits || []
+      setDayStats((prev) => ({ ...prev, [dayOff]: summarizeVisitsForDay(visits) }))
+    } catch {
+      setDayStats((prev) => ({
+        ...prev,
+        [dayOff]: { total: 0, pending: 0, submitted: 0, completed: 0, overdue: 0 },
+      }))
+    } finally {
+      dayStatsLoadingRef.current.delete(dayOff)
+    }
+  }, [selectedProvider?.id])
 
   const showNotif = (msg, type = 'green') => { setNotif({ msg, type }); setTimeout(() => setNotif(null), 3000) }
 
@@ -317,6 +409,27 @@ export default function Scribe() {
     if (activeTab === 'notes')  loadMyNotes()
     if (activeTab === 'grades') loadGrades()
   }, [activeTab]) // eslint-disable-line react-hooks/exhaustive-deps -- tab switch only; loaders intentionally omitted
+
+  useEffect(() => {
+    setDayStats({})
+    dayStatsLoadingRef.current.clear()
+  }, [selectedProvider?.id])
+
+  useEffect(() => {
+    if (screen !== 'recordings') return
+    const today = localDate(0, 'input')
+    const offDays = Math.round(
+      (new Date(`${selectedDate}T12:00:00`).getTime() - new Date(`${today}T12:00:00`).getTime()) / 86400000,
+    )
+    if (Number.isFinite(offDays)) setOff(offDays)
+  }, [screen, selectedProvider?.id, selectedDate])
+
+  useEffect(() => {
+    if (screen !== 'recordings' || !selectedProvider?.id) return
+    const date = localDate(off, 'input')
+    if (date !== selectedDate) setSelectedDate(date)
+    loadRecordings(selectedProvider.id, date)
+  }, [off, screen, selectedProvider?.id]) // eslint-disable-line react-hooks/exhaustive-deps -- sync strip to existing recordings load
 
   const saveDraft = async () => {
     if (!finalNote.trim()) { showNotif('Please write the note before saving.', 'amber'); return }
@@ -806,6 +919,44 @@ export default function Scribe() {
             }
           />
           <div className="sf-body">
+            <div className="sf-date-nav scribe-date-nav portal-cal-strip">
+              <button type="button" className="btn btn-sm scribe-date-nav__arrow portal-cal-strip__arrow portal-cal-strip__arrow--week" onClick={() => setOff((d) => d - 7)} aria-label="Previous week">
+                ‹‹
+              </button>
+              <button type="button" className="btn btn-sm scribe-date-nav__arrow portal-cal-strip__arrow" onClick={() => setOff((d) => d - 1)} aria-label="Previous day">
+                ‹
+              </button>
+              <div className="sf-date-nav-days scribe-date-nav__days portal-cal-strip__days">
+                {DAYS.map((o) => {
+                  const stats = dayStats[o]
+                  const providerLabel = selectedProvider?.name || null
+                  return (
+                    <div key={o} className="scribe-date-nav__day-wrap portal-cal-strip__day-wrap">
+                      <ScheduleDayPreview dayOff={o} stats={stats} providerName={providerLabel} />
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        onMouseEnter={() => void loadDayStats(o)}
+                        onFocus={() => void loadDayStats(o)}
+                        onClick={() => setOff(o)}
+                        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setOff(o)}
+                        className={`sf-date-nav-day scribe-date-nav__day portal-cal-strip__day${o === off ? ' active' : ''}${o === 0 ? ' scribe-date-nav__day--today portal-cal-strip__day--today' : ''}`}
+                      >
+                        <div className="sf-date-nav-day-name portal-cal-strip__day-name">{localDate(o, 'day')}</div>
+                        <div className="sf-date-nav-day-date portal-cal-strip__day-num">{localDate(o, 'date')}</div>
+                        {o === 0 ? <div className="scribe-date-nav__today-label portal-cal-strip__today-label">Today</div> : null}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              <button type="button" className="btn btn-sm scribe-date-nav__arrow portal-cal-strip__arrow" onClick={() => setOff((d) => d + 1)} aria-label="Next day">
+                ›
+              </button>
+              <button type="button" className="btn btn-sm scribe-date-nav__arrow portal-cal-strip__arrow portal-cal-strip__arrow--week" onClick={() => setOff((d) => d + 7)} aria-label="Next week">
+                ››
+              </button>
+            </div>
             <div className="sf-stats" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
               <div className="sf-stat"><div className="sf-stat-val" style={{ color: '#1E293B' }}>{recordings.length}</div><div className="sf-stat-lbl">Total</div></div>
               <div className="sf-stat"><div className="sf-stat-val" style={{ color: '#FFB547' }}>{pending}</div><div className="sf-stat-lbl">Pending</div></div>
@@ -1054,5 +1205,13 @@ function Notif({ notif }) {
     <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 999, background: notif.type === 'red' ? '#FFE8ED' : 'linear-gradient(135deg,#4260E9,#7B61FF)', color: notif.type === 'red' ? '#be123c' : '#fff', padding: '12px 20px', borderRadius: 10, fontSize: 13, fontWeight: 500, boxShadow: '0 4px 20px rgba(0,0,0,.15)' }}>
       {notif.type === 'red' ? '⚠ ' : '✓ '}{notif.msg}
     </div>
+  )
+}
+
+export default function ScribeWithErrorBoundary() {
+  return (
+    <ErrorBoundary portalName="Scribe portal">
+      <Scribe />
+    </ErrorBoundary>
   )
 }

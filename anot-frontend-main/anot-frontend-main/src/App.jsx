@@ -5,6 +5,7 @@ import Clinician from './pages/Clinician/index'
 import Scribe from './pages/Scribe/index'
 import QPS from './pages/QPS/index'
 import Admin from './pages/Admin/index'
+import DevClinicianPage from './pages/DevClinician/index'
 import { authAPI } from './services/api'
 import { dashboardPathForRole, roleMatchesPortal } from './auth/dashboardPaths'
 import { applyBrandingToDocument, getCachedBranding, refreshBranding } from './services/branding'
@@ -104,6 +105,10 @@ function App() {
           <Route
             path="/clinician"
             element={<ProtectedRoute element={<Clinician />} allowedRole="clinician" />}
+          />
+          <Route
+            path="/dev-clinician"
+            element={<ProtectedRoute element={<DevClinicianPage />} allowedRole="clinician" />}
           />
           <Route
             path="/scribe"

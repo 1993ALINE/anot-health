@@ -1,0 +1,296 @@
+/* Shared schedule calendar strip — Clinician + Scribe */
+
+.sf-portal .portal-cal-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 16px;
+  padding: 8px 10px;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  flex-wrap: nowrap;
+  overflow: visible;
+  position: relative;
+  z-index: 2;
+}
+
+.sf-portal .portal-cal-strip .portal-cal-strip__days,
+.sf-portal .portal-cal-strip .sf-date-nav-days,
+.sf-portal .portal-cal-strip .cl-date-nav__days,
+.sf-portal .portal-cal-strip .scribe-date-nav__days {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+  justify-content: center;
+  min-width: 0;
+}
+
+.sf-portal .portal-cal-strip__day-wrap,
+.sf-portal .portal-cal-strip .cl-date-nav__day-wrap {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  max-width: 88px;
+}
+
+.sf-portal .portal-cal-strip__day-preview,
+.sf-portal .portal-cal-strip .cl-date-nav__day-preview,
+.sf-portal .portal-cal-strip .scribe-date-nav__day-preview {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #1f2937;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 150ms ease, visibility 150ms ease;
+}
+
+.sf-portal .portal-cal-strip__day-preview--rich,
+.sf-portal .portal-cal-strip .cl-date-nav__day-preview--rich,
+.sf-portal .portal-cal-strip .scribe-date-nav__day-preview--rich {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  min-width: 140px;
+  max-width: 220px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  white-space: normal;
+  text-align: left;
+}
+
+.sf-portal .portal-cal-strip__day-preview-today,
+.sf-portal .portal-cal-strip .cl-date-nav__day-preview-today {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.sf-portal .portal-cal-strip__day-preview-heading,
+.sf-portal .portal-cal-strip .cl-date-nav__day-preview-heading {
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+}
+
+.sf-portal .portal-cal-strip__day-preview-provider,
+.sf-portal .portal-cal-strip .scribe-date-nav__day-preview-provider {
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.sf-portal .portal-cal-strip__day-preview-rule,
+.sf-portal .portal-cal-strip .cl-date-nav__day-preview-rule {
+  display: block;
+  height: 1px;
+  margin: 2px 0 4px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.sf-portal .portal-cal-strip__day-preview-row,
+.sf-portal .portal-cal-strip .cl-date-nav__day-preview-row {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.sf-portal .portal-cal-strip__day-preview-count,
+.sf-portal .portal-cal-strip .cl-date-nav__day-preview-count {
+  font-weight: 700;
+}
+
+.sf-portal .portal-cal-strip__day-preview-count--upcoming,
+.sf-portal .portal-cal-strip .cl-date-nav__day-preview-count--upcoming { color: #60a5fa; }
+.sf-portal .portal-cal-strip__day-preview-count--scribe,
+.sf-portal .portal-cal-strip .cl-date-nav__day-preview-count--scribe { color: #fb923c; }
+.sf-portal .portal-cal-strip__day-preview-count--pending,
+.sf-portal .portal-cal-strip .scribe-date-nav__day-preview-count--pending { color: #fbbf24; }
+.sf-portal .portal-cal-strip__day-preview-count--submitted,
+.sf-portal .portal-cal-strip .scribe-date-nav__day-preview-count--submitted { color: #93c5fd; }
+.sf-portal .portal-cal-strip__day-preview-count--overdue,
+.sf-portal .portal-cal-strip .cl-date-nav__day-preview-count--overdue,
+.sf-portal .portal-cal-strip .scribe-date-nav__day-preview-count--overdue { color: #f87171; }
+.sf-portal .portal-cal-strip__day-preview-count--completed,
+.sf-portal .portal-cal-strip .cl-date-nav__day-preview-count--completed,
+.sf-portal .portal-cal-strip .scribe-date-nav__day-preview-count--completed { color: #4ade80; }
+
+.sf-portal .portal-cal-strip__day-preview::after,
+.sf-portal .portal-cal-strip .cl-date-nav__day-preview::after,
+.sf-portal .portal-cal-strip .scribe-date-nav__day-preview::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #1f2937;
+}
+
+.sf-portal .portal-cal-strip__day-wrap:hover .portal-cal-strip__day-preview,
+.sf-portal .portal-cal-strip__day-wrap:focus-within .portal-cal-strip__day-preview,
+.sf-portal .portal-cal-strip .cl-date-nav__day-wrap:hover .cl-date-nav__day-preview,
+.sf-portal .portal-cal-strip .cl-date-nav__day-wrap:focus-within .cl-date-nav__day-preview,
+.sf-portal .portal-cal-strip .cl-date-nav__day-wrap:hover .portal-cal-strip__day-preview,
+.sf-portal .portal-cal-strip .cl-date-nav__day-wrap:focus-within .portal-cal-strip__day-preview,
+.sf-portal .portal-cal-strip .scribe-date-nav__day-wrap:hover .scribe-date-nav__day-preview,
+.sf-portal .portal-cal-strip .scribe-date-nav__day-wrap:focus-within .scribe-date-nav__day-preview {
+  opacity: 1;
+  visibility: visible;
+}
+
+.sf-portal .portal-cal-strip__day,
+.sf-portal .portal-cal-strip .cl-date-nav__day,
+.sf-portal .portal-cal-strip .scribe-date-nav__day {
+  background: #fff !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 10px !important;
+  padding: 6px 10px !important;
+  text-align: center;
+  min-width: 56px;
+  flex: 1;
+  width: 100%;
+  cursor: pointer;
+}
+
+.sf-portal .portal-cal-strip__day:hover,
+.sf-portal .portal-cal-strip .cl-date-nav__day:hover,
+.sf-portal .portal-cal-strip .scribe-date-nav__day:hover {
+  border-color: #93c5fd !important;
+}
+
+.sf-portal .portal-cal-strip__day--today:not(.active),
+.sf-portal .portal-cal-strip .cl-date-nav__day--today:not(.active),
+.sf-portal .portal-cal-strip .scribe-date-nav__day--today:not(.active),
+.sf-portal .portal-cal-strip .sf-date-nav-day.portal-cal-strip__day--today:not(.active) {
+  border: 2px solid #2563eb !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.28);
+  background: #eff6ff !important;
+}
+
+.sf-portal .portal-cal-strip__day.active,
+.sf-portal .portal-cal-strip__day--today.active,
+.sf-portal .portal-cal-strip .cl-date-nav__day.active,
+.sf-portal .portal-cal-strip .scribe-date-nav__day.active,
+.sf-portal .portal-cal-strip .sf-date-nav-day.portal-cal-strip__day.active {
+  background: #2563eb !important;
+  border-color: #2563eb !important;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
+}
+
+.sf-portal .portal-cal-strip__day-name,
+.sf-portal .portal-cal-strip .cl-date-nav__day-name,
+.sf-portal .portal-cal-strip .sf-date-nav-day-name {
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  color: #374151 !important;
+}
+
+.sf-portal .portal-cal-strip__day-num,
+.sf-portal .portal-cal-strip .cl-date-nav__day-num,
+.sf-portal .portal-cal-strip .sf-date-nav-day-date {
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  line-height: 1.2 !important;
+  color: #374151 !important;
+  margin-top: 2px;
+}
+
+.sf-portal .portal-cal-strip__today-label,
+.sf-portal .portal-cal-strip .cl-date-nav__today-label,
+.sf-portal .portal-cal-strip .scribe-date-nav__today-label {
+  font-size: 9px;
+  font-weight: 700;
+  margin-top: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #2563eb;
+}
+
+.sf-portal .portal-cal-strip__day.active .portal-cal-strip__day-name,
+.sf-portal .portal-cal-strip__day.active .portal-cal-strip__day-num,
+.sf-portal .portal-cal-strip__day.active .portal-cal-strip__today-label,
+.sf-portal .portal-cal-strip .cl-date-nav__day.active .cl-date-nav__day-name,
+.sf-portal .portal-cal-strip .cl-date-nav__day.active .cl-date-nav__day-num,
+.sf-portal .portal-cal-strip .cl-date-nav__day.active .cl-date-nav__today-label,
+.sf-portal .portal-cal-strip .scribe-date-nav__day.active .sf-date-nav-day-name,
+.sf-portal .portal-cal-strip .scribe-date-nav__day.active .sf-date-nav-day-date,
+.sf-portal .portal-cal-strip .scribe-date-nav__day.active .scribe-date-nav__today-label,
+.sf-portal .portal-cal-strip .cl-date-nav__day.active .sf-date-nav-day-name,
+.sf-portal .portal-cal-strip .cl-date-nav__day.active .sf-date-nav-day-date,
+.sf-portal .portal-cal-strip .sf-date-nav-day.portal-cal-strip__day.active .sf-date-nav-day-name,
+.sf-portal .portal-cal-strip .sf-date-nav-day.portal-cal-strip__day.active .sf-date-nav-day-date,
+.sf-portal .portal-cal-strip .sf-date-nav-day.portal-cal-strip__day.active .portal-cal-strip__today-label {
+  color: #ffffff !important;
+}
+
+.sf-portal .portal-cal-strip__arrow {
+  flex-shrink: 0;
+  min-width: 32px;
+}
+
+.sf-portal .portal-cal-strip__arrow--week {
+  min-width: 36px;
+  font-weight: 700;
+}
+
+.sf-portal .portal-cal-strip__workflow-links {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.sf-portal .portal-cal-strip__workflow-link {
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 9px;
+  font-weight: 700;
+  color: #2563eb;
+  text-decoration: underline;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.sf-portal .portal-cal-strip__day.active .portal-cal-strip__workflow-link,
+.sf-portal .portal-cal-strip .scribe-date-nav__day.active .portal-cal-strip__workflow-link,
+.sf-portal .portal-cal-strip .scribe-date-nav__day.active .scribe-date-nav__workflow-link {
+  color: #fff;
+}
+
+.sf-portal.cl-clinician-shell .portal-cal-strip {
+  background: transparent;
+  border: none;
+  padding: 0;
+}
+
+@media (max-width: 720px) {
+  .sf-portal .portal-cal-strip .portal-cal-strip__days,
+  .sf-portal .portal-cal-strip .sf-date-nav-days {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    padding-bottom: 4px;
+  }
+}
