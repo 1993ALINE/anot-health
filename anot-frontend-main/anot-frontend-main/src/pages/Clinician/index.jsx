@@ -326,7 +326,7 @@ function scheduleDayDots(breakdown) {
 function scheduleDayBreakdownFor(dayOff, selectedOff, currentVisits, scheduleDayBreakdown) {
   const key = localDate(dayOff)
   if (dayOff === selectedOff) return scheduleDayStatusBreakdown(currentVisits, dayOff)
-  if (Object.prototype.hasOwnProperty.call(scheduleDayBreakdown, key)) {
+  if (scheduleDayBreakdown && Object.prototype.hasOwnProperty.call(scheduleDayBreakdown, key)) {
     return scheduleDayBreakdown[key]
   }
   return null
