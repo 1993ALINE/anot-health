@@ -35,13 +35,18 @@
 
 .badge-review,
 .badge-ready-for-review,
-.badge-overdue,
 .cl-schedule-status-row .cl-status-badge.badge-review,
 .cl-notes-status-row .cl-status-badge.badge-review {
-  background-color: #fef2f2;
-  background: #fef2f2;
-  color: #dc2626;
-  border: 1px solid #dc2626;
+  background-color: #dc2626;
+  background: #dc2626;
+  color: #ffffff;
+  border: none;
+}
+
+.badge-overdue {
+  background: #FFFBEB !important;
+  color: #D97706 !important;
+  border: 1px solid #D97706 !important;
 }
 
 .badge-completed {
@@ -148,6 +153,24 @@
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 20px;
+  position: relative;
+  overflow: visible;
+}
+
+/* Filter-tab tooltips sit at the very top of the page — render them BELOW the
+   tab (not above, where they collide with the top navigation bar). */
+.cl-notes-tabs .cl-schedule-tooltip {
+  top: 100%;
+  bottom: auto;
+  margin-top: 8px;
+  z-index: 1000;
+}
+
+.cl-notes-tabs .cl-schedule-tooltip::after {
+  top: auto;
+  bottom: 100%;
+  border-top-color: transparent;
+  border-bottom-color: #1f2937;
 }
 
 .cl-notes-tab {
@@ -685,7 +708,7 @@
 
 .adm-shell.cl-clinician-shell .sf-portal__main > .adm-topbar {
   position: relative;
-  z-index: 60;
+  z-index: 100;
 }
 
 .adm-shell.cl-clinician-shell .sf-portal__main > .sf-body {
@@ -696,12 +719,20 @@
 .adm-shell.cl-clinician-shell .cl-patient-card--overdue,
 .adm-shell.cl-clinician-shell .sf-row.cl-patient-card.cl-patient-card--overdue,
 .adm-shell.cl-clinician-shell .cl-patient-card--overdue.sf-row-active {
-  border-left: 3px solid #dc2626 !important;
-  border-left-color: #dc2626 !important;
+  border-left: 3px solid #D97706 !important;
+  border-left-color: #D97706 !important;
 }
 
+.cl-patient-card--overdue,
 .cl-pending-card--overdue {
-  border-left: 3px solid #dc2626;
+  background: #FFFBEB;
+  border: 1px solid #FDE68A;
+  border-left: 3px solid #D97706 !important;
+}
+
+.cl-patient-card--overdue:hover,
+.cl-pending-card--overdue:hover {
+  background: #FEF3C7;
 }
 
 .cl-pending-card--completed-emr,
@@ -738,8 +769,8 @@
   border-radius: 50%;
   font-size: 15px;
   font-weight: 800;
-  background: #4f46e5;
-  color: #fff;
+  background: #e5e7eb;
+  color: #6b7280;
   flex-shrink: 0;
 }
 
@@ -1435,8 +1466,8 @@
   justify-content: center;
   font-size: 15px;
   font-weight: 800;
-  background: #4f46e5;
-  color: #fff;
+  background: #e5e7eb;
+  color: #6b7280;
   flex-shrink: 0;
 }
 

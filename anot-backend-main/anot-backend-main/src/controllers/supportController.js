@@ -1,48 +1,70 @@
-const Anthropic = require('@anthropic-ai/sdk')
+const { auditLog } = require('../utils/auditLogger')
+const { sendSupportEmail } = require('../utils/mailer')
 
-const SUPPORT_SYSTEM_PROMPT =
-  'You are Anot Support, a helpful assistant for the Anot Health clinician portal. You help doctors with questions about using the platform including adding patients, recording encounters, understanding note statuses, and troubleshooting common issues. Be concise, friendly, and professional. If the issue requires human intervention say: I will flag this for our support team to follow up with you directly.'
-
-const supportChat = async (req, res) => {
+// POST /api/support/message — clinician sends a support message; emailed to support inbox.
+const supportMessage = async (req, res) => {
   try {
-    const apiKey = process.env.ANTHROPIC_API_KEY?.trim()
-    if (!apiKey) {
-      return res.status(503).json({ error: 'Support chat is not configured.' })
+    const { name, subject, message, clinicianName, email } = req.body
+
+    if (typeof message !== 'string' || !message.trim()) {
+      return res.status(400).json({ error: 'Message is required.' })
     }
 
-    const { messages } = req.body
-    if (!Array.isArray(messages) || messages.length === 0) {
-      return res.status(400).json({ error: 'messages array is required.' })
+    const cleanMessage = message.trim().slice(0, 5000)
+    const cleanSubject =
+      typeof subject === 'string' && subject.trim() ? subject.trim().slice(0, 200) : 'General Question'
+    const cleanName =
+      typeof name === 'string' && name.trim()
+        ? name.trim().slice(0, 200)
+        : (req.user?.name || clinicianName || 'Clinician')
+    const replyTo =
+      typeof email === 'string' && email.trim() ? email.trim().slice(0, 320) : (req.user?.email || '')
+
+    // Audit trail — metadata only. NEVER persist the message body (may contain PHI).
+    try {
+      await auditLog(
+        req.user,
+        'SUPPORT_MESSAGE_SENT',
+        'support',
+        null,
+        `Support message: ${cleanSubject}`,
+        {
+          req,
+          module_key: 'clinician',
+          action_category: 'other',
+          metadata: { subject: cleanSubject, name: cleanName, messageLength: cleanMessage.length },
+        },
+      )
+    } catch (auditErr) {
+      console.error('Support message audit log failed:', auditErr.message)
     }
 
-    const anthropicMessages = messages
-      .filter((m) => m && typeof m.content === 'string' && m.content.trim())
-      .map((m) => ({
-        role: m.role === 'assistant' ? 'assistant' : 'user',
-        content: m.content.trim(),
-      }))
-
-    if (anthropicMessages.length === 0) {
-      return res.status(400).json({ error: 'No valid messages provided.' })
+    let delivery
+    try {
+      delivery = await sendSupportEmail({
+        name: cleanName,
+        fromEmail: replyTo,
+        subject: cleanSubject,
+        message: cleanMessage,
+        clinicianName: req.user?.name || clinicianName,
+      })
+    } catch (mailErr) {
+      console.error('Support message email failed:', mailErr.message)
+      return res
+        .status(502)
+        .json({ error: 'Could not send your message. Please try again or email support@anot.health.' })
     }
 
-    const client = new Anthropic({ apiKey })
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1000,
-      system: SUPPORT_SYSTEM_PROMPT,
-      messages: anthropicMessages,
-    })
+    if (delivery && delivery.sent === false) {
+      // Message accepted and audited, but SMTP isn't configured (e.g. local dev).
+      console.warn(`Support message accepted but not emailed (${delivery.reason}). Subject: ${cleanSubject}`)
+    }
 
-    const reply =
-      response.content?.find((block) => block.type === 'text')?.text?.trim() ||
-      'Sorry, I could not generate a response. Please try again or email support@anot.health.'
-
-    res.status(200).json({ reply })
+    res.status(200).json({ ok: true })
   } catch (err) {
-    console.error('Support chat error:', err.message)
-    res.status(500).json({ error: 'Could not get a response. Please try again.' })
+    console.error('Support message error:', err.message)
+    res.status(500).json({ error: 'Could not send your message. Please try again.' })
   }
 }
 
-module.exports = { supportChat }
+module.exports = { supportMessage }

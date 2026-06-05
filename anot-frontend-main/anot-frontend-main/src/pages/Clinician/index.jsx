@@ -9,6 +9,7 @@ import { queueAudioUpload, flushPendingAudioUploads, installOfflineUploadFlush }
 import './clinician.css'
 import './clinician-redesign.css'
 import PortalCalendarDayPreview from '../../components/PortalCalendarDayPreview'
+import ErrorBoundary from '../../components/ErrorBoundary'
 import ContactScreen from './ContactScreen'
 import { getPatientAvatarColor } from '../../utils/avatarColor'
 
@@ -27,7 +28,7 @@ function getGreeting() {
 }
 
 function isScheduleToday(off = 0) {
-  return localDate(off, 'input') === localDate(0, 'input')
+  return Number(off) === 0
 }
 
 function visitsSectionTitle(off = 0) {
@@ -176,6 +177,19 @@ function notesWaitingLabel(h) {
   return `Waiting ${days}d`
 }
 
+/** Relative "Xh ago" (same day) / "X days ago" — returns null when the timestamp is missing/invalid. */
+function notesRelativeAgo(raw) {
+  if (!raw) return null
+  const t = new Date(raw).getTime()
+  if (Number.isNaN(t)) return null
+  const ms = Date.now() - t
+  if (ms < 0) return null
+  const hours = Math.floor(ms / 3600000)
+  if (hours < 24) return hours < 1 ? '<1h ago' : `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return days === 1 ? '1 day ago' : `${days} days ago`
+}
+
 function localDate(off = 0, fmt = 'input') {
   const d = new Date(); d.setDate(d.getDate() + off)
   const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0')
@@ -255,15 +269,6 @@ function IconMic() {
   )
 }
 
-function IconPenEdit() {
-  return (
-    <svg className="cl-schedule-cta__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-    </svg>
-  )
-}
-
 function ClinicianTooltip({ tip, placement = 'above', compact = false, icon = false, filterTip = false, children }) {
   if (!tip) return children
   return (
@@ -290,18 +295,32 @@ function isScheduleVisitOverdueForDay(v, dayOff) {
 }
 
 function scheduleDayStatusBreakdown(visitList, dayOff) {
-  const counts = { upcoming: 0, withScribe: 0, overdue: 0, completed: 0 }
+  const counts = { upcoming: 0, withScribe: 0, overdue: 0, ready: 0, completed: 0 }
   for (const v of visitList) {
     if (v.status === 'upcoming') {
       if (isScheduleVisitOverdueForDay(v, dayOff)) counts.overdue += 1
       else counts.upcoming += 1
     } else if (['recording-uploaded', 'in-progress', 'submitted'].includes(v.status)) {
       counts.withScribe += 1
-    } else if (['note-ready', 'uploaded', 'done'].includes(v.status)) {
+    } else if (v.status === 'note-ready') {
+      counts.ready += 1
+    } else if (['uploaded', 'done'].includes(v.status)) {
       counts.completed += 1
     }
   }
   return counts
+}
+
+// Always-visible status dots for a day pill (mobile/tablet have no hover).
+// Priority + max 3: purple (overdue), red (ready), blue (upcoming), green (completed).
+function scheduleDayDots(breakdown) {
+  if (!breakdown || typeof breakdown !== 'object') return []
+  const dots = []
+  if ((breakdown.overdue || 0) > 0) dots.push('#D97706')
+  if ((breakdown.ready || 0) > 0) dots.push('#DC2626')
+  if ((breakdown.upcoming || 0) > 0) dots.push('#2563EB')
+  if ((breakdown.completed || 0) > 0) dots.push('#16A34A')
+  return dots.slice(0, 3)
 }
 
 function scheduleDayBreakdownFor(dayOff, selectedOff, currentVisits, scheduleDayBreakdown) {
@@ -314,8 +333,14 @@ function scheduleDayBreakdownFor(dayOff, selectedOff, currentVisits, scheduleDay
 }
 
 function scheduleDayPatientTotal(dayOff, breakdown, scheduleDayCounts) {
-  if (breakdown) {
-    return breakdown.upcoming + breakdown.withScribe + breakdown.overdue + breakdown.completed
+  const hasBreakdownData =
+    breakdown && typeof breakdown === 'object' && !Array.isArray(breakdown) &&
+    ('upcoming' in breakdown || 'withScribe' in breakdown || 'overdue' in breakdown || 'ready' in breakdown || 'completed' in breakdown)
+  if (hasBreakdownData) {
+    return (breakdown.upcoming || 0) + (breakdown.withScribe || 0) + (breakdown.overdue || 0) + (breakdown.ready || 0) + (breakdown.completed || 0)
+  }
+  if (!scheduleDayCounts || typeof scheduleDayCounts !== 'object' || Array.isArray(scheduleDayCounts)) {
+    return 0
   }
   const key = localDate(dayOff)
   if (Object.prototype.hasOwnProperty.call(scheduleDayCounts, key)) {
@@ -332,12 +357,17 @@ function scheduleDayPreviewLabel(dayOff, total) {
 }
 
 function ScheduleDayPreview({ dayOff, breakdown, scheduleDayCounts }) {
-  const total = scheduleDayPatientTotal(dayOff, breakdown, scheduleDayCounts)
-  return (
-    <span className="portal-cal-strip__day-preview cl-date-nav__day-preview" role="tooltip">
-      {scheduleDayPreviewLabel(dayOff, total)}
-    </span>
-  )
+  if (dayOff === undefined || dayOff === null) return null
+  try {
+    const total = scheduleDayPatientTotal(dayOff, breakdown, scheduleDayCounts)
+    return (
+      <span className="portal-cal-strip__day-preview cl-date-nav__day-preview" role="tooltip">
+        {scheduleDayPreviewLabel(dayOff, total)}
+      </span>
+    )
+  } catch (e) {
+    return null
+  }
 }
 
 function ScheduleDatePicker({ off, onSelectDate, onClose, anchorRef }) {
@@ -505,6 +535,27 @@ function scheduleVisitBadgeClass(status) {
   }
 }
 
+// Status priority for the Schedule "Sort: Status" option (lower = more urgent).
+function scheduleStatusSortRank(v, off) {
+  if (isScheduleVisitOverdue(v, off)) return 0 // Overdue
+  switch (v.status) {
+    case 'note-ready':
+      return 1 // Ready for Review
+    case 'processing':
+    case 'recording-uploaded':
+    case 'in-progress':
+    case 'submitted':
+      return 2 // With Scribe
+    case 'upcoming':
+      return 3 // Upcoming
+    case 'uploaded':
+    case 'done':
+      return 4 // Completed
+    default:
+      return 3
+  }
+}
+
 const NOTES_FILTER_TABS = [
   { key: 'all', label: 'All', tip: 'Show all encounters regardless of status' },
   { key: 'with-scribe', label: 'With Scribe', tip: 'Encounters where scribe is actively drafting the note' },
@@ -519,7 +570,7 @@ const NOTES_BADGE_META = {
   processing: { label: WITH_SCRIBE_LABEL, className: BADGE_WITH_SCRIBE_CLASS },
   ready: { label: READY_FOR_REVIEW_LABEL, className: 'badge-review' },
   completed: { label: 'Completed', className: 'badge-completed' },
-  overdue: { label: 'Overdue', className: 'badge-review' },
+  overdue: { label: 'Overdue', className: 'badge-overdue' },
   closed: { label: 'Visit Closed', className: 'badge-visit-closed' },
 }
 
@@ -1374,6 +1425,7 @@ export default function Clinician() {
   const off = useMemo(() => scheduleOffFromDate(scheduleDate), [scheduleDate])
   const [weekCenterOff, setWeekCenterOff] = useState(0)
   const [calendarOpen, setCalendarOpen] = useState(false)
+  const [scheduleSort, setScheduleSort] = useState('time')
   const calendarBtnRef = useRef(null)
 
   const applyScheduleOff = useCallback((valueOrFn) => {
@@ -1387,6 +1439,29 @@ export default function Clinician() {
   }, [])
 
   const [visits, setVisits]         = useState([])
+  const sortedVisits = useMemo(() => {
+    const list = [...visits]
+    const byTime = (a, b) =>
+      visitMinutesFromMidnight(a.visit_time) - visitMinutesFromMidnight(b.visit_time)
+    if (scheduleSort === 'name') {
+      return list.sort((a, b) =>
+        (a.patient_name || '').localeCompare(b.patient_name || '', undefined, { sensitivity: 'base' }),
+      )
+    }
+    if (scheduleSort === 'status') {
+      return list.sort((a, b) => {
+        const rank = scheduleStatusSortRank(a, off) - scheduleStatusSortRank(b, off)
+        return rank !== 0 ? rank : byTime(a, b)
+      })
+    }
+    return list.sort(byTime)
+  }, [visits, scheduleSort, off])
+  // Completed encounters belong on the Notes page — hide them from the Schedule list
+  // (they remain counted in the "Completed" stat card, which reads from `visits`).
+  const scheduleListVisits = useMemo(
+    () => sortedVisits.filter((v) => !['uploaded', 'done', 'completed'].includes(v.status)),
+    [sortedVisits],
+  )
   const [history, setHistory]       = useState([])
   const [loading, setLoading]       = useState(false)
   const [active, setActive]         = useState(null)
@@ -1421,6 +1496,7 @@ export default function Clinician() {
   const [notesTypeFilter, setNotesTypeFilter]   = useState('all')
   const [notesScribeFilter, setNotesScribeFilter] = useState('all')
   const [notesSortBy, setNotesSortBy]           = useState('date-newest')
+  const [notesFiltersOpen, setNotesFiltersOpen] = useState(false)
 
   const resetNotesViewDefaults = useCallback(() => {
     setNotesFilter('all')
@@ -1901,6 +1977,11 @@ export default function Clinician() {
   })()
 
   const notesDateRangeActive = !!(histDateFrom || histDateTo)
+  const notesActiveFilterCount =
+    (notesDateRangeActive ? 1 : 0) +
+    (notesTypeFilter !== 'all' ? 1 : 0) +
+    (notesScribeFilter !== 'all' ? 1 : 0) +
+    (notesSortBy !== 'date-newest' ? 1 : 0)
 
   const historyTitle = 'Notes'
   const historySubtitle = (() => {
@@ -1917,8 +1998,6 @@ export default function Clinician() {
         return `Full timeline · ${countLabel}${refreshed}`
     }
   })()
-
-  const historyToolbarLayout = screen === 'notes'
 
   const openProfile = () => {
     setReview(null)
@@ -2177,6 +2256,53 @@ export default function Clinician() {
                 ))}
               </div>
 
+              <div
+                className="cl-notes-search-row"
+                style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}
+              >
+                <input
+                  className="sf-input"
+                  placeholder="Search by name or MRN…"
+                  value={histQ}
+                  onChange={(e) => setHistQ(e.target.value)}
+                  aria-label="Search encounters"
+                  style={{ flex: 1, marginBottom: 0 }}
+                />
+                <button
+                  type="button"
+                  className="cl-notes-filters-toggle"
+                  aria-expanded={notesFiltersOpen}
+                  onClick={() => setNotesFiltersOpen((open) => !open)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    whiteSpace: 'nowrap',
+                    background: notesActiveFilterCount > 0 ? '#EFF6FF' : 'white',
+                    border: `1px solid ${notesActiveFilterCount > 0 ? '#4F46E5' : '#E5E7EB'}`,
+                    borderRadius: 6,
+                    padding: '6px 12px',
+                    fontSize: 13,
+                    color: notesActiveFilterCount > 0 ? '#4F46E5' : '#374151',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+                  </svg>
+                  {notesActiveFilterCount > 0 ? `Filters (${notesActiveFilterCount})` : 'Filters'}
+                </button>
+              </div>
+
+              <div
+                className="cl-notes-filter-panel"
+                aria-hidden={!notesFiltersOpen}
+                style={{
+                  overflow: 'hidden',
+                  transition: 'max-height 300ms ease',
+                  maxHeight: notesFiltersOpen ? 600 : 0,
+                }}
+              >
               <div className="cl-notes-date-filter">
                 <div className="cl-notes-date-filter__field">
                   <label className="cl-notes-date-filter__label" htmlFor="cl-notes-date-from">
@@ -2300,15 +2426,6 @@ export default function Clinician() {
                 </ClinicianTooltip>
               </div>
 
-              <div className={historyToolbarLayout ? 'cl-pending-toolbar' : ''}>
-                <input
-                  className="sf-input"
-                  placeholder="Search by name or MRN…"
-                  value={histQ}
-                  onChange={(e) => setHistQ(e.target.value)}
-                  aria-label="Search encounters"
-                  style={historyToolbarLayout ? undefined : { marginBottom: 12 }}
-                />
               </div>
 
               {loading ? (
@@ -2344,9 +2461,16 @@ export default function Clinician() {
                 </div>
               ) : (
                 historyFiltered.map((h) => {
-                  const notesBadge = NOTES_BADGE_META[notesCardBadgeKey(h)] || NOTES_BADGE_META.processing
+                  const badgeKey = notesCardBadgeKey(h)
+                  const notesBadge = NOTES_BADGE_META[badgeKey] || NOTES_BADGE_META.processing
                   const actionKind = notesCardActionKind(h)
-                  const isReadyReview = notesCardBadgeKey(h) === 'ready'
+                  const isReadyReview = badgeKey === 'ready'
+                  const completedAgo =
+                    badgeKey === 'completed' || badgeKey === 'closed'
+                      ? notesRelativeAgo(h.completed_at || h.updated_at)
+                      : null
+                  const readyAgo =
+                    badgeKey === 'ready' ? notesRelativeAgo(h.note_updated_at || h.updated_at) : null
                   const modernCard = screen === 'notes'
                   const cardVariant =
                     notesFilter === 'with-scribe'
@@ -2372,8 +2496,18 @@ export default function Clinician() {
                       : ''
                   const RowWrap = modernCard ? 'article' : 'div'
                   const scribeUrgent = notesBadge.label === 'With Scribe' && scribeWaitingTier(h) === 'urgent'
+                  const canonicalPendingClass =
+                    badgeKey === 'ready'
+                      ? 'cl-pending-card--ready'
+                      : badgeKey === 'overdue'
+                      ? 'cl-pending-card--overdue'
+                      : badgeKey === 'completed' || badgeKey === 'closed'
+                      ? 'cl-pending-card--completed'
+                      : h.status === 'upcoming'
+                      ? 'cl-pending-card--upcoming'
+                      : 'cl-pending-card--with-scribe'
                   const rowClass = modernCard
-                    ? `cl-pending-card cl-pending-card--${cardVariant}${isReadyReview ? ' cl-pending-card--ready-review' : ''}${scribeUrgent ? ' cl-pending-card--scribe-urgent' : ''}`
+                    ? `cl-pending-card cl-pending-card--${cardVariant} ${canonicalPendingClass}${isReadyReview ? ' cl-pending-card--ready-review' : ''}${scribeUrgent ? ' cl-pending-card--scribe-urgent' : ''}`
                     : 'sf-row'
                   const rowProps = modernCard ? { 'aria-label': `${h.patient_name}, ${notesBadge.label}` } : {}
                   return (
@@ -2393,12 +2527,22 @@ export default function Clinician() {
                               label={notesBadge.label === 'With Scribe' ? withScribeBadgeLabel(h) : notesBadge.label}
                               className={notesBadge.label === 'With Scribe' ? withScribeBadgeClassName(h) : notesBadge.className}
                             />
-                            {notesBadge.label !== 'With Scribe' && notesFilter === 'all' && notesBadge.className?.includes('badge-processing') ? (
+                            {notesBadge.label !== 'With Scribe' && notesBadge.className?.includes('badge-processing') ? (
                               <span className={`cl-waiting-badge cl-waiting-badge--${notesWaitingTier(h)}`}>
                                 {notesWaitingLabel(h)}
                               </span>
                             ) : null}
                           </div>
+                          {completedAgo ? (
+                            <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4 }}>
+                              Completed {completedAgo}
+                            </div>
+                          ) : null}
+                          {readyAgo ? (
+                            <div style={{ fontSize: 12, color: '#9CA3AF', marginTop: 4 }}>
+                              Ready {readyAgo}
+                            </div>
+                          ) : null}
                           <div className={modernCard ? 'cl-pending-card__meta' : ''} style={modernCard ? undefined : { fontSize:13, color:'#64748B', marginTop:3, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
                             <span className="cl-pending-card__meta-mrn" style={{ fontWeight:600, color:'#475569' }}>📋 {h.mrn}</span>
                             <span style={{ color:'#CBD5E1' }} aria-hidden="true">·</span>
@@ -2411,7 +2555,7 @@ export default function Clinician() {
                       <div className={modernCard ? 'cl-pending-card__actions' : ''} style={modernCard ? undefined : { display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end', marginLeft: 'auto' }}>
                         {actionKind === 'open' ? (
                           <button type="button" className="cl-notes-btn-open" onClick={() => openNoteFromCard(h)}>
-                            Open Note
+                            Review Note
                           </button>
                         ) : null}
                         {actionKind === 'awaiting' ? (
@@ -2469,7 +2613,7 @@ export default function Clinician() {
               </time>
               <ClinicianTooltip tip="Update visit statistics and patient list" placement="below">
                 <button type="button" className="btn btn-sm" disabled={loading} onClick={() => loadVisits({ notify: true })}>
-                  ⟳ Refresh
+                  ⟳ <span className="cl-refresh-label">Refresh</span>
                 </button>
               </ClinicianTooltip>
               <button type="button" className="btn btn-navy btn-sm" onClick={() => { setShowAdd((f) => !f); setPtErr('') }}>
@@ -2590,8 +2734,8 @@ export default function Clinician() {
               )}
 
               <div className="sf-date-nav cl-date-nav portal-cal-strip">
-                <button type="button" className="btn btn-sm cl-date-nav__arrow portal-cal-strip__arrow portal-cal-strip__arrow--week" onClick={() => shiftScheduleOff(-7)} aria-label="Previous week">
-                  ‹‹
+                <button type="button" className="cl-date-nav__jump-prev" onClick={() => shiftScheduleOff(-7)} aria-label="Previous week">
+                  «
                 </button>
                 <button type="button" className="btn btn-sm cl-date-nav__arrow portal-cal-strip__arrow" onClick={() => shiftScheduleOff(-1)} aria-label="Previous day">
                   ‹
@@ -2599,9 +2743,13 @@ export default function Clinician() {
                 <div className="sf-date-nav-days cl-date-nav__days portal-cal-strip__days">
                   {scheduleDays.map((o) => {
                     const breakdown = scheduleDayBreakdownFor(o, off, visits, scheduleDayBreakdown)
+                    const dayDots = scheduleDayDots(breakdown)
+                    const isToday = localDate(o, 'input') === localDate(0, 'input')
                     return (
                       <div key={o} className="cl-date-nav__day-wrap portal-cal-strip__day-wrap">
-                        <ScheduleDayPreview dayOff={o} breakdown={breakdown} />
+                        <ErrorBoundary fallback={null}>
+                          <ScheduleDayPreview dayOff={o ?? 0} breakdown={breakdown ?? {}} scheduleDayCounts={scheduleDayCounts ?? {}} />
+                        </ErrorBoundary>
                         <div
                           role="button"
                           tabIndex={0}
@@ -2611,12 +2759,39 @@ export default function Clinician() {
                         >
                           <div className="sf-date-nav-day-name cl-date-nav__day-name portal-cal-strip__day-name">{localDate(o, 'day')}</div>
                           <div className="sf-date-nav-day-date cl-date-nav__day-num portal-cal-strip__day-num">{localDate(o, 'date')}</div>
-                          {localDate(o, 'input') === localDate(0, 'input') ? <div className="cl-date-nav__today-label portal-cal-strip__today-label">Today</div> : null}
+                          {isToday ? <div className="cl-date-nav__today-label portal-cal-strip__today-label">Today</div> : null}
+                          {dayDots.length > 0 ? (
+                            <div
+                              className="cl-date-nav__day-dots"
+                              style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', lineHeight: 0, marginTop: 2 }}
+                              aria-hidden
+                            >
+                              {dayDots.map((color, i) => (
+                                <span
+                                  key={i}
+                                  style={{
+                                    width: 6,
+                                    height: 6,
+                                    borderRadius: '50%',
+                                    display: 'inline-block',
+                                    margin: '0 2px',
+                                    background: isToday ? '#FFFFFF' : color,
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     )
                   })}
                 </div>
+                <button type="button" className="btn btn-sm cl-date-nav__arrow portal-cal-strip__arrow" onClick={() => shiftScheduleOff(1)} aria-label="Next day">
+                  ›
+                </button>
+                <button type="button" className="cl-date-nav__jump-next" onClick={() => shiftScheduleOff(7)} aria-label="Next week">
+                  »
+                </button>
                 <div className="cl-date-nav__calendar-wrap">
                   <button
                     ref={calendarBtnRef}
@@ -2637,17 +2812,29 @@ export default function Clinician() {
                     />
                   ) : null}
                 </div>
-                <button type="button" className="btn btn-sm cl-date-nav__arrow portal-cal-strip__arrow" onClick={() => shiftScheduleOff(1)} aria-label="Next day">
-                  ›
-                </button>
-                <button type="button" className="btn btn-sm cl-date-nav__arrow portal-cal-strip__arrow portal-cal-strip__arrow--week" onClick={() => shiftScheduleOff(7)} aria-label="Next week">
-                  ››
-                </button>
               </div>
 
               <div className="cl-schedule-list-head">
                 <span className="sf-section-label" style={{ marginBottom: 0 }}>Patient List</span>
-                <span className="cl-schedule-list-head__sort">Sort: Time ▾</span>
+                <select
+                  className="cl-schedule-list-head__sort"
+                  aria-label="Sort patient list"
+                  value={scheduleSort}
+                  onChange={(e) => setScheduleSort(e.target.value)}
+                  style={{
+                    border: '1px solid #E5E7EB',
+                    borderRadius: 6,
+                    padding: '4px 8px',
+                    fontSize: 13,
+                    color: '#374151',
+                    background: 'white',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <option value="time">Time</option>
+                  <option value="status">Status (overdue first)</option>
+                  <option value="name">Name A-Z</option>
+                </select>
               </div>
 
               <div>
@@ -2671,22 +2858,37 @@ export default function Clinician() {
                       + Add Patient
                     </button>
                   </div>
+                ) : scheduleListVisits.length === 0 ? (
+                  <div className="sf-empty">
+                    <div className="sf-empty-icon">✅</div>
+                    <div className="sf-empty-title">All encounters completed</div>
+                    <div className="sf-empty-sub">Completed notes are available on the Notes page.</div>
+                  </div>
                 ) : (
-                  visits.map((v, visitIdx) => {
+                  scheduleListVisits.map((v, visitIdx) => {
                   const isActive = active?.id === v.id
                   const scheduleOverdue = isScheduleVisitOverdue(v, off)
                   const scheduleBadgeText = scheduleOverdue ? 'Overdue' : scheduleStatusDisplayLabel(v.status)
-                  const scheduleBadgeClass = scheduleOverdue ? 'badge-review' : scheduleVisitBadgeClass(v.status)
+                  const scheduleBadgeClass = scheduleOverdue ? 'badge-overdue' : scheduleVisitBadgeClass(v.status)
                   const unifiedWithScribeBadge = !scheduleOverdue && scheduleBadgeText === WITH_SCRIBE_LABEL
                   const scribeUrgentOnSchedule = unifiedWithScribeBadge && scribeWaitingTier(v) === 'urgent'
                   const accentClass = scheduleOverdue
                     ? 'cl-patient-card--overdue'
                     : schedulePatientCardAccentClass(v, off)
-                  const showNowBefore = shouldInsertNowBefore(visits, visitIdx, off, liveNow)
+                  const canonicalCardClass = scheduleOverdue
+                    ? 'cl-patient-card--overdue'
+                    : v.status === 'note-ready'
+                    ? 'cl-patient-card--ready'
+                    : v.status === 'uploaded' || v.status === 'done'
+                    ? 'cl-patient-card--completed'
+                    : ['recording-uploaded', 'in-progress', 'submitted'].includes(v.status)
+                    ? 'cl-patient-card--with-scribe'
+                    : 'cl-patient-card--upcoming'
+                  const showNowBefore = scheduleSort === 'time' && shouldInsertNowBefore(scheduleListVisits, visitIdx, off, liveNow)
                   return (
                     <div key={v.id} className="cl-schedule-visit-wrap">
                       {showNowBefore ? <NowDivider now={liveNow} /> : null}
-                    <div className={`cl-schedule-row sf-row cl-patient-card ${accentClass}${scribeUrgentOnSchedule ? ' cl-patient-card--scribe-urgent' : ''}${isActive ? ' sf-row-active' : ''}`}>
+                    <div className={`cl-schedule-row sf-row cl-patient-card ${accentClass} ${canonicalCardClass}${scribeUrgentOnSchedule ? ' cl-patient-card--scribe-urgent' : ''}${isActive ? ' sf-row-active' : ''}`}>
                       <div className="cl-schedule-row__time">
                         <div className="cl-schedule-row__time-main">{fmtTime(v.visit_time).split(' ')[0]}</div>
                         <div className="cl-schedule-row__time-sub">{fmtTime(v.visit_time).split(' ')[1]}</div>
@@ -2752,23 +2954,17 @@ export default function Clinician() {
                         {v.status === 'note-ready' && (
                           <>
                             <ClinicianTooltip tip="Review and sign off on the scribe-drafted note">
-                              <button type="button" className="cl-schedule-btn-review" style={{ ...B.action, display:'inline-flex', alignItems:'center', gap:6, background:'linear-gradient(135deg,#15803D,#16A34A)', color:'#fff', padding:'10px 18px', fontSize:14, boxShadow:'0 4px 14px rgba(21,128,61,0.35)' }}
-                                onClick={() => openNoteDetail(v)}>
-                                <IconPenEdit />
-                                Open Note
+                              <button type="button" className="cl-notes-btn-open" onClick={() => openNoteDetail(v)}>
+                                Review Note
                               </button>
                             </ClinicianTooltip>
                           </>
                         )}
                         {v.status === 'uploaded' && (
                           <>
-                            <button type="button" className="cl-schedule-btn-review" style={{ ...B.action, background:'linear-gradient(135deg,#1565C0,#1E40AF)', color:'#fff', padding:'10px 18px', fontSize:14, boxShadow:'0 4px 14px rgba(30,64,175,0.35)' }}
-                              onClick={() => openNoteDetail(v)}>
-                              📋 View Final Note
+                            <button type="button" className="cl-notes-btn-open" onClick={() => openNoteDetail(v)}>
+                              Review Note
                             </button>
-                            {canPreviewUploadedNote(v) ? (
-                              <button type="button" className="cl-icon-btn" title="Preview Note" onClick={() => { setAiVisitFromNotes(false); setAiVisit(v) }}>👁</button>
-                            ) : null}
                           </>
                         )}
                       </div>

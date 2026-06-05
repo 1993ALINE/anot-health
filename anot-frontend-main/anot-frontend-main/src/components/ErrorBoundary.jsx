@@ -23,6 +23,10 @@ export default class ErrorBoundary extends Component {
     const { error } = this.state
     if (!error) return this.props.children
 
+    if (Object.prototype.hasOwnProperty.call(this.props, 'fallback')) {
+      return this.props.fallback
+    }
+
     const name = this.props.portalName || 'This page'
     return (
       <div className="portal-error-boundary" role="alert">

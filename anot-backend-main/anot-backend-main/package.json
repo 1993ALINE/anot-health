@@ -15,7 +15,6 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.92.0",
     "@deepgram/sdk": "^3.13.0",
     "anot-workspace": "file:../..",
     "bcryptjs": "^3.0.3",
@@ -30,6 +29,7 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.1.1",
     "node-fetch": "^3.3.2",
+    "nodemailer": "^8.0.10",
     "pdfkit": "^0.15.0",
     "pg": "^8.20.0",
     "xlsx": "^0.18.5"
