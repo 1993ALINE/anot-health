@@ -307,7 +307,7 @@ function scheduleDayStatusBreakdown(visitList, dayOff) {
 function scheduleDayBreakdownFor(dayOff, selectedOff, currentVisits, scheduleDayBreakdown) {
   const key = localDate(dayOff)
   if (dayOff === selectedOff) return scheduleDayStatusBreakdown(currentVisits, dayOff)
-  if (Object.prototype.hasOwnProperty.call(scheduleDayBreakdown, key)) {
+  if (scheduleDayBreakdown && Object.prototype.hasOwnProperty.call(scheduleDayBreakdown, key)) {
     return scheduleDayBreakdown[key]
   }
   return null
@@ -318,7 +318,7 @@ function scheduleDayPatientTotal(dayOff, breakdown, scheduleDayCounts) {
     return breakdown.upcoming + breakdown.withScribe + breakdown.overdue + breakdown.completed
   }
   const key = localDate(dayOff)
-  if (Object.prototype.hasOwnProperty.call(scheduleDayCounts, key)) {
+  if (scheduleDayCounts && Object.prototype.hasOwnProperty.call(scheduleDayCounts, key)) {
     return scheduleDayCounts[key]
   }
   return 0
@@ -2601,7 +2601,7 @@ export default function Clinician() {
                     const breakdown = scheduleDayBreakdownFor(o, off, visits, scheduleDayBreakdown)
                     return (
                       <div key={o} className="cl-date-nav__day-wrap portal-cal-strip__day-wrap">
-                        <ScheduleDayPreview dayOff={o} breakdown={breakdown} />
+                        <ScheduleDayPreview dayOff={o} breakdown={breakdown} scheduleDayCounts={scheduleDayCounts} />
                         <div
                           role="button"
                           tabIndex={0}
