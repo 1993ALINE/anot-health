@@ -5,7 +5,7 @@ import { setBranding, useBranding } from '../../services/branding'
 import SystemProfileManager from '../../components/SystemProfileManager'
 import AdminModulePermissionsModal from '../../components/AdminModulePermissionsModal'
 import AdminAuditDashboard from './AdminAuditDashboard'
-import { SfAccountMenu, useSidebar, Overlay, usePortalDrawerMode, PortalSidebarBrand } from '../shared'
+import { SfAccountMenu, useSidebar, Overlay, usePortalDrawerMode, portalSidebarAriaHidden, PortalSidebarBrand } from '../shared'
 import { isSuperAdmin, ADMIN_GRANTABLE_MODULE_KEYS, ADMIN_DEFAULT_MODULE_KEYS_FOR_ADMIN, ADMIN_PORTAL_MODULES, adminMayOpenTab, resolvedAdminModuleKeys } from '../../auth/roles'
 import ErrorBoundary, { PortalCrashFallback } from '../../components/ErrorBoundary'
 import { getCurrentUser } from '../../utils/getCurrentUser'
@@ -23,6 +23,19 @@ const PerformanceMiniChart = lazy(() =>
 function initials(n) {
     if (!n) return '?'
     return n.split(' ').map((x) => x[0]).join('').slice(0, 2).toUpperCase()
+}
+
+function fmtAdminDate(raw) {
+  if (!raw) return '—'
+  try {
+    return new Date(raw).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    })
+  } catch {
+    return '—'
+  }
 }
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
@@ -227,7 +240,7 @@ function buildDailyCountSeries(entries, getDate, days, filterFn = () => true) {
     return buckets
 }
 
-function OverviewStatCard({ item }) {
+function OverviewStatCard({ item, loading }) {
     const points = item.points?.some((p) => p > 0) ? item.points : []
     const split = Math.floor(points.length / 2)
     const prevTotal = points.slice(0, split).reduce((a, v) => a + v, 0)
@@ -247,7 +260,7 @@ function OverviewStatCard({ item }) {
             <div className="adm-stat-card__head">
                 <div className="adm-stat-card__value-wrap">
                     <div className="adm-stat-card__label">{item.label}</div>
-                    <div className="adm-stat-card__value" style={{ color: item.color }}>{item.value}</div>
+                    <div className="adm-stat-card__value" style={{ color: item.color }}>{loading ? '—' : item.value}</div>
                 </div>
                 <div className="adm-stat-card__icon-wrap" aria-hidden>
                     <span className="adm-stat-card__icon">{item.icon}</span>
@@ -341,7 +354,7 @@ function AdminSidebar({ tab, onSelectTab, currentUser, onRequestSignOut, badges,
         <aside
             id="adm-admin-sidebar"
             className={`sf-sidebar sf-sidebar--rich adm-sidebar${sidebarOpen ? ' open' : ''}`}
-            aria-hidden={sidebarDrawerMode ? !sidebarOpen : false}
+            aria-hidden={portalSidebarAriaHidden(sidebarDrawerMode, sidebarOpen)}
         >
             <div className="sf-sidebar-top sf-sidebar-rich__top">
                 <PortalSidebarBrand branding={branding} subtitle={isSuperAdmin(currentUser) ? 'Super Admin' : 'Admin Panel'} />
@@ -1569,7 +1582,7 @@ function Admin() {
                         <>
                             <div className="adm-stats-grid adm-stats-grid--premium">
                                 {overviewStats.map((item) => (
-                                    <OverviewStatCard key={item.label} item={item} />
+                                    <OverviewStatCard key={item.label} item={item} loading={loading} />
                                 ))}
                             </div>
                             {assignmentsLoadError && (
@@ -1730,7 +1743,7 @@ function Admin() {
                                                 <div style={{ fontWeight: 600 }}>{a.scribe_name}</div>
                                                 <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{a.scribe_email}</div>
                                             </div>
-                                            <div className="adm-td" data-label="Date" style={{ flex: 1, fontSize: 12, color: 'var(--text-muted)' }}>{new Date(a.assigned_at).toLocaleDateString()}</div>
+                                            <div className="adm-td" data-label="Date" style={{ flex: 1, fontSize: 12, color: 'var(--text-muted)' }}>{fmtAdminDate(a.assigned_at)}</div>
                                             <div className="adm-td" data-label="Action" style={{ flex: 1 }}>
                                                 <button type="button" className="adm-btn-action" style={{ color: '#b91c1c' }} onClick={() => requestRemoveAssignment(a)}>
                                                     Remove

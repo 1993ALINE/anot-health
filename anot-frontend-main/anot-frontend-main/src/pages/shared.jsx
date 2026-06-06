@@ -71,6 +71,27 @@ export function usePortalDrawerMode() {
     return useSyncExternalStore(subscribePortalDrawerMq, getPortalDrawerMqSnapshot, () => true)
 }
 
+function subscribeSidebarOffCanvasMq(callback) {
+    const mq = window.matchMedia('(max-width: 768px)')
+    mq.addEventListener('change', callback)
+    return () => mq.removeEventListener('change', callback)
+}
+
+function getSidebarOffCanvasMqSnapshot() {
+    return window.matchMedia('(max-width: 768px)').matches
+}
+
+/** True when sidebar is off-canvas until `.open` (matches global.css drawer at ≤768px). */
+export function useSidebarOffCanvasMode() {
+    return useSyncExternalStore(subscribeSidebarOffCanvasMq, getSidebarOffCanvasMqSnapshot, () => false)
+}
+
+/** aria-hidden only when an off-canvas drawer is closed; omit when the rail is visible. */
+export function portalSidebarAriaHidden(isOffCanvas, isOpen) {
+    if (!isOffCanvas) return undefined
+    return !isOpen
+}
+
 /**
  * Sticky header matching Admin `adm-topbar`: in-bar menu on drawer breakpoints, module title, brand line, account menu.
  * Pass `titleRow` to replace the default title stack (e.g. back button + headings).

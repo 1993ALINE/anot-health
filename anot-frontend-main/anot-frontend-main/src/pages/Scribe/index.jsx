@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, ConfirmDialog, PortalSidebarBrand } from '../shared'
+import { useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, useSidebarOffCanvasMode, portalSidebarAriaHidden, ConfirmDialog, PortalSidebarBrand } from '../shared'
 import { authAPI, usersAPI, visitsAPI, notesAPI, API_BASE } from '../../services/api'
 import { useBranding } from '../../services/branding'
 import SystemProfileManager from '../../components/SystemProfileManager'
@@ -200,6 +200,7 @@ function Scribe() {
   const loadingRef = useRef(false)
 
   const drawerMode = usePortalDrawerMode()
+  const offCanvasSidebar = useSidebarOffCanvasMode()
   const branding = useBranding()
 
   const markBaseline = useCallback((visitId, final, segments) => {
@@ -612,7 +613,7 @@ function Scribe() {
       <aside
         id="scribe-sidebar"
         className={`sf-sidebar sf-sidebar--rich adm-sidebar${sidebar.open ? ' open' : ''}`}
-        aria-hidden={drawerMode ? !sidebar.open : undefined}
+        aria-hidden={portalSidebarAriaHidden(offCanvasSidebar, sidebar.open)}
       >
       <div className="sf-sidebar-top sf-sidebar-rich__top">
         <PortalSidebarBrand branding={branding} subtitle="Scribe Portal" />
@@ -670,7 +671,7 @@ function Scribe() {
     </>
   ), [
     sidebar.open,
-    drawerMode,
+    offCanvasSidebar,
     branding,
     activeTab,
     grades.length,
@@ -1100,10 +1101,10 @@ function Scribe() {
                   )
                 })}
               </div>
-              <button type="button" className="btn btn-sm scribe-date-nav__arrow portal-cal-strip__arrow" onClick={() => setSelectedDate((d) => addDaysToDateStr(d, 1))} aria-label="Next day">
+              <button type="button" className="btn btn-sm scribe-date-nav__arrow portal-cal-strip__arrow" onClick={() => setSelectedDate((d) => addDaysToDateStr(d, 1))} disabled={selectedDate >= localDateStr(0)} aria-label="Next day">
                 ›
               </button>
-              <button type="button" className="btn btn-sm scribe-date-nav__arrow portal-cal-strip__arrow portal-cal-strip__arrow--week" onClick={() => setSelectedDate((d) => addDaysToDateStr(d, 7))} aria-label="Next week">
+              <button type="button" className="btn btn-sm scribe-date-nav__arrow portal-cal-strip__arrow portal-cal-strip__arrow--week" onClick={() => setSelectedDate((d) => addDaysToDateStr(d, 7))} disabled={selectedDate >= localDateStr(0)} aria-label="Next week">
                 ››
               </button>
             </div>

@@ -4,7 +4,7 @@ import { authAPI, visitsAPI, patientsAPI, notesAPI, API_BASE } from '../../servi
 import { useBranding } from '../../services/branding'
 import SystemProfileManager from '../../components/SystemProfileManager'
 import PortalSidebarFooter from '../../components/PortalSidebarFooter'
-import { useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, ConfirmDialog, PortalSidebarBrand } from '../shared'
+import { useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, useSidebarOffCanvasMode, portalSidebarAriaHidden, ConfirmDialog, PortalSidebarBrand } from '../shared'
 import { queueAudioUpload, flushPendingAudioUploads, installOfflineUploadFlush } from '../../utils/offlineUploadQueue'
 import './clinician.css'
 import './clinician-redesign.css'
@@ -1247,6 +1247,7 @@ function ReviewReminderToast({ count, oldestHours, onReview, onDismiss }) {
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
 
 function Sidebar({ screen, setScreen, sidebar, currentUser, scheduleUpcomingBadge, readyForReviewCount, drawerMode, onRequestLogout, confirmDialog, confirmLoading, onDismissConfirm, onConfirmAction, branding }) {
+  const offCanvasSidebar = useSidebarOffCanvasMode()
   const NAV = [
     { key:'schedule', label:'Schedule', icon:'📅', badge: scheduleUpcomingBadge, badgeVariant: 'schedule' },
     { key:'notes',    label:'Notes',    icon:'📝', badge: readyForReviewCount, badgeVariant: 'urgent' },
@@ -1267,7 +1268,7 @@ function Sidebar({ screen, setScreen, sidebar, currentUser, scheduleUpcomingBadg
       <aside
         id="clinician-sidebar"
         className={`sf-sidebar sf-sidebar--rich adm-sidebar cl-sidebar${sidebar.open ? ' open' : ''}`}
-        aria-hidden={drawerMode ? !sidebar.open : undefined}
+        aria-hidden={portalSidebarAriaHidden(offCanvasSidebar, sidebar.open)}
       >
         <div className="cl-sidebar__header sf-sidebar-top sf-sidebar-rich__top">
           <button
@@ -1516,7 +1517,7 @@ function Clinician() {
   }, [])
 
   const setScreen = useCallback((key) => {
-    if (key === 'schedule') {
+    if (key === 'schedule' && screen !== 'schedule') {
       setScheduleDate(new Date())
       setWeekCenterOff(0)
     }
@@ -1527,7 +1528,7 @@ function Clinician() {
     setAiVisit(null)
     setAiVisitFromNotes(false)
     setScreenState(key)
-  }, [resetNotesViewDefaults])
+  }, [screen, resetNotesViewDefaults])
 
   const [scheduleDayCounts, setScheduleDayCounts] = useState({})
   const [scheduleDayBreakdown, setScheduleDayBreakdown] = useState({})
@@ -2655,6 +2656,24 @@ function Clinician() {
                         </div>
                       </div>
                       <div className={modernCard ? 'cl-pending-card__actions' : ''} style={modernCard ? undefined : { display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end', marginLeft: 'auto' }}>
+                        {badgeKey === 'overdue' ? (
+                          <button
+                            type="button"
+                            style={{
+                              background: '#D97706',
+                              color: 'white',
+                              borderRadius: '8px',
+                              padding: '10px 20px',
+                              fontWeight: 600,
+                              border: 'none',
+                              cursor: 'pointer',
+                              fontSize: '13px'
+                            }}
+                            onClick={() => goRecordOverdueFromNotes(h)}
+                          >
+                            Record Now
+                          </button>
+                        ) : null}
                         {actionKind === 'review' ? (
                           <button type="button" className="cl-notes-btn-open" onClick={() => openNoteFromCard(h)}>
                             Review

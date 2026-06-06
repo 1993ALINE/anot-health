@@ -7,7 +7,7 @@ import PortalAudioPlayer from '../../components/PortalAudioPlayer'
 import NoteWorkspacePanel from '../../components/NoteWorkspacePanel'
 import PortalSidebarFooter from '../../components/PortalSidebarFooter'
 import { fmtAppointmentTime } from '../../utils/timeFormat'
-import { parseTranscriptionBlocks, useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, ConfirmDialog, PortalSidebarBrand } from '../shared'
+import { parseTranscriptionBlocks, useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, useSidebarOffCanvasMode, portalSidebarAriaHidden, ConfirmDialog, PortalSidebarBrand } from '../shared'
 import ErrorBoundary, { PortalCrashFallback } from '../../components/ErrorBoundary'
 import { getCurrentUser } from '../../utils/getCurrentUser'
 import './qps.css'
@@ -85,6 +85,7 @@ function QPS() {
   const [confirmLoading, setConfirmLoading]     = useState(false)
 
   const drawerMode = usePortalDrawerMode()
+  const offCanvasSidebar = useSidebarOffCanvasMode()
   const branding = useBranding()
   const requestLogout = () => {
     setConfirmDialog({
@@ -148,6 +149,7 @@ function QPS() {
   }
 
   useEffect(() => { loadProviders() }, [])
+  useEffect(() => { loadGradedNotes() }, [])
   useEffect(() => { if (activeTab === 'graded') loadGradedNotes() }, [activeTab])
 
   const openNote = (note) => {
@@ -187,12 +189,13 @@ function QPS() {
         formatting: scores.formatting,
         comment,
       }
-      setNotes(prev => prev.map(n => n.id === selectedNote.id ? { ...n, status: 'uploaded', grade: gradePayload } : n))
+      setNotes(prev => prev.filter(n => n.id !== selectedNote.id))
       setGradedNotes(prev => {
         const next = prev.filter(n => n.id !== selectedNote.id)
         return [{ ...selectedNote, status: 'uploaded', grade: gradePayload }, ...next]
       })
       showNotif('Grade submitted successfully')
+      await loadGradedNotes()
       setTimeout(() => {
         setScreen('recordings')
         setComment('')
@@ -222,7 +225,7 @@ function QPS() {
       <aside
         id="qps-sidebar"
         className={`sf-sidebar sf-sidebar--rich adm-sidebar${sidebar.open ? ' open' : ''}`}
-        aria-hidden={drawerMode ? !sidebar.open : undefined}
+        aria-hidden={portalSidebarAriaHidden(offCanvasSidebar, sidebar.open)}
       >
       <div className="sf-sidebar-top sf-sidebar-rich__top">
         <PortalSidebarBrand branding={branding} subtitle="QPS Portal" />
@@ -485,7 +488,7 @@ function QPS() {
             menuId="qps-account-menu"
             titleRow={
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>
-                <span className="sf-back" role="button" tabIndex={0} onClick={() => { setScreen('provider'); setActiveTab('notes') }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setScreen('provider'); setActiveTab('notes') } }}>
+                <span className="sf-back" role="button" tabIndex={0} onClick={() => { setScreen('provider'); setActiveTab('notes'); setSelectedProvider(null) }} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setScreen('provider'); setActiveTab('notes'); setSelectedProvider(null) } }}>
                   ← Back
                 </span>
                 <div className="adm-topbar__titles" style={{ minWidth: 0 }}>
