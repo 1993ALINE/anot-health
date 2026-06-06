@@ -13,6 +13,7 @@ import {
 } from 'recharts'
 import { adminAPI, settingsAPI } from '../../services/api'
 import { isSuperAdmin } from '../../auth/roles'
+import { ConfirmDialog } from '../shared'
 import { auditBucketDateKey, formatAuditBucketDayUTC, formatAuditDateTime, parseAuditInstant } from '../../utils/auditDateTime'
 import './adminAudit.css'
 
@@ -122,6 +123,8 @@ export default function AdminAuditDashboard({ showToast, currentUser, onMeta }) 
     const [retentionDays, setRetentionDays] = useState(365)
     const [retentionSaving, setRetentionSaving] = useState(false)
     const [settingsSnapshot, setSettingsSnapshot] = useState(null)
+    const [purgeConfirmOpen, setPurgeConfirmOpen] = useState(false)
+    const [purgeLoading, setPurgeLoading] = useState(false)
     const prevSigRef = useRef('')
 
     const [q, setQ] = useState('')
@@ -265,14 +268,18 @@ export default function AdminAuditDashboard({ showToast, currentUser, onMeta }) 
 
     const onApplyRetention = async () => {
         if (!isSuperAdmin(currentUser)) return
+        setPurgeLoading(true)
         try {
             const data = await adminAPI.applyAuditRetention()
             showToast?.(`Retention applied: removed ${data.deleted} row(s).`, 'success')
             prevSigRef.current = ''
             void loadSummary()
             void loadLogs()
+            setPurgeConfirmOpen(false)
         } catch (err) {
             showToast?.(err.message || 'Retention failed', 'error')
+        } finally {
+            setPurgeLoading(false)
         }
     }
 
@@ -299,6 +306,18 @@ export default function AdminAuditDashboard({ showToast, currentUser, onMeta }) 
 
     return (
         <div className="adm-auditpro">
+            <ConfirmDialog
+                dialog={purgeConfirmOpen ? {
+                    tone: 'danger',
+                    title: 'Delete audit logs?',
+                    message: `This will permanently delete audit logs older than ${retentionDays} days. This cannot be undone. Are you sure?`,
+                    confirmText: 'Delete Logs',
+                    cancelText: 'Cancel',
+                } : null}
+                loading={purgeLoading}
+                onDismiss={() => !purgeLoading && setPurgeConfirmOpen(false)}
+                onConfirm={onApplyRetention}
+            />
             {summary?.alerts?.length > 0 && (
                 <div className="adm-auditpro__alerts" role="status">
                     {summary.alerts.map((a) => (
@@ -508,7 +527,7 @@ export default function AdminAuditDashboard({ showToast, currentUser, onMeta }) 
                         <button type="button" className="adm-btn-primary" disabled={retentionSaving} onClick={onSaveRetention}>
                             {retentionSaving ? 'Saving…' : 'Save policy'}
                         </button>
-                        <button type="button" className="adm-btn-action" style={{ color: '#b45309' }} onClick={onApplyRetention}>
+                        <button type="button" className="adm-btn-action" style={{ color: '#b45309' }} onClick={() => setPurgeConfirmOpen(true)}>
                             Apply purge now
                         </button>
                     </div>

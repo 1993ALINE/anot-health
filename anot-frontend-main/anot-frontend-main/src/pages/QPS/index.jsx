@@ -8,8 +8,11 @@ import NoteWorkspacePanel from '../../components/NoteWorkspacePanel'
 import PortalSidebarFooter from '../../components/PortalSidebarFooter'
 import { fmtAppointmentTime } from '../../utils/timeFormat'
 import { parseTranscriptionBlocks, useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, ConfirmDialog, PortalSidebarBrand } from '../shared'
+import ErrorBoundary, { PortalCrashFallback } from '../../components/ErrorBoundary'
+import { getCurrentUser } from '../../utils/getCurrentUser'
 import './qps.css'
 import '../portal-sidebar-indigo.css'
+import '../portalErrorBoundary.css'
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -51,10 +54,18 @@ function qpsNoteListMeta(note) {
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
-export default function QPS() {
+export default function QPSWithErrorBoundary() {
+  return (
+    <ErrorBoundary portalName="QPS portal" fallback={<PortalCrashFallback />}>
+      <QPS />
+    </ErrorBoundary>
+  )
+}
+
+function QPS() {
   const navigate    = useNavigate()
   const sidebar     = useSidebar()
-  const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
+  const currentUser = getCurrentUser()
 
   const [screen, setScreen]                     = useState('provider')
   const [activeTab, setActiveTab]               = useState('notes')
@@ -141,10 +152,14 @@ export default function QPS() {
 
   const openNote = (note) => {
     setSelectedNote(note)
-    // Load existing grade if already graded
-    if (note.status === 'uploaded' && note.grade) {
-      setScores({ accuracy: note.grade.accuracy || 88, completeness: note.grade.completeness || 92, terminology: note.grade.terminology || 85, formatting: note.grade.formatting || 95 })
-      setComment(note.grade.comment || '')
+    if (note.grade) {
+      setScores({
+        accuracy: note.grade.accuracy ?? 88,
+        completeness: note.grade.completeness ?? 92,
+        terminology: note.grade.terminology ?? 85,
+        formatting: note.grade.formatting ?? 95,
+      })
+      setComment(note.grade.comment ?? '')
     } else {
       setScores({ accuracy: 88, completeness: 92, terminology: 85, formatting: 95 })
       setComment('')
@@ -153,6 +168,7 @@ export default function QPS() {
   }
 
   const handleSubmit = async () => {
+    if (!selectedNote?.id) return
     if (!comment.trim()) { showNotif('Please write a comment before submitting.', 'error'); return }
     try {
       setSubmitting(true)
@@ -164,7 +180,18 @@ export default function QPS() {
         formatting:   scores.formatting,
         comment,
       })
-      setNotes(prev => prev.map(n => n.id === selectedNote.id ? { ...n, status: 'uploaded' } : n))
+      const gradePayload = {
+        accuracy: scores.accuracy,
+        completeness: scores.completeness,
+        terminology: scores.terminology,
+        formatting: scores.formatting,
+        comment,
+      }
+      setNotes(prev => prev.map(n => n.id === selectedNote.id ? { ...n, status: 'uploaded', grade: gradePayload } : n))
+      setGradedNotes(prev => {
+        const next = prev.filter(n => n.id !== selectedNote.id)
+        return [{ ...selectedNote, status: 'uploaded', grade: gradePayload }, ...next]
+      })
       showNotif('Grade submitted successfully')
       setTimeout(() => {
         setScreen('recordings')
@@ -224,7 +251,7 @@ export default function QPS() {
         {selectedProvider && (
           <div className="sf-provider-chip">
             <div className="sf-chip-label">Current Provider</div>
-            <div className="sf-chip-name">{selectedProvider.name}</div>
+            <div className="sf-chip-name">{selectedProvider?.name ?? 'Unknown'}</div>
             <div className="sf-chip-spec">{selectedProvider.specialty || 'Clinician'}</div>
             <div
               className="sf-chip-change"
@@ -249,6 +276,8 @@ export default function QPS() {
     </aside>
     </>
   )
+
+  const portalToast = notif ? <Notif notif={notif} /> : null
 
   // ─── GRADED NOTES ─────────────────────────────────
 
@@ -326,6 +355,7 @@ export default function QPS() {
             </div>
           </div>
         </div>
+        {portalToast}
       </div>
     )
   }
@@ -367,7 +397,7 @@ export default function QPS() {
               <SystemProfileManager showToast={showNotif} roleLabel="QPS" compact readOnly />
             </div>
           </div>
-          {notif && <Notif notif={notif} />}
+          {portalToast}
         </div>
       </div>
     )
@@ -426,6 +456,7 @@ export default function QPS() {
             </div>
           </div>
         </div>
+        {portalToast}
       </div>
     )
   }
@@ -458,7 +489,7 @@ export default function QPS() {
                   ← Back
                 </span>
                 <div className="adm-topbar__titles" style={{ minWidth: 0 }}>
-                  <div className="adm-topbar__module">{selectedProvider.name}</div>
+                  <div className="adm-topbar__module">{selectedProvider?.name ?? 'Unknown'}</div>
                   <div className="adm-topbar__brand">{pendingNotes.length} notes need review</div>
                 </div>
               </div>
@@ -466,7 +497,7 @@ export default function QPS() {
           />
           <div className="sf-body">
             <p className="qps-page-intro">
-              Work the review queue for <strong style={{ color: 'var(--text-main)' }}>{selectedProvider.name}</strong> — notes listed here still need your grade. Completed reviews are on the Graded tab.
+              Work the review queue for <strong style={{ color: 'var(--text-main)' }}>{selectedProvider?.name ?? 'Unknown'}</strong> — notes listed here still need your grade. Completed reviews are on the Graded tab.
             </p>
             <div className="qps-stats-wrap">
               <div className="sf-stats" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
@@ -518,6 +549,7 @@ export default function QPS() {
             </div>
           </div>
         </div>
+        {portalToast}
       </div>
     )
   }
@@ -678,11 +710,7 @@ export default function QPS() {
           </div>
         </div>
 
-        {notif && (
-          <div className={`sf-notif ${notif.type === 'error' ? 'sf-notif-error' : 'sf-notif-green'}`}>
-            {notif.type === 'error' ? '⚠ ' : '✓ '}{notif.msg}
-          </div>
-        )}
+        {portalToast}
       </div>
     </div>
   )

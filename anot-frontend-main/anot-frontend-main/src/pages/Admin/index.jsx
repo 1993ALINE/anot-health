@@ -7,8 +7,11 @@ import AdminModulePermissionsModal from '../../components/AdminModulePermissions
 import AdminAuditDashboard from './AdminAuditDashboard'
 import { SfAccountMenu, useSidebar, Overlay, usePortalDrawerMode, PortalSidebarBrand } from '../shared'
 import { isSuperAdmin, ADMIN_GRANTABLE_MODULE_KEYS, ADMIN_DEFAULT_MODULE_KEYS_FOR_ADMIN, ADMIN_PORTAL_MODULES, adminMayOpenTab, resolvedAdminModuleKeys } from '../../auth/roles'
+import ErrorBoundary, { PortalCrashFallback } from '../../components/ErrorBoundary'
+import { getCurrentUser } from '../../utils/getCurrentUser'
 import './admin.css'
 import '../portal-sidebar-indigo.css'
+import '../portalErrorBoundary.css'
 
 const PayrollMiniChart = lazy(() =>
     import('./AdminMiniCharts').then((m) => ({ default: m.PayrollMiniChart }))
@@ -410,11 +413,14 @@ function AdminUserTable({
         : role === 'qps' ? 'qps'
         : role === 'admin' || role === 'elevated' ? 'admins'
         : 'generic'
-    const filtered = userList.filter((u) => {
-        const matchSearch = u.name.toLowerCase().includes(search.toLowerCase()) ||
-            u.email.toLowerCase().includes(search.toLowerCase())
-        return matchSearch && (filter === 'all' || u.status === filter)
-    })
+    const matchesSearch = (u) => {
+        if (!search) return true
+        const q = search.toLowerCase()
+        const name = (u.name || '').toLowerCase()
+        const email = (u.email || '').toLowerCase()
+        return name.includes(q) || email.includes(q)
+    }
+    const filtered = userList.filter((u) => matchesSearch(u) && (filter === 'all' || u.status === filter))
     const isSystemSuperRow = (u) => u.role === 'super_admin'
     return (
         <div>
@@ -569,22 +575,20 @@ function AdminUserTable({
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
-export default function Admin() {
+export default function AdminWithErrorBoundary() {
+    return (
+        <ErrorBoundary portalName="Admin portal" fallback={<PortalCrashFallback />}>
+            <Admin />
+        </ErrorBoundary>
+    )
+}
+
+function Admin() {
     const navigate = useNavigate()
-    const [currentUser, setCurrentUser] = useState(() => {
-        try {
-            return JSON.parse(localStorage.getItem('user') || '{}')
-        } catch {
-            return {}
-        }
-    })
+    const [currentUser, setCurrentUser] = useState(() => getCurrentUser())
     useEffect(() => {
         authAPI.getMe().then(() => {
-            try {
-                setCurrentUser(JSON.parse(localStorage.getItem('user') || '{}'))
-            } catch {
-                /* ignore */
-            }
+            setCurrentUser(getCurrentUser())
         }).catch(() => {})
     }, [])
     const branding = useBranding()
@@ -640,6 +644,7 @@ export default function Admin() {
     const [assignLoading, setAssignLoading]         = useState(false)
     const [assignmentsLoadError, setAssignmentsLoadError] = useState(null)
     const [settingsForm, setSettingsForm] = useState(DEFAULT_SETTINGS_FORM)
+    const [settingsDirty, setSettingsDirty] = useState(false)
     const [settingsLoading, setSettingsLoading] = useState(false)
     const [settingsSaving, setSettingsSaving] = useState(false)
     const [settingsError, setSettingsError] = useState('')
@@ -681,6 +686,7 @@ export default function Admin() {
             anthropic_enabled: raw?.anthropic_enabled ?? true,
             anthropic_model: raw?.anthropic_model ?? 'claude-haiku-4-5',
         })
+        setSettingsDirty(false)
     }, [])
 
     const fetchAssignments = useCallback(async () => {
@@ -840,13 +846,14 @@ export default function Admin() {
 
     // Settings tab loads from GET /settings/internal; syncing branding here races refreshBranding and clears social/AI fields.
     useEffect(() => {
-        if (!branding || tab === 'settings') return
+        if (!branding || tab === 'settings' || settingsDirty) return
         queueMicrotask(() => {
             hydrateSettingsForm(branding)
         })
-    }, [branding, hydrateSettingsForm, tab])
+    }, [branding, hydrateSettingsForm, tab, settingsDirty])
 
     const handleSettingInput = (key, value) => {
+        setSettingsDirty(true)
         setSettingsForm((prev) => ({ ...prev, [key]: value }))
     }
 
@@ -1109,7 +1116,7 @@ export default function Admin() {
             if (String(currentUser?.id) === String(u.id)) {
                 await authAPI.getMe()
                 try {
-                    setCurrentUser(JSON.parse(localStorage.getItem('user') || '{}'))
+                    setCurrentUser(getCurrentUser())
                 } catch {
                     /* ignore */
                 }
@@ -1481,6 +1488,22 @@ export default function Admin() {
     }, [navItems, tab])
 
     const handleSelectTab = (key) => {
+        if (tab === 'settings' && key !== 'settings' && settingsDirty) {
+            setConfirmDialog({
+                tone: 'primary',
+                title: 'You have unsaved changes',
+                message: 'Leave without saving?',
+                confirmText: 'Leave',
+                cancelText: 'Stay',
+                onConfirm: () => {
+                    hydrateSettingsForm(branding)
+                    setSettingsDirty(false)
+                    setTab(key)
+                    sidebar.close()
+                },
+            })
+            return
+        }
         setTab(key)
         sidebar.close()
     }

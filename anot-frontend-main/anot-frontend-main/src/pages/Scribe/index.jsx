@@ -10,9 +10,10 @@ import NoteWorkspacePanel from '../../components/NoteWorkspacePanel'
 import { cleanAiDraftForDisplay } from '../../utils/aiDraftFormat'
 import { useRenderRateWarning } from '../../utils/useRenderRateWarning'
 import PortalSidebarFooter from '../../components/PortalSidebarFooter'
-import ErrorBoundary from '../../components/ErrorBoundary'
+import ErrorBoundary, { PortalCrashFallback } from '../../components/ErrorBoundary'
 import PortalCalendarDayPreview, { scribeDayPreviewRows } from '../../components/PortalCalendarDayPreview'
 import { fmtAppointmentTime } from '../../utils/timeFormat'
+import { getCurrentUser } from '../../utils/getCurrentUser'
 import './scribe.css'
 import '../portal-sidebar-indigo.css'
 import '../portalErrorBoundary.css'
@@ -162,7 +163,7 @@ function Scribe() {
 
   const navigate    = useNavigate()
   const sidebar     = useSidebar()
-  const currentUser = useMemo(() => JSON.parse(localStorage.getItem('user') || '{}'), [])
+  const currentUser = useMemo(() => getCurrentUser(), [])
 
   const [screen, setScreen]                       = useState('providers')
   const [activeTab, setActiveTab]                 = useState('recordings')
@@ -335,14 +336,14 @@ function Scribe() {
               setTxSegments(segs)
             }
           }
-          return
+          return true
         }
         if (!n) {
           setNote(null)
           setFinalNote('')
           setTxSegments([])
           setBaseline({ visitId: null, final: '', tx: '' })
-          return
+          return true
         }
         setNote(n)
         setSelectedRec((prev) =>
@@ -355,18 +356,21 @@ function Scribe() {
         const segs = parseTranscriptions(n.transcription)
         setTxSegments(segs)
         markBaseline(visitId, fn, segs)
+        return true
       } catch {
         if (!mergeOnly) {
           setNote(null)
           setFinalNote('')
           setTxSegments([])
           setBaseline({ visitId: null, final: '', tx: '' })
+          showNotif('Failed to load note. Please try again.', 'red')
         }
+        return false
       } finally {
         if (!mergeOnly) setLoadingNote(false)
       }
     },
-    [markBaseline],
+    [markBaseline, showNotif],
   )
 
   const performNoteRefresh = useCallback(
@@ -374,16 +378,20 @@ function Scribe() {
       if (!selectedRec?.id || noteRefreshing) return
       setNoteRefreshing(true)
       try {
-        if (mode === 'merge') await loadNote(selectedRec.id, { mergeOnly: true })
-        else await loadNote(selectedRec.id, {})
-        showNotif(mode === 'merge' ? 'Note data updated from server.' : 'Note reloaded from server.')
+        const ok =
+          mode === 'merge'
+            ? await loadNote(selectedRec.id, { mergeOnly: true })
+            : await loadNote(selectedRec.id, {})
+        if (ok) {
+          showNotif(mode === 'merge' ? 'Note data updated from server.' : 'Note reloaded from server.')
+        }
       } catch (err) {
         showNotif(err.message || 'Refresh failed.', 'red')
       } finally {
         setNoteRefreshing(false)
       }
     },
-    [selectedRec?.id, noteRefreshing, loadNote],
+    [selectedRec?.id, noteRefreshing, loadNote, showNotif],
   )
 
   const onDiscardReloadFromServer = useCallback(() => {
@@ -441,6 +449,7 @@ function Scribe() {
   }, [screen, selectedProvider?.id, selectedDate, loadRecordings])
 
   const saveDraft = async () => {
+    if (!selectedRec?.id) return
     if (!finalNote.trim()) { showNotif('Please write the note before saving.', 'amber'); return }
     try {
       setSaving(true)
@@ -463,6 +472,7 @@ function Scribe() {
   }
 
   const uploadToEMR = async () => {
+    if (!selectedRec?.id) return
     if (!finalNote.trim()) { showNotif('Please write the note before uploading.', 'amber'); return }
     try {
       setSaving(true)
@@ -676,6 +686,8 @@ function Scribe() {
     runConfirm,
   ])
 
+  const portalToast = notif ? <Notif notif={notif} /> : null
+
   // ─── MY NOTES ─────────────────────────────────────
 
   if (screen === 'notes') {
@@ -757,6 +769,7 @@ function Scribe() {
             ))}
           </div>
         </div>
+        {portalToast}
       </div>
     )
   }
@@ -840,6 +853,7 @@ function Scribe() {
             ))}
           </div>
         </div>
+        {portalToast}
       </div>
     )
   }
@@ -895,7 +909,7 @@ function Scribe() {
               />
             </div>
           </div>
-          {notif && <Notif notif={notif} />}
+          {portalToast}
         </div>
       </div>
     )
@@ -940,6 +954,7 @@ function Scribe() {
             )}
           </div>
         </div>
+        {portalToast}
       </div>
     )
   }
@@ -1007,6 +1022,7 @@ function Scribe() {
             </div>
           </div>
         </div>
+        {portalToast}
       </div>
     )
   }
@@ -1122,6 +1138,7 @@ function Scribe() {
             })}
           </div>
         </div>
+        {portalToast}
       </div>
     )
   }
@@ -1201,6 +1218,7 @@ function Scribe() {
             </article>
           </div>
         </div>
+        {portalToast}
       </div>
     )
   }
@@ -1412,7 +1430,7 @@ function Scribe() {
         </div>
         </div>
 
-        {notif && <div className={`sf-notif sf-notif-${notif.type}`}>✓ {notif.msg}</div>}
+        {portalToast}
       </div>
     </div>
   )
@@ -1440,7 +1458,7 @@ function Notif({ notif }) {
 
 export default function ScribeWithErrorBoundary() {
   return (
-    <ErrorBoundary portalName="Scribe portal">
+    <ErrorBoundary portalName="Scribe portal" fallback={<PortalCrashFallback />}>
       <Scribe />
     </ErrorBoundary>
   )

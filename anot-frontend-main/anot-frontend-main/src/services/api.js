@@ -1,4 +1,6 @@
 // Railway fallback when the app is deployed (hostname is not localhost).
+import { getCurrentUser as readStoredUser } from '../utils/getCurrentUser'
+
 const DEFAULT_PROD_API = 'https://anot-backend-production.up.railway.app/api'
 
 const envApiUrl = import.meta.env.VITE_API_URL?.replace(/\/+$/, '') || ''
@@ -102,8 +104,8 @@ export const authAPI = {
     localStorage.removeItem('user')
   },
   getCurrentUser: () => {
-    const user = localStorage.getItem('user')
-    return user ? JSON.parse(user) : null
+    const user = readStoredUser()
+    return Object.keys(user).length ? user : null
   },
   isLoggedIn: () => !!getToken(),
   /** Validates the session and refreshes cached user from the server. */

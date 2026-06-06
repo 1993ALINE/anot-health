@@ -8,10 +8,12 @@ import { useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, ConfirmDialog, 
 import { queueAudioUpload, flushPendingAudioUploads, installOfflineUploadFlush } from '../../utils/offlineUploadQueue'
 import './clinician.css'
 import './clinician-redesign.css'
+import '../portalErrorBoundary.css'
 import PortalCalendarDayPreview from '../../components/PortalCalendarDayPreview'
-import ErrorBoundary from '../../components/ErrorBoundary'
+import ErrorBoundary, { PortalCrashFallback } from '../../components/ErrorBoundary'
 import ContactScreen from './ContactScreen'
 import { getPatientAvatarColor } from '../../utils/avatarColor'
+import { getCurrentUser } from '../../utils/getCurrentUser'
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -1421,9 +1423,17 @@ const B = {
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
-export default function Clinician() {
+export default function ClinicianWithErrorBoundary() {
+  return (
+    <ErrorBoundary portalName="Clinician portal" fallback={<PortalCrashFallback />}>
+      <Clinician />
+    </ErrorBoundary>
+  )
+}
+
+function Clinician() {
   const navigate    = useNavigate()
-  const cu          = JSON.parse(localStorage.getItem('user') || '{}')
+  const cu          = getCurrentUser()
   const sidebar     = useSidebar()
 
   const [screen, setScreenState]    = useState('schedule')
@@ -2672,7 +2682,7 @@ export default function Clinician() {
               cu={cu}
               onViewProfile={openProfile}
               onLogout={requestLogout}
-              title={`${getGreeting()}, Dr. ${cu.name?.split(' ').pop()}`}
+              title={`${getGreeting()}${cu?.name ? `, Dr. ${cu.name}` : ''}`}
               belowTitle={
                 readyForReviewCount > 0 ? (
                   <button type="button" className="cl-schedule-pending-reviews" onClick={goToReadyForReview}>
