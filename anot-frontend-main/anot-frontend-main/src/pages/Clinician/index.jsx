@@ -634,12 +634,20 @@ function notesCardBadgeKey(h) {
 
 function notesCardActionKind(h) {
   const key = notesCardBadgeKey(h)
-  if (key === 'overdue') return 'record'
-  if (key === 'ready' && !clinicianNoteReturned(h)) return 'open'
+  if (key === 'overdue' || h.status === 'upcoming') return null
+  if (key === 'ready' || key === 'completed' || key === 'closed' || canPreviewUploadedNote(h)) {
+    return 'review'
+  }
   if (key === 'processing') return 'awaiting'
-  if (key === 'completed' || key === 'closed') return 'view'
-  if (key === 'ready' && clinicianNoteReturned(h)) return 'view'
   return null
+}
+
+function isNoteDetailCompleted(note) {
+  return note?.status === 'uploaded' || note?.note_status === 'uploaded' || !!note?.locked_at
+}
+
+function isNoteDetailReadyForReview(note) {
+  return note?.status === 'note-ready' && !isNoteDetailCompleted(note)
 }
 
 function notesWithScribeMatch(h) {
@@ -1566,6 +1574,8 @@ export default function Clinician() {
   const showToast = (msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500) }
   const [confirmDialog, setConfirmDialog] = useState(null)
   const [confirmLoading, setConfirmLoading] = useState(false)
+  const [lockConfirmOpen, setLockConfirmOpen] = useState(false)
+  const [lockConfirmLoading, setLockConfirmLoading] = useState(false)
 
   const runConfirm = async () => {
     if (!confirmDialog?.onConfirm) return
@@ -2008,6 +2018,8 @@ export default function Clinician() {
         final_note: d.note?.final_note,
         note_id: d.note?.id,
         scribe_name: d.note?.scribe_name || visitRow.scribe_name,
+        note_status: d.note?.status ?? visitRow.note_status,
+        locked_at: d.note?.locked_at ?? visitRow.locked_at,
       })
     } catch {
       showToast('Failed to load note', 'error')
@@ -2016,7 +2028,43 @@ export default function Clinician() {
 
   const openNoteFromCard = (h) => openNoteDetail(h)
 
-  const closeNoteDetail = () => setReview(null)
+  const closeNoteDetail = () => {
+    setLockConfirmOpen(false)
+    setReview(null)
+  }
+
+  const confirmLockNote = async () => {
+    if (!reviewNote?.id) return
+    setLockConfirmLoading(true)
+    try {
+      const d = await visitsAPI.lockNote(reviewNote.id)
+      const updated = d.visit || {}
+      setReview((prev) => ({
+        ...prev,
+        status: updated.status || 'uploaded',
+        note_status: updated.note_status || 'uploaded',
+        locked_at: updated.locked_at || new Date().toISOString(),
+      }))
+      setHistory((prev) =>
+        prev.map((v) =>
+          v.id === reviewNote.id
+            ? {
+                ...v,
+                status: updated.status || 'uploaded',
+                note_status: updated.note_status || 'uploaded',
+                locked_at: updated.locked_at,
+              }
+            : v
+        )
+      )
+      setLockConfirmOpen(false)
+      showToast('Note locked and marked as completed')
+    } catch (e) {
+      showToast(e.message, 'error')
+    } finally {
+      setLockConfirmLoading(false)
+    }
+  }
 
   const sidebarProps = {
     screen,
@@ -2175,34 +2223,90 @@ export default function Clinician() {
               <button type="button" className="cl-note-detail-back" onClick={closeNoteDetail}>
                 ← Back to Notes
               </button>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
-                <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 999, background: 'var(--blue-light)', border: '1px solid rgba(79, 172, 254, 0.35)' }}>
-                  <span style={{ fontSize: 14 }}>📄</span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--brand-primary-dark)' }}>Final Note — {reviewNote.scribe_name || 'Scribe'}</span>
+              <div className="cl-note-detail-header">
+                <div className="cl-note-detail-chip">
+                  <span className="cl-note-detail-chip__icon" aria-hidden>📄</span>
+                  <span className="cl-note-detail-chip__label">
+                    Final Note — {reviewNote.scribe_name || 'Scribe'}
+                  </span>
+                  {isNoteDetailCompleted(reviewNote) ? (
+                    <span className="cl-note-detail-chip__lock" title="Locked" aria-label="Locked">🔒</span>
+                  ) : null}
                 </div>
-                {!editReq[reviewNote.note_id] ? (
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={async () => {
-                      try {
-                        await notesAPI.requestEdit(reviewNote.note_id)
-                        setEditReq((p) => ({ ...p, [reviewNote.note_id]: true }))
-                        showToast('Edit request sent')
-                      } catch (e) {
-                        showToast(e.message, 'error')
-                      }
-                    }}
-                  >
-                    ✏️ Request Edit
-                  </button>
-                ) : (
-                  <span className="badge badge-amber">✓ Edit Requested</span>
-                )}
+                {isNoteDetailReadyForReview(reviewNote) ? (
+                  <div className="cl-note-detail-actions">
+                    {!editReq[reviewNote.note_id] ? (
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={async () => {
+                          try {
+                            await notesAPI.requestEdit(reviewNote.note_id)
+                            setEditReq((p) => ({ ...p, [reviewNote.note_id]: true }))
+                            showToast('Edit request sent')
+                          } catch (e) {
+                            showToast(e.message, 'error')
+                          }
+                        }}
+                      >
+                        ✏️ Request Edit
+                      </button>
+                    ) : (
+                      <span className="badge badge-amber">✓ Edit Requested</span>
+                    )}
+                    <button
+                      type="button"
+                      className="cl-notes-btn-lock"
+                      onClick={() => setLockConfirmOpen(true)}
+                    >
+                      🔒 Lock Note
+                    </button>
+                  </div>
+                ) : null}
               </div>
               <div className="sf-note-card">
                 <pre className="sf-note-pre">{reviewNote.final_note || 'Note not available.'}</pre>
               </div>
+              {lockConfirmOpen ? (
+                <div
+                  className="cl-lock-confirm-overlay"
+                  role="presentation"
+                  onClick={(e) => e.target === e.currentTarget && !lockConfirmLoading && setLockConfirmOpen(false)}
+                >
+                  <div
+                    className="cl-lock-confirm-modal"
+                    role="alertdialog"
+                    aria-modal="true"
+                    aria-labelledby="cl-lock-confirm-title"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div id="cl-lock-confirm-title" className="cl-lock-confirm-modal__title">
+                      Lock this note?
+                    </div>
+                    <p className="cl-lock-confirm-modal__message">
+                      This marks the note as completed and approved. The scribe can no longer edit it.
+                    </p>
+                    <div className="cl-lock-confirm-modal__footer">
+                      <button
+                        type="button"
+                        className="cl-lock-confirm-modal__btn-cancel"
+                        onClick={() => setLockConfirmOpen(false)}
+                        disabled={lockConfirmLoading}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        className="cl-lock-confirm-modal__btn-lock"
+                        onClick={confirmLockNote}
+                        disabled={lockConfirmLoading}
+                      >
+                        {lockConfirmLoading ? 'Please wait…' : 'Lock Note'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
           </>
         ) : (
@@ -2541,18 +2645,13 @@ export default function Clinician() {
                         </div>
                       </div>
                       <div className={modernCard ? 'cl-pending-card__actions' : ''} style={modernCard ? undefined : { display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end', marginLeft: 'auto' }}>
-                        {actionKind === 'open' || actionKind === 'view' ? (
+                        {actionKind === 'review' ? (
                           <button type="button" className="cl-notes-btn-open" onClick={() => openNoteFromCard(h)}>
-                            Review Note
+                            Review
                           </button>
                         ) : null}
                         {actionKind === 'awaiting' ? (
                           <span className="cl-notes-awaiting">Awaiting Note</span>
-                        ) : null}
-                        {actionKind === 'record' ? (
-                          <button type="button" className="cl-notes-btn-record" onClick={() => goRecordOverdueFromNotes(h)}>
-                            Record Now
-                          </button>
                         ) : null}
                       </div>
                     </RowWrap>

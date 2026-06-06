@@ -279,6 +279,13 @@ export const visitsAPI = {
     })
     return handleResponse(res)
   },
+  lockNote: async (id) => {
+    const res = await fetch(`${BASE_URL}/visits/${id}/lock-note`, {
+      method: 'POST',
+      headers: headers(),
+    })
+    return handleResponse(res)
+  },
   uploadAudio: async (visitId, audioBlob) => {
     const formData = new FormData()
     const ext = audioBlob.type?.includes('mp4') ? 'mp4' : audioBlob.type?.includes('ogg') ? 'ogg' : 'webm'

@@ -9,6 +9,13 @@ const {
   visitTranscriptionStatusSelect,
   visitHasDurationSeconds,
 } = require('../utils/visitSchemaCompat')
+const { getVisitForUser } = require('../utils/visitAccess')
+const { addColumnIfMissing } = require('../utils/schemaDdl')
+
+async function ensureNoteLockColumns() {
+  await addColumnIfMissing('notes', 'locked_at', 'ALTER TABLE notes ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ')
+  await addColumnIfMissing('notes', 'locked_by', 'ALTER TABLE notes ADD COLUMN IF NOT EXISTS locked_by INTEGER REFERENCES users(id)')
+}
 
 function isIsoDate(s) {
   return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s))
@@ -398,7 +405,7 @@ const getVisitHistory = async (req, res) => {
          p.name as patient_name, p.mrn,
          COALESCE(sb.name, s.name) as scribe_name,
          n.final_note, n.ai_draft, n.transcription, n.id as note_id,
-         n.status as note_status
+         n.status as note_status, n.locked_at
        FROM visits v
        JOIN patients p ON p.id = v.patient_id
        LEFT JOIN users s  ON s.id  = v.scribe_id
@@ -417,8 +424,83 @@ const getVisitHistory = async (req, res) => {
   }
 }
 
+// ─── LOCK NOTE (Clinician) ────────────────────────────────────────────────────
+
+const lockNote = async (req, res) => {
+  try {
+    await ensureNoteLockColumns()
+    const { id } = req.params
+
+    const out = await withTransaction(async (client) => {
+      const visit = await getVisitForUser(id, req.user, client)
+      if (!visit) return { forbidden: true }
+
+      const noteRow = await client.query(
+        'SELECT id FROM notes WHERE visit_id = $1 FOR UPDATE',
+        [id]
+      )
+      if (!noteRow.rows[0]) return { notFound: true }
+
+      await client.query(
+        `UPDATE notes
+            SET status = 'uploaded',
+                locked_at = NOW(),
+                locked_by = $1,
+                updated_at = NOW()
+          WHERE visit_id = $2`,
+        [req.user.id, id]
+      )
+
+      await client.query(
+        `UPDATE visits SET status = 'uploaded' WHERE id = $1`,
+        [id]
+      )
+
+      await auditLog(
+        req.user,
+        'lock_note',
+        'note',
+        String(id),
+        'Note locked and marked as completed by clinician',
+        client,
+        { req, module_key: 'clinical', action_category: 'update' }
+      )
+
+      return { ok: true }
+    })
+
+    if (out.notFound) return res.status(404).json({ error: 'Note not found for this visit.' })
+    if (out.forbidden) return res.status(403).json({ error: 'Not authorized for this visit.' })
+
+    const durationCol = await visitDurationSelect('v')
+    const txStatusCol = await visitTranscriptionStatusSelect('v')
+    const result = await pool.query(
+      `SELECT
+         v.id, v.visit_date, v.visit_time, v.visit_type, v.status,
+         ${durationCol}, v.audio_file, ${txStatusCol},
+         p.name as patient_name, p.mrn,
+         COALESCE(sb.name, s.name) as scribe_name,
+         n.final_note, n.ai_draft, n.transcription, n.id as note_id,
+         n.status as note_status, n.locked_at
+       FROM visits v
+       JOIN patients p ON p.id = v.patient_id
+       LEFT JOIN users s  ON s.id  = v.scribe_id
+       LEFT JOIN notes n  ON n.visit_id = v.id
+       LEFT JOIN users sb ON sb.id = n.submitted_by
+       WHERE v.id = $1 AND v.clinician_id = $2`,
+      [id, req.user.id]
+    )
+
+    if (!result.rows[0]) return res.status(404).json({ error: 'Visit not found.' })
+    res.status(200).json({ visit: result.rows[0] })
+  } catch (err) {
+    console.error('Lock note error:', err.message)
+    res.status(500).json({ error: 'Server error.' })
+  }
+}
+
 module.exports = {
   getVisitsByDate, getAllVisits, createVisit,
   updateVisitStatus, endVisit, updateVisit,
-  deleteVisit, getVisitHistory,
+  deleteVisit, getVisitHistory, lockNote,
 }

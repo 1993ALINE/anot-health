@@ -86,3 +86,6 @@ CREATE INDEX IF NOT EXISTS idx_visits_clinician ON visits (clinician_id);
 CREATE INDEX IF NOT EXISTS idx_visits_scribe ON visits (scribe_id);
 CREATE INDEX IF NOT EXISTS idx_visits_patient ON visits (patient_id);
 CREATE INDEX IF NOT EXISTS idx_notes_status ON notes (status);
+
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ;
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS locked_by INTEGER REFERENCES users(id);

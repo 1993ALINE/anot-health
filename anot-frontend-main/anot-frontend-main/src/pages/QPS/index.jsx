@@ -6,7 +6,6 @@ import SystemProfileManager from '../../components/SystemProfileManager'
 import PortalAudioPlayer from '../../components/PortalAudioPlayer'
 import NoteWorkspacePanel from '../../components/NoteWorkspacePanel'
 import PortalSidebarFooter from '../../components/PortalSidebarFooter'
-import { getClinicianTemplateForVisit } from '../../utils/clinicianTemplates'
 import { fmtAppointmentTime } from '../../utils/timeFormat'
 import { parseTranscriptionBlocks, useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, ConfirmDialog, PortalSidebarBrand } from '../shared'
 import './qps.css'
@@ -29,6 +28,25 @@ function fmtSecs(s) {
 function fmtDuration(secs) {
   if (!secs) return '—'
   return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2,'0')}`
+}
+
+function fmtQpsDate(d) {
+  if (!d) return '—'
+  const raw = String(d).trim()
+  const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(raw) ? `${raw}T12:00:00` : raw)
+  if (Number.isNaN(date.getTime())) return raw
+  return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+}
+
+function isGradedNote(note) {
+  const status = (note?.status || '').toLowerCase()
+  return status === 'uploaded' || status === 'graded' || status === 'completed'
+}
+
+function qpsNoteListMeta(note) {
+  const parts = [note.mrn, note.visit_type, fmtQpsDate(note.visit_date)]
+  if (note.visit_time) parts.push(fmtTime(note.visit_time))
+  return parts.filter(Boolean).join(' · ')
 }
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
@@ -184,7 +202,7 @@ export default function QPS() {
       </div>
       <p className="sf-sidebar-rich__nav-label">Workspace</p>
       <nav className="sf-nav sf-sidebar-rich__nav" aria-label="Main">
-        {[['notes','📋','Notes'],['graded','⭐','Graded'],['profile','👤','Profile']].map(([k, icon, label]) => (
+        {[['notes','📋','Notes'],['graded','⭐','Graded']].map(([k, icon, label]) => (
           <div
             key={k}
             role="button"
@@ -201,30 +219,33 @@ export default function QPS() {
           </div>
         ))}
       </nav>
-      {selectedProvider && activeTab === 'notes' && (
-        <div className="sf-provider-chip">
-          <div className="sf-chip-label">Current Provider</div>
-          <div className="sf-chip-name">{selectedProvider.name}</div>
-          <div className="sf-chip-spec">{selectedProvider.specialty || 'Clinician'}</div>
-          <div
-            className="sf-chip-change"
-            onClick={() => {
-              setScreen('provider')
-              setSelectedProvider(null)
-              setSelectedNote(null)
-              setNotes([])
-              sidebar.close()
-            }}
-          >
-            Change provider
+      <div className="qps-sidebar__fill" aria-hidden="true" />
+      <div className="qps-sidebar__bottom">
+        {selectedProvider && (
+          <div className="sf-provider-chip">
+            <div className="sf-chip-label">Current Provider</div>
+            <div className="sf-chip-name">{selectedProvider.name}</div>
+            <div className="sf-chip-spec">{selectedProvider.specialty || 'Clinician'}</div>
+            <div
+              className="sf-chip-change"
+              onClick={() => {
+                setScreen('provider')
+                setSelectedProvider(null)
+                setSelectedNote(null)
+                setNotes([])
+                sidebar.close()
+              }}
+            >
+              Change provider
+            </div>
           </div>
-        </div>
-      )}
-      <PortalSidebarFooter
-        userName={currentUser.name || 'QPS'}
-        role="qps"
-        onLogout={requestLogout}
-      />
+        )}
+        <PortalSidebarFooter
+          userName={currentUser.name || 'QPS'}
+          role="qps"
+          onLogout={requestLogout}
+        />
+      </div>
     </aside>
     </>
   )
@@ -259,12 +280,12 @@ export default function QPS() {
             </div>
             <div className="qps-stats-wrap">
               <div className="sf-stats" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
-                <StatCard label="Total Graded"      value={gradedNotes.length} color="#1E293B" />
-                <StatCard label="Providers Covered" value={[...new Set(gradedNotes.map(n => n.clinician_id))].length} color="#00C896" />
+                <StatCard label="Total Graded"      value={gradedNotes.length} variant="graded" />
+                <StatCard label="Providers Covered" value={[...new Set(gradedNotes.map(n => n.clinician_id))].length} variant="total" />
                 <StatCard label="This Month"        value={gradedNotes.filter(n => {
                   const d = new Date(n.updated_at), now = new Date()
                   return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
-                }).length} color="#4FACFE" />
+                }).length} variant="review" />
               </div>
             </div>
             <div className="qps-notes-list-block">
@@ -284,15 +305,12 @@ export default function QPS() {
               // Use submitted_by name first, fallback to scribe_name
               const scribeName = note.scribe_name || '—'
               return (
-                <div key={note.id} className="sf-row">
+                <div key={note.id} className="sf-row qps-note-card qps-note-card--graded">
                   <div className="sf-row-left">
                     <span className="qps-row-icon" aria-hidden>📋</span>
                     <div>
                       <div className="sf-row-name">{note.patient_name}</div>
-                      <div className="sf-row-meta">
-                        {note.mrn} · {note.visit_type} · {note.visit_date} · {fmtTime(note.visit_time)}
-                        {note.duration_seconds ? ` · ${fmtDuration(note.duration_seconds)}` : ''}
-                      </div>
+                      <div className="sf-row-meta">{qpsNoteListMeta(note)}</div>
                       <div className="qps-row-byline">
                         👨‍⚕️ {note.clinician_name} · 📝 Scribe: <strong>{scribeName}</strong>
                       </div>
@@ -415,8 +433,8 @@ export default function QPS() {
   // ─── NOTES LIST ───────────────────────────────────
 
   if (screen === 'recordings') {
-    const pending = notes.filter(n => n.status === 'submitted').length
-    const graded  = notes.filter(n => n.status === 'uploaded').length
+    const pendingNotes = notes.filter(n => !isGradedNote(n))
+    const gradedCount  = notes.filter(n => isGradedNote(n)).length
     return (
       <div className="sf-page sf-portal adm-shell qps-portal">
         <Sidebar />
@@ -441,25 +459,25 @@ export default function QPS() {
                 </span>
                 <div className="adm-topbar__titles" style={{ minWidth: 0 }}>
                   <div className="adm-topbar__module">{selectedProvider.name}</div>
-                  <div className="adm-topbar__brand">{notes.length} submitted notes</div>
+                  <div className="adm-topbar__brand">{pendingNotes.length} notes need review</div>
                 </div>
               </div>
             }
           />
           <div className="sf-body">
             <p className="qps-page-intro">
-              Work the queue for <strong style={{ color: 'var(--text-main)' }}>{selectedProvider.name}</strong> — prioritize notes that still need a grade, or reopen completed reviews.
+              Work the review queue for <strong style={{ color: 'var(--text-main)' }}>{selectedProvider.name}</strong> — notes listed here still need your grade. Completed reviews are on the Graded tab.
             </p>
             <div className="qps-stats-wrap">
               <div className="sf-stats" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
-                <StatCard label="Total"        value={notes.length} color="#1E293B" />
-                <StatCard label="Needs Review" value={pending}      color="#FFB547" />
-                <StatCard label="Graded"       value={graded}       color="#00C896" />
+                <StatCard label="Total"        value={notes.length}        variant="total" />
+                <StatCard label="Needs Review" value={pendingNotes.length} variant="review" />
+                <StatCard label="Graded"       value={gradedCount}         variant="graded" />
               </div>
             </div>
             <div className="qps-notes-list-block">
-              <div className="sf-section-label">Submitted Notes</div>
-              {!loadingNotes && notes.length > 0 ? (
+              <div className="sf-section-label">Notes Needing Review</div>
+              {!loadingNotes && pendingNotes.length > 0 ? (
                 <div className="qps-notes-list-thead" aria-hidden>
                   <span>Patient &amp; visit</span>
                   <div className="qps-notes-list-thead__right">
@@ -468,32 +486,30 @@ export default function QPS() {
                   </div>
                 </div>
               ) : null}
-              {loadingNotes ? <Loading /> : notes.length === 0 ? (
-                <Empty icon="📭" title="No notes submitted yet" sub="Notes will appear here after scribes submit them." />
-              ) : notes.map(note => {
-              const isGr = note.status === 'uploaded'
+              {loadingNotes ? <Loading /> : pendingNotes.length === 0 ? (
+                <Empty
+                  icon="📭"
+                  title={notes.length === 0 ? 'No notes submitted yet' : 'All caught up'}
+                  sub={notes.length === 0 ? 'Notes will appear here after scribes submit them.' : 'Every note for this provider has been graded. Open the Graded tab to review completed work.'}
+                />
+              ) : pendingNotes.map(note => {
               const scribeName = note.scribe_name || '—'
               return (
-                <div key={note.id} className="sf-row">
+                <div key={note.id} className="sf-row qps-note-card qps-note-card--review">
                   <div className="sf-row-left">
                     <span className="qps-row-icon" aria-hidden>📄</span>
                     <div>
                       <div className="sf-row-name">{note.patient_name}</div>
-                      <div className="sf-row-meta">
-                        {note.mrn} · {note.visit_type} · {note.visit_date} · {fmtTime(note.visit_time)}
-                        {note.duration_seconds ? ` · ⏱ ${fmtDuration(note.duration_seconds)}` : ''}
-                      </div>
+                      <div className="sf-row-meta">{qpsNoteListMeta(note)}</div>
                       <div className="qps-row-byline">
                         📝 Scribe: <strong>{scribeName}</strong>
                       </div>
                     </div>
                   </div>
                   <div className="sf-row-right">
-                    <span className={`badge ${isGr ? 'badge-green' : 'badge-amber'}`}>
-                      {isGr ? 'Graded' : 'Needs Review'}
-                    </span>
-                    <button type="button" className={`btn btn-sm ${isGr ? 'btn-ghost' : 'btn-navy'}`} onClick={() => openNote(note)}>
-                      {isGr ? 'View Grade' : 'Review Note'}
+                    <span className="badge badge-amber">Needs Review</span>
+                    <button type="button" className="btn btn-sm btn-navy" onClick={() => openNote(note)}>
+                      Review Note
                     </button>
                   </div>
                 </div>
@@ -509,7 +525,6 @@ export default function QPS() {
   // ─── REVIEW / GRADING ─────────────────────────────
 
   const scribeName = selectedNote?.scribe_name || 'Unknown Scribe'
-  const clinicianTemplate = getClinicianTemplateForVisit(selectedNote?.visit_type)
 
   return (
     <div className="sf-page-fixed sf-portal adm-shell qps-portal">
@@ -549,8 +564,7 @@ export default function QPS() {
                   {selectedNote?.patient_name} — {selectedNote?.visit_type}
                 </div>
                 <div className="adm-topbar__brand">
-                  {selectedNote?.mrn} · {selectedNote?.visit_date}{selectedNote?.visit_time ? ` · Appt. ${fmtAppointmentTime(selectedNote.visit_time)}` : ''}
-                  {selectedNote?.duration_seconds ? ` · ⏱ ${fmtDuration(selectedNote.duration_seconds)}` : ''}
+                  {selectedNote?.mrn} · {fmtQpsDate(selectedNote?.visit_date)}{selectedNote?.visit_time ? ` · Appt. ${fmtAppointmentTime(selectedNote.visit_time)}` : ''}
                   {' · '}📝 <strong>{scribeName}</strong>
                 </div>
               </div>
@@ -565,10 +579,6 @@ export default function QPS() {
               durationSecs={selectedNote?.duration_seconds || 0}
               compact
             />
-            <div className="sf-template-ref">
-              <div className="sf-template-ref__title">Clinician template — {clinicianTemplate.name}</div>
-              <pre className="sf-template-ref__body">{clinicianTemplate.content}</pre>
-            </div>
           </div>
 
           <div className="sf-note-workspace__panels">
@@ -680,10 +690,10 @@ export default function QPS() {
 
 // ─── HELPER COMPONENTS ────────────────────────────────────────────────────────
 
-function StatCard({ label, value, color }) {
+function StatCard({ label, value, variant = 'total' }) {
   return (
-    <div className="sf-stat">
-      <div className="sf-stat-val" style={{ color }}>{value}</div>
+    <div className={`sf-stat qps-stat qps-stat--${variant}`}>
+      <div className="sf-stat-val qps-stat__val">{value}</div>
       <div className="sf-stat-lbl">{label}</div>
     </div>
   )

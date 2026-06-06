@@ -696,8 +696,7 @@
   white-space: nowrap;
 }
 
-.cl-portal.cl-clinician-shell .cl-notes-btn-open,
-.cl-portal.cl-clinician-shell .cl-notes-btn-view {
+.cl-portal.cl-clinician-shell .cl-notes-btn-open {
   border: none;
   border-radius: 8px;
   padding: 10px 24px;
@@ -709,9 +708,40 @@
   cursor: pointer;
 }
 
-.cl-portal.cl-clinician-shell .cl-notes-btn-open:hover,
-.cl-portal.cl-clinician-shell .cl-notes-btn-view:hover {
+.cl-portal.cl-clinician-shell .cl-notes-btn-open:hover {
   background: #4338ca;
+}
+
+.cl-portal.cl-clinician-shell .cl-notes-btn-view {
+  border: 1px solid #6b7280;
+  border-radius: 8px;
+  padding: 10px 24px;
+  background: transparent;
+  color: #6b7280;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.cl-portal.cl-clinician-shell .cl-notes-btn-view:hover {
+  background: rgba(107, 114, 128, 0.08);
+}
+
+.cl-portal.cl-clinician-shell .cl-notes-btn-lock {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  background: #16a34a;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.cl-portal.cl-clinician-shell .cl-notes-btn-lock:hover {
+  background: #15803d;
 }
 
 .cl-portal.cl-clinician-shell .cl-pending-card--ready-review {

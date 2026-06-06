@@ -9,6 +9,7 @@ const {
   updateVisit,
   deleteVisit,
   getVisitHistory,
+  lockNote,
 } = require('../controllers/visitController')
 const { protect, restrict } = require('../middleware/auth')
 
@@ -20,6 +21,7 @@ router.put('/:id/end', protect, restrict('clinician'), endVisit)
 router.put('/:id/status', protect, restrict('clinician', 'scribe', 'admin', 'super_admin'), updateVisitStatus)
 router.put('/:id', protect, restrict('clinician'), updateVisit)
 router.delete('/:id', protect, restrict('clinician'), deleteVisit)
+router.post('/:id/lock-note', protect, restrict('clinician'), lockNote)
 
 // Scribe / QPS / Admin / Clinician routes (controller scopes results per role)
 router.get('/', protect, restrict('scribe', 'qps', 'admin', 'super_admin', 'clinician'), getAllVisits)

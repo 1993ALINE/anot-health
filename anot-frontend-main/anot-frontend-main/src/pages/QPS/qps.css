@@ -1,16 +1,84 @@
 /* ═══ QPS portal — canvas, lists, review (scoped) ═══════════════════════════ */
 
-.qps-portal.sf-page .sf-main,
-.qps-portal.sf-page-fixed .sf-main-fixed {
-    background:
-        radial-gradient(ellipse 85% 55% at 100% -15%, color-mix(in srgb, var(--brand-primary) 10%, transparent), transparent 58%),
-        radial-gradient(ellipse 70% 45% at 0% 105%, color-mix(in srgb, var(--brand-secondary) 8%, transparent), transparent 52%),
-        linear-gradient(180deg, var(--bg-main) 0%, color-mix(in srgb, var(--brand-primary) 3%, #f8fafc) 100%);
+.qps-portal.sf-page .sf-main.sf-portal__main,
+.qps-portal.sf-page-fixed .sf-main-fixed.sf-portal__main {
+    background: #f4f6f9 !important;
+    background-image: none !important;
+}
+
+.qps-portal .sf-portal__main .sf-body {
+    background: #f4f6f9;
 }
 
 .qps-portal .sf-body {
     padding-top: 1.25rem;
     padding-bottom: 2rem;
+}
+
+/* Remove stray provider-bundle dot */
+.qps-portal .sf-prov-bundle__dot {
+    display: none !important;
+}
+
+/* Stat cards — tinted backgrounds */
+.qps-portal .qps-stat {
+    border-radius: 12px;
+    padding: 20px;
+    border: none;
+    box-shadow: none;
+    background-image: none;
+}
+
+.qps-portal .qps-stat:hover {
+    transform: none;
+    box-shadow: none;
+    border-color: transparent;
+}
+
+.qps-portal .qps-stat--total {
+    background: #eff6ff;
+}
+
+.qps-portal .qps-stat--total .qps-stat__val {
+    color: #2563eb;
+}
+
+.qps-portal .qps-stat--review {
+    background: #fef2f2;
+}
+
+.qps-portal .qps-stat--review .qps-stat__val {
+    color: #dc2626;
+}
+
+.qps-portal .qps-stat--graded {
+    background: #f0fdf4;
+}
+
+.qps-portal .qps-stat--graded .qps-stat__val {
+    color: #16a34a;
+}
+
+/* Note cards — left border accents */
+.qps-portal .qps-note-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+    border: none;
+    border-left: 3px solid transparent;
+    background-image: none;
+}
+
+.qps-portal .qps-note-card--review {
+    border-left-color: #dc2626;
+}
+
+.qps-portal .qps-note-card--graded {
+    border-left-color: #16a34a;
+}
+
+.qps-portal .qps-note-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .qps-page-intro {
@@ -254,5 +322,336 @@
     .qps-page-intro {
         font-size: 0.8125rem;
         padding: 0.85rem 1rem;
+    }
+}
+
+/* ═══ QPS sidebar — indigo theme (matches Scribe portal) ═══════════════════ */
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.35) transparent;
+    background: #4f46e5 !important;
+    background-image: none !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.12) !important;
+    box-shadow: 6px 0 32px rgba(79, 70, 229, 0.25) !important;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__top,
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__nav-label,
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-nav.sf-sidebar-rich__nav,
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-provider-chip {
+    flex-shrink: 0;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-nav.sf-sidebar-rich__nav {
+    flex: 0 1 auto;
+}
+
+.qps-portal .qps-sidebar__fill {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.qps-portal .qps-sidebar__bottom {
+    flex-shrink: 0;
+    margin-top: auto;
+    margin-bottom: 24px;
+}
+
+.qps-portal .qps-sidebar__bottom .sf-sidebar-rich__footer.adm-sidebar-footer {
+    margin-top: 0 !important;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__top {
+    padding: 1.25rem 1rem 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.14) !important;
+    background: none !important;
+    background-image: none !important;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__mark {
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.15) !important;
+    box-shadow: none !important;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-logo,
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__titles .sf-logo {
+    color: #fff !important;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__titles .sf-logo-sub {
+    display: block !important;
+    margin-top: 3px !important;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    box-shadow: none !important;
+    color: #fff !important;
+    font-size: 10px !important;
+    font-weight: 500 !important;
+    letter-spacing: 1px !important;
+    opacity: 0.8 !important;
+    text-transform: uppercase;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__nav-label {
+    padding: 1rem 1.15rem 0.4rem;
+    letter-spacing: 0.12em;
+    color: rgba(255, 255, 255, 0.55) !important;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-nav.sf-sidebar-rich__nav {
+    padding: 0.25rem 0.65rem 1rem;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-nav-item.sf-sidebar-rich__nav-item {
+    color: rgba(255, 255, 255, 0.85) !important;
+    font-weight: 500 !important;
+    border-left: 3px solid transparent !important;
+    border-radius: 10px;
+    margin: 0 0.35rem;
+    padding: 10px 14px !important;
+    min-height: 48px;
+    gap: 0.65rem;
+    box-shadow: none !important;
+    transform: none !important;
+    transition:
+        background 0.18s ease,
+        color 0.18s ease,
+        border-color 0.18s ease;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-nav-item.sf-sidebar-rich__nav-item:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+    color: #fff !important;
+    transform: none !important;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-nav-item.sf-sidebar-rich__nav-item.active {
+    background: rgba(255, 255, 255, 0.15) !important;
+    background-image: none !important;
+    border-left-color: #fff !important;
+    color: #fff !important;
+    font-weight: 600 !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__nav-text {
+    color: inherit !important;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__nav-ico {
+    width: 2rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+    color: #fff !important;
+    background: rgba(255, 255, 255, 0.12) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    font-size: 1rem;
+    transform: none !important;
+    transition:
+        background 0.18s ease,
+        border-color 0.18s ease;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-nav-item.sf-sidebar-rich__nav-item:hover .sf-sidebar-rich__nav-ico,
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-nav-item.sf-sidebar-rich__nav-item.active .sf-sidebar-rich__nav-ico {
+    background: rgba(255, 255, 255, 0.2) !important;
+    border-color: rgba(255, 255, 255, 0.28) !important;
+    color: #fff !important;
+    transform: none !important;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__nav-badge {
+    border: none !important;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__nav-badge--subtle {
+    background: rgba(255, 255, 255, 0.2) !important;
+    color: #fff !important;
+    box-shadow: none !important;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-provider-chip {
+    background: rgba(255, 255, 255, 0.12) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    box-shadow: none !important;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-chip-label {
+    color: rgba(255, 255, 255, 0.6) !important;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-chip-name {
+    color: #fff !important;
+    font-weight: 600;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-chip-spec,
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-chip-date {
+    color: rgba(255, 255, 255, 0.85) !important;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-chip-change {
+    color: #fff !important;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__footer.adm-sidebar-footer {
+    padding: 0;
+    margin: 10px 10px 14px;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .adm-sidebar-footer__card {
+    background: #3730a3 !important;
+    background-image: none !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    box-shadow: none !important;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .adm-sidebar-footer__eyebrow {
+    color: rgba(255, 255, 255, 0.6) !important;
+    font-size: 11px !important;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .adm-sidebar-footer__who {
+    color: #fff !important;
+    font-weight: 600 !important;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .adm-sidebar-footer__identity {
+    border-bottom: none !important;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .adm-sidebar-footer__actions {
+    border-top: none !important;
+    margin-top: 10px !important;
+    padding-top: 0 !important;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .adm-sidebar-footer__btn,
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .portal-guide-trigger.portal-guide-trigger--footer {
+    width: 100% !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 8px;
+    border: none !important;
+    border-radius: 8px !important;
+    color: #fff !important;
+    font-weight: 600 !important;
+    box-shadow: none !important;
+    min-height: 44px;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .portal-guide-trigger.portal-guide-trigger--footer {
+    background: rgba(255, 255, 255, 0.15) !important;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .adm-sidebar-footer__btn--signout,
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .adm-sidebar-footer__card > .adm-sidebar-footer__btn {
+    background: rgba(255, 255, 255, 0.1) !important;
+    color: #fff !important;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .adm-sidebar-footer__btn:hover,
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .portal-guide-trigger.portal-guide-trigger--footer:hover,
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .adm-sidebar-footer__btn--signout:hover {
+    filter: brightness(1.08);
+    border-color: transparent !important;
+    color: #fff !important;
+    background: rgba(255, 255, 255, 0.14) !important;
+}
+
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .adm-sidebar-footer__btn-ico,
+:is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+    .sf-sidebar.sf-sidebar--rich.adm-sidebar .portal-guide-trigger__ico {
+    color: #fff !important;
+    opacity: 1;
+}
+
+/* Override admin.css brand-accent active states */
+.qps-portal.sf-page.adm-shell.sf-portal .adm-sidebar .sf-sidebar-rich__nav-item.active:not([data-adm-nav]),
+.qps-portal.sf-page-fixed.adm-shell.sf-portal .adm-sidebar .sf-sidebar-rich__nav-item.active:not([data-adm-nav]) {
+    background: rgba(255, 255, 255, 0.15) !important;
+    background-image: none !important;
+    border-left: 3px solid #fff !important;
+    color: #fff !important;
+    font-weight: 600 !important;
+    box-shadow: none !important;
+}
+
+.qps-portal.sf-page.adm-shell.sf-portal .adm-sidebar .sf-sidebar-rich__nav-item.active:not([data-adm-nav]) .sf-sidebar-rich__nav-ico,
+.qps-portal.sf-page-fixed.adm-shell.sf-portal .adm-sidebar .sf-sidebar-rich__nav-item.active:not([data-adm-nav]) .sf-sidebar-rich__nav-ico {
+    background: rgba(255, 255, 255, 0.2) !important;
+    border-color: rgba(255, 255, 255, 0.28) !important;
+    color: #fff !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+        .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-nav-item.sf-sidebar-rich__nav-item,
+    :is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
+        .sf-sidebar.sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__nav-ico {
+        transition: none;
     }
 }
