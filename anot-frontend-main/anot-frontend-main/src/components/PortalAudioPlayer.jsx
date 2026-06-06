@@ -1,118 +1,263 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback, memo } from 'react'
 import { API_BASE } from '../services/api'
 import { fmtSecsAudio } from '../utils/timeFormat'
+import { useRenderRateWarning } from '../utils/useRenderRateWarning'
 
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2]
 
-export default function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = true }) {
+function readDuration(audio) {
+  const dur = audio.duration
+  return dur && Number.isFinite(dur) && dur > 0 ? dur : 0
+}
+
+/** Wait for loadedmetadata; seek trick for formats (e.g. webm) with missing duration. */
+function waitForAudioDuration(audio) {
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (dur) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      resolve(dur > 0 ? dur : 0)
+    }
+
+    const tryRead = () => {
+      const dur = readDuration(audio)
+      if (dur > 0) {
+        finish(dur)
+        return true
+      }
+      return false
+    }
+
+    const onMeta = () => {
+      if (tryRead()) return
+      try {
+        audio.currentTime = 1e101
+      } catch {
+        finish(0)
+      }
+    }
+
+    const onSeeked = () => {
+      const dur = readDuration(audio)
+      if (dur > 0) {
+        try {
+          audio.currentTime = 0
+        } catch {
+          /* ignore */
+        }
+        finish(dur)
+      }
+    }
+
+    const onError = () => finish(0)
+
+    const cleanup = () => {
+      audio.removeEventListener('loadedmetadata', onMeta)
+      audio.removeEventListener('durationchange', onMeta)
+      audio.removeEventListener('seeked', onSeeked)
+      audio.removeEventListener('error', onError)
+    }
+
+    if (tryRead()) return
+
+    audio.addEventListener('loadedmetadata', onMeta)
+    audio.addEventListener('durationchange', onMeta)
+    audio.addEventListener('seeked', onSeeked)
+    audio.addEventListener('error', onError, { once: true })
+    audio.load()
+  })
+}
+
+const PROGRESS_UI_MIN_MS = 250
+
+function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = true }) {
+  useRenderRateWarning('PortalAudioPlayer')
+
   const [count, setCount] = useState(1)
   const [activeIdx, setActiveIdx] = useState(0)
   const [status, setStatus] = useState('loading')
   const [isPlaying, setPlaying] = useState(false)
-  const [current, setCurrent] = useState(0)
-  const [duration, setDuration] = useState(durationSecs || 0)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [duration, setDuration] = useState(0)
+  const [progress, setProgress] = useState(0)
   const [playbackRate, setPlaybackRate] = useState(1)
-  const audioRef = useRef(null)
-  const blobRef = useRef(null)
-  const maxTimeRef = useRef(durationSecs || 0)
+  const [durations, setDurations] = useState({})
+  const [scrubHover, setScrubHover] = useState(null)
 
+  const audioRef = useRef(null)
+  const blobUrlsRef = useRef({})
+  const durationsRef = useRef({})
+  const visitIdRef = useRef(visitId)
+  const lastProgressUiRef = useRef(0)
+  const lastProgressSecRef = useRef(-1)
+
+  visitIdRef.current = visitId
+
+  const storeDuration = useCallback((idx, rawDuration) => {
+    if (!rawDuration || !Number.isFinite(rawDuration) || rawDuration <= 0) return
+    const secs = Math.floor(rawDuration)
+    durationsRef.current[idx] = secs
+    setDurations((prev) => ({ ...prev, [idx]: secs }))
+  }, [])
+
+  const fetchBlobUrl = useCallback(async (idx) => {
+    if (blobUrlsRef.current[idx]) return blobUrlsRef.current[idx]
+
+    const token = localStorage.getItem('token')
+    const res = await fetch(`${API_BASE}/audio/${visitIdRef.current}?index=${idx}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) throw new Error('no audio')
+    const blob = await res.blob()
+    if (!blob?.size) throw new Error('empty')
+
+    const url = URL.createObjectURL(blob)
+    blobUrlsRef.current[idx] = url
+    return url
+  }, [])
+
+  // Recording count only on visit change.
   useEffect(() => {
-    if (!visitId) return
+    if (!visitId) {
+      setStatus('error')
+      return
+    }
+
+    let cancelled = false
+
+    setCount(1)
+    setActiveIdx(0)
+    setDurations({})
+    durationsRef.current = {}
+    setProgress(0)
+    setCurrentTime(0)
+    setDuration(0)
+    setPlaying(false)
+    setStatus('loading')
+
+    Object.values(blobUrlsRef.current).forEach((url) => URL.revokeObjectURL(url))
+    blobUrlsRef.current = {}
+
     const token = localStorage.getItem('token')
     fetch(`${API_BASE}/audio/${visitId}/count`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => r.json())
       .then((d) => {
-        if (d.count > 0) setCount(d.count)
+        if (!cancelled && d.count > 0) setCount(d.count)
       })
       .catch(() => {})
+
+    return () => {
+      cancelled = true
+      Object.values(blobUrlsRef.current).forEach((url) => URL.revokeObjectURL(url))
+      blobUrlsRef.current = {}
+    }
   }, [visitId])
 
+  // Load active recording on tab switch: fetch blob, wait for metadata, then ready.
   useEffect(() => {
-    if (!visitId) {
-      setStatus('error')
-      return
-    }
-    const audioEl = audioRef.current
-    setStatus('loading')
-    setPlaying(false)
-    setCurrent(0)
-    const initDur = activeIdx === 0 ? durationSecs || 0 : 0
-    setDuration(initDur)
-    maxTimeRef.current = initDur
-    if (blobRef.current) {
-      URL.revokeObjectURL(blobRef.current)
-      blobRef.current = null
-    }
-    const token = localStorage.getItem('token')
-    fetch(`${API_BASE}/audio/${visitId}?index=${activeIdx}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error('no audio')
-        return res.blob()
-      })
-      .then((blob) => {
-        if (!blob?.size) throw new Error('empty')
-        blobRef.current = URL.createObjectURL(blob)
-        if (audioEl) {
-          audioEl.src = blobRef.current
-          audioEl.load()
-        }
-        setStatus('ready')
-      })
-      .catch(() => setStatus('error'))
-    return () => {
-      if (audioEl) {
-        audioEl.pause()
-        audioEl.src = ''
-      }
-      if (blobRef.current) {
-        URL.revokeObjectURL(blobRef.current)
-        blobRef.current = null
-      }
-    }
-  }, [visitId, activeIdx, durationSecs])
+    const audio = audioRef.current
+    if (!audio || !visitId) return
 
+    let cancelled = false
+
+    audio.pause()
+    setPlaying(false)
+    setProgress(0)
+    setCurrentTime(0)
+    audio.currentTime = 0
+    setDuration(0)
+    setStatus('loading')
+
+    ;(async () => {
+      try {
+        const url = await fetchBlobUrl(activeIdx)
+        if (cancelled) return
+
+        audio.pause()
+        audio.currentTime = 0
+        audio.playbackRate = playbackRate
+        audio.src = url
+
+        let dur = await waitForAudioDuration(audio)
+        if (cancelled) return
+
+        if (dur <= 0 && activeIdx === 0 && durationSecs > 0) {
+          dur = durationSecs
+        }
+
+        if (dur > 0) {
+          storeDuration(activeIdx, dur)
+          setDuration(Math.floor(dur))
+        }
+
+        audio.currentTime = 0
+        setProgress(0)
+        setCurrentTime(0)
+        setStatus('ready')
+      } catch {
+        if (!cancelled) setStatus('error')
+      }
+    })()
+
+    return () => {
+      cancelled = true
+      audio.pause()
+    }
+  }, [activeIdx, visitId, durationSecs, fetchBlobUrl, storeDuration])
+
+  // Playback events on the single main audio element.
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
-    audio.playbackRate = playbackRate
-    const onMeta = () => {
+
+    const onTimeUpdate = () => {
       const dur = audio.duration
-      if (dur && isFinite(dur) && dur > 0) {
-        const floored = Math.floor(dur)
-        setDuration(floored)
-        maxTimeRef.current = floored
+      if (!dur || !Number.isFinite(dur) || dur <= 0) return
+      const ct = audio.currentTime
+      const now = performance.now()
+      const sec = Math.floor(ct)
+      if (
+        now - lastProgressUiRef.current < PROGRESS_UI_MIN_MS &&
+        sec === lastProgressSecRef.current
+      ) {
+        return
       }
+      lastProgressUiRef.current = now
+      lastProgressSecRef.current = sec
+      setCurrentTime(ct)
+      setProgress((ct / dur) * 100)
     }
-    const onTime = () => {
-      const cur = Math.floor(audio.currentTime)
-      setCurrent(cur)
-      if (cur > maxTimeRef.current) {
-        maxTimeRef.current = cur
-        setDuration(cur)
-      }
-    }
+
     const onEnded = () => {
       setPlaying(false)
-      setCurrent(0)
-      if (maxTimeRef.current > 0) setDuration(maxTimeRef.current)
+      const dur = audio.duration
+      if (dur && Number.isFinite(dur) && dur > 0) {
+        setProgress(100)
+        setCurrentTime(dur)
+      }
     }
-    audio.addEventListener('loadedmetadata', onMeta)
-    audio.addEventListener('durationchange', onMeta)
-    audio.addEventListener('timeupdate', onTime)
+
+    audio.addEventListener('timeupdate', onTimeUpdate)
     audio.addEventListener('ended', onEnded)
     return () => {
-      audio.removeEventListener('loadedmetadata', onMeta)
-      audio.removeEventListener('durationchange', onMeta)
-      audio.removeEventListener('timeupdate', onTime)
+      audio.removeEventListener('timeupdate', onTimeUpdate)
       audio.removeEventListener('ended', onEnded)
     }
+  }, [])
+
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.playbackRate = playbackRate
   }, [playbackRate])
 
   const handleTabChange = (i) => {
+    if (i === activeIdx) return
+    const audio = audioRef.current
+    if (audio) audio.pause()
+    setPlaying(false)
     setActiveIdx(i)
     onTabChange?.(i)
   }
@@ -131,20 +276,43 @@ export default function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChan
   const skip = (secs) => {
     const audio = audioRef.current
     if (!audio || status !== 'ready') return
-    const max = maxTimeRef.current || duration || 0
-    const t = Math.max(0, Math.min(max, audio.currentTime + secs))
+    const dur = audio.duration
+    if (!dur || !Number.isFinite(dur) || dur <= 0) return
+    const t = Math.max(0, Math.min(dur, audio.currentTime + secs))
     audio.currentTime = t
-    setCurrent(Math.floor(t))
+    setProgress((t / dur) * 100)
+    setCurrentTime(t)
+  }
+
+  const timeAtProgressX = (trackEl, clientX) => {
+    const audio = audioRef.current
+    if (!audio || !trackEl) return null
+    const dur = audio.duration
+    if (!dur || !Number.isFinite(dur) || dur <= 0) return null
+    const rect = trackEl.getBoundingClientRect()
+    const width = rect.width || 1
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / width))
+    return { time: ratio * dur, pct: ratio * 100 }
   }
 
   const seek = (e) => {
     const audio = audioRef.current
-    if (!audio || status !== 'ready' || !duration) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    const t = Math.round(((e.clientX - rect.left) / rect.width) * duration)
-    audio.currentTime = t
-    setCurrent(t)
+    if (!audio || status !== 'ready') return
+    const hit = timeAtProgressX(e.currentTarget, e.clientX)
+    if (!hit) return
+    audio.currentTime = hit.time
+    setProgress(hit.pct)
+    setCurrentTime(hit.time)
   }
+
+  const handleProgressMouseMove = (e) => {
+    if (status !== 'ready') return
+    const hit = timeAtProgressX(e.currentTarget, e.clientX)
+    if (!hit) return
+    setScrubHover({ time: hit.time, pct: hit.pct })
+  }
+
+  const handleProgressMouseLeave = () => setScrubHover(null)
 
   const onSpeedChange = (e) => {
     const rate = parseFloat(e.target.value, 10)
@@ -153,8 +321,8 @@ export default function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChan
   }
 
   const canPlay = status === 'ready'
-  const progress = duration > 0 ? Math.min(100, (current / duration) * 100) : 0
-  const totalStr = duration > 0 ? fmtSecsAudio(duration) : '--:--'
+  const displayCurrent = fmtSecsAudio(Math.floor(currentTime))
+  const displayTotal = duration > 0 ? fmtSecsAudio(duration) : '--:--'
 
   return (
     <div className={`sf-audio-bar sf-audio-bar--portal${compact ? ' sf-audio-bar--compact' : ''}`}>
@@ -182,20 +350,18 @@ export default function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChan
         {status === 'ready' ? <span className="sf-audio-bar__pill sf-audio-bar__pill--ok">Ready</span> : null}
         {status === 'error' ? <span className="sf-audio-bar__pill">No audio</span> : null}
         <span className="sf-audio-timer" aria-live="polite">
-          <span className="sf-audio-timer__cur">{fmtSecsAudio(current)}</span>
-          <span className="sf-audio-timer__sep"> / </span>
-          <span className="sf-audio-timer__total">{totalStr}</span>
+          <span>{displayCurrent} / {displayTotal}</span>
         </span>
       </div>
       <div className="sf-audio-bar__row sf-audio-bar__row--controls">
         <div className="sf-audio-bar__transport">
-          <button type="button" className="sf-skip-btn" onClick={() => skip(-5)} disabled={!canPlay}>
+          <button type="button" className="sf-skip-btn sf-skip-btn--back" onClick={() => skip(-5)} disabled={!canPlay}>
             −5s
           </button>
           <button type="button" className="sf-play-btn" onClick={toggle} disabled={!canPlay} aria-label={isPlaying ? 'Pause' : 'Play'}>
             {status === 'loading' ? '⏳' : isPlaying ? '⏸' : '▶'}
           </button>
-          <button type="button" className="sf-skip-btn" onClick={() => skip(5)} disabled={!canPlay}>
+          <button type="button" className="sf-skip-btn sf-skip-btn--fwd" onClick={() => skip(5)} disabled={!canPlay}>
             +5s
           </button>
         </div>
@@ -211,17 +377,26 @@ export default function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChan
         </label>
         <div className="sf-progress-wrap">
           <div
-            className="sf-progress-track"
+            className="sf-progress-track sf-progress-track--interactive"
             onClick={canPlay ? seek : undefined}
+            onMouseMove={canPlay ? handleProgressMouseMove : undefined}
+            onMouseLeave={canPlay ? handleProgressMouseLeave : undefined}
             role={canPlay ? 'slider' : undefined}
             aria-valuemin={0}
             aria-valuemax={duration}
-            aria-valuenow={current}
+            aria-valuenow={Math.floor(currentTime)}
           >
-            <div className="sf-progress-fill" style={{ width: `${progress}%` }} />
+            <div className="sf-progress-fill sf-progress-fill--live" style={{ width: `${progress}%` }} />
+            {scrubHover != null ? (
+              <span className="sf-progress-scrub-label" style={{ left: `${scrubHover.pct}%` }}>
+                {fmtSecsAudio(scrubHover.time)}
+              </span>
+            ) : null}
           </div>
         </div>
       </div>
     </div>
   )
 }
+
+export default memo(PortalAudioPlayer)

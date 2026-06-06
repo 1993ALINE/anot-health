@@ -6,26 +6,6 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms))
 }
 
-function extractGroqText(transcription) {
-  return transcription?.text != null ? String(transcription.text) : null
-}
-
-async function transcribeWithGroq(absPath) {
-  const Groq = require('groq-sdk')
-  const key = process.env.GROQ_API_KEY
-  if (!key) {
-    console.warn('[aiTranscription] GROQ_API_KEY not set')
-    return null
-  }
-  const groq = new Groq({ apiKey: key })
-  const transcription = await groq.audio.transcriptions.create({
-    file: fs.createReadStream(absPath),
-    model: 'whisper-large-v3',
-    language: 'en',
-  })
-  return extractGroqText(transcription)
-}
-
 function extractDeepgramText(result) {
   if (!result) return null
   try {
@@ -63,10 +43,14 @@ async function transcribeWithDeepgram(absPath, settings, visitId) {
   if (!apiKey) return null
   const client = createClient(apiKey)
   const opts = {
-    model: settings.deepgram_model || 'nova-2',
-    language: settings.deepgram_language || 'en-US',
-    punctuate: true,
+    model: 'nova-2-medical',
     smart_format: true,
+    punctuate: true,
+    diarize: true,
+    utterances: true,
+    language: 'en-US',
+    filler_words: false,
+    numerals: true,
   }
   const stream = fs.createReadStream(absPath)
   const baseCallback = String(settings.deepgram_webhook_url || '').trim()
@@ -94,7 +78,8 @@ async function transcribeWithDeepgram(absPath, settings, visitId) {
 }
 
 /**
- * Transcribe a local file using Deepgram (if enabled + key) else Groq Whisper.
+ * Transcribe a local file using Deepgram.
+ * HIPAA-compliant: Only uses Deepgram (BAA-covered service).
  * @param {string} absPath
  * @param {object} [settingsOverride]
  * @param {number} [visitId] when set with Deepgram webhook URL, uses async callback for that visit
@@ -104,14 +89,11 @@ async function transcribeFile(absPath, settingsOverride, visitId) {
   if (useDeepgram(settings)) {
     const text = await transcribeWithDeepgram(absPath, settings, visitId)
     if (text) return text
-    const groq = await transcribeWithGroq(absPath)
-    if (groq) {
-      console.warn('[aiTranscription] Deepgram returned no text; used Groq Whisper fallback.')
-      return groq
-    }
+    console.warn('[Transcription] Deepgram returned no text - manual transcription required')
     return null
   }
-  return transcribeWithGroq(absPath)
+  console.warn('[aiTranscription] Deepgram not configured - manual transcription required')
+  return null
 }
 
 async function transcribeFileWithRetries(absPath, settingsOverride, maxAttempts = 3, visitId) {

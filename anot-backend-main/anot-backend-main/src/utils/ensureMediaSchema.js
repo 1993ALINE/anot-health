@@ -17,6 +17,9 @@ const MEDIA_COLUMNS = [
     { table: 'system_settings', name: 'ffmpeg_compression', ddl: `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS ffmpeg_compression INTEGER NOT NULL DEFAULT 5` },
     { table: 'system_settings', name: 'ffmpeg_max_upload_mb', ddl: `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS ffmpeg_max_upload_mb INTEGER NOT NULL DEFAULT 100` },
     { table: 'system_settings', name: 'ffmpeg_preprocess_before_transcribe', ddl: `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS ffmpeg_preprocess_before_transcribe BOOLEAN NOT NULL DEFAULT true` },
+    { table: 'system_settings', name: 'anthropic_api_key_enc', ddl: `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS anthropic_api_key_enc TEXT` },
+    { table: 'system_settings', name: 'anthropic_enabled', ddl: `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS anthropic_enabled BOOLEAN NOT NULL DEFAULT true` },
+    { table: 'system_settings', name: 'anthropic_model', ddl: `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS anthropic_model VARCHAR(100) NOT NULL DEFAULT 'claude-haiku-4-5'` },
 ]
 
 /** Idempotent DDL for AI/media columns (shared by settings + runtime). */

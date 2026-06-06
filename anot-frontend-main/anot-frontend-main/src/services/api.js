@@ -319,6 +319,14 @@ export const visitsAPI = {
     })
     return handleResponse(res)
   },
+  /** Regenerate AI draft from saved transcriptions (HTTP 200). */
+  generateDraft: async (visitId) => {
+    const res = await fetch(`${BASE_URL}/visits/${visitId}/generate-draft`, {
+      method: 'POST',
+      headers: headers(),
+    })
+    return handleResponse(res)
+  },
 }
 
 // ─── NOTES ────────────────────────────────────────────────────────────────────

@@ -25,7 +25,7 @@ router.delete('/:id', protect, restrict('clinician'), deleteVisit)
 router.get('/', protect, restrict('scribe', 'qps', 'admin', 'super_admin', 'clinician'), getAllVisits)
 
 const pool = require('../config/db')
-const { runAIPipeline } = require('../utils/aiPipeline')
+const { runAIPipeline, generateAINote } = require('../utils/aiPipeline')
 const { getVisitForUser } = require('../utils/visitAccess')
 const { setVisitTranscriptionStatus } = require('../utils/visitSchemaCompat')
 
@@ -40,6 +40,93 @@ function noteHasTranscript(transcription) {
     return raw.length > 0
   }
   return false
+}
+
+function parseTranscriptionSegments(transcription) {
+  if (!transcription) return []
+  const raw = String(transcription).trim()
+  if (!raw || raw === '[]' || raw === 'null') return []
+  try {
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) {
+      return parsed.map((s) => String(s || '').trim()).filter(Boolean)
+    }
+    const one = String(parsed || '').trim()
+    return one ? [one] : []
+  } catch {
+    return raw.length > 0 ? [raw] : []
+  }
+}
+
+const AI_DRAFT_UNAVAILABLE =
+  '[AI draft unavailable — add an Anthropic API key in Admin → Settings or ANTHROPIC_API_KEY to the server .env file, then click Transcribe audio or Refresh.]'
+
+async function generateDraft(req, res) {
+  try {
+    const { id } = req.params
+    const visit = await getVisitForUser(id, req.user)
+    if (!visit) {
+      return res.status(404).json({ error: 'Visit not found.' })
+    }
+
+    const detail = await pool.query(
+      `
+        SELECT v.visit_type, v.visit_date, p.name AS patient_name, p.mrn
+        FROM visits v
+        JOIN patients p ON p.id = v.patient_id
+        WHERE v.id = $1
+      `,
+      [id],
+    )
+    const row = detail.rows[0]
+    if (!row) {
+      return res.status(404).json({ error: 'Visit not found.' })
+    }
+
+    const noteRow = await pool.query('SELECT id, transcription, status FROM notes WHERE visit_id = $1', [id])
+    const segments = parseTranscriptionSegments(noteRow.rows[0]?.transcription)
+    if (!segments.length) {
+      return res.status(400).json({ error: 'No transcription available for this visit.' })
+    }
+
+    if (noteRow.rows.length > 0 && !['pending', 'draft'].includes(noteRow.rows[0].status)) {
+      return res.status(409).json({ error: 'Note is locked.' })
+    }
+
+    let aiDraft = await generateAINote(segments, {
+      patient_name: row.patient_name,
+      mrn: row.mrn,
+      visit_type: row.visit_type,
+      visit_date: row.visit_date,
+    })
+    if (!aiDraft) {
+      aiDraft = AI_DRAFT_UNAVAILABLE
+    }
+
+    if (noteRow.rows.length > 0) {
+      await pool.query(
+        `
+          UPDATE notes
+          SET ai_draft = $1, updated_at = NOW()
+          WHERE visit_id = $2
+        `,
+        [aiDraft, id],
+      )
+    } else {
+      await pool.query(
+        `
+          INSERT INTO notes (visit_id, transcription, ai_draft, status)
+          VALUES ($1, $2, $3, 'pending')
+        `,
+        [id, JSON.stringify(segments), aiDraft],
+      )
+    }
+
+    return res.status(200).json({ ai_draft: aiDraft })
+  } catch (err) {
+    console.error('Generate draft error:', err.message)
+    return res.status(500).json({ error: 'Failed to generate AI draft.' })
+  }
 }
 
 async function resolveStuckTranscription(visitId, visit) {
@@ -98,5 +185,8 @@ router.post('/:id/generate-ai', protect, restrict('clinician', 'scribe'), queueT
 
 // POST /api/visits/:id/transcribe — explicit transcription trigger
 router.post('/:id/transcribe', protect, restrict('clinician', 'scribe'), queueTranscription)
+
+// POST /api/visits/:id/generate-draft — manual AI draft generation from saved transcriptions
+router.post('/:id/generate-draft', protect, restrict('scribe'), generateDraft)
 
 module.exports = router

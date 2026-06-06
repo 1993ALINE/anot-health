@@ -1,28 +1,29 @@
 import { useState } from 'react'
 import { API_BASE } from '../../services/api'
 
-const CONTACT_SUBJECTS = ['Technical Issue', 'Billing', 'General Question', 'Feature Request']
+const CONTACT_SUBJECTS = ['General Question', 'Technical Issue', 'Billing', 'Feature Request']
 
 const cardStyle = {
   background: '#FFFFFF',
   borderRadius: 12,
   boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
-  padding: 24,
-  maxWidth: 600,
-  margin: '0 auto',
+  padding: 40,
+  maxWidth: 800,
+  margin: '40px auto',
 }
 
-const fieldStyle = { display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }
-const labelStyle = { fontSize: 14, fontWeight: 600, color: '#374151' }
+const fieldStyle = { display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24 }
+const labelStyle = { fontSize: 15, fontWeight: 500, color: '#374151', marginBottom: 8 }
 const inputBaseStyle = {
   border: '1px solid #E5E7EB',
   borderRadius: 8,
-  padding: '10px 14px',
-  fontSize: 14,
+  padding: '14px 16px',
+  fontSize: 16,
   color: '#111827',
   outline: 'none',
   width: '100%',
   boxSizing: 'border-box',
+  height: 52,
 }
 const buttonStyle = {
   width: '100%',
@@ -32,14 +33,15 @@ const buttonStyle = {
   borderRadius: 8,
   padding: 12,
   fontWeight: 600,
-  fontSize: 15,
+  fontSize: 16,
   cursor: 'pointer',
+  height: 52,
 }
 
 export default function ContactScreen({ currentUser, showToast }) {
   const [form, setForm] = useState(() => ({
     name: currentUser?.name || '',
-    subject: 'Technical Issue',
+    subject: 'General Question',
     message: '',
   }))
   const [sending, setSending] = useState(false)
@@ -138,8 +140,7 @@ export default function ContactScreen({ currentUser, showToast }) {
               </label>
               <textarea
                 id="cl-contact-message"
-                rows={5}
-                style={{ ...inputBaseStyle, resize: 'vertical' }}
+                style={{ ...inputBaseStyle, resize: 'vertical', height: 180 }}
                 placeholder="Describe your issue..."
                 value={form.message}
                 onChange={(e) => setForm({ ...form, message: e.target.value })}

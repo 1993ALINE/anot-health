@@ -1051,21 +1051,29 @@ h1, h2, h3, h4, .sf-topbar-title { font-family: 'Poppins', system-ui, sans-serif
     height: 6px;
     background: var(--border);
     border-radius: 4px;
-    overflow: visible;
+    overflow: hidden;
     position: relative;
     transition: height 0.12s ease;
+    width: 100%;
 }
 .sf-progress-track--interactive { cursor: pointer; }
 .sf-progress-track--interactive:hover,
 .sf-progress-track--dragging { height: 8px; }
 .sf-progress-fill {
+    display: block;
     height: 100%;
-    background: var(--gradient-btn);
+    min-height: 6px;
+    background: #4F46E5;
     border-radius: 4px;
     transition: width 0.08s linear;
     pointer-events: none;
     position: relative;
     z-index: 1;
+    max-width: 100%;
+}
+.sf-progress-fill--live {
+    transition: none;
+    background: #4F46E5;
 }
 .sf-progress-thumb {
     position: absolute;
@@ -1095,7 +1103,7 @@ h1, h2, h3, h4, .sf-topbar-title { font-family: 'Poppins', system-ui, sans-serif
     border-radius: 4px;
     background: #1f2937;
     color: #fff;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;

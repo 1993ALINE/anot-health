@@ -632,7 +632,8 @@
   text-decoration: underline;
 }
 
-.cl-notes-btn-open {
+.cl-notes-btn-open,
+.cl-notes-btn-view {
   border: none;
   border-radius: 8px;
   padding: 10px 24px;
@@ -642,27 +643,11 @@
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
-  box-shadow: 0 2px 4px rgba(79, 70, 229, 0.3);
 }
 
-.cl-notes-btn-open:hover {
-  background: #4338ca;
-}
-
-.cl-notes-btn-view {
-  border: 1px solid #6b7280;
-  border-radius: 8px;
-  padding: 10px 20px;
-  background: transparent;
-  color: #6b7280;
-  font-size: 14px;
-  font-weight: 500;
-  font-family: inherit;
-  cursor: pointer;
-}
-
+.cl-notes-btn-open:hover,
 .cl-notes-btn-view:hover {
-  background: rgba(107, 114, 128, 0.06);
+  background: #4338ca;
 }
 
 .cl-notes-btn-record {
@@ -768,9 +753,9 @@
   height: 48px;
   border-radius: 50%;
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 600;
   background: #e5e7eb;
-  color: #6b7280;
+  color: #4B5563;
   flex-shrink: 0;
 }
 
@@ -1465,9 +1450,9 @@
   align-items: center;
   justify-content: center;
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 600;
   background: #e5e7eb;
-  color: #6b7280;
+  color: #4B5563;
   flex-shrink: 0;
 }
 
@@ -1831,6 +1816,7 @@
 
 .cl-contact-body {
   background: #f4f6f9;
+  padding-top: 40px;
 }
 
 .cl-contact-page {

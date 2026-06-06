@@ -119,6 +119,10 @@ const DEFAULT_SETTINGS_FORM = {
     deepgram_language: 'en-US',
     deepgram_webhook_url: '',
     deepgram_auto_transcribe_on_upload: false,
+    anthropic_api_key: '',
+    anthropic_clear_api_key: false,
+    anthropic_enabled: true,
+    anthropic_model: 'claude-haiku-4-5',
     ffmpeg_enabled: false,
     ffmpeg_target_format: 'mp3',
     ffmpeg_compression: 5,
@@ -671,6 +675,11 @@ export default function Admin() {
             x_url: social.x_url || '',
             deepgram_api_key: '',
             deepgram_clear_api_key: false,
+            anthropic_api_key: '',
+            anthropic_clear_api_key: false,
+            anthropic_api_key_set: raw?.anthropic_api_key_set,
+            anthropic_enabled: raw?.anthropic_enabled ?? true,
+            anthropic_model: raw?.anthropic_model ?? 'claude-haiku-4-5',
         })
     }, [])
 
@@ -883,6 +892,9 @@ export default function Admin() {
         if (settingsForm.deepgram_enabled && !settingsForm.deepgram_api_key_set && !settingsForm.deepgram_api_key?.trim()) {
             return 'Deepgram is enabled but no API key is saved. Enter a key or turn Deepgram off.'
         }
+        if (settingsForm.anthropic_enabled && !settingsForm.anthropic_api_key_set && !settingsForm.anthropic_api_key?.trim()) {
+            return 'AI note generation is enabled but no Anthropic API key is saved. Enter a key or turn it off.'
+        }
         return ''
     }
 
@@ -920,6 +932,8 @@ export default function Admin() {
                 deepgram_language: settingsForm.deepgram_language?.trim() || 'en-US',
                 deepgram_webhook_url: settingsForm.deepgram_webhook_url?.trim() || '',
                 deepgram_auto_transcribe_on_upload: !!settingsForm.deepgram_auto_transcribe_on_upload,
+                anthropic_enabled: !!settingsForm.anthropic_enabled,
+                anthropic_model: settingsForm.anthropic_model || 'claude-haiku-4-5',
                 ffmpeg_enabled: !!settingsForm.ffmpeg_enabled,
                 ffmpeg_target_format: settingsForm.ffmpeg_target_format === 'wav' ? 'wav' : 'mp3',
                 ffmpeg_compression: Math.max(0, Math.min(9, Number(settingsForm.ffmpeg_compression) || 5)),
@@ -931,6 +945,12 @@ export default function Admin() {
             }
             if (settingsForm.deepgram_clear_api_key) {
                 payload.deepgram_clear_api_key = true
+            }
+            if (settingsForm.anthropic_api_key?.trim()) {
+                payload.anthropic_api_key = settingsForm.anthropic_api_key.trim()
+            }
+            if (settingsForm.anthropic_clear_api_key) {
+                payload.anthropic_clear_api_key = true
             }
             const data = await settingsAPI.update(payload)
             const saved = data.settings || payload
@@ -2100,7 +2120,7 @@ export default function Admin() {
                                     <div className="adm-form-card">
                                         <div className="adm-form-card__title">AI &amp; media services</div>
                                         <p className="adm-settings-note" style={{ marginBottom: 16 }}>
-                                            Deepgram and FFmpeg run only on the server. Store a strong <code>SETTINGS_ENCRYPTION_KEY</code> in production for API key encryption at rest.
+                                            Deepgram, Anthropic, and FFmpeg run only on the server. Store a strong <code>SETTINGS_ENCRYPTION_KEY</code> in production for API key encryption at rest.
                                         </p>
                                         <div className="adm-form-card__title" style={{ fontSize: 15, marginTop: 8 }}>Deepgram (transcription)</div>
                                         <div className="adm-form-grid">
@@ -2138,6 +2158,32 @@ export default function Admin() {
                                                 <label className="adm-form-label">
                                                     <input type="checkbox" checked={!!settingsForm.deepgram_auto_transcribe_on_upload} onChange={(e) => handleSettingInput('deepgram_auto_transcribe_on_upload', e.target.checked)} /> Auto-transcribe when primary recording is uploaded
                                                 </label>
+                                            </div>
+                                        </div>
+                                        <div className="adm-form-card__title" style={{ fontSize: 15, marginTop: 20 }}>Anthropic (AI note generation)</div>
+                                        <div className="adm-form-grid">
+                                            <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>
+                                                <label className="adm-form-label">
+                                                    <input type="checkbox" checked={!!settingsForm.anthropic_enabled} onChange={(e) => handleSettingInput('anthropic_enabled', e.target.checked)} /> Enable AI note generation
+                                                </label>
+                                            </div>
+                                            <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>
+                                                <label className="adm-form-label">Anthropic API key {settingsForm.anthropic_api_key_set ? <span style={{ color: '#059669' }}>(saved)</span> : null}</label>
+                                                <input className="adm-input" type="password" autoComplete="new-password" placeholder={settingsForm.anthropic_api_key_set ? 'Leave blank to keep existing key' : 'sk-ant-...'}
+                                                    value={settingsForm.anthropic_api_key} onChange={(e) => handleSettingInput('anthropic_api_key', e.target.value)} />
+                                            </div>
+                                            <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>
+                                                <label className="adm-form-label">
+                                                    <input type="checkbox" checked={!!settingsForm.anthropic_clear_api_key} onChange={(e) => handleSettingInput('anthropic_clear_api_key', e.target.checked)} /> Remove stored API key on save
+                                                </label>
+                                            </div>
+                                            <div className="adm-form-group">
+                                                <label className="adm-form-label">Model</label>
+                                                <select className="adm-input" value={settingsForm.anthropic_model} onChange={(e) => handleSettingInput('anthropic_model', e.target.value)}>
+                                                    <option value="claude-haiku-4-5">claude-haiku-4-5 (Fast, recommended)</option>
+                                                    <option value="claude-sonnet-4-5">claude-sonnet-4-5 (Balanced)</option>
+                                                    <option value="claude-opus-4-5">claude-opus-4-5 (Most capable)</option>
+                                                </select>
                                             </div>
                                         </div>
                                         <div className="adm-form-card__title" style={{ fontSize: 15, marginTop: 20 }}>FFmpeg (audio preprocessing)</div>

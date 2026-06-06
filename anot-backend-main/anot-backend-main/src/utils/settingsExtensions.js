@@ -14,6 +14,9 @@ const EXTENSION_FIELD_KEYS = [
   'ffmpeg_compression',
   'ffmpeg_max_upload_mb',
   'ffmpeg_preprocess_before_transcribe',
+  'anthropic_api_key_enc',
+  'anthropic_enabled',
+  'anthropic_model',
 ]
 
 function parseSocialLinks(raw) {

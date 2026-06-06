@@ -1,6 +1,6 @@
 /** Clinician portal: single indigo avatar color for all patients */
-export const CLINICIAN_AVATAR_BG = '#4F46E5'
-export const CLINICIAN_AVATAR_COLOR = '#ffffff'
+export const CLINICIAN_AVATAR_BG = '#E5E7EB'
+export const CLINICIAN_AVATAR_COLOR = '#4B5563'
 
 /** Scribe portal: consistent indigo avatars */
 export const SCRIBE_AVATAR_STYLE = {

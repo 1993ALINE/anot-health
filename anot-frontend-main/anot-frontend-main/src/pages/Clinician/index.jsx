@@ -1362,7 +1362,6 @@ function ClinicianTopbar({
   branding,
   cu,
   onViewProfile,
-  onSettings,
   onLogout,
   title,
   subtitle,
@@ -1389,7 +1388,6 @@ function ClinicianTopbar({
       avatarFallback="C"
       navControlsId="clinician-sidebar"
       onViewProfile={onViewProfile}
-      onSettings={onSettings}
       onLogout={onLogout}
       menuId="clinician-account-menu"
       accountMenuVariant="clinician"
@@ -1456,12 +1454,6 @@ export default function Clinician() {
     }
     return list.sort(byTime)
   }, [visits, scheduleSort, off])
-  // Completed encounters belong on the Notes page — hide them from the Schedule list
-  // (they remain counted in the "Completed" stat card, which reads from `visits`).
-  const scheduleListVisits = useMemo(
-    () => sortedVisits.filter((v) => !['uploaded', 'done', 'completed'].includes(v.status)),
-    [sortedVisits],
-  )
   const [history, setHistory]       = useState([])
   const [loading, setLoading]       = useState(false)
   const [active, setActive]         = useState(null)
@@ -2067,11 +2059,10 @@ export default function Clinician() {
             onMenuClick={sidebar.toggle}
             navControlsId="clinician-sidebar"
             moduleTitle="Contact Us"
-            brandName={branding.system_name || 'Anot'}
+            brandName=""
             user={cu}
             avatarFallback="C"
             onViewProfile={openProfile}
-            onSettings={openProfile}
             onLogout={requestLogout}
             menuId="clinician-account-menu"
             accountMenuVariant="clinician"
@@ -2111,7 +2102,6 @@ export default function Clinician() {
               setScreen('profile')
               sidebar.close()
             }}
-            onSettings={openProfile}
             onLogout={requestLogout}
             menuId="clinician-account-menu"
             accountMenuVariant="clinician"
@@ -2165,7 +2155,6 @@ export default function Clinician() {
                 setScreen('profile')
                 sidebar.close()
               }}
-              onSettings={openProfile}
               onLogout={requestLogout}
               menuId="clinician-account-menu"
               accountMenuVariant="clinician"
@@ -2227,7 +2216,6 @@ export default function Clinician() {
               branding={branding}
               cu={cu}
               onViewProfile={openProfile}
-              onSettings={openProfile}
               onLogout={requestLogout}
               title={historyTitle}
               subtitle={historySubtitle}
@@ -2553,18 +2541,13 @@ export default function Clinician() {
                         </div>
                       </div>
                       <div className={modernCard ? 'cl-pending-card__actions' : ''} style={modernCard ? undefined : { display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end', marginLeft: 'auto' }}>
-                        {actionKind === 'open' ? (
+                        {actionKind === 'open' || actionKind === 'view' ? (
                           <button type="button" className="cl-notes-btn-open" onClick={() => openNoteFromCard(h)}>
                             Review Note
                           </button>
                         ) : null}
                         {actionKind === 'awaiting' ? (
                           <span className="cl-notes-awaiting">Awaiting Note</span>
-                        ) : null}
-                        {actionKind === 'view' ? (
-                          <button type="button" className="cl-notes-btn-view" onClick={() => openNoteFromCard(h)}>
-                            View Note
-                          </button>
                         ) : null}
                         {actionKind === 'record' ? (
                           <button type="button" className="cl-notes-btn-record" onClick={() => goRecordOverdueFromNotes(h)}>
@@ -2589,7 +2572,6 @@ export default function Clinician() {
               branding={branding}
               cu={cu}
               onViewProfile={openProfile}
-              onSettings={openProfile}
               onLogout={requestLogout}
               title={`${getGreeting()}, Dr. ${cu.name?.split(' ').pop()}`}
               belowTitle={
@@ -2858,14 +2840,8 @@ export default function Clinician() {
                       + Add Patient
                     </button>
                   </div>
-                ) : scheduleListVisits.length === 0 ? (
-                  <div className="sf-empty">
-                    <div className="sf-empty-icon">✅</div>
-                    <div className="sf-empty-title">All encounters completed</div>
-                    <div className="sf-empty-sub">Completed notes are available on the Notes page.</div>
-                  </div>
                 ) : (
-                  scheduleListVisits.map((v, visitIdx) => {
+                  sortedVisits.map((v, visitIdx) => {
                   const isActive = active?.id === v.id
                   const scheduleOverdue = isScheduleVisitOverdue(v, off)
                   const scheduleBadgeText = scheduleOverdue ? 'Overdue' : scheduleStatusDisplayLabel(v.status)
@@ -2884,7 +2860,7 @@ export default function Clinician() {
                     : ['recording-uploaded', 'in-progress', 'submitted'].includes(v.status)
                     ? 'cl-patient-card--with-scribe'
                     : 'cl-patient-card--upcoming'
-                  const showNowBefore = scheduleSort === 'time' && shouldInsertNowBefore(scheduleListVisits, visitIdx, off, liveNow)
+                  const showNowBefore = scheduleSort === 'time' && shouldInsertNowBefore(sortedVisits, visitIdx, off, liveNow)
                   return (
                     <div key={v.id} className="cl-schedule-visit-wrap">
                       {showNowBefore ? <NowDivider now={liveNow} /> : null}

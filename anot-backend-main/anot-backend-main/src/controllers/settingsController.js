@@ -22,12 +22,16 @@ const DEFAULT_SETTINGS = {
   system_description: 'Clinical documentation platform',
 }
 
+const ANTHROPIC_MODELS = new Set(['claude-haiku-4-5', 'claude-sonnet-4-5', 'claude-opus-4-5'])
+
 const AI_DEFAULTS = {
   deepgram_enabled: false,
   deepgram_model: 'nova-2',
   deepgram_language: 'en-US',
   deepgram_webhook_url: '',
   deepgram_auto_transcribe_on_upload: false,
+  anthropic_enabled: true,
+  anthropic_model: 'claude-haiku-4-5',
   ffmpeg_enabled: false,
   ffmpeg_target_format: 'mp3',
   ffmpeg_compression: 5,
@@ -121,6 +125,8 @@ function mapBaseSettings(row) {
 
 function mapAiSettings(row) {
   const enc = row.deepgram_api_key_enc
+  const anthropicEnc = row.anthropic_api_key_enc
+  const model = String(row.anthropic_model || AI_DEFAULTS.anthropic_model).trim()
   return {
     deepgram_enabled: !!row.deepgram_enabled,
     deepgram_api_key_set: !!(enc && String(enc).length > 0),
@@ -128,6 +134,9 @@ function mapAiSettings(row) {
     deepgram_language: row.deepgram_language || AI_DEFAULTS.deepgram_language,
     deepgram_webhook_url: row.deepgram_webhook_url != null ? String(row.deepgram_webhook_url) : '',
     deepgram_auto_transcribe_on_upload: !!row.deepgram_auto_transcribe_on_upload,
+    anthropic_api_key_set: !!(anthropicEnc && String(anthropicEnc).length > 0),
+    anthropic_enabled: row.anthropic_enabled !== false,
+    anthropic_model: ANTHROPIC_MODELS.has(model) ? model : AI_DEFAULTS.anthropic_model,
     ffmpeg_enabled: !!row.ffmpeg_enabled,
     ffmpeg_target_format: ['wav', 'mp3'].includes(String(row.ffmpeg_target_format || '').toLowerCase())
       ? String(row.ffmpeg_target_format).toLowerCase()
@@ -236,6 +245,31 @@ const updateSettings = async (req, res) => {
         ? !!payload.deepgram_auto_transcribe_on_upload
         : !!cur.deepgram_auto_transcribe_on_upload
 
+    let anthropic_api_key_enc = cur.anthropic_api_key_enc || null
+    let newAnthropicKeySaved = false
+    if (payload.anthropic_clear_api_key === true) {
+      anthropic_api_key_enc = null
+    } else if (payload.anthropic_api_key != null && String(payload.anthropic_api_key).trim()) {
+      anthropic_api_key_enc = encryptString(String(payload.anthropic_api_key).trim())
+      if (!anthropic_api_key_enc) {
+        return res.status(500).json({ error: 'Could not encrypt API key (check SETTINGS_ENCRYPTION_KEY / JWT_SECRET).' })
+      }
+      newAnthropicKeySaved = true
+    }
+
+    let anthropic_enabled =
+      payload.anthropic_enabled !== undefined ? !!payload.anthropic_enabled : cur.anthropic_enabled !== false
+    if (payload.anthropic_clear_api_key === true) {
+      anthropic_enabled = false
+    } else if (newAnthropicKeySaved) {
+      anthropic_enabled = true
+    }
+    const anthropicModelIn =
+      payload.anthropic_model !== undefined
+        ? cleanStr(payload.anthropic_model, 100) || AI_DEFAULTS.anthropic_model
+        : String(cur.anthropic_model || AI_DEFAULTS.anthropic_model)
+    const anthropic_model = ANTHROPIC_MODELS.has(anthropicModelIn) ? anthropicModelIn : AI_DEFAULTS.anthropic_model
+
     const ffmpeg_enabled = payload.ffmpeg_enabled !== undefined ? !!payload.ffmpeg_enabled : !!cur.ffmpeg_enabled
     const fmtIn =
       payload.ffmpeg_target_format !== undefined ? String(payload.ffmpeg_target_format || 'mp3').toLowerCase() : String(cur.ffmpeg_target_format || 'mp3').toLowerCase()
@@ -262,6 +296,9 @@ const updateSettings = async (req, res) => {
       deepgram_language,
       deepgram_webhook_url: deepgram_webhook_raw || '',
       deepgram_auto_transcribe_on_upload,
+      anthropic_enabled,
+      anthropic_api_key_enc,
+      anthropic_model,
       ffmpeg_enabled,
       ffmpeg_target_format,
       ffmpeg_compression,
@@ -290,6 +327,9 @@ const updateSettings = async (req, res) => {
       deepgram_language,
       deepgram_webhook_url: deepgram_webhook_raw || '',
       deepgram_auto_transcribe_on_upload,
+      anthropic_enabled,
+      anthropic_api_key_enc,
+      anthropic_model,
       ffmpeg_enabled,
       ffmpeg_target_format,
       ffmpeg_compression,

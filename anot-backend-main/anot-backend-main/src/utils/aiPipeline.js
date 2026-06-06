@@ -2,19 +2,14 @@ const fs = require('fs')
 const path = require('path')
 const pool = require('../config/db')
 const { auditLog } = require('./auditLogger')
-const { loadAiSettings } = require('../services/aiSettings')
+const { loadAiSettings, getAnthropicKey } = require('../services/aiSettings')
 const { processAudioForTranscription, unlinkTempPaths } = require('../services/audioProcessingService')
 const { transcribeFileWithRetries } = require('../services/aiTranscriptionService')
 const { setVisitTranscriptionStatus } = require('./visitSchemaCompat')
 const { isReachableWebhookUrl } = require('./webhookReachability')
 
 const AI_DRAFT_UNAVAILABLE =
-  '[AI draft unavailable — add GROQ_API_KEY to the server .env file, then click Transcribe audio or Refresh.]'
-
-function getGroq() {
-  const Groq = require('groq-sdk')
-  return new Groq({ apiKey: process.env.GROQ_API_KEY })
-}
+  '[AI draft unavailable — add an Anthropic API key in Admin → Settings or ANTHROPIC_API_KEY to the server .env file, then click Transcribe audio or Refresh.]'
 
 /** @deprecated prefer transcribeFileWithRetries via pipeline */
 async function transcribeAudio(filePath) {
@@ -24,26 +19,38 @@ async function transcribeAudio(filePath) {
 
 async function generateAINote(transcriptions, patientInfo) {
   try {
+    const settings = await loadAiSettings()
+    if (!settings.anthropic_enabled) {
+      console.warn('[aiPipeline] Anthropic AI note generation disabled in settings')
+      return null
+    }
+
+    const key = await getAnthropicKey()
+    if (!key) {
+      console.warn('[aiPipeline] Anthropic API key not configured')
+      return null
+    }
+
+    const Anthropic = require('@anthropic-ai/sdk')
+    const anthropic = new Anthropic({ apiKey: key })
+
     const combinedTranscription = transcriptions
       .map((t, i) => `[Recording ${i + 1}]\n${t}`)
       .join('\n\n')
 
-    console.log(`🤖 Generating AI note for ${patientInfo.patient_name}...`)
+    console.log('🤖 Generating AI note...')
 
-    const groq = getGroq()
-    const completion = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
+    const response = await anthropic.messages.create({
+      model: settings.anthropic_model || 'claude-haiku-4-5',
       max_tokens: 1500,
+      system:
+        'You are a medical scribe assistant. Generate structured clinical notes from visit transcriptions. Use plain text only — no markdown, no bold markers, no # headers, no separator lines. Be professional, concise and clinically accurate. Only include information present in the transcription. Never invent or assume clinical details.',
       messages: [
         {
-          role: 'system',
-          content:
-            'You are a medical scribe AI. Generate structured clinical notes from visit transcriptions. Be professional, concise and clinically accurate. Only include information present in the transcription.',
-        },
-        {
           role: 'user',
-          content: `Generate a structured clinical note for the following patient visit.
+          content: `Generate a structured clinical note from the visit transcription below.
 
+Context (do NOT repeat in the note — patient details are shown elsewhere in the UI):
 Patient: ${patientInfo.patient_name}
 MRN: ${patientInfo.mrn}
 Visit Type: ${patientInfo.visit_type}
@@ -52,7 +59,7 @@ Date: ${patientInfo.visit_date}
 TRANSCRIPTION(S):
 ${combinedTranscription}
 
-Generate the note with EXACTLY these 5 sections. Write "Not mentioned" if information is not available in the transcription.
+Start directly with CHIEF COMPLAINT — no title, no patient header, no markdown. Use EXACTLY these 5 plain-text section headers ending with a colon. Write "Not mentioned" if information is not available in the transcription.
 
 CHIEF COMPLAINT:
 [1-2 sentences describing the main reason for the visit]
@@ -72,13 +79,13 @@ ASSESSMENT & PLAN (A&P):
       ],
     })
 
-    const choice = completion.choices?.[0]?.message?.content
-    if (!choice) {
-      console.error('AI note generation error: empty completion')
+    const noteText = response.content?.[0]?.text
+    if (!noteText) {
+      console.error('AI note generation error: empty response')
       return null
     }
-    console.log(`✅ AI note generated (${choice.length} chars)`)
-    return choice
+    console.log(`✅ AI note generated (${noteText.length} chars)`)
+    return noteText
   } catch (err) {
     console.error('AI note generation error:', err.message)
     return null

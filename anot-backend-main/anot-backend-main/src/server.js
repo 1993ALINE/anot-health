@@ -49,35 +49,33 @@ app.use(helmet({
 }))
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
-// Allowlist is env-driven (CORS_ORIGINS=comma,sep,list). The previous
-// /\.vercel\.app$/ regex matched any attacker-deployed *.vercel.app, so it's gone.
+// Local dev origins are always allowed; CORS_ORIGINS adds extra entries (comma-separated).
+// The previous /\.vercel\.app$/ regex matched any attacker-deployed *.vercel.app, so it's gone.
 
-const DEFAULT_ORIGINS = [
+const allowedOrigins = [
   'http://localhost:5173',
   'http://localhost:5174',
-  'http://localhost:5175',
-  'http://localhost:5176',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174',
   'http://localhost:3000',
   'https://anot-frontend.vercel.app',
   'https://anot-frontend-git-main-1993alines-projects.vercel.app',
   'https://anot-frontend-5m4fm5c5p-1993alines-projects.vercel.app',
 ]
 
-const allowedOrigins = (process.env.CORS_ORIGINS
-  ? process.env.CORS_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
-  : DEFAULT_ORIGINS)
-
-const allowLocalhostDev =
-  process.env.NODE_ENV !== 'production' && !process.env.RAILWAY_ENVIRONMENT
+if (process.env.CORS_ORIGINS) {
+  for (const origin of process.env.CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean)) {
+    if (!allowedOrigins.includes(origin)) allowedOrigins.push(origin)
+  }
+}
 
 app.use(cors({
-  origin: (origin, cb) => {
-    // Allow non-browser tools (curl, server-to-server) where Origin is undefined.
-    if (!origin) return cb(null, true)
-    if (allowLocalhostDev && /^http:\/\/127\.0\.0\.1:\d+$/.test(origin)) return cb(null, true)
-    if (allowLocalhostDev && /^http:\/\/localhost:\d+$/.test(origin)) return cb(null, true)
-    if (allowedOrigins.includes(origin)) return cb(null, true)
-    return cb(new Error(`CORS: origin not allowed: ${origin}`))
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true)
+    } else {
+      callback(new Error('Not allowed by CORS'))
+    }
   },
   credentials: true,
 }))

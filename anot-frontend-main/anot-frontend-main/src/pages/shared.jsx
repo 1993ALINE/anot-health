@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useLayoutEffect, useSyncExternalStore } from 'react'
+import { useState, useEffect, useRef, useCallback, useLayoutEffect, useSyncExternalStore, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { DEFAULT_BRAND_LOGO_SRC } from '../services/branding'
 
@@ -44,8 +44,8 @@ export function parseTranscriptionBlocks(raw) {
 /* ── Responsive sidebar toggle ─────────────────────────── */
 export function useSidebar() {
     const [open, setOpen] = useState(false)
-    const toggle = () => setOpen(o => !o)
-    const close  = () => setOpen(false)
+    const toggle = useCallback(() => setOpen((o) => !o), [])
+    const close = useCallback(() => setOpen(false), [])
 
     useEffect(() => {
         if (open) document.body.style.overflow = 'hidden'
@@ -53,7 +53,7 @@ export function useSidebar() {
         return () => { document.body.style.overflow = '' }
     }, [open])
 
-    return { open, toggle, close }
+    return useMemo(() => ({ open, toggle, close }), [open, toggle, close])
 }
 
 /** True when portal sidebar is an off-canvas drawer (tablet / mobile). Matches Admin breakpoint. */

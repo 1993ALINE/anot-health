@@ -5,7 +5,10 @@ import { authAPI, usersAPI, visitsAPI, notesAPI, API_BASE } from '../../services
 import { useBranding } from '../../services/branding'
 import SystemProfileManager from '../../components/SystemProfileManager'
 import PortalAudioPlayer from '../../components/PortalAudioPlayer'
+import ScribeFinalNoteEditor from '../../components/ScribeFinalNoteEditor'
 import NoteWorkspacePanel from '../../components/NoteWorkspacePanel'
+import { cleanAiDraftForDisplay } from '../../utils/aiDraftFormat'
+import { useRenderRateWarning } from '../../utils/useRenderRateWarning'
 import PortalSidebarFooter from '../../components/PortalSidebarFooter'
 import ErrorBoundary from '../../components/ErrorBoundary'
 import PortalCalendarDayPreview, { scribeDayPreviewRows } from '../../components/PortalCalendarDayPreview'
@@ -79,6 +82,14 @@ function localDateStr(offsetDays = 0) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
 
+function addDaysToDateStr(dateStr, delta) {
+  if (!dateStr) return localDateStr(delta)
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  dt.setDate(dt.getDate() + delta)
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`
+}
+
 function fmtDateLabel(dateStr) {
   if (!dateStr) return ''
   const [y, m, day] = dateStr.split('-').map(Number)
@@ -89,6 +100,15 @@ function fmtShortDate(dateStr) {
   if (!dateStr) return ''
   const [y, m, day] = dateStr.split('-').map(Number)
   return new Date(y, m - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+function fmtDisplayDate(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  if (!Number.isNaN(d.getTime())) {
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+  }
+  return fmtShortDate(dateStr)
 }
 
 function fmtDuration(secs) {
@@ -138,9 +158,11 @@ function ScoreBar({ value }) {
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
 
 function Scribe() {
+  useRenderRateWarning('Scribe')
+
   const navigate    = useNavigate()
   const sidebar     = useSidebar()
-  const currentUser = JSON.parse(localStorage.getItem('user') || '{}')
+  const currentUser = useMemo(() => JSON.parse(localStorage.getItem('user') || '{}'), [])
 
   const [screen, setScreen]                       = useState('providers')
   const [activeTab, setActiveTab]                 = useState('recordings')
@@ -154,6 +176,7 @@ function Scribe() {
   const [myNotes, setMyNotes]                     = useState([])
   const [grades, setGrades]                       = useState([])
   const [selectedGrade, setSelectedGrade]         = useState(null)
+  const [viewingMyNote, setViewingMyNote]         = useState(null)
   const [loadingProviders, setLoadingProviders]   = useState(true)
   const [loadingRecordings, setLoadingRecordings] = useState(false)
   const [loadingNote, setLoadingNote]             = useState(false)
@@ -164,14 +187,16 @@ function Scribe() {
   const [activeRecIdx, setActiveRecIdx]           = useState(0)
   const [txSegments, setTxSegments]               = useState([])
   const [transcribeSubmitting, setTranscribeSubmitting] = useState(false)
+  const [generatingDraft, setGeneratingDraft] = useState(false)
   const [confirmDialog, setConfirmDialog]         = useState(null)
   const [confirmLoading, setConfirmLoading]         = useState(false)
   const [noteRefreshing, setNoteRefreshing]         = useState(false)
-  const [off, setOff]                             = useState(0)
   const [dayStats, setDayStats]                   = useState({})
 
   const [baseline, setBaseline] = useState({ visitId: null, final: '', tx: '' })
+  const [recordingsError, setRecordingsError] = useState(null)
   const dayStatsLoadingRef = useRef(new Set())
+  const loadingRef = useRef(false)
 
   const drawerMode = usePortalDrawerMode()
   const branding = useBranding()
@@ -205,7 +230,7 @@ function Scribe() {
     [screen, isDirty],
   )
 
-  const requestLogout = () => {
+  const requestLogout = useCallback(() => {
     const dirtyNote = screen === 'note' && isDirty
     setConfirmDialog({
       tone: 'primary',
@@ -219,9 +244,9 @@ function Scribe() {
         navigate('/login', { replace: true })
       },
     })
-  }
+  }, [screen, isDirty, navigate])
 
-  const runConfirm = async () => {
+  const runConfirm = useCallback(async () => {
     const onConfirm = confirmDialog?.onConfirm
     if (!onConfirm) return
     setConfirmLoading(true)
@@ -231,7 +256,7 @@ function Scribe() {
       setConfirmLoading(false)
       setConfirmDialog(null)
     }
-  }
+  }, [confirmDialog])
 
   const loadDayStats = useCallback(async (dayOff) => {
     if (!selectedProvider?.id) return
@@ -260,7 +285,10 @@ function Scribe() {
     }
   }, [selectedProvider?.id])
 
-  const showNotif = (msg, type = 'green') => { setNotif({ msg, type }); setTimeout(() => setNotif(null), 3000) }
+  const showNotif = useCallback((msg, type = 'green') => {
+    setNotif({ msg, type })
+    setTimeout(() => setNotif(null), 3000)
+  }, [])
 
   const loadProviders = async () => {
     try { setLoadingProviders(true); const data = await usersAPI.getMyClinicians(); setProviders(data.clinicians || []) }
@@ -268,15 +296,24 @@ function Scribe() {
     finally { setLoadingProviders(false) }
   }
 
-  const loadRecordings = async (providerId, date) => {
+  const loadRecordings = useCallback(async (providerId, date) => {
+    if (loadingRef.current) return
+    loadingRef.current = true
     try {
       setLoadingRecordings(true)
+      setRecordingsError(null)
       const data = await visitsAPI.getAll(providerId, date)
       const all  = data.visits || []
       setRecordings(all.filter(v => !['upcoming', 'scheduled', 'in-progress'].includes(v.status)))
-    } catch { showNotif('Failed to load recordings.', 'red') }
-    finally  { setLoadingRecordings(false) }
-  }
+    } catch {
+      setRecordings([])
+      setRecordingsError('Could not load recordings. Check your connection and try again later.')
+      showNotif('Failed to load recordings.', 'red')
+    } finally {
+      setLoadingRecordings(false)
+      loadingRef.current = false
+    }
+  }, [showNotif])
 
   const loadNote = useCallback(
     async (visitId, opts = {}) => {
@@ -349,23 +386,6 @@ function Scribe() {
     [selectedRec?.id, noteRefreshing, loadNote],
   )
 
-  const onToolbarRefresh = useCallback(() => {
-    if (!selectedRec?.id || noteRefreshing || loadingNote) return
-    if (isDirty) {
-      setConfirmDialog({
-        tone: 'primary',
-        title: 'Refresh with unsaved edits?',
-        message:
-          'We will update transcription status and the AI draft from the server. Your note text and transcript fields will not be overwritten.',
-        confirmText: 'Refresh safely',
-        cancelText: 'Cancel',
-        onConfirm: () => performNoteRefresh('merge'),
-      })
-      return
-    }
-    void performNoteRefresh('full')
-  }, [selectedRec?.id, noteRefreshing, loadingNote, isDirty, performNoteRefresh])
-
   const onDiscardReloadFromServer = useCallback(() => {
     if (!selectedRec?.id || noteRefreshing || loadingNote) return
     setConfirmDialog({
@@ -416,20 +436,9 @@ function Scribe() {
   }, [selectedProvider?.id])
 
   useEffect(() => {
-    if (screen !== 'recordings') return
-    const today = localDate(0, 'input')
-    const offDays = Math.round(
-      (new Date(`${selectedDate}T12:00:00`).getTime() - new Date(`${today}T12:00:00`).getTime()) / 86400000,
-    )
-    if (Number.isFinite(offDays)) setOff(offDays)
-  }, [screen, selectedProvider?.id, selectedDate])
-
-  useEffect(() => {
-    if (screen !== 'recordings' || !selectedProvider?.id) return
-    const date = localDate(off, 'input')
-    if (date !== selectedDate) setSelectedDate(date)
-    loadRecordings(selectedProvider.id, date)
-  }, [off, screen, selectedProvider?.id]) // eslint-disable-line react-hooks/exhaustive-deps -- sync strip to existing recordings load
+    if (screen !== 'recordings' || !selectedProvider?.id || !selectedDate) return
+    void loadRecordings(selectedProvider.id, selectedDate)
+  }, [screen, selectedProvider?.id, selectedDate, loadRecordings])
 
   const saveDraft = async () => {
     if (!finalNote.trim()) { showNotif('Please write the note before saving.', 'amber'); return }
@@ -468,13 +477,28 @@ function Scribe() {
     finally { setSaving(false) }
   }
 
+  const runGenerateDraft = async () => {
+    const noteDone = ['submitted', 'uploaded'].includes(selectedRec?.note_status ?? selectedRec?.status)
+    if (!selectedRec?.id || generatingDraft || noteDone) return
+    setGeneratingDraft(true)
+    try {
+      const data = await visitsAPI.generateDraft(selectedRec.id)
+      const draft = data.ai_draft || ''
+      setNote((prev) => (prev ? { ...prev, ai_draft: draft } : { ai_draft: draft, visit_id: selectedRec.id }))
+    } catch {
+      showNotif('Failed to generate. Check API key in Admin settings.', 'red')
+    } finally {
+      setGeneratingDraft(false)
+    }
+  }
+
   const runTranscribe = async () => {
     if (!selectedRec?.id) return
     try {
       setTranscribeSubmitting(true)
       await visitsAPI.runTranscription(selectedRec.id)
       setSelectedRec((prev) => (prev ? { ...prev, transcription_status: 'processing' } : prev))
-      showNotif('Transcription started — updating automatically every few seconds.')
+      showNotif('Transcription started — updating automatically every 30 seconds.')
       await loadNote(selectedRec.id, { mergeOnly: true })
     } catch (err) {
       showNotif(err.message || 'Could not start transcription.', 'red')
@@ -489,7 +513,7 @@ function Scribe() {
     if (st !== 'processing') return undefined
     const timer = setInterval(() => {
       void loadNote(selectedRec.id, { mergeOnly: true })
-    }, 8000)
+    }, 30000)
     return () => clearInterval(timer)
   }, [screen, selectedRec?.id, selectedRec?.transcription_status, note?.transcription_status, loadNote])
 
@@ -507,7 +531,52 @@ function Scribe() {
     go()
   }
 
-  const handleNav = (tab) => {
+  const myNoteToRec = (n) => {
+    const visitId = n.visit_id ?? n.id
+    const visitDate = n.visit_date ? String(n.visit_date).slice(0, 10) : selectedDate
+    return {
+      id: visitId,
+      patient_name: n.patient_name,
+      mrn: n.mrn,
+      visit_type: n.visit_type,
+      visit_time: n.visit_time,
+      visit_date: visitDate,
+      duration_seconds: n.duration_seconds,
+      note_status: n.status,
+      status: n.status,
+    }
+  }
+
+  const closeNoteView = () => {
+    setScreen('notes')
+    setViewingMyNote(null)
+    setSelectedRec(null)
+    setNote(null)
+  }
+
+  const openMyNote = (n) => {
+    const visitId = n.visit_id ?? n.id
+    const isReadOnly = ['submitted', 'uploaded'].includes(n.status)
+    const go = () => {
+      if (n.clinician_id && n.clinician_name) {
+        setSelectedProvider({ id: n.clinician_id, name: n.clinician_name, specialty: '' })
+      }
+      const visitDate = n.visit_date ? String(n.visit_date).slice(0, 10) : selectedDate
+      setSelectedDate(visitDate)
+      setSelectedRec(myNoteToRec(n))
+      setViewingMyNote(isReadOnly ? n : null)
+      void loadNote(visitId)
+      setActiveRecIdx(0)
+      setScreen(isReadOnly ? 'note-view' : 'note')
+    }
+    if (screen === 'note' && isDirty && String(selectedRec?.id) !== String(visitId)) {
+      leaveNoteScreen(go)
+      return
+    }
+    go()
+  }
+
+  const handleNav = useCallback((tab) => {
     leaveNoteScreen(() => {
       setActiveTab(tab)
       if (tab === 'recordings') {
@@ -516,9 +585,13 @@ function Scribe() {
       } else setScreen(tab)
       sidebar.close()
     })
-  }
+  }, [leaveNoteScreen, selectedProvider, sidebar])
 
-  const SidebarEl = () => (
+  const handleAudioTabChange = useCallback((idx) => {
+    setActiveRecIdx(idx)
+  }, [])
+
+  const sidebarMarkup = useMemo(() => (
     <>
       <ConfirmDialog
         dialog={confirmDialog}
@@ -536,7 +609,7 @@ function Scribe() {
       </div>
       <p className="sf-sidebar-rich__nav-label">Workspace</p>
       <nav className="sf-nav sf-sidebar-rich__nav" aria-label="Main">
-        {[['recordings','🎙','Recordings'],['notes','📋','My Notes'],['grades','⭐','My Grades'],['profile','👤','Profile']].map(([k, icon, label]) => (
+        {[['recordings','🎙','Recordings'],['notes','📋','My Notes'],['grades','⭐','My Grades']].map(([k, icon, label]) => (
           <div
             key={k}
             role="button"
@@ -547,42 +620,61 @@ function Scribe() {
           >
             <span className="sf-sidebar-rich__nav-ico">{icon}</span>
             <span className="sf-sidebar-rich__nav-text">{label}</span>
-            {k === 'grades' && grades.length > 0 ? <span className="sf-sidebar-rich__nav-badge">{grades.length}</span> : null}
+            {k === 'grades' && grades.length > 0 ? <span className="sf-sidebar-rich__nav-badge sf-sidebar-rich__nav-badge--subtle">{grades.length}</span> : null}
           </div>
         ))}
       </nav>
-      {selectedProvider && activeTab === 'recordings' && (
-        <div className="sf-provider-chip">
-          <div className="sf-chip-label">Current Provider</div>
-          <div className="sf-chip-name">{selectedProvider.name}</div>
-          <div className="sf-chip-spec">{selectedProvider.specialty || 'Clinician'}</div>
-          {selectedDate && screen !== 'providers' && (
-            <div className="sf-chip-date">📅 {fmtShortDate(selectedDate)}</div>
-          )}
-          <div
-            className="sf-chip-change"
-            onClick={() =>
-              leaveNoteScreen(() => {
-                setScreen('providers')
-                setSelectedProvider(null)
-                setSelectedRec(null)
-                setRecordings([])
-                sidebar.close()
-              })
-            }
-          >
-            Change provider
+      <div className="scribe-sidebar__fill" aria-hidden="true" />
+      <div className="scribe-sidebar__bottom">
+        {selectedProvider && (
+          <div className="sf-provider-chip">
+            <div className="sf-chip-label">Current Provider</div>
+            <div className="sf-chip-name">{selectedProvider.name}</div>
+            <div className="sf-chip-spec">{selectedProvider.specialty || 'Clinician'}</div>
+            {selectedDate && screen !== 'providers' && (
+              <div className="sf-chip-date">📅 {fmtShortDate(selectedDate)}</div>
+            )}
+            <div
+              className="sf-chip-change"
+              onClick={() =>
+                leaveNoteScreen(() => {
+                  setScreen('providers')
+                  setSelectedProvider(null)
+                  setSelectedRec(null)
+                  setRecordings([])
+                  sidebar.close()
+                })
+              }
+            >
+              Change provider
+            </div>
           </div>
-        </div>
-      )}
-      <PortalSidebarFooter
-        userName={currentUser.name || 'Scribe'}
-        role="scribe"
-        onLogout={requestLogout}
-      />
+        )}
+        <PortalSidebarFooter
+          userName={currentUser.name || 'Scribe'}
+          role="scribe"
+          onLogout={requestLogout}
+        />
+      </div>
     </aside>
     </>
-  )
+  ), [
+    sidebar.open,
+    drawerMode,
+    branding,
+    activeTab,
+    grades.length,
+    selectedProvider,
+    selectedDate,
+    screen,
+    currentUser.name,
+    confirmDialog,
+    confirmLoading,
+    leaveNoteScreen,
+    requestLogout,
+    handleNav,
+    runConfirm,
+  ])
 
   // ─── MY NOTES ─────────────────────────────────────
 
@@ -590,7 +682,7 @@ function Scribe() {
     const byProvider = myNotes.reduce((acc, n) => { const key = n.clinician_name || 'Unknown'; if (!acc[key]) acc[key] = []; acc[key].push(n); return acc }, {})
     return (
       <div className="sf-page sf-portal adm-shell scribe-portal">
-        <SidebarEl />
+        {sidebarMarkup}
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
           <PortalTopbar
@@ -599,7 +691,7 @@ function Scribe() {
             onMenuClick={sidebar.toggle}
             navControlsId="scribe-sidebar"
             moduleTitle="My Notes"
-            brandName={branding.system_name || 'Anot'}
+            brandName=""
             user={currentUser}
             avatarFallback="S"
             onViewProfile={() => handleNav('profile')}
@@ -607,29 +699,57 @@ function Scribe() {
             menuId="scribe-account-menu"
           />
           <div className="sf-body">
-            <div className="sf-stats" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
-              {[['Total', myNotes.length, '#4260E9'],['Submitted', myNotes.filter(n => ['submitted','uploaded'].includes(n.status)).length, '#00C896'],['Drafts', myNotes.filter(n => n.status === 'draft').length, '#4FACFE'],['Graded', myNotes.filter(n => n.status === 'uploaded').length, '#FFB547']].map(([l, v, c]) => (
-                <div key={l} className="sf-stat"><div className="sf-stat-val" style={{ color: c }}>{v}</div><div className="sf-stat-lbl">{l}</div></div>
-              ))}
+            <div className="sf-stats scribe-stats scribe-stats--notes">
+              <div className="sf-stat scribe-stat scribe-stat--total"><div className="sf-stat-val">{myNotes.length}</div><div className="sf-stat-lbl">Total</div></div>
+              <div className="sf-stat scribe-stat scribe-stat--submitted"><div className="sf-stat-val">{myNotes.filter(n => ['submitted','uploaded'].includes(n.status)).length}</div><div className="sf-stat-lbl">Submitted</div></div>
+              <div className="sf-stat scribe-stat scribe-stat--drafts"><div className="sf-stat-val">{myNotes.filter(n => n.status === 'draft').length}</div><div className="sf-stat-lbl">Drafts</div></div>
+              <div className="sf-stat scribe-stat scribe-stat--graded"><div className="sf-stat-val">{myNotes.filter(n => n.status === 'uploaded').length}</div><div className="sf-stat-lbl">Graded</div></div>
             </div>
             {loadingNotes ? <Empty icon="⏳" title="Loading..." /> : myNotes.length === 0 ? <Empty icon="📋" title="No notes yet" sub="Notes you write will appear here." /> :
              Object.entries(byProvider).map(([provName, provNotes]) => (
-              <div key={provName} className="sf-prov-bundle">
-                <div className="sf-prov-bundle__head">
-                  <div className="sf-prov-bundle__mark">
-                    <div className="sf-prov-bundle__dot" aria-hidden />
-                    <div>
-                      <div className="sf-prov-bundle__name">{provName}</div>
-                      <div className="sf-prov-bundle__meta">{provNotes.length} note{provNotes.length !== 1 ? 's' : ''}</div>
-                    </div>
-                  </div>
-                </div>
+              <div key={provName} className="scribe-notes-group">
+                <div className="scribe-notes-group__divider">{provName}</div>
                 {provNotes.map(n => {
-                  const s = STATUS_CFG[n.status] || { label: n.status, cls: 'badge-gray' }
+                  const isPending = ['draft', 'recording-uploaded', 'note-ready'].includes(n.status)
+                  const badgeType = n.status === 'uploaded' ? 'graded' : n.status === 'submitted' ? 'submitted' : 'pending'
+                  const badgeLabel = n.status === 'uploaded' ? 'Graded' : n.status === 'submitted' ? 'Submitted' : n.status === 'draft' ? 'Draft' : 'Pending'
+                  const accentClass = isPending ? 'scribe-note-card--pending' : 'scribe-note-card--done'
                   return (
-                    <div key={n.id} className="sf-row">
-                      <div className="sf-row-left"><span style={{ fontSize: 20 }}>📄</span><div><div className="sf-row-name">{n.patient_name}</div><div className="sf-row-meta">{n.mrn} · {n.visit_type} · {n.visit_date}</div></div></div>
-                      <div className="sf-row-right"><span className={`badge ${s.cls}`}>{s.label}</span></div>
+                    <div
+                      key={n.id}
+                      role="button"
+                      tabIndex={0}
+                      className={`scribe-note-card ${accentClass}`}
+                      onClick={() => openMyNote(n)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          openMyNote(n)
+                        }
+                      }}
+                    >
+                      <div className="scribe-note-card__left">
+                        <span className="scribe-note-card__icon" aria-hidden>📄</span>
+                        <div className="scribe-note-card__info">
+                          <div className="scribe-note-card__name">{n.patient_name}</div>
+                          <div className="scribe-note-card__meta">
+                            {n.mrn} · {fmtDisplayDate(n.visit_date)} · {n.visit_type}
+                          </div>
+                          <span className={`scribe-status-badge scribe-status-badge--${badgeType}`}>{badgeLabel}</span>
+                        </div>
+                      </div>
+                      <div className="scribe-note-card__actions">
+                        <button
+                          type="button"
+                          className={isPending ? 'scribe-note-btn scribe-note-btn--open' : 'scribe-note-btn scribe-note-btn--view'}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            openMyNote(n)
+                          }}
+                        >
+                          {isPending ? 'Open Note' : 'View Note'}
+                        </button>
+                      </div>
                     </div>
                   )
                 })}
@@ -647,7 +767,7 @@ function Scribe() {
     const avgScore = grades.length > 0 ? Math.round(grades.reduce((a, g) => a + (g.overall_score || 0), 0) / grades.length) : 0
     return (
       <div className="sf-page sf-portal adm-shell scribe-portal">
-        <SidebarEl />
+        {sidebarMarkup}
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
           <PortalTopbar
@@ -656,7 +776,7 @@ function Scribe() {
             onMenuClick={sidebar.toggle}
             navControlsId="scribe-sidebar"
             moduleTitle="My Grades"
-            brandName={branding.system_name || 'Anot'}
+            brandName=""
             user={currentUser}
             avatarFallback="S"
             onViewProfile={() => handleNav('profile')}
@@ -664,11 +784,12 @@ function Scribe() {
             menuId="scribe-account-menu"
           />
           <div className="sf-body">
-            <div className="sf-stats" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
-              {[['Notes Graded', grades.length, '#4260E9'],['Average Score', avgScore || '—', avgScore >= 90 ? '#00C896' : avgScore >= 75 ? '#FFB547' : '#FF5A7A'],['Top Score', grades.length > 0 ? Math.max(...grades.map(g => g.overall_score || 0)) : '—', '#00C896']].map(([l, v, c]) => (
-                <div key={l} className="sf-stat"><div className="sf-stat-val" style={{ color: c }}>{v}</div><div className="sf-stat-lbl">{l}</div></div>
-              ))}
+            <div className="sf-stats scribe-stats scribe-stats--grades">
+              <div className="sf-stat scribe-stat scribe-stat--notes-graded"><div className="sf-stat-val">{grades.length}</div><div className="sf-stat-lbl">Notes Graded</div></div>
+              <div className="sf-stat scribe-stat scribe-stat--avg-score"><div className="sf-stat-val">{avgScore || '—'}</div><div className="sf-stat-lbl">Average Score</div></div>
+              <div className="sf-stat scribe-stat scribe-stat--top-score"><div className="sf-stat-val">{grades.length > 0 ? Math.max(...grades.map(g => g.overall_score || 0)) : '—'}</div><div className="sf-stat-lbl">Top Score</div></div>
             </div>
+            <p className="scribe-grades-scale">Notes are graded out of 100 by the QPS team based on accuracy, completeness, and clinical language.</p>
             <div className="sf-section-label">Grade History</div>
             {loadingGrades ? <Empty icon="⏳" title="Loading grades..." /> :
              grades.length === 0 ? <Empty icon="⭐" title="No grades yet" sub="Grades from QPS will appear here once your notes are reviewed." /> :
@@ -679,7 +800,7 @@ function Scribe() {
                   <div className="sf-grade-detail__head">
                     <div>
                       <div className="sf-grade-detail__name">{selectedGrade.patient_name}</div>
-                      <div className="sf-grade-detail__meta">{selectedGrade.mrn} · {selectedGrade.visit_type} · {selectedGrade.visit_date} · {selectedGrade.clinician_name}</div>
+                      <div className="sf-grade-detail__meta">{selectedGrade.mrn} · {selectedGrade.visit_type} · {fmtDisplayDate(selectedGrade.visit_date)} · {selectedGrade.clinician_name}</div>
                     </div>
                     <div style={{ fontSize: 36, fontWeight: 700, color: selectedGrade.overall_score >= 90 ? '#4260E9' : selectedGrade.overall_score >= 75 ? '#FFB547' : '#FF5A7A', lineHeight: 1 }}>{selectedGrade.overall_score}<span style={{ fontSize: 14, color: '#64748B', fontWeight: 400 }}>/100</span></div>
                   </div>
@@ -712,7 +833,7 @@ function Scribe() {
               <div key={g.id} className="sf-row" style={{ cursor: 'pointer' }} onClick={() => setSelectedGrade(g)}>
                 <div className="sf-row-left">
                   <div style={{ width: 48, height: 48, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, background: g.overall_score >= 90 ? '#E1F5EE' : g.overall_score >= 75 ? '#FAEEDA' : '#FCEBEB', color: g.overall_score >= 90 ? '#085041' : g.overall_score >= 75 ? '#633806' : '#501313' }}>{g.overall_score}</div>
-                  <div><div className="sf-row-name">{g.patient_name}</div><div className="sf-row-meta">{g.mrn} · {g.visit_type} · {g.visit_date} · {g.clinician_name}</div>{g.comment && <div style={{ fontSize: 12, color: '#64748B', marginTop: 4, fontStyle: 'italic' }}>"{g.comment.length > 60 ? g.comment.slice(0, 60) + '...' : g.comment}"</div>}</div>
+                  <div><div className="sf-row-name">{g.patient_name}</div><div className="sf-row-meta">{g.mrn} · {g.visit_type} · {fmtDisplayDate(g.visit_date)} · {g.clinician_name}</div>{g.comment && <div style={{ fontSize: 12, color: '#64748B', marginTop: 4, fontStyle: 'italic' }}>"{g.comment.length > 60 ? g.comment.slice(0, 60) + '...' : g.comment}"</div>}</div>
                 </div>
                 <div className="sf-row-right"><span style={{ fontSize: 12, color: '#4260E9', fontWeight: 500 }}>View →</span></div>
               </div>
@@ -728,7 +849,7 @@ function Scribe() {
   if (screen === 'profile') {
     return (
       <div className="sf-page sf-portal adm-shell scribe-portal">
-        <SidebarEl />
+        {sidebarMarkup}
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
           <PortalTopbar
@@ -737,7 +858,7 @@ function Scribe() {
             onMenuClick={sidebar.toggle}
             navControlsId="scribe-sidebar"
             moduleTitle="My Profile"
-            brandName={branding.system_name || 'Anot'}
+            brandName=""
             user={currentUser}
             avatarFallback="S"
             onViewProfile={() => handleNav('profile')}
@@ -756,8 +877,22 @@ function Scribe() {
                 ))}
               </div>
             </div>
-            <div style={{ marginTop: 16 }}>
-              <SystemProfileManager showToast={showNotif} roleLabel="Scribe" compact readOnly />
+            <div className="scribe-profile-section" style={{ marginTop: 16 }}>
+              <SystemProfileManager
+                showToast={showNotif}
+                roleLabel="Scribe"
+                compact
+                className="scribe-profile-card"
+                subtitleText="Your name and email are managed by your administrator. You can update your phone number and personal details below."
+                fieldPlaceholders={{
+                  email: 'your@email.com',
+                  phone: '+1 (555) 000-0000',
+                  personal_info: 'Add your background, specializations, or preferences...',
+                }}
+                maskDevEmail
+                lockedFields={['name', 'email']}
+                saveButtonLabel="Save Changes"
+              />
             </div>
           </div>
           {notif && <Notif notif={notif} />}
@@ -771,7 +906,7 @@ function Scribe() {
   if (screen === 'providers') {
     return (
       <div className="sf-page sf-portal adm-shell scribe-portal">
-        <SidebarEl />
+        {sidebarMarkup}
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
           <PortalTopbar
@@ -780,7 +915,7 @@ function Scribe() {
             onMenuClick={sidebar.toggle}
             navControlsId="scribe-sidebar"
             moduleTitle="Select Provider"
-            brandName={`Step 1 of 2 — Choose your assigned clinician · ${branding.system_name || 'Anot'}`}
+            brandName="Step 1 of 2 — Choose your assigned clinician"
             user={currentUser}
             avatarFallback="S"
             onViewProfile={() => handleNav('profile')}
@@ -815,7 +950,7 @@ function Scribe() {
     const QUICK = [{ label: 'Today', date: localDateStr(0) },{ label: 'Yesterday', date: localDateStr(-1) },{ label: '2 days ago', date: localDateStr(-2) },{ label: '3 days ago', date: localDateStr(-3) }]
     return (
       <div className="sf-page sf-portal adm-shell scribe-portal">
-        <SidebarEl />
+        {sidebarMarkup}
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
           <PortalTopbar
@@ -837,7 +972,7 @@ function Scribe() {
                 </span>
                 <div className="adm-topbar__titles">
                   <div className="adm-topbar__module">{selectedProvider?.name}</div>
-                  <div className="adm-topbar__brand">Step 2 of 2 — Select a date · {branding.system_name || 'Anot'}</div>
+                  <div className="adm-topbar__brand">Step 2 of 2 — Select a date</div>
                 </div>
               </div>
             }
@@ -883,7 +1018,7 @@ function Scribe() {
     const submitted = recordings.filter(r => ['submitted','uploaded'].includes(r.status)).length
     return (
       <div className="sf-page sf-portal adm-shell scribe-portal">
-        <SidebarEl />
+        {sidebarMarkup}
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
           <PortalTopbar
@@ -906,8 +1041,7 @@ function Scribe() {
                 <div className="adm-topbar__titles">
                   <div className="adm-topbar__module">{selectedProvider?.name}</div>
                   <div className="adm-topbar__brand">
-                    {fmtDateLabel(selectedDate)} · {recordings.length} recording{recordings.length !== 1 ? 's' : ''} ·{' '}
-                    {branding.system_name || 'Anot'}
+                    {fmtDateLabel(selectedDate)} · {recordings.length} recording{recordings.length !== 1 ? 's' : ''}
                   </div>
                 </div>
               </div>
@@ -920,10 +1054,10 @@ function Scribe() {
           />
           <div className="sf-body">
             <div className="sf-date-nav scribe-date-nav portal-cal-strip">
-              <button type="button" className="btn btn-sm scribe-date-nav__arrow portal-cal-strip__arrow portal-cal-strip__arrow--week" onClick={() => setOff((d) => d - 7)} aria-label="Previous week">
+              <button type="button" className="btn btn-sm scribe-date-nav__arrow portal-cal-strip__arrow portal-cal-strip__arrow--week" onClick={() => setSelectedDate((d) => addDaysToDateStr(d, -7))} aria-label="Previous week">
                 ‹‹
               </button>
-              <button type="button" className="btn btn-sm scribe-date-nav__arrow portal-cal-strip__arrow" onClick={() => setOff((d) => d - 1)} aria-label="Previous day">
+              <button type="button" className="btn btn-sm scribe-date-nav__arrow portal-cal-strip__arrow" onClick={() => setSelectedDate((d) => addDaysToDateStr(d, -1))} aria-label="Previous day">
                 ‹
               </button>
               <div className="sf-date-nav-days scribe-date-nav__days portal-cal-strip__days">
@@ -938,9 +1072,9 @@ function Scribe() {
                         tabIndex={0}
                         onMouseEnter={() => void loadDayStats(o)}
                         onFocus={() => void loadDayStats(o)}
-                        onClick={() => setOff(o)}
-                        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setOff(o)}
-                        className={`sf-date-nav-day scribe-date-nav__day portal-cal-strip__day${o === off ? ' active' : ''}${o === 0 ? ' scribe-date-nav__day--today portal-cal-strip__day--today' : ''}`}
+                        onClick={() => setSelectedDate(localDate(o, 'input'))}
+                        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setSelectedDate(localDate(o, 'input'))}
+                        className={`sf-date-nav-day scribe-date-nav__day portal-cal-strip__day${localDate(o, 'input') === selectedDate ? ' active' : ''}${o === 0 ? ' scribe-date-nav__day--today portal-cal-strip__day--today' : ''}`}
                       >
                         <div className="sf-date-nav-day-name portal-cal-strip__day-name">{localDate(o, 'day')}</div>
                         <div className="sf-date-nav-day-date portal-cal-strip__day-num">{localDate(o, 'date')}</div>
@@ -950,20 +1084,21 @@ function Scribe() {
                   )
                 })}
               </div>
-              <button type="button" className="btn btn-sm scribe-date-nav__arrow portal-cal-strip__arrow" onClick={() => setOff((d) => d + 1)} aria-label="Next day">
+              <button type="button" className="btn btn-sm scribe-date-nav__arrow portal-cal-strip__arrow" onClick={() => setSelectedDate((d) => addDaysToDateStr(d, 1))} aria-label="Next day">
                 ›
               </button>
-              <button type="button" className="btn btn-sm scribe-date-nav__arrow portal-cal-strip__arrow portal-cal-strip__arrow--week" onClick={() => setOff((d) => d + 7)} aria-label="Next week">
+              <button type="button" className="btn btn-sm scribe-date-nav__arrow portal-cal-strip__arrow portal-cal-strip__arrow--week" onClick={() => setSelectedDate((d) => addDaysToDateStr(d, 7))} aria-label="Next week">
                 ››
               </button>
             </div>
-            <div className="sf-stats" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
-              <div className="sf-stat"><div className="sf-stat-val" style={{ color: '#1E293B' }}>{recordings.length}</div><div className="sf-stat-lbl">Total</div></div>
-              <div className="sf-stat"><div className="sf-stat-val" style={{ color: '#FFB547' }}>{pending}</div><div className="sf-stat-lbl">Pending</div></div>
-              <div className="sf-stat"><div className="sf-stat-val" style={{ color: '#4260E9' }}>{submitted}</div><div className="sf-stat-lbl">Submitted</div></div>
+            <div className="sf-stats scribe-stats scribe-stats--recordings">
+              <div className="sf-stat scribe-stat scribe-stat--total"><div className="sf-stat-val">{recordings.length}</div><div className="sf-stat-lbl">Total</div></div>
+              <div className="sf-stat scribe-stat scribe-stat--pending"><div className="sf-stat-val">{pending}</div><div className="sf-stat-lbl">Pending</div></div>
+              <div className="sf-stat scribe-stat scribe-stat--submitted"><div className="sf-stat-val">{submitted}</div><div className="sf-stat-lbl">Submitted</div></div>
             </div>
             <div className="sf-section-label">Patient Recordings — {fmtShortDate(selectedDate)}</div>
             {loadingRecordings ? <Empty icon="⏳" title="Loading..." /> :
+             recordingsError ? <Empty icon="⚠️" title="Could not load recordings" sub={recordingsError} /> :
              recordings.length === 0 ? <Empty icon="📭" title="No recordings for this date" sub={`No visits found for ${selectedProvider?.name} on ${fmtDateLabel(selectedDate)}`} /> :
              recordings.map(rec => {
               const effectiveStatus = ['submitted','uploaded'].includes(rec.note_status) ? rec.note_status : rec.status
@@ -991,7 +1126,88 @@ function Scribe() {
     )
   }
 
+  // ─── READ-ONLY NOTE VIEW (My Notes — submitted / graded) ──
+
+  if (screen === 'note-view' && viewingMyNote) {
+    const noteId = viewingMyNote.id ?? note?.id
+    const grade =
+      viewingMyNote.status === 'uploaded'
+        ? grades.find((g) => String(g.note_id) === String(noteId))
+        : null
+    const finalNoteText = note?.final_note || viewingMyNote.final_note || ''
+    const submittedRaw = note?.updated_at || viewingMyNote.updated_at
+    const submittedLabel = submittedRaw ? fmtDisplayDate(submittedRaw) : '—'
+    const statusLabel = viewingMyNote.status === 'uploaded' ? 'Graded' : 'Submitted'
+
+    return (
+      <div className="sf-page sf-portal adm-shell scribe-portal">
+        {sidebarMarkup}
+        <div className="sf-main sf-portal__main">
+          <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
+          <PortalTopbar
+            drawerMode={drawerMode}
+            sidebarOpen={sidebar.open}
+            onMenuClick={sidebar.toggle}
+            navControlsId="scribe-sidebar"
+            moduleTitle="View Note"
+            brandName=""
+            user={currentUser}
+            avatarFallback="S"
+            onViewProfile={() => handleNav('profile')}
+            onLogout={requestLogout}
+            menuId="scribe-account-menu"
+          />
+          <div className="sf-body scribe-note-readonly-page">
+            <button type="button" className="sf-back scribe-note-readonly__back" onClick={closeNoteView}>
+              ← Back to My Notes
+            </button>
+            <article className="scribe-note-readonly">
+              <header className="scribe-note-readonly__head">
+                <div className="scribe-note-readonly__patient">{viewingMyNote.patient_name}</div>
+                <div className="scribe-note-readonly__meta">
+                  {viewingMyNote.mrn} · {fmtDisplayDate(viewingMyNote.visit_date)} · {viewingMyNote.visit_type}
+                  {viewingMyNote.clinician_name ? ` · ${viewingMyNote.clinician_name}` : ''}
+                </div>
+                <div className="scribe-note-readonly__submitted">
+                  <span className={`scribe-status-badge scribe-status-badge--${viewingMyNote.status === 'uploaded' ? 'graded' : 'submitted'}`}>
+                    {statusLabel}
+                  </span>
+                  <span className="scribe-note-readonly__submitted-date">Submitted {submittedLabel}</span>
+                </div>
+              </header>
+              {loadingNote ? (
+                <div className="scribe-note-readonly__loading">Loading note…</div>
+              ) : finalNoteText ? (
+                <ScribeFinalNoteEditor value={finalNoteText} onChange={() => {}} readOnly className="scribe-note-readonly__sections" />
+              ) : (
+                <div className="scribe-note-readonly__empty">No final note content available.</div>
+              )}
+              {grade ? (
+                <footer className="scribe-note-readonly__grade">
+                  <div className="scribe-note-readonly__grade-title">Grade Summary</div>
+                  <div className="scribe-note-readonly__score">
+                    Overall score: <strong>{grade.overall_score}</strong>/100
+                  </div>
+                  {grade.comment ? (
+                    <div className="scribe-note-readonly__feedback">
+                      <div className="scribe-note-readonly__feedback-label">
+                        Feedback from QPS{grade.qps_name ? ` (${grade.qps_name})` : ''}
+                      </div>
+                      <p className="scribe-note-readonly__feedback-text">{grade.comment}</p>
+                    </div>
+                  ) : null}
+                </footer>
+              ) : null}
+            </article>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   // ─── NOTE EDITOR ──────────────────────────────────
+
+  if (screen !== 'note') return null
 
   const notePhase = selectedRec?.note_status ?? selectedRec?.status
   const isDone = ['submitted', 'uploaded'].includes(notePhase)
@@ -1005,7 +1221,7 @@ function Scribe() {
   const txComplete = txSt === 'completed'
   return (
     <div className="sf-page-fixed sf-portal adm-shell scribe-portal">
-      <SidebarEl />
+      {sidebarMarkup}
       <div className="sf-main-fixed sf-portal__main">
         <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
         <PortalTopbar
@@ -1031,8 +1247,7 @@ function Scribe() {
                 </div>
                 <div className="adm-topbar__brand">
                   {selectedRec?.mrn} · {selectedProvider?.name}
-                  {selectedRec?.visit_time ? ` · Appt. ${fmtAppointmentTime(selectedRec.visit_time)}` : ''} · {selectedDate} ·{' '}
-                  {branding.system_name || 'Anot'}
+                  {selectedRec?.visit_time ? ` · Appt. ${fmtAppointmentTime(selectedRec.visit_time)}` : ''} · {fmtDisplayDate(selectedDate)}
                 </div>
               </div>
             </div>
@@ -1041,28 +1256,19 @@ function Scribe() {
 
         <div className="sf-note-toolbar" role="toolbar" aria-label="Note data">
           {isDirty ? <span className="sf-note-toolbar__pill">Unsaved changes</span> : null}
-          <span className="sf-note-toolbar__hint">
+          <span
+            className={
+              txSt === 'processing' || txSt === 'failed'
+                ? 'sf-note-toolbar__hint'
+                : 'sf-note-toolbar__hint scribe-note-banner'
+            }
+          >
             {txSt === 'processing'
-              ? 'Transcription is running on the server (auto-refresh every 8s). You can also click Refresh.'
+              ? 'Transcription is running on the server (auto-refresh every 30s).'
               : txSt === 'failed'
                 ? 'Transcription failed — check audio format (install ffmpeg on server for .webm), Deepgram/Groq keys in Admin → Settings, then click Transcribe audio again.'
                 : 'Edits stay in your browser until you save a draft or submit to the clinician.'}
           </span>
-          <button
-            type="button"
-            className="sf-note-toolbar__btn"
-            onClick={() => onToolbarRefresh()}
-            disabled={noteRefreshing || loadingNote || !selectedRec?.id}
-            title={isDirty ? 'Safe refresh: updates status and AI draft from server, keeps your note text' : 'Reload note, transcript, and AI draft from server'}
-          >
-            {noteRefreshing ? <span className="sf-note-toolbar__spin" aria-hidden /> : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden>
-                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-                <polyline points="21 3 21 9 15 9" />
-              </svg>
-            )}
-            {noteRefreshing ? 'Refreshing…' : 'Refresh'}
-          </button>
           {isDirty ? (
             <button
               type="button"
@@ -1081,7 +1287,7 @@ function Scribe() {
             <PortalAudioPlayer
               visitId={selectedRec?.id}
               durationSecs={selectedRec?.duration_seconds || 0}
-              onTabChange={(idx) => setActiveRecIdx(idx)}
+              onTabChange={handleAudioTabChange}
               compact
             />
           </div>
@@ -1089,21 +1295,12 @@ function Scribe() {
           <NoteWorkspacePanel
             title="Transcription"
             className="sf-note-panel--transcription"
-            badges={
-              <>
-                <span className={`badge ${txBadge.cls}`}>{txBadge.label}</span>
-                <span
-                  className="badge badge-gray"
-                  title={txSegments.length > 1 ? 'Multiple recordings — use Rec tabs on the player' : 'Single recording — transcript maps to Rec 1 automatically'}
-                >
-                  {txSegments.length > 1 ? `Rec ${activeRecIdx + 1} of ${txSegments.length}` : 'Auto segment'}
-                </span>
-              </>
-            }
+            allowExpand={false}
+            badges={<span className={`badge ${txBadge.cls}`}>{txBadge.label}</span>}
           >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div className="scribe-note-panel-content">
               {!isDone && !txComplete && (
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <div className="scribe-note-panel-content__actions">
                   <button type="button" className="btn btn-navy" disabled={transcribeSubmitting || !selectedRec?.id} onClick={runTranscribe}>
                     {transcribeSubmitting ? 'Starting…' : 'Transcribe audio'}
                   </button>
@@ -1125,7 +1322,6 @@ function Scribe() {
                   readOnly={isDone}
                   placeholder="Transcript for this recording appears here after AI processing. You can edit text before saving the draft."
                   spellCheck
-                  style={{ minHeight: 200, flex: 1 }}
                 />
               )}
               {!loadingNote && !currentSeg && txSt === 'failed' && (
@@ -1143,11 +1339,39 @@ function Scribe() {
 
           <NoteWorkspacePanel
             title="AI Draft"
-            badges={<span className="badge badge-blue">AI Generated</span>}
+            allowExpand={false}
+            badges={
+              !isDone ? (
+                <button
+                  type="button"
+                  className="scribe-generate-draft-btn"
+                  onClick={runGenerateDraft}
+                  disabled={generatingDraft || loadingNote || !selectedRec?.id}
+                >
+                  {generatingDraft ? (
+                    <>
+                      <span className="scribe-generate-draft-spin" aria-hidden />
+                      Generating...
+                    </>
+                  ) : (
+                    'Generate AI Draft'
+                  )}
+                </button>
+              ) : null
+            }
           >
             {loadingNote ? <div style={{ padding: 12, color: '#64748B', fontSize: 13 }}>Loading...</div> :
              note?.ai_draft ? (
-              <textarea className="sf-textarea sf-textarea-readonly" value={note.ai_draft} readOnly />
+              note.ai_draft.startsWith('[AI draft unavailable') ? (
+                <div className="scribe-ai-draft-unavailable">{note.ai_draft}</div>
+              ) : (
+                <ScribeFinalNoteEditor
+                  value={cleanAiDraftForDisplay(note.ai_draft)}
+                  onChange={() => {}}
+                  readOnly
+                  className="scribe-ai-draft-readonly"
+                />
+              )
             ) : (
               <div style={{ padding: 16, color: '#64748B', fontSize: 13, lineHeight: 1.7 }}>
                 <div style={{ fontSize: 24, marginBottom: 8 }}>🤖</div>
@@ -1159,17 +1383,23 @@ function Scribe() {
 
           <NoteWorkspacePanel
             title="Final Note"
+            className="sf-note-panel--final-note"
+            allowExpand={false}
             badges={<span className={`badge ${isDone ? 'badge-green' : 'badge-amber'}`}>{isDone ? 'Submitted' : 'Editing'}</span>}
           >
             {loadingNote ? <div style={{ padding: 12, color: '#64748B', fontSize: 13 }}>Loading...</div> : (
-              <textarea className="sf-textarea" value={finalNote} onChange={e => setFinalNote(e.target.value)}
-                readOnly={isDone} style={isDone ? { background: '#EEF2FF', cursor: 'default' } : {}}
-                placeholder={`Write the final clinical note here...\n\nCHIEF COMPLAINT:\n\nHISTORY OF PRESENT ILLNESS (HPI):\n\nPHYSICAL EXAMINATION (PE):\n\nIMAGING:\n\nASSESSMENT & PLAN (A&P):`}
-                spellCheck />
+              <textarea
+                className="scribe-final-note-textarea"
+                value={finalNote}
+                onChange={(e) => setFinalNote(e.target.value)}
+                readOnly={isDone}
+                placeholder="Write the final clinical note here..."
+                spellCheck
+              />
             )}
             {!isDone && (
               <div className="sf-bottom-bar">
-                <button className="btn btn-amber" onClick={saveDraft} disabled={saving}>{saving ? 'Saving...' : 'Save Draft'}</button>
+                <button type="button" className="btn scribe-save-draft-btn" onClick={saveDraft} disabled={saving}>{saving ? 'Saving...' : 'Save Draft'}</button>
                 <button className="btn btn-teal" style={{ marginLeft: 'auto' }} onClick={uploadToEMR} disabled={saving}>{saving ? 'Uploading...' : 'Upload to EMR'}</button>
               </div>
             )}

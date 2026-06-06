@@ -1,5 +1,431 @@
-/* Scribe portal — mobile layout */
+/* Scribe portal — layout and visual polish */
 
+/* ── Main content background ───────────────────────────── */
+.scribe-portal .sf-portal__main .sf-body {
+  background: #f4f6f9;
+}
+
+.scribe-portal.sf-page-fixed .sf-main-fixed {
+  background: #f4f6f9;
+}
+
+/* Hide empty grey subtitle under page titles */
+.scribe-portal .adm-topbar__titles .adm-topbar__brand:empty {
+  display: none;
+}
+
+/* ── Page cards and sections ───────────────────────────── */
+.scribe-portal .sf-body .sf-card,
+.scribe-portal .sf-body .sf-prov-bundle,
+.scribe-portal .sf-body .sf-row,
+.scribe-portal .sf-body .scribe-date-panel,
+.scribe-portal .sf-body .sf-provider-card,
+.scribe-portal .sf-body .sf-empty {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.scribe-portal .sf-body .sf-card,
+.scribe-portal .sf-body .scribe-date-panel {
+  padding: 24px;
+}
+
+.scribe-portal .sf-body .sf-prov-bundle {
+  padding: 8px 24px 16px;
+  margin-bottom: 16px;
+}
+
+.scribe-portal .sf-body .sf-row {
+  padding: 16px 20px;
+  margin-bottom: 10px;
+  border: 1px solid #e5e7eb;
+}
+
+.scribe-portal .sf-body .sf-provider-grid {
+  gap: 12px;
+}
+
+.scribe-portal .sf-body .sf-provider-card {
+  padding: 20px 24px;
+  border: 1px solid #e5e7eb;
+}
+
+/* ── Stat cards ────────────────────────────────────────── */
+.scribe-portal .scribe-stats {
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.scribe-portal .scribe-stats--notes {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.scribe-portal .scribe-stats--grades,
+.scribe-portal .scribe-stats--recordings {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.scribe-portal .scribe-stat {
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: none;
+  background-image: none;
+}
+
+.scribe-portal .scribe-stat--total {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+}
+
+.scribe-portal .scribe-stat--total .sf-stat-val {
+  color: #2563eb;
+}
+
+.scribe-portal .scribe-stat--submitted,
+.scribe-portal .scribe-stat--graded,
+.scribe-portal .scribe-stat--top-score {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
+.scribe-portal .scribe-stat--submitted .sf-stat-val,
+.scribe-portal .scribe-stat--graded .sf-stat-val,
+.scribe-portal .scribe-stat--top-score .sf-stat-val {
+  color: #16a34a;
+}
+
+.scribe-portal .scribe-stat--drafts,
+.scribe-portal .scribe-stat--pending,
+.scribe-portal .scribe-stat--avg-score {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+}
+
+.scribe-portal .scribe-stat--drafts .sf-stat-val,
+.scribe-portal .scribe-stat--pending .sf-stat-val,
+.scribe-portal .scribe-stat--avg-score .sf-stat-val {
+  color: #ea580c;
+}
+
+.scribe-portal .scribe-stat--notes-graded {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+}
+
+.scribe-portal .scribe-stat--notes-graded .sf-stat-val {
+  color: #2563eb;
+}
+
+.scribe-portal .scribe-stat .sf-stat-lbl {
+  color: #6b7280;
+}
+
+/* ── My Grades scale note ──────────────────────────────── */
+.scribe-portal .scribe-grades-scale {
+  font-size: 13px;
+  color: #6b7280;
+  font-style: italic;
+  margin: -8px 0 16px;
+  line-height: 1.5;
+}
+
+/* ── Status badges (My Notes) ──────────────────────────── */
+.scribe-portal .scribe-status-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 12px;
+  white-space: nowrap;
+}
+
+.scribe-portal .scribe-status-badge--pending {
+  background: #fff7ed;
+  color: #ea580c;
+  border: 1px solid #ea580c;
+}
+
+.scribe-portal .scribe-status-badge--submitted,
+.scribe-portal .scribe-status-badge--graded {
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #16a34a;
+}
+
+/* ── Note cards (My Notes) ───────────────────────────── */
+.scribe-portal .scribe-notes-group {
+  margin-bottom: 8px;
+}
+
+.scribe-portal .scribe-notes-group__divider {
+  font-size: 12px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 4px 4px 10px;
+  margin-top: 4px;
+}
+
+.scribe-portal .scribe-notes-group:first-child .scribe-notes-group__divider {
+  margin-top: 0;
+}
+
+.scribe-portal .scribe-note-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  padding: 16px 20px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  border: none;
+  transition: box-shadow 0.15s ease;
+}
+
+.scribe-portal .scribe-note-card:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.scribe-portal .scribe-note-card--pending {
+  border-left: 3px solid #ea580c;
+}
+
+.scribe-portal .scribe-note-card--done {
+  border-left: 3px solid #16a34a;
+}
+
+.scribe-portal .scribe-note-card__left {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  flex: 1;
+  min-width: 0;
+}
+
+.scribe-portal .scribe-note-card__icon {
+  font-size: 20px;
+  flex-shrink: 0;
+  line-height: 1;
+  margin-top: 2px;
+}
+
+.scribe-portal .scribe-note-card__name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.3;
+}
+
+.scribe-portal .scribe-note-card__meta {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 2px;
+  line-height: 1.4;
+}
+
+.scribe-portal .scribe-note-card__info .scribe-status-badge {
+  margin-top: 8px;
+}
+
+.scribe-portal .scribe-note-card__actions {
+  flex-shrink: 0;
+  align-self: center;
+  margin-left: auto;
+}
+
+.scribe-portal .scribe-note-btn {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 8px;
+  padding: 10px 20px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.scribe-portal .scribe-note-btn--open {
+  background: #4f46e5;
+  color: #fff;
+  border: none;
+}
+
+.scribe-portal .scribe-note-btn--view {
+  background: transparent;
+  border: 1px solid #6b7280;
+  color: #6b7280;
+}
+
+/* ── Read-only note view (My Notes) ───────────────────── */
+.scribe-portal .scribe-note-readonly-page {
+  padding-top: 8px;
+}
+
+.scribe-portal .scribe-note-readonly__back {
+  display: inline-block;
+  margin-bottom: 20px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+}
+
+.scribe-portal .scribe-note-readonly {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  padding: 32px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.scribe-portal .scribe-note-readonly__head {
+  margin-bottom: 8px;
+}
+
+.scribe-portal .scribe-note-readonly__patient {
+  font-size: 20px;
+  font-weight: 700;
+  color: #111827;
+  line-height: 1.3;
+}
+
+.scribe-portal .scribe-note-readonly__meta {
+  font-size: 13px;
+  color: #6b7280;
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+.scribe-portal .scribe-note-readonly__submitted {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.scribe-portal .scribe-note-readonly__submitted-date {
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.scribe-portal .scribe-note-readonly__loading,
+.scribe-portal .scribe-note-readonly__empty {
+  font-size: 14px;
+  color: #6b7280;
+  padding: 24px 0;
+}
+
+.scribe-portal .scribe-note-readonly__sections.scribe-final-note--readonly {
+  background: transparent;
+  padding: 0;
+  overflow: visible;
+}
+
+.scribe-portal .scribe-note-readonly__sections .scribe-final-note__header {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 8px;
+  margin-top: 24px;
+  margin-bottom: 12px;
+}
+
+.scribe-portal .scribe-note-readonly__sections .scribe-final-note__section:first-child .scribe-final-note__header {
+  margin-top: 16px;
+}
+
+.scribe-portal .scribe-note-readonly__sections .scribe-final-note__body {
+  font-size: 15px;
+  color: #111827;
+  line-height: 1.7;
+  margin: 0 0 4px;
+}
+
+.scribe-portal .scribe-note-readonly__grade {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.scribe-portal .scribe-note-readonly__grade-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.scribe-portal .scribe-note-readonly__score {
+  font-size: 15px;
+  color: #111827;
+  line-height: 1.6;
+}
+
+.scribe-portal .scribe-note-readonly__score strong {
+  font-size: 18px;
+  color: #4f46e5;
+}
+
+.scribe-portal .scribe-note-readonly__feedback {
+  margin-top: 16px;
+}
+
+.scribe-portal .scribe-note-readonly__feedback-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 8px;
+}
+
+.scribe-portal .scribe-note-readonly__feedback-text {
+  font-size: 15px;
+  color: #111827;
+  line-height: 1.7;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+/* ── Profile page ──────────────────────────────────────── */
+.scribe-portal .scribe-profile-card .pm-actions {
+  justify-content: stretch;
+  padding-top: 0;
+  margin-top: 16px;
+}
+
+.scribe-portal .scribe-profile-card .pm-btn {
+  width: 100%;
+  background: #4f46e5;
+  background-image: none;
+  color: #fff;
+  border-radius: 8px;
+  padding: 12px 24px;
+  font-weight: 600;
+  font-size: 16px;
+  box-shadow: none;
+}
+
+.scribe-portal .scribe-profile-card .pm-btn:hover:not(:disabled) {
+  background: #4338ca;
+}
+
+.scribe-portal .scribe-profile-card .pm-group:nth-child(1) .pm-input,
+.scribe-portal .scribe-profile-card .pm-group:nth-child(2) .pm-input {
+  background: #f9fafb;
+  color: #6b7280;
+}
+
+/* ── Topbar / navigation ───────────────────────────────── */
 .scribe-portal .scribe-topbar-row {
   display: flex;
   align-items: center;
@@ -64,6 +490,287 @@
   white-space: nowrap;
 }
 
+/* Remove stray provider-bundle dot */
+.scribe-portal .sf-prov-bundle__dot {
+  display: none;
+}
+
+/* Sidebar — pin Account card to bottom on every page (My Notes, My Grades, Recordings, etc.) */
+.scribe-portal .sf-sidebar--rich.adm-sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.scribe-portal .sf-sidebar--rich .sf-sidebar-rich__top,
+.scribe-portal .sf-sidebar--rich .sf-sidebar-rich__nav-label,
+.scribe-portal .sf-sidebar--rich .sf-nav.sf-sidebar-rich__nav,
+.scribe-portal .sf-sidebar--rich .sf-provider-chip {
+  flex-shrink: 0;
+}
+
+.scribe-portal .sf-sidebar--rich .sf-nav.sf-sidebar-rich__nav {
+  flex: 0 1 auto;
+}
+
+.scribe-portal .scribe-sidebar__fill {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.scribe-portal .scribe-sidebar__bottom {
+  flex-shrink: 0;
+  margin-top: auto;
+}
+
+.scribe-portal .scribe-sidebar__bottom .sf-sidebar-rich__footer.adm-sidebar-footer {
+  margin-top: 0 !important;
+}
+
+/* Current Provider chip — space below nav */
+.scribe-portal .sf-sidebar--rich .sf-provider-chip {
+  margin-top: 24px;
+}
+
+/* Grades sidebar badge — subtle count, no orange glow */
+.scribe-portal .sf-sidebar-rich__nav-badge--subtle {
+  background: rgba(255, 255, 255, 0.2) !important;
+  color: #fff !important;
+  box-shadow: none !important;
+}
+
+/* Date picker — neutralize native calendar indicator tint */
+.scribe-portal .scribe-date-panel input[type='date']::-webkit-calendar-picker-indicator {
+  opacity: 0.55;
+  filter: grayscale(1);
+}
+
+/* ── Note editor (Final Note) ──────────────────────────── */
+.scribe-portal .scribe-final-note {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 14px;
+}
+
+.scribe-portal .scribe-final-note__section:first-child .scribe-final-note__header {
+  margin-top: 0;
+}
+
+.scribe-portal .scribe-final-note__header {
+  color: #374151;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.05em;
+  margin-top: 16px;
+  margin-bottom: 4px;
+}
+
+.scribe-portal .scribe-final-note__input {
+  width: 100%;
+  box-sizing: border-box;
+  border: none;
+  resize: vertical;
+  padding: 0;
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--text-main);
+  font-family: 'Inter', system-ui, sans-serif;
+  outline: none;
+  min-height: 4.5em;
+  background: transparent;
+}
+
+.scribe-portal .scribe-final-note__input:focus {
+  outline: none;
+}
+
+.scribe-portal .scribe-final-note--readonly .scribe-final-note__body {
+  margin: 0 0 12px;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--text-main);
+  font-family: 'Inter', system-ui, sans-serif;
+  white-space: pre-wrap;
+  background: transparent;
+}
+
+.scribe-portal .scribe-final-note--readonly {
+  background: #eef2ff;
+}
+
+.scribe-portal .scribe-ai-draft-readonly.scribe-final-note--readonly {
+  background: color-mix(in srgb, var(--brand-primary) 4%, var(--bg-card));
+}
+
+.scribe-portal .scribe-ai-draft-unavailable {
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.75;
+  color: #64748b;
+}
+
+/* Final Note — free text area */
+.scribe-portal .sf-note-panel--final-note .sf-note-panel__body {
+  padding: 0;
+}
+
+.scribe-portal .scribe-final-note-textarea {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  border: none;
+  resize: none;
+  padding: 16px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #111827;
+  font-family: 'Inter', system-ui, sans-serif;
+  outline: none;
+  background: transparent;
+}
+
+.scribe-portal .scribe-final-note-textarea:focus {
+  outline: none;
+}
+
+.scribe-portal .scribe-final-note-textarea:read-only {
+  cursor: default;
+}
+
+/* Note editor — equal-height three-column layout */
+.scribe-portal .sf-note-workspace__panels {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  height: calc(100vh - 280px);
+  min-height: 500px;
+  flex: none;
+  overflow: hidden;
+}
+
+.scribe-portal .sf-note-workspace__panels > .sf-note-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  min-height: 0;
+}
+
+.scribe-portal .sf-note-panel .sf-note-panel__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.scribe-portal .scribe-note-panel-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.scribe-portal .scribe-note-panel-content__actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.scribe-portal .sf-note-panel .sf-textarea,
+.scribe-portal .scribe-final-note-textarea,
+.scribe-portal .scribe-ai-draft-readonly,
+.scribe-portal .scribe-ai-draft-unavailable {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  resize: none;
+}
+
+.scribe-portal .sf-note-panel .sf-textarea {
+  min-height: 0;
+}
+
+.scribe-portal .scribe-ai-draft-readonly {
+  overflow-y: auto;
+}
+
+/* Save Draft button */
+.scribe-portal .scribe-save-draft-btn {
+  background: #fff;
+  border: 2px solid #4f46e5;
+  color: #4f46e5;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-weight: 600;
+}
+
+.scribe-portal .scribe-save-draft-btn:hover:not(:disabled) {
+  background: #eef2ff;
+  border-color: #4338ca;
+  color: #4338ca;
+}
+
+.scribe-portal .scribe-save-draft-btn:disabled {
+  opacity: 0.55;
+}
+
+/* AI Draft — manual generate button */
+.scribe-portal .scribe-generate-draft-btn {
+  background: #4f46e5;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.scribe-portal .scribe-generate-draft-btn:hover:not(:disabled) {
+  background: #4338ca;
+}
+
+.scribe-portal .scribe-generate-draft-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.scribe-portal .scribe-generate-draft-spin {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  animation: sf-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+/* Unsaved edits info banner */
+.scribe-portal .scribe-note-banner {
+  background: #eff6ff;
+  border-left: 3px solid #2563eb;
+  color: #1d4ed8;
+  padding: 10px 16px;
+  font-size: 13px;
+  border-radius: 0 6px 6px 0;
+  flex: 1 1 100%;
+}
+
 @media (max-width: 768px) {
   .scribe-portal .sf-body {
     padding-left: 14px;
@@ -101,7 +808,15 @@
   }
 
   .scribe-portal .sf-note-workspace__panels {
+    flex-direction: column;
+    height: auto;
+    min-height: 0;
     overflow: visible;
+  }
+
+  .scribe-portal .sf-note-workspace__panels > .sf-note-panel {
+    min-height: 320px;
+    height: auto;
   }
 
   .scribe-portal .sf-note-panel .sf-textarea {
@@ -123,6 +838,17 @@
     justify-content: flex-start;
     flex-wrap: wrap;
     gap: 8px;
+  }
+
+  .scribe-portal .scribe-note-card {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .scribe-portal .scribe-note-card__actions {
+    width: 100%;
+    display: flex;
+    justify-content: flex-end;
   }
 
   .scribe-portal .sf-row-right .btn {
@@ -147,6 +873,9 @@
     flex: 1 1 100%;
   }
 
+  .scribe-portal .scribe-stats--notes,
+  .scribe-portal .scribe-stats--grades,
+  .scribe-portal .scribe-stats--recordings,
   .scribe-portal .sf-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
   }
@@ -180,6 +909,9 @@
     inset: 48px 8px 8px;
   }
 
+  .scribe-portal .scribe-stats--notes,
+  .scribe-portal .scribe-stats--grades,
+  .scribe-portal .scribe-stats--recordings,
   .scribe-portal .sf-stats {
     grid-template-columns: 1fr 1fr !important;
   }

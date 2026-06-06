@@ -3,7 +3,18 @@ import { authAPI } from '../services/api'
 import { useBranding } from '../services/branding'
 import './systemProfileManager.css'
 
-export default function SystemProfileManager({ showToast, roleLabel = 'User', compact = false, readOnly = false }) {
+export default function SystemProfileManager({
+  showToast,
+  roleLabel = 'User',
+  compact = false,
+  readOnly = false,
+  className = '',
+  subtitleText,
+  fieldPlaceholders = {},
+  maskDevEmail = false,
+  lockedFields = [],
+  saveButtonLabel = 'Update profile',
+}) {
   const branding = useBranding()
   const [form, setForm] = useState({
     name: '',
@@ -55,6 +66,14 @@ export default function SystemProfileManager({ showToast, roleLabel = 'User', co
   }, [roleLabel])
 
   const setField = (k, v) => setForm((prev) => ({ ...prev, [k]: v }))
+
+  const isFieldLocked = (field) => readOnly || lockedFields.includes(field)
+  const displayEmail = maskDevEmail && form.email === 'scribe@dev.anot.local' ? '' : form.email
+  const resolvedSubtitle =
+    subtitleText ||
+    (readOnly
+      ? 'Your account details are managed by your organization administrator.'
+      : 'Update your name, contact details, and password. Only you can change this profile while signed in.')
 
   const fileToObjectUrl = (file) => URL.createObjectURL(file)
 
@@ -159,7 +178,7 @@ export default function SystemProfileManager({ showToast, roleLabel = 'User', co
   }
 
   return (
-    <div className="pm-card">
+    <div className={`pm-card${className ? ` ${className}` : ''}`}>
       <header className="pm-header" aria-labelledby="pm-heading">
         <div className="pm-header-visual">
           <div className="pm-avatar-wrap">
@@ -183,11 +202,7 @@ export default function SystemProfileManager({ showToast, roleLabel = 'User', co
           <h3 id="pm-heading" className="pm-title">
             Profile Management
           </h3>
-          <p className="pm-subtitle">
-            {readOnly
-              ? 'Your account details are managed by your organization administrator.'
-              : 'Update your name, contact details, and password. Only you can change this profile while signed in.'}
-          </p>
+          <p className="pm-subtitle">{resolvedSubtitle}</p>
           <div className="pm-badges" role="list">
             <span className="pm-badge" role="listitem">
               Role: {meta.role || roleLabel}
@@ -207,26 +222,26 @@ export default function SystemProfileManager({ showToast, roleLabel = 'User', co
       <div className="pm-grid">
         <div className="pm-group">
           <label className="pm-label">Full name *</label>
-          <input className="pm-input" value={form.name} onChange={(e) => setField('name', e.target.value)} readOnly={readOnly} disabled={readOnly} />
+          <input className="pm-input" value={form.name} onChange={(e) => setField('name', e.target.value)} readOnly={isFieldLocked('name')} disabled={isFieldLocked('name')} />
         </div>
         <div className="pm-group">
           <label className="pm-label">Email address *</label>
-          <input className="pm-input" value={form.email} onChange={(e) => setField('email', e.target.value)} readOnly={readOnly} disabled={readOnly} />
+          <input className="pm-input" value={displayEmail} onChange={(e) => setField('email', e.target.value)} readOnly={isFieldLocked('email')} disabled={isFieldLocked('email')} placeholder={fieldPlaceholders.email || undefined} />
         </div>
         <div className="pm-group">
           <label className="pm-label">Phone number</label>
-          <input className="pm-input" value={form.phone} onChange={(e) => setField('phone', e.target.value)} readOnly={readOnly} disabled={readOnly} />
+          <input className="pm-input" value={form.phone} onChange={(e) => setField('phone', e.target.value)} readOnly={isFieldLocked('phone')} disabled={isFieldLocked('phone')} placeholder={fieldPlaceholders.phone || undefined} />
         </div>
         {!compact && (
           <div className="pm-group">
             <label className="pm-label">Personal information / details</label>
-            <textarea className="pm-input pm-textarea" value={form.personal_info} onChange={(e) => setField('personal_info', e.target.value)} readOnly={readOnly} disabled={readOnly} />
+            <textarea className="pm-input pm-textarea" value={form.personal_info} onChange={(e) => setField('personal_info', e.target.value)} readOnly={isFieldLocked('personal_info')} disabled={isFieldLocked('personal_info')} placeholder={fieldPlaceholders.personal_info || undefined} />
           </div>
         )}
         {compact && (
           <div className="pm-group pm-group--full">
             <label className="pm-label">Personal information / details</label>
-            <textarea className="pm-input pm-textarea" value={form.personal_info} onChange={(e) => setField('personal_info', e.target.value)} readOnly={readOnly} disabled={readOnly} />
+            <textarea className="pm-input pm-textarea" value={form.personal_info} onChange={(e) => setField('personal_info', e.target.value)} readOnly={isFieldLocked('personal_info')} disabled={isFieldLocked('personal_info')} placeholder={fieldPlaceholders.personal_info || undefined} />
           </div>
         )}
 
@@ -266,7 +281,7 @@ export default function SystemProfileManager({ showToast, roleLabel = 'User', co
       {!readOnly ? (
         <div className="pm-actions">
           <button type="button" className="pm-btn" onClick={save} disabled={saving}>
-            {saving ? 'Updating profile…' : 'Update profile'}
+            {saving ? 'Saving changes…' : saveButtonLabel}
           </button>
         </div>
       ) : null}
