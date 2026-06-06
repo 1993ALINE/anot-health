@@ -38,6 +38,12 @@ function fmtAdminDate(raw) {
   }
 }
 
+function displayEmail(email) {
+  if (!email) return '—'
+  if (email.includes('@dev.anot.local')) return '(dev account)'
+  return email
+}
+
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 
 /** Primary brand palette — align with CSS :root (--brand-primary / --brand-secondary) */
@@ -511,7 +517,7 @@ function AdminUserTable({
                                     </div>
                                 </div>
                             </div>
-                            <div className="adm-td" data-label="Email" style={{ flex: 2, fontSize: 12, color: 'var(--text-muted)' }}>{u.email}</div>
+                            <div className="adm-td" data-label="Email" style={{ flex: 2, fontSize: 12, color: 'var(--text-muted)' }}>{displayEmail(u.email)}</div>
                             <div className="adm-td" data-label={semantic.label} style={{ flex: 2 }}>
                                 {role === 'clinician' ? (
                                     <span className="adm-specialty-chip">{semantic.value}</span>
@@ -1628,7 +1634,7 @@ function Admin() {
                                             <div key={i} className="adm-spotlight-card__row">
                                                 <div style={{ flex: 1 }}>
                                                     <div className="adm-spotlight-card__name">{u.name}</div>
-                                                    <div className="adm-spotlight-card__sub">{u.email}</div>
+                                                    <div className="adm-spotlight-card__sub">{displayEmail(u.email)}</div>
                                                 </div>
                                                 <span
                                                     className="adm-badge"
@@ -1857,7 +1863,7 @@ function Admin() {
                                                 <div key={i} className="adm-table__row">
                                                     <div className="adm-td" data-label="Name" style={{ flex: 2 }}>
                                                         <div style={{ fontWeight: 600 }}>{p.name}</div>
-                                                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{p.email}</div>
+                                                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{displayEmail(p.email)}</div>
                                                     </div>
                                                     <div className="adm-td" data-label="Role" style={{ flex: 1 }}>
                                                         <span
@@ -2007,7 +2013,7 @@ function Admin() {
                                         <div key={i} className="adm-table__row">
                                             <div className="adm-td" data-label="Name" style={{ flex: 2 }}>
                                                 <div style={{ fontWeight: 600 }}>{p.name}</div>
-                                                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{p.email}</div>
+                                                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{displayEmail(p.email)}</div>
                                             </div>
                                             <div className="adm-td" data-label="Role" style={{ flex: 1 }}>
                                                 <span
@@ -2475,7 +2481,7 @@ function Admin() {
                     <div className="adm-modal">
                         <div className="adm-modal__title">Reset password</div>
                         <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 18 }}>
-                            <strong style={{ color: 'var(--text-main)' }}>{resetUser.name}</strong> · {resetUser.email} · {resetUser.role}
+                            <strong style={{ color: 'var(--text-main)' }}>{resetUser.name}</strong> · {displayEmail(resetUser.email)} · {resetUser.role}
                         </div>
                         <div className="adm-form-group">
                             <label className="adm-form-label">New password</label>

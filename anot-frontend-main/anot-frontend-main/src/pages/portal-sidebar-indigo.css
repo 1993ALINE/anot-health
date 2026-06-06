@@ -82,8 +82,10 @@
   .adm-shell.sf-portal.qps-portal
 ) .sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__nav-label {
   padding: 1rem 1.15rem 0.4rem;
-  letter-spacing: 0.12em;
-  color: rgba(255, 255, 255, 0.55) !important;
+  color: rgba(255, 255, 255, 0.6) !important;
+  font-size: 11px !important;
+  letter-spacing: 1px !important;
+  text-transform: uppercase !important;
 }
 
 :is(
@@ -183,12 +185,18 @@
   transform: none !important;
 }
 
-/* Notification badges — keep existing palette; readable on indigo */
+/* Notification badges — white background with indigo text */
 :is(
   .adm-shell.sf-portal:not(.cl-clinician-shell):not(.scribe-portal):not(.qps-portal),
   .adm-shell.sf-portal.scribe-portal,
   .adm-shell.sf-portal.qps-portal
 ) .sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__nav-badge {
+  background: #fff !important;
+  color: #4F46E5 !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  border-radius: 20px !important;
+  padding: 2px 8px !important;
   border: none !important;
 }
 
