@@ -9,6 +9,7 @@ import { SfAccountMenu, useSidebar, Overlay, usePortalDrawerMode, portalSidebarA
 import { isSuperAdmin, ADMIN_GRANTABLE_MODULE_KEYS, ADMIN_DEFAULT_MODULE_KEYS_FOR_ADMIN, ADMIN_PORTAL_MODULES, adminMayOpenTab, resolvedAdminModuleKeys } from '../../auth/roles'
 import ErrorBoundary, { PortalCrashFallback } from '../../components/ErrorBoundary'
 import { getCurrentUser } from '../../utils/getCurrentUser'
+import { useSessionTimeout } from '../../utils/useSessionTimeout'
 import './admin.css'
 import '../portal-sidebar-indigo.css'
 import '../portalErrorBoundary.css'
@@ -612,6 +613,7 @@ function Admin() {
     }, [])
     const branding = useBranding()
     const sidebar = useSidebar()
+    const sessionTimeoutModal = useSessionTimeout(!!currentUser && Object.keys(currentUser).length > 0)
 
     const [tab, setTab]                 = useState('overview')
     const [users, setUsers]             = useState([])
@@ -1529,6 +1531,7 @@ function Admin() {
 
     return (
         <div className="sf-page sf-portal adm-shell" data-adm-tab={tab}>
+            {sessionTimeoutModal}
             <AdminSidebar
                 tab={tab}
                 onSelectTab={handleSelectTab}

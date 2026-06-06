@@ -14,6 +14,7 @@ import ErrorBoundary, { PortalCrashFallback } from '../../components/ErrorBounda
 import ContactScreen from './ContactScreen'
 import { getPatientAvatarColor } from '../../utils/avatarColor'
 import { getCurrentUser } from '../../utils/getCurrentUser'
+import { useSessionTimeout } from '../../utils/useSessionTimeout'
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -1436,6 +1437,7 @@ function Clinician() {
   const navigate    = useNavigate()
   const cu          = getCurrentUser()
   const sidebar     = useSidebar()
+  const sessionTimeoutModal = useSessionTimeout(!!cu && Object.keys(cu).length > 0)
 
   const [screen, setScreenState]    = useState('schedule')
   const [scheduleDate, setScheduleDate] = useState(() => new Date())
@@ -2195,6 +2197,7 @@ function Clinician() {
 
   return (
     <div className="sf-page sf-portal adm-shell cl-clinician-shell cl-portal">
+      {sessionTimeoutModal}
       <Sidebar {...sidebarProps} />
       <div className="sf-main sf-portal__main">
         <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />

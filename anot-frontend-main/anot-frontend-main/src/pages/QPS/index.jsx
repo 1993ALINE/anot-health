@@ -10,6 +10,7 @@ import { fmtAppointmentTime } from '../../utils/timeFormat'
 import { parseTranscriptionBlocks, useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, useSidebarOffCanvasMode, portalSidebarAriaHidden, ConfirmDialog, PortalSidebarBrand } from '../shared'
 import ErrorBoundary, { PortalCrashFallback } from '../../components/ErrorBoundary'
 import { getCurrentUser } from '../../utils/getCurrentUser'
+import { useSessionTimeout } from '../../utils/useSessionTimeout'
 import './qps.css'
 import '../portal-sidebar-indigo.css'
 import '../portalErrorBoundary.css'
@@ -66,6 +67,7 @@ function QPS() {
   const navigate    = useNavigate()
   const sidebar     = useSidebar()
   const currentUser = getCurrentUser()
+  const sessionTimeoutModal = useSessionTimeout(!!currentUser && Object.keys(currentUser).length > 0)
 
   const [screen, setScreen]                     = useState('provider')
   const [activeTab, setActiveTab]               = useState('notes')
@@ -563,6 +565,7 @@ function QPS() {
 
   return (
     <div className="sf-page-fixed sf-portal adm-shell qps-portal">
+      {sessionTimeoutModal}
       <Sidebar />
       <div className="sf-main-fixed sf-portal__main">
         <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />

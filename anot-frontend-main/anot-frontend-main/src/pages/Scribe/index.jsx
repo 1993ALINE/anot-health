@@ -14,6 +14,7 @@ import ErrorBoundary, { PortalCrashFallback } from '../../components/ErrorBounda
 import PortalCalendarDayPreview, { scribeDayPreviewRows } from '../../components/PortalCalendarDayPreview'
 import { fmtAppointmentTime } from '../../utils/timeFormat'
 import { getCurrentUser } from '../../utils/getCurrentUser'
+import { useSessionTimeout } from '../../utils/useSessionTimeout'
 import './scribe.css'
 import '../portal-sidebar-indigo.css'
 import '../portalErrorBoundary.css'
@@ -164,6 +165,7 @@ function Scribe() {
   const navigate    = useNavigate()
   const sidebar     = useSidebar()
   const currentUser = useMemo(() => getCurrentUser(), [])
+  const sessionTimeoutModal = useSessionTimeout(!!currentUser && Object.keys(currentUser).length > 0)
 
   const [screen, setScreen]                       = useState('providers')
   const [activeTab, setActiveTab]                 = useState('recordings')
@@ -1240,6 +1242,7 @@ function Scribe() {
   const txComplete = txSt === 'completed'
   return (
     <div className="sf-page-fixed sf-portal adm-shell scribe-portal">
+      {sessionTimeoutModal}
       {sidebarMarkup}
       <div className="sf-main-fixed sf-portal__main">
         <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />

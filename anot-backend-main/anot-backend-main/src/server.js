@@ -20,6 +20,9 @@ require('./config/db')
 
 const app = express()
 
+// Don't advertise the framework.
+app.disable('x-powered-by')
+
 // Behind Railway / other reverse proxies: trust X-Forwarded-* for correct rate-limit IPs.
 // In production we default to 1 hop; set TRUST_PROXY=0 to disable (e.g. local testing).
 const _tp = process.env.TRUST_PROXY
@@ -32,21 +35,63 @@ if (_tp === 'false' || _tp === '0') {
   if (Number.isFinite(n) && n > 0) app.set('trust proxy', n)
 }
 
-const apiLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max:      120,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many requests. Please slow down.' },
-})
-app.use('/api', apiLimiter)
-
 // ─── SECURITY HEADERS ─────────────────────────────────────────────────────────
 
 app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "blob:"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'", "blob:"],
+      frameSrc: ["'none'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
   // We serve audio cross-origin (frontend on Vercel pulls from backend on Railway).
   crossOriginResourcePolicy: { policy: 'cross-origin' },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true,
+  },
 }))
+
+// Additional explicit security headers.
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('X-Frame-Options', 'DENY')
+  res.setHeader('X-XSS-Protection', '1; mode=block')
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(self), geolocation=()')
+  next()
+})
+
+// ─── RATE LIMITING ────────────────────────────────────────────────────────────
+// General API limit + stricter limit on auth routes to slow brute-force attempts.
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max:      100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please try again later.' },
+})
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max:      10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts. Please try again in 15 minutes.' },
+})
+
+app.use('/api', apiLimiter)
+app.use('/api/auth', authLimiter)
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 // Local dev origins are always allowed; CORS_ORIGINS adds extra entries (comma-separated).
