@@ -1,3 +1,6 @@
+require('../instrument.js')
+
+const Sentry       = require('@sentry/node')
 const express      = require('express')
 const cors         = require('cors')
 const helmet       = require('helmet')
@@ -168,6 +171,12 @@ app.use('/api/support',     require('./routes/support'))
 app.use((req, res) => {
   res.status(404).json({ error: `Route not found: ${req.method} ${req.originalUrl}` })
 })
+
+// ─── SENTRY ERROR HANDLER ─────────────────────────────────────────────────────
+// Must be registered after all routes/controllers and before our own error
+// handler. PHI scrubbing is configured in instrument.js (beforeSend).
+
+Sentry.setupExpressErrorHandler(app)
 
 // ─── ERROR HANDLER ────────────────────────────────────────────────────────────
 

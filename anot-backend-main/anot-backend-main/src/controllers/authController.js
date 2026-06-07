@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const pool = require('../config/db')
-const { isDisallowedPassword, DISALLOWED_MSG } = require('../utils/passwordPolicy')
+const { validatePassword } = require('../utils/passwordPolicy')
 const { isSuperAdmin, ASSIGNABLE_ROLES, ELEVATED_CREATABLE_ROLES } = require('../utils/roles')
 const { assertAdminMayUseStaffRole } = require('../utils/adminPortalAccess')
 const { auditLog } = require('../utils/auditLogger')
@@ -138,13 +138,10 @@ const register = async (req, res) => {
             return res.status(e.statusCode || 403).json({ error: e.message })
         }
 
-        // Validate password length
-        if (password.length < 6) {
-            return res.status(400).json({ error: 'Password must be at least 6 characters.' })
-        }
-
-        if (isDisallowedPassword(password)) {
-            return res.status(400).json({ error: DISALLOWED_MSG })
+        // Enforce HIPAA password complexity policy
+        const pwCheck = validatePassword(password)
+        if (!pwCheck.valid) {
+            return res.status(400).json({ error: pwCheck.message })
         }
 
         // Check if email already exists
@@ -272,12 +269,9 @@ const changePassword = async (req, res) => {
             return res.status(400).json({ error: 'Current and new password are required.' })
         }
 
-        if (newPassword.length < 6) {
-            return res.status(400).json({ error: 'New password must be at least 6 characters.' })
-        }
-
-        if (isDisallowedPassword(newPassword)) {
-            return res.status(400).json({ error: DISALLOWED_MSG })
+        const pwCheck = validatePassword(newPassword)
+        if (!pwCheck.valid) {
+            return res.status(400).json({ error: pwCheck.message })
         }
 
         // Get user from database

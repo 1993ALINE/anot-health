@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { authAPI } from '../services/api'
 import { useBranding } from '../services/branding'
+import PasswordStrengthMeter from './PasswordStrengthMeter'
+import { validatePassword } from '../utils/passwordPolicy'
 import './systemProfileManager.css'
 
 export default function SystemProfileManager({
@@ -149,7 +151,8 @@ export default function SystemProfileManager({
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showToast('Enter a valid email.', 'error')
     if (wantsPassword) {
       if (!form.currentPassword || !form.newPassword) return showToast('Enter current and new password.', 'error')
-      if (form.newPassword.length < 6) return showToast('New password must be at least 6 characters.', 'error')
+      const pwCheck = validatePassword(form.newPassword)
+      if (!pwCheck.valid) return showToast(pwCheck.message, 'error')
       if (form.newPassword !== form.confirmPassword) return showToast('Passwords do not match.', 'error')
     }
 
@@ -264,6 +267,7 @@ export default function SystemProfileManager({
               {passVisible.next ? '🙈' : '👁️'}
             </button>
           </div>
+          <PasswordStrengthMeter password={form.newPassword} />
         </div>
         <div className="pm-group">
           <label className="pm-label">Confirm new password</label>

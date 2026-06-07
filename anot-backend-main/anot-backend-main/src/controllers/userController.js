@@ -1,6 +1,6 @@
 const pool = require('../config/db')
 const bcrypt = require('bcryptjs')
-const { isDisallowedPassword, DISALLOWED_MSG } = require('../utils/passwordPolicy')
+const { validatePassword } = require('../utils/passwordPolicy')
 const { auditLog } = require('../utils/auditLogger')
 const {
     isSuperAdmin,
@@ -484,12 +484,9 @@ const resetPassword = async (req, res) => {
         const { id } = req.params
         const { password } = req.body
 
-        if (!password || password.length < 6) {
-            return res.status(400).json({ error: 'Password must be at least 6 characters.' })
-        }
-
-        if (isDisallowedPassword(password)) {
-            return res.status(400).json({ error: DISALLOWED_MSG })
+        const pwCheck = validatePassword(password)
+        if (!pwCheck.valid) {
+            return res.status(400).json({ error: pwCheck.message })
         }
 
         const target = await loadUserRow(id)

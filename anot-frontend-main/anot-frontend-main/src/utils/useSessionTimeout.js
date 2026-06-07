@@ -5,16 +5,19 @@ import { authAPI } from '../services/api'
 /**
  * HIPAA-compliant idle session timeout.
  *
- * Warns the user after 14 minutes of inactivity and automatically logs them
- * out after a further 1 minute (15 minutes total). Any tracked user activity
- * resets the timer and dismisses the warning.
+ * Warns the user after 13 minutes of inactivity and automatically logs them
+ * out after a further 2 minutes (15 minutes total). Any tracked user activity
+ * resets the timer and dismisses the warning. While the warning is shown the
+ * modal displays a live countdown and the exact expiry time, and the user can
+ * click "Stay Logged In" to extend the session.
  *
  * @param {boolean} enabled - Only run while a user is logged in.
  * @returns {React.ReactNode} The warning modal (portaled to <body>) or null.
  */
 
-const TIMEOUT_MS = 14 * 60 * 1000
-const WARNING_MS = 1 * 60 * 1000
+const TOTAL_MS = 15 * 60 * 1000
+const WARNING_MS = 2 * 60 * 1000
+const IDLE_BEFORE_WARNING_MS = TOTAL_MS - WARNING_MS // 13 minutes
 
 const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click']
 
@@ -34,8 +37,25 @@ async function handleLogout() {
   window.location.href = '/login'
 }
 
+function formatClock(ts) {
+  try {
+    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return ''
+  }
+}
+
+function formatCountdown(ms) {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000))
+  const m = Math.floor(totalSeconds / 60)
+  const s = totalSeconds % 60
+  return `${m}:${String(s).padStart(2, '0')}`
+}
+
 export function useSessionTimeout(enabled = true) {
   const [showWarning, setShowWarning] = useState(false)
+  const [expiresAt, setExpiresAt] = useState(null)
+  const [remaining, setRemaining] = useState(WARNING_MS)
   const resetTimerRef = useRef(() => {})
 
   useEffect(() => {
@@ -53,15 +73,18 @@ export function useSessionTimeout(enabled = true) {
       clearTimeout(timeoutId)
       clearTimeout(warningId)
       setShowWarning((prev) => (prev ? false : prev))
+      setExpiresAt(null)
 
       warningId = setTimeout(() => {
+        setExpiresAt(Date.now() + WARNING_MS)
+        setRemaining(WARNING_MS)
         setShowWarning(true)
-      }, TIMEOUT_MS)
+      }, IDLE_BEFORE_WARNING_MS)
 
       timeoutId = setTimeout(() => {
         loggedOut = true
         handleLogout()
-      }, TIMEOUT_MS + WARNING_MS)
+      }, TOTAL_MS)
     }
 
     resetTimerRef.current = resetTimer
@@ -74,6 +97,15 @@ export function useSessionTimeout(enabled = true) {
       events.forEach((e) => window.removeEventListener(e, resetTimer, { passive: true }))
     }
   }, [enabled])
+
+  // Live countdown while the warning modal is visible.
+  useEffect(() => {
+    if (!showWarning || !expiresAt) return undefined
+    const tick = () => setRemaining(expiresAt - Date.now())
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [showWarning, expiresAt])
 
   const stayLoggedIn = useCallback(() => {
     setShowWarning(false)
@@ -115,13 +147,39 @@ export function useSessionTimeout(enabled = true) {
     'p',
     {
       style: {
-        margin: '0 0 24px',
+        margin: '0 0 16px',
         fontSize: 14,
         lineHeight: 1.5,
         color: '#4B5563',
       },
     },
-    'You will be logged out in 1 minute due to inactivity.',
+    'Your session will expire in 2 minutes due to inactivity. Click to stay logged in.',
+  )
+
+  const countdown = createElement(
+    'div',
+    {
+      style: {
+        fontSize: 34,
+        fontWeight: 700,
+        color: remaining <= 30000 ? '#DC2626' : '#111827',
+        fontVariantNumeric: 'tabular-nums',
+        marginBottom: 4,
+      },
+    },
+    formatCountdown(remaining),
+  )
+
+  const expiryNote = createElement(
+    'div',
+    {
+      style: {
+        fontSize: 12,
+        color: '#6B7280',
+        marginBottom: 24,
+      },
+    },
+    expiresAt ? `Session expires at ${formatClock(expiresAt)}` : '',
   )
 
   const button = createElement(
@@ -168,6 +226,8 @@ export function useSessionTimeout(enabled = true) {
     icon,
     title,
     body,
+    countdown,
+    expiryNote,
     button,
   )
 

@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { authAPI, usersAPI, adminAPI, settingsAPI, API_BASE } from '../../services/api'
 import { setBranding, useBranding } from '../../services/branding'
 import SystemProfileManager from '../../components/SystemProfileManager'
+import PasswordStrengthMeter from '../../components/PasswordStrengthMeter'
+import { validatePassword } from '../../utils/passwordPolicy'
 import AdminModulePermissionsModal from '../../components/AdminModulePermissionsModal'
 import AdminAuditDashboard from './AdminAuditDashboard'
 import { SfAccountMenu, useSidebar, Overlay, usePortalDrawerMode, portalSidebarAriaHidden, PortalSidebarBrand } from '../shared'
@@ -971,13 +973,9 @@ function Admin() {
         if (!cleanName)  { setAddError('Name is required.'); return }
         if (!cleanEmail) { setAddError('Email is required.'); return }
         if (!cleanEmail.includes('@')) { setAddError('Enter a valid email.'); return }
-        if (!newUserPassword || newUserPassword.length < 6) {
-            setAddError('Initial password is required (at least 6 characters).')
-            return
-        }
-        if (newUserPassword.toLowerCase().trim() === 'password*2026') {
-            setAddError('Do not use the old example password. Choose a unique password for this user.')
-            return
+        {
+            const pwCheck = validatePassword(newUserPassword)
+            if (!pwCheck.valid) { setAddError(pwCheck.message); return }
         }
         try {
             setAddLoading(true)
@@ -1017,9 +1015,9 @@ function Admin() {
         if (!newUser.name.trim())  { setAddError('Name is required.'); return }
         if (!newUser.email.trim()) { setAddError('Email is required.'); return }
         if (!newUser.email.includes('@')) { setAddError('Enter a valid email.'); return }
-        if (!newUserPassword || newUserPassword.length < 6) {
-            setAddError('Initial password is required (at least 6 characters).')
-            return
+        {
+            const pwCheck = validatePassword(newUserPassword)
+            if (!pwCheck.valid) { setAddError(pwCheck.message); return }
         }
         setConfirmDialog({
             title: 'Confirm account creation',
@@ -1141,7 +1139,10 @@ function Admin() {
     // ── Reset password ────────────────────────────────
     const resetPassword = async () => {
         setResetError('')
-        if (!resetPass || resetPass.length < 6) { setResetError('Password must be at least 6 characters.'); return }
+        {
+            const pwCheck = validatePassword(resetPass)
+            if (!pwCheck.valid) { setResetError(pwCheck.message); return }
+        }
         try {
             setResetLoading(true)
             await usersAPI.resetPassword(resetUser.id, resetPass)
@@ -2141,8 +2142,9 @@ function Admin() {
                                 ))}
                                 <div className="adm-form-group">
                                     <label className="adm-form-label">Initial password *</label>
-                                    <input className="adm-input" type="password" placeholder="Min. 6 characters — share securely with the user"
+                                    <input className="adm-input" type="password" placeholder="Min. 12 chars, mixed case, number & symbol"
                                            value={newUserPassword} onChange={(e) => setNewUserPassword(e.target.value)} autoComplete="new-password" />
+                                    <PasswordStrengthMeter password={newUserPassword} />
                                 </div>
                             </div>
                             {addError && <div className="adm-err">⚠ {addError}</div>}
@@ -2289,7 +2291,7 @@ function Admin() {
                             <div className="adm-modal__pw-wrap">
                                 <input className="adm-input" style={{ paddingRight: 44 }}
                                        type={showResetPass ? 'text' : 'password'}
-                                       placeholder="Minimum 6 characters"
+                                       placeholder="Min. 12 chars, mixed case, number & symbol"
                                        value={resetPass}
                                        onChange={(e) => setResetPass(e.target.value)} />
                                 <button type="button" className="adm-modal__eye" onClick={() => setShowResetPass((p) => !p)}
@@ -2297,6 +2299,7 @@ function Admin() {
                                     {showResetPass ? '🙈' : '👁️'}
                                 </button>
                             </div>
+                            <PasswordStrengthMeter password={resetPass} />
                         </div>
                         <div className="adm-modal__hint">Share the new password securely with the user.</div>
                         {resetError && <div className="adm-err">⚠ {resetError}</div>}

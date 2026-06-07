@@ -17,6 +17,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.92.0",
     "@deepgram/sdk": "^3.13.0",
+    "@sentry/node": "^10.56.0",
     "anot-workspace": "file:../..",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
