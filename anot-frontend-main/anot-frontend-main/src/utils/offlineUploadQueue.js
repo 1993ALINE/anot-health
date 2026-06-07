@@ -1,72 +1,37 @@
-const STORAGE_KEY = 'anot_pending_audio_uploads'
-
-function readQueue() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    const parsed = raw ? JSON.parse(raw) : []
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-function writeQueue(items) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
-}
-
-function blobToBase64(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = String(reader.result || '')
-      const base64 = result.includes(',') ? result.split(',')[1] : result
-      resolve(base64)
-    }
-    reader.onerror = () => reject(new Error('Failed to read recording'))
-    reader.readAsDataURL(blob)
-  })
-}
-
-function base64ToBlob(base64, mimeType) {
-  const binary = atob(base64)
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
-  return new Blob([bytes], { type: mimeType || 'audio/webm' })
-}
+// Pending audio uploads are kept in memory ONLY. Audio recordings are PHI and
+// must never be persisted to localStorage (or any other on-disk browser store),
+// where they would survive logout and be readable by anything on the device.
+// The trade-off: a queued upload does not survive a full page reload.
+const queue = []
 
 /** Queue a failed visit audio upload for retry when back online. */
 export async function queueAudioUpload({ visitId, blob, mode = 'primary' }) {
   if (!visitId || !blob?.size) return
-  const base64 = await blobToBase64(blob)
-  const queue = readQueue()
   queue.push({
     id: `${visitId}-${mode}-${Date.now()}`,
     visitId,
     mode,
-    mimeType: blob.type || 'audio/webm',
-    base64,
+    blob,
     createdAt: new Date().toISOString(),
   })
-  writeQueue(queue)
 }
 
 let flushing = false
 
 /** Retry queued uploads (call after successful upload attempt or on `online`). */
 export async function flushPendingAudioUploads({ uploadPrimary, uploadAppend, onSuccess, onError }) {
-  if (flushing || !navigator.onLine) return { flushed: 0, remaining: readQueue().length }
+  if (flushing || !navigator.onLine) return { flushed: 0, remaining: queue.length }
   flushing = true
   let flushed = 0
   try {
-    let queue = readQueue()
+    const pending = queue.splice(0, queue.length)
     const keep = []
-    for (const item of queue) {
+    for (const item of pending) {
       try {
-        const blob = base64ToBlob(item.base64, item.mimeType)
         if (item.mode === 'append') {
-          await uploadAppend(item.visitId, blob)
+          await uploadAppend(item.visitId, item.blob)
         } else {
-          await uploadPrimary(item.visitId, blob)
+          await uploadPrimary(item.visitId, item.blob)
         }
         flushed += 1
         onSuccess?.(item)
@@ -75,7 +40,7 @@ export async function flushPendingAudioUploads({ uploadPrimary, uploadAppend, on
         onError?.(item, err)
       }
     }
-    writeQueue(keep)
+    queue.push(...keep)
     return { flushed, remaining: keep.length }
   } finally {
     flushing = false
@@ -83,7 +48,7 @@ export async function flushPendingAudioUploads({ uploadPrimary, uploadAppend, on
 }
 
 export function pendingUploadCount() {
-  return readQueue().length
+  return queue.length
 }
 
 export function installOfflineUploadFlush(flushFn) {

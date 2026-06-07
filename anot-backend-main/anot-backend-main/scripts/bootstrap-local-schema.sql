@@ -65,6 +65,8 @@ CREATE TABLE IF NOT EXISTS notes (
   final_note TEXT,
   status VARCHAR(32) NOT NULL DEFAULT 'pending',
   submitted_by INTEGER REFERENCES users(id),
+  ehr_uploaded_at TIMESTAMPTZ,
+  ehr_uploaded_by INTEGER REFERENCES users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -87,5 +89,17 @@ CREATE INDEX IF NOT EXISTS idx_visits_scribe ON visits (scribe_id);
 CREATE INDEX IF NOT EXISTS idx_visits_patient ON visits (patient_id);
 CREATE INDEX IF NOT EXISTS idx_notes_status ON notes (status);
 
+-- Performance optimization: Additional indexes for frequently queried columns
+CREATE INDEX IF NOT EXISTS idx_notes_visit_id ON notes (visit_id);
+CREATE INDEX IF NOT EXISTS idx_scribe_assignments_clinician_id ON scribe_assignments (clinician_id);
+CREATE INDEX IF NOT EXISTS idx_scribe_assignments_scribe_id ON scribe_assignments (scribe_id);
+CREATE INDEX IF NOT EXISTS idx_visits_visit_date ON visits (visit_date);
+CREATE INDEX IF NOT EXISTS idx_visits_status ON visits (status);
+CREATE INDEX IF NOT EXISTS idx_visits_clinician_date ON visits (clinician_id, visit_date DESC);
+CREATE INDEX IF NOT EXISTS idx_notes_updated_at ON notes (updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_grades_note_id ON grades (note_id);
+
 ALTER TABLE notes ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ;
 ALTER TABLE notes ADD COLUMN IF NOT EXISTS locked_by INTEGER REFERENCES users(id);
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS ehr_uploaded_at TIMESTAMPTZ;
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS ehr_uploaded_by INTEGER REFERENCES users(id);

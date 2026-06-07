@@ -138,7 +138,7 @@ function mapAiSettings(row) {
     anthropic_enabled: row.anthropic_enabled !== false,
     anthropic_model: ANTHROPIC_MODELS.has(model) ? model : AI_DEFAULTS.anthropic_model,
     ffmpeg_enabled: !!row.ffmpeg_enabled,
-    ffmpeg_target_format: ['wav', 'mp3'].includes(String(row.ffmpeg_target_format || '').toLowerCase())
+    ffmpeg_target_format: ['wav', 'mp3', 'ogg', 'webm', 'flac'].includes(String(row.ffmpeg_target_format || '').toLowerCase())
       ? String(row.ffmpeg_target_format).toLowerCase()
       : 'mp3',
     ffmpeg_compression: row.ffmpeg_compression != null ? Number(row.ffmpeg_compression) : AI_DEFAULTS.ffmpeg_compression,
@@ -177,6 +177,7 @@ const updateSettings = async (req, res) => {
   try {
     await ensureSettingsTable()
     const payload = req.body || {}
+
     const system_name = cleanStr(payload.system_name, 120) || DEFAULT_SETTINGS.system_name
     const system_email = cleanStr(payload.system_email, 160)
     const phone = cleanStr(payload.phone, 80)
@@ -273,7 +274,7 @@ const updateSettings = async (req, res) => {
     const ffmpeg_enabled = payload.ffmpeg_enabled !== undefined ? !!payload.ffmpeg_enabled : !!cur.ffmpeg_enabled
     const fmtIn =
       payload.ffmpeg_target_format !== undefined ? String(payload.ffmpeg_target_format || 'mp3').toLowerCase() : String(cur.ffmpeg_target_format || 'mp3').toLowerCase()
-    const ffmpeg_target_format = fmtIn === 'wav' ? 'wav' : 'mp3'
+    const ffmpeg_target_format = ['wav', 'mp3', 'ogg', 'webm', 'flac'].includes(fmtIn) ? fmtIn : 'mp3'
     let ffmpeg_compression =
       payload.ffmpeg_compression !== undefined ? parseInt(String(payload.ffmpeg_compression), 10) : Number(cur.ffmpeg_compression)
     if (!Number.isFinite(ffmpeg_compression)) ffmpeg_compression = AI_DEFAULTS.ffmpeg_compression

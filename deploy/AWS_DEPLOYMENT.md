@@ -204,7 +204,7 @@ CORS_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
 
 **`CORS_ORIGINS`:** comma-separated, **exact** origins (scheme + host), **no trailing slash**. Must include every browser origin that loads the SPA.
 
-Optional: `GROQ_API_KEY`, `SETTINGS_ENCRYPTION_KEY`, `DATABASE_SSL_INSECURE` (see `src/config/db.js`).
+Optional: `ANTHROPIC_API_KEY`, `SETTINGS_ENCRYPTION_KEY` (see `src/config/db.js`). Database SSL always verifies the server certificate — use a provider whose certificate chain Node can validate.
 
 ---
 

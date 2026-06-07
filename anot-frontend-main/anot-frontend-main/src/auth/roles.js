@@ -6,6 +6,8 @@
  * Canonical admin-portal modules (keys match sidebar `NAV` / API checks).
  * Order and labels match the Module permissions UI.
  */
+// NOTE: 'performance' intentionally omitted — performance reports are a QPS
+// capability and live in the QPS portal, not the Admin portal.
 export const ADMIN_PORTAL_MODULES = [
     { key: 'overview', icon: '📊', label: 'Overview' },
     { key: 'clinicians', icon: '🩺', label: 'Clinicians' },
@@ -14,7 +16,6 @@ export const ADMIN_PORTAL_MODULES = [
     { key: 'admins', icon: '⚙️', label: 'Admins' },
     { key: 'assignments', icon: '🔗', label: 'Assignments' },
     { key: 'payroll', icon: '💳', label: 'Payroll' },
-    { key: 'performance', icon: '📈', label: 'Performance' },
     { key: 'audit', icon: '🔍', label: 'Audit Logs' },
     { key: 'settings', icon: '🛠', label: 'Settings' },
     { key: 'system-profile', icon: '👤', label: 'Profile Management' },

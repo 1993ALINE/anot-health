@@ -2,16 +2,14 @@ const { Pool } = require('pg')
 const dotenv = require('dotenv')
 dotenv.config()
 
-// SSL: verify server certificate by default. Set DATABASE_SSL_INSECURE=true only if your
-// provider uses a chain Node cannot verify (avoid in production if possible).
+// SSL: always verify the server certificate. We never disable certificate
+// validation, since accepting unverified certs exposes the connection to MITM.
 const useUrl = !!process.env.DATABASE_URL
 const pool = new Pool(
   useUrl
     ? {
         connectionString: process.env.DATABASE_URL,
-        ssl: process.env.DATABASE_SSL_INSECURE === 'true'
-          ? { rejectUnauthorized: false }
-          : { rejectUnauthorized: true },
+        ssl: { rejectUnauthorized: true },
       }
     : {
         host:     process.env.DB_HOST,
@@ -19,7 +17,7 @@ const pool = new Pool(
         database: process.env.DB_NAME,
         user:     process.env.DB_USER,
         password: process.env.DB_PASSWORD,
-        ...(process.env.DB_SSL === 'true' ? { ssl: { rejectUnauthorized: process.env.DATABASE_SSL_INSECURE !== 'true' } } : {}),
+        ...(process.env.DB_SSL === 'true' ? { ssl: { rejectUnauthorized: true } } : {}),
       }
 )
 

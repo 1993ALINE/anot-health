@@ -11,10 +11,7 @@ const pool = new Pool(
   process.env.DATABASE_URL
     ? {
         connectionString: process.env.DATABASE_URL,
-        ssl:
-          process.env.DATABASE_SSL_INSECURE === 'true'
-            ? { rejectUnauthorized: false }
-            : { rejectUnauthorized: true },
+        ssl: { rejectUnauthorized: true },
       }
     : {
         host: process.env.DB_HOST,

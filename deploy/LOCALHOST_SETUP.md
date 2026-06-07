@@ -146,7 +146,7 @@ openssl rand -hex 32
 DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/DBNAME?sslmode=require
 ```
 
-Optional: `DATABASE_SSL_INSECURE=true` if the provider needs relaxed SSL (see `src/config/db.js`).
+Database SSL always verifies the server certificate (see `src/config/db.js`) — use a provider whose certificate chain Node can validate.
 
 **Style A — local Postgres without SSL:** prefer **Style B** below. Using `DATABASE_URL` against local Postgres often causes **“The server does not support SSL connections”**.
 
@@ -175,7 +175,7 @@ Add `DB_SSL=true` if the server requires SSL.
 
 | Variable | Purpose |
 |----------|---------|
-| `GROQ_API_KEY` | AI-related features if used in your deployment |
+| `ANTHROPIC_API_KEY` | AI draft generation (Anthropic Claude) if used in your deployment |
 | `CORS_ORIGINS` | Usually **omit** locally — `server.js` allows localhost / `127.0.0.1` on various ports in development |
 
 ### Minimal example `.env` (local)
@@ -371,7 +371,7 @@ If the preview calls the wrong API, read **`src/services/api.js`** and adjust **
 | **Error before sign-in** | Old **`token`** in `localStorage` triggers **`/api/auth/me`**; failing API looks like a login failure. Clear site data or use a private window. |
 | **CORS in production** | Not typical on pure localhost; for deployed APIs set **`CORS_ORIGINS`** — see **AWS** or **cPanel** guides in this folder. |
 | **Scribe: Transcription stuck on “Processing”** | A prior run may have left `transcription_status=processing`. Click **Transcribe audio** again (server now clears stuck jobs) or **Refresh**. Clear a fake Deepgram webhook URL in Admin → Settings if it points to `localhost`. |
-| **Scribe: transcript OK but no AI draft** | Uncomment **`GROQ_API_KEY=...`** in backend `.env` and restart `npm run dev`. |
+| **Scribe: transcript OK but no AI draft** | Set **`ANTHROPIC_API_KEY=...`** in backend `.env` (or the Anthropic key in Admin → Settings) and restart `npm run dev`. |
 | **`.webm` audio / corrupt audio errors** | Install **ffmpeg** on the server PATH, or enable FFmpeg preprocessing in Admin → Settings. |
 
 ---

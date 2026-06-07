@@ -2,7 +2,7 @@
 
 ## What this project is
 
-**Anot** is a **clinical documentation** platform: care teams capture **visit audio**, produce **structured notes** (with optional **AI** via Groq), and move work through **scribe → QPS review** flows. **Clinicians** (physicians) manage **patients and visits**; **admins** handle **users, assignments, payroll, and audit**.
+**Anot** is a **clinical documentation** platform: care teams capture **visit audio**, produce **structured notes** (transcription via **Deepgram**, with optional **AI** draft via **Anthropic Claude**), and move work through **scribe → QPS review** flows. **Clinicians** (physicians) manage **patients and visits**; **admins** handle **users, assignments, payroll, and audit**.
 
 It is built as **two packages** in one workspace—**not** two unrelated apps:
 
@@ -104,7 +104,7 @@ Sign-in is always at **`/login`**; the app routes by **`role`** from the server 
 
 | Location | Purpose |
 |----------|---------|
-| `anot-backend-main/anot-backend-main/.env` | `DATABASE_URL`, `JWT_SECRET`, optional `GROQ_API_KEY`, `PORT` |
+| `anot-backend-main/anot-backend-main/.env` | `DATABASE_URL`, `JWT_SECRET`, optional `ANTHROPIC_API_KEY`, `PORT` |
 | `anot-frontend-main/anot-frontend-main/.env.local` | Optional. On **localhost** / **127.0.0.1**, the app uses **`http://127.0.0.1:5000/api`** by default unless **`VITE_USE_LOCAL_API=false`**. See [deploy/LOCALHOST_SETUP.md](deploy/LOCALHOST_SETUP.md). |
 
 Use your **Neon dev** database only for local work; production is separate.

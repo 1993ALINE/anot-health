@@ -11,12 +11,6 @@ const { isReachableWebhookUrl } = require('./webhookReachability')
 const AI_DRAFT_UNAVAILABLE =
   '[AI draft unavailable — add an Anthropic API key in Admin → Settings or ANTHROPIC_API_KEY to the server .env file, then click Transcribe audio or Refresh.]'
 
-/** @deprecated prefer transcribeFileWithRetries via pipeline */
-async function transcribeAudio(filePath) {
-  const settings = await loadAiSettings()
-  return transcribeFileWithRetries(filePath, settings, 3)
-}
-
 async function generateAINote(transcriptions, patientInfo) {
   try {
     const settings = await loadAiSettings()
@@ -318,7 +312,6 @@ async function runAIPipeline(visitId, options = {}) {
 
 module.exports = {
   runAIPipeline,
-  transcribeAudio,
   generateAINote,
   persistTranscriptionAndDraft,
 }

@@ -71,31 +71,12 @@ app.use((req, res, next) => {
   next()
 })
 
-// ─── RATE LIMITING ────────────────────────────────────────────────────────────
-// General API limit + stricter limit on auth routes to slow brute-force attempts.
-
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max:      100,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many requests. Please try again later.' },
-})
-
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max:      10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many login attempts. Please try again in 15 minutes.' },
-})
-
-app.use('/api', apiLimiter)
-app.use('/api/auth', authLimiter)
-
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 // Local dev origins are always allowed; CORS_ORIGINS adds extra entries (comma-separated).
 // The previous /\.vercel\.app$/ regex matched any attacker-deployed *.vercel.app, so it's gone.
+// CORS must run BEFORE rate limiting so that 429 responses (and preflight requests
+// throttled by the limiter) still carry Access-Control-Allow-Origin — otherwise the
+// browser reports those as CORS failures instead of the real status.
 
 const allowedOrigins = [
   'http://localhost:5173',
@@ -114,16 +95,43 @@ if (process.env.CORS_ORIGINS) {
   }
 }
 
-app.use(cors({
+const corsOptions = {
   origin(origin, callback) {
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true)
     } else {
-      callback(new Error('Not allowed by CORS'))
+      callback(new Error('CORS: Origin not allowed'))
     }
   },
   credentials: true,
-}))
+}
+
+// cors() handles OPTIONS preflight automatically, so no explicit app.options() route
+// is needed (and a '*' path would crash under Express 5 / path-to-regexp).
+app.use(cors(corsOptions))
+
+// ─── RATE LIMITING ────────────────────────────────────────────────────────────
+// General API limit + stricter limit on auth routes to slow brute-force attempts.
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max:      1000, // TODO: Set back to 100 for production
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please try again later.' },
+})
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  // TODO: Set back to 10 for production — raised to 100 to unblock local dev testing.
+  max:      100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts. Please try again in 15 minutes.' },
+})
+
+app.use('/api', apiLimiter)
+app.use('/api/auth', authLimiter)
 
 const jsonSmall = express.json({ limit: '2mb' })
 const jsonLarge = express.json({ limit: '15mb' })

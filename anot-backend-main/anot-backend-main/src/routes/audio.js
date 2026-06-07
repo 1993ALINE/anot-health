@@ -47,18 +47,61 @@ function streamFile(req, res, filePath) {
   const ext = path.extname(filePath).toLowerCase()
   const mimeType = ext === '.mp4' ? 'audio/mp4' : ext === '.ogg' ? 'audio/ogg' : ext === '.mp3' ? 'audio/mpeg' : 'audio/webm'
 
+  const onStreamError = (stream) => {
+    res.on('close', () => stream.destroy())
+    stream.on('error', (err) => {
+      console.error('Audio stream error:', err.message)
+      if (!res.headersSent) res.status(500).end()
+      else res.destroy(err)
+    })
+  }
+
+  // Honor HTTP Range requests so audio players can seek and so browsers
+  // (notably Safari) that require 206 Partial Content can play the media.
+  const rangeHeader = req.headers.range
+  if (rangeHeader) {
+    const match = /^bytes=(\d*)-(\d*)$/.exec(String(rangeHeader).trim())
+    if (!match || (match[1] === '' && match[2] === '')) {
+      res.writeHead(416, { 'Content-Range': `bytes */${fileSize}` })
+      return res.end()
+    }
+
+    let start
+    let end
+    if (match[1] === '') {
+      // Suffix range: last N bytes (bytes=-500)
+      const suffix = parseInt(match[2], 10)
+      start = Math.max(fileSize - suffix, 0)
+      end = fileSize - 1
+    } else {
+      start = parseInt(match[1], 10)
+      end = match[2] === '' ? fileSize - 1 : parseInt(match[2], 10)
+    }
+
+    if (end > fileSize - 1) end = fileSize - 1
+    if (Number.isNaN(start) || Number.isNaN(end) || start > end || start >= fileSize) {
+      res.writeHead(416, { 'Content-Range': `bytes */${fileSize}` })
+      return res.end()
+    }
+
+    res.writeHead(206, {
+      'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+      'Accept-Ranges': 'bytes',
+      'Content-Length': end - start + 1,
+      'Content-Type': mimeType,
+    })
+    const stream = fs.createReadStream(filePath, { start, end })
+    onStreamError(stream)
+    return stream.pipe(res)
+  }
+
   res.writeHead(200, {
     'Content-Length': fileSize,
     'Content-Type': mimeType,
     'Accept-Ranges': 'bytes',
   })
   const stream = fs.createReadStream(filePath)
-  res.on('close', () => stream.destroy())
-  stream.on('error', (err) => {
-    console.error('Audio stream error:', err.message)
-    if (!res.headersSent) res.status(500).end()
-    else res.destroy(err)
-  })
+  onStreamError(stream)
   stream.pipe(res)
 }
 
@@ -81,7 +124,7 @@ async function maybeAutoTranscribe(visitId, user, req) {
 
 // ─── POST /api/audio/:visitId — Upload primary recording ─────────────────────
 
-router.post('/:visitId', protect, restrict('clinician', 'scribe'), upload.single('audio'), async (req, res) => {
+router.post('/:visitId', protect, restrict('clinician'), upload.single('audio'), async (req, res) => {
   try {
     const { visitId } = req.params
     if (!req.file) return res.status(400).json({ error: 'No audio file uploaded.' })
@@ -123,7 +166,7 @@ router.post('/:visitId', protect, restrict('clinician', 'scribe'), upload.single
 
 // ─── POST /api/audio/:visitId/append — Append additional recording ───────────
 
-router.post('/:visitId/append', protect, restrict('clinician', 'scribe'), upload.single('audio'), async (req, res) => {
+router.post('/:visitId/append', protect, restrict('clinician'), upload.single('audio'), async (req, res) => {
   try {
     const { visitId } = req.params
     if (!req.file) return res.status(400).json({ error: 'No audio file uploaded.' })
@@ -166,7 +209,7 @@ router.post('/:visitId/append', protect, restrict('clinician', 'scribe'), upload
 
 // ─── GET /api/audio/:visitId/count — Count recordings ────────────────────────
 
-router.get('/:visitId/count', protect, async (req, res) => {
+router.get('/:visitId/count', protect, restrict('clinician', 'scribe', 'qps'), async (req, res) => {
   try {
     const visit = await getVisitForUser(req.params.visitId, req.user)
     if (!visit) return res.status(404).json({ error: 'Visit not found.' })
@@ -182,7 +225,7 @@ router.get('/:visitId/count', protect, async (req, res) => {
 
 // ─── GET /api/audio/:visitId — Stream audio (supports ?index=N) ──────────────
 
-router.get('/:visitId', protect, async (req, res) => {
+router.get('/:visitId', protect, restrict('clinician', 'scribe', 'qps'), async (req, res) => {
   try {
     const { visitId } = req.params
     const index = parseInt(req.query.index || '0')

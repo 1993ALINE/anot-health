@@ -3,8 +3,17 @@ const { withTransaction } = require('../config/db')
 const { auditLog } = require('../utils/auditLogger')
 const { getVisitForUser } = require('../utils/visitAccess')
 const { visitDurationSelect, visitTranscriptionStatusSelect } = require('../utils/visitSchemaCompat')
+const { addColumnIfMissing } = require('../utils/schemaDdl')
 
 const NOTE_STATUSES = new Set(['draft', 'pending', 'submitted', 'uploaded'])
+
+// Columns backing the "Upload to EHR" action. The note `status` lifecycle
+// (draft → submitted → uploaded/graded) is separate from the EHR push, so we
+// track the EHR upload independently via these idempotent columns.
+async function ensureEhrColumns() {
+  await addColumnIfMissing('notes', 'ehr_uploaded_at', 'ALTER TABLE notes ADD COLUMN IF NOT EXISTS ehr_uploaded_at TIMESTAMPTZ')
+  await addColumnIfMissing('notes', 'ehr_uploaded_by', 'ALTER TABLE notes ADD COLUMN IF NOT EXISTS ehr_uploaded_by INTEGER REFERENCES users(id)')
+}
 
 // ─── GET NOTE BY VISIT ID ─────────────────────────────────────────────────────
 // Read access is gated by visit ownership: clinicians who own the visit,
@@ -291,6 +300,72 @@ const submitNote = async (req, res) => {
   }
 }
 
+// ─── UPDATE NOTE CONTENT ──────────────────────────────────────────────────────
+// Clinician-only. Allows clinicians to directly edit note content before locking.
+// Only blocks editing if the note has been locked by the clinician (locked_at is set).
+
+const updateNoteContent = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { final_note } = req.body
+
+    if (!final_note || typeof final_note !== 'string') {
+      return res.status(400).json({ error: 'final_note is required.' })
+    }
+
+    const out = await withTransaction(async (client) => {
+      const noteRow = await client.query(
+        'SELECT id, visit_id, status, locked_at FROM notes WHERE id = $1 FOR UPDATE',
+        [id]
+      )
+      if (!noteRow.rows[0]) return { notFound: true }
+
+      const note = noteRow.rows[0]
+
+      // Only block editing if the note has been locked by the clinician
+      if (note.locked_at) {
+        return { 
+          locked: true, 
+          message: 'Note is already locked and cannot be edited.' 
+        }
+      }
+
+      const visit = await getVisitForUser(note.visit_id, req.user, client)
+      if (!visit) return { forbidden: true }
+
+      const updated = await client.query(
+        `UPDATE notes 
+         SET final_note = $1, 
+             updated_at = NOW() 
+         WHERE id = $2 
+         RETURNING *`,
+        [final_note, id]
+      )
+
+      await auditLog(
+        req.user,
+        'NOTE_CONTENT_UPDATED',
+        'note',
+        String(id),
+        `Clinician edited note content for visit: ${note.visit_id}`,
+        client,
+        { req, module_key: 'clinical', action_category: 'update', status: 'success' }
+      )
+
+      return { note: updated.rows[0] }
+    })
+
+    if (out.notFound) return res.status(404).json({ error: 'Note not found.' })
+    if (out.forbidden) return res.status(403).json({ error: 'Not authorized for this note.' })
+    if (out.locked) return res.status(409).json({ error: out.message })
+
+    res.status(200).json({ message: 'Note updated successfully.', note: out.note })
+  } catch (err) {
+    console.error('Update note content error:', err.message)
+    res.status(500).json({ error: 'Server error.' })
+  }
+}
+
 // ─── REQUEST EDIT ─────────────────────────────────────────────────────────────
 // Clinician-only at route layer. Verifies the note belongs to their visit.
 
@@ -339,6 +414,74 @@ const requestEdit = async (req, res) => {
     res.status(200).json({ message: 'Edit requested.' })
   } catch (err) {
     console.error('Request edit error:', err.message)
+    res.status(500).json({ error: 'Server error.' })
+  }
+}
+
+// ─── UPLOAD TO EHR ────────────────────────────────────────────────────────────
+// Scribe-only at the route layer. Marks a finalized note as pushed to the EHR,
+// recording when and by which scribe. Idempotent: re-uploading a note that is
+// already marked returns the existing state rather than overwriting it.
+
+const uploadToEHR = async (req, res) => {
+  try {
+    const { id }    = req.params
+    const scribe_id = req.user.id
+
+    await ensureEhrColumns()
+
+    const out = await withTransaction(async (client) => {
+      const noteRow = await client.query(
+        'SELECT id, visit_id, status, ehr_uploaded_at FROM notes WHERE id = $1 FOR UPDATE',
+        [id]
+      )
+      if (!noteRow.rows[0]) return { notFound: true }
+
+      const visit = await getVisitForUser(noteRow.rows[0].visit_id, req.user, client)
+      if (!visit) return { forbidden: true }
+
+      // Only finalized notes (submitted to the clinician or QPS-graded) may be
+      // pushed to the EHR — drafts are still in progress.
+      if (!['submitted', 'uploaded'].includes(noteRow.rows[0].status)) {
+        return { invalidStatus: true }
+      }
+
+      // Already uploaded — no double write, no duplicate audit entry.
+      if (noteRow.rows[0].ehr_uploaded_at) {
+        const existing = await client.query('SELECT * FROM notes WHERE id = $1', [id])
+        return { already: true, note: existing.rows[0] }
+      }
+
+      const upd = await client.query(
+        `UPDATE notes
+            SET ehr_uploaded_at = NOW(),
+                ehr_uploaded_by = $1,
+                updated_at      = NOW()
+          WHERE id = $2 RETURNING *`,
+        [scribe_id, id]
+      )
+
+      await auditLog(
+        req.user,
+        'NOTE_UPLOADED_EHR',
+        'note',
+        String(id),
+        `Note uploaded to EHR for visit: ${upd.rows[0].visit_id}`,
+        client,
+        { req, module_key: 'clinical', action_category: 'update', status: 'success' }
+      )
+
+      return { note: upd.rows[0] }
+    })
+
+    if (out.notFound)      return res.status(404).json({ error: 'Note not found.' })
+    if (out.forbidden)     return res.status(403).json({ error: 'Not authorized for this note.' })
+    if (out.invalidStatus) return res.status(409).json({ error: 'Only finalized notes can be uploaded to the EHR.' })
+    if (out.already)       return res.status(200).json({ message: 'Note already uploaded to EHR.', note: out.note })
+
+    res.status(200).json({ message: 'Note uploaded to EHR.', note: out.note })
+  } catch (err) {
+    console.error('Upload to EHR error:', err.message)
     res.status(500).json({ error: 'Server error.' })
   }
 }
@@ -421,5 +564,5 @@ const submitGrade = async (req, res) => {
 
 module.exports = {
   getNoteByVisit, getMyNotes, getAllNotes, getClinicianNotes,
-  getMyGrades, saveDraft, submitNote, requestEdit, submitGrade,
+  getMyGrades, saveDraft, submitNote, updateNoteContent, requestEdit, uploadToEHR, submitGrade,
 }

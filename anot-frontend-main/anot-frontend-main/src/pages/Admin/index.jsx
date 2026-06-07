@@ -17,9 +17,6 @@ import '../portalErrorBoundary.css'
 const PayrollMiniChart = lazy(() =>
     import('./AdminMiniCharts').then((m) => ({ default: m.PayrollMiniChart }))
 )
-const PerformanceMiniChart = lazy(() =>
-    import('./AdminMiniCharts').then((m) => ({ default: m.PerformanceMiniChart }))
-)
 
 function initials(n) {
     if (!n) return '?'
@@ -72,22 +69,6 @@ const ROLE_CFG = {
     elevated:     { label: 'Administrator', bg: '#EEF2FF', color: BRAND.root, icon: '⚙️' },
 }
 
-const ACTION_CFG = {
-    USER_UPDATED:      { label: 'User Updated',      color: '#4260E9', bg: '#E8F4FF' },
-    USER_ACTIVATED:    { label: 'User Activated',    color: '#047857', bg: '#DDFBF3' },
-    USER_DEACTIVATED:  { label: 'User Deactivated',  color: '#be123c', bg: '#FFE8ED' },
-    USER_DELETED:      { label: 'User Deleted',      color: '#be123c', bg: '#FFE8ED' },
-    PASSWORD_RESET:    { label: 'Password Reset',    color: SEM.warn, bg: '#FFF4E0' },
-    RATE_UPDATED:      { label: 'Rate Updated',      color: '#047857', bg: '#DDFBF3' },
-    NOTE_SUBMITTED:    { label: 'Note Submitted',    color: BRAND.deep, bg: '#E8F4FF' },
-    GRADE_SUBMITTED:   { label: 'Grade Submitted',   color: '#047857', bg: '#DDFBF3' },
-    USER_REGISTERED:   { label: 'User Registered',   color: '#4260E9', bg: '#EEF2FF' },
-    LOGIN_SUCCESS:     { label: 'Login Success',     color: '#047857', bg: '#DDFBF3' },
-    LOGIN_FAILED:      { label: 'Login Failed',      color: '#be123c', bg: '#FFE8ED' },
-    LOGOUT:            { label: 'Logout',            color: '#64748b', bg: '#f1f5f9' },
-    ADMIN_PORTAL_ACCESS: { label: 'Portal Access',   color: '#4260E9', bg: '#E8F4FF' },
-}
-
 const NAV = [
     { key: 'overview',    icon: '📊', label: 'Overview' },
     { key: 'clinicians',  icon: '🩺', label: 'Clinicians' },
@@ -96,7 +77,6 @@ const NAV = [
     { key: 'admins',      icon: '⚙️', label: 'Admins' },
     { key: 'assignments', icon: '🔗', label: 'Assignments' },
     { key: 'payroll',     icon: '💳', label: 'Payroll' },
-    { key: 'performance', icon: '📈', label: 'Performance' },
     { key: 'audit',       icon: '🔍', label: 'Audit Logs' },
     { key: 'settings',    icon: '🛠', label: 'Settings' },
     { key: 'system-profile', icon: '👤', label: 'Profile Management' },
@@ -110,7 +90,6 @@ const MODULE_META = {
     admins:        { tagline: 'Elevated operators — Super Admins manage Admin access and modules.' },
     assignments:   { tagline: 'Who documents whom — keep pairs accurate and current.' },
     payroll:       { tagline: 'Compensation tied to completed notes and agreed rates.' },
-    performance:   { tagline: 'QPS grades and productivity in one operational view.' },
     audit:         { tagline: 'Enterprise activity monitoring, security analytics, and immutable compliance exports.' },
     settings:      { tagline: 'Policies, defaults, and security posture.' },
     'system-profile': { tagline: 'Manage your profile identity and security settings.' },
@@ -137,12 +116,14 @@ const DEFAULT_SETTINGS_FORM = {
     audit_retention_days: 365,
     deepgram_enabled: false,
     deepgram_api_key: '',
+    deepgram_api_key_set: false,
     deepgram_clear_api_key: false,
     deepgram_model: 'nova-2',
     deepgram_language: 'en-US',
     deepgram_webhook_url: '',
     deepgram_auto_transcribe_on_upload: false,
     anthropic_api_key: '',
+    anthropic_api_key_set: false,
     anthropic_clear_api_key: false,
     anthropic_enabled: true,
     anthropic_model: 'claude-haiku-4-5',
@@ -211,19 +192,6 @@ function AdminEmpty({ icon, title, hint, actionLabel, onAction }) {
                     {actionLabel}
                 </button>
             )}
-        </div>
-    )
-}
-
-function ScoreBar({ value }) {
-    if (!value || value === 0) return <span style={{ color: BRAND.muted, fontSize: 12 }}>—</span>
-    const fillColor = value >= 90 ? SEM.success : value >= 75 ? SEM.warn : SEM.danger
-    return (
-        <div className="adm-scorebar">
-            <div className="adm-scorebar__track">
-                <div className="adm-scorebar__fill" style={{ width: `${value}%`, background: fillColor }} />
-            </div>
-            <span className="adm-scorebar__val">{value}</span>
         </div>
     )
 }
@@ -619,7 +587,6 @@ function Admin() {
     const [users, setUsers]             = useState([])
     const [assignments, setAssignments] = useState([])
     const [payroll, setPayroll]         = useState([])
-    const [performance, setPerformance] = useState([])
     const [auditLogs, setAuditLogs]     = useState([])
     const [auditTotalEvents, setAuditTotalEvents] = useState(0)
     const [auditDashMeta, setAuditDashMeta] = useState(null)
@@ -629,7 +596,6 @@ function Admin() {
     const [modulePermUser, setModulePermUser] = useState(null)
     const [modulePermSaving, setModulePermSaving] = useState(false)
     const [payrollLoading, setPayrollLoading]   = useState(false)
-    const [perfLoading, setPerfLoading]         = useState(false)
     const [toast, setToast]             = useState(null)
 
     const showToast = useCallback((msg, type = 'success') => {
@@ -701,6 +667,10 @@ function Admin() {
             x_url: social.x_url || '',
             deepgram_api_key: '',
             deepgram_clear_api_key: false,
+            deepgram_api_key_set: raw?.deepgram_api_key_set,
+            deepgram_enabled: raw?.deepgram_enabled ?? false,
+            deepgram_model: raw?.deepgram_model ?? 'nova-2',
+            deepgram_language: raw?.deepgram_language ?? 'en-US',
             anthropic_api_key: '',
             anthropic_clear_api_key: false,
             anthropic_api_key_set: raw?.anthropic_api_key_set,
@@ -795,19 +765,6 @@ function Admin() {
         finally { setPayrollLoading(false) }
     }, [currentUser, showToast])
 
-    const loadPerformance = useCallback(async () => {
-        if (!adminMayOpenTab(currentUser, 'performance')) {
-            setPerformance([])
-            return
-        }
-        try {
-            setPerfLoading(true)
-            const data = await adminAPI.getPerformance()
-            setPerformance(data.performance || [])
-        } catch (err) { showToast(`Failed to load performance: ${err.message}`, 'error') }
-        finally { setPerfLoading(false) }
-    }, [currentUser, showToast])
-
     const loadAuditLogs = useCallback(async () => {
         if (!adminMayOpenTab(currentUser, 'audit')) {
             setAuditLogs([])
@@ -849,21 +806,19 @@ function Admin() {
         queueMicrotask(() => {
             if (tab === 'overview') void loadAuditLogs()
             if (tab === 'payroll') void loadPayroll()
-            if (tab === 'performance') void loadPerformance()
             if (tab === 'settings') void loadSettings()
         })
-    }, [tab, currentUser, loadPayroll, loadPerformance, loadAuditLogs, loadSettings])
+    }, [tab, currentUser, loadPayroll, loadAuditLogs, loadSettings])
 
-    // Auto-refresh payroll, performance, and overview audit sample every 30 seconds
+    // Auto-refresh payroll and overview audit sample every 30 seconds
     useEffect(() => {
-        if (!['overview', 'payroll', 'performance'].includes(tab)) return
+        if (!['overview', 'payroll'].includes(tab)) return
         const interval = setInterval(() => {
             if (tab === 'overview' && adminMayOpenTab(currentUser, 'audit')) void loadAuditLogs()
             if (tab === 'payroll' && adminMayOpenTab(currentUser, 'payroll')) void loadPayroll()
-            if (tab === 'performance' && adminMayOpenTab(currentUser, 'performance')) void loadPerformance()
         }, 30000)
         return () => clearInterval(interval)
-    }, [tab, currentUser, loadPayroll, loadPerformance, loadAuditLogs])
+    }, [tab, currentUser, loadPayroll, loadAuditLogs])
 
     // Settings tab loads from GET /settings/internal; syncing branding here races refreshBranding and clears social/AI fields.
     useEffect(() => {
@@ -963,7 +918,7 @@ function Admin() {
                 anthropic_enabled: !!settingsForm.anthropic_enabled,
                 anthropic_model: settingsForm.anthropic_model || 'claude-haiku-4-5',
                 ffmpeg_enabled: !!settingsForm.ffmpeg_enabled,
-                ffmpeg_target_format: settingsForm.ffmpeg_target_format === 'wav' ? 'wav' : 'mp3',
+                ffmpeg_target_format: settingsForm.ffmpeg_target_format,
                 ffmpeg_compression: Math.max(0, Math.min(9, Number(settingsForm.ffmpeg_compression) || 5)),
                 ffmpeg_max_upload_mb: Math.max(1, Math.min(500, Number(settingsForm.ffmpeg_max_upload_mb) || 100)),
                 ffmpeg_preprocess_before_transcribe: !!settingsForm.ffmpeg_preprocess_before_transcribe,
@@ -1275,10 +1230,6 @@ function Admin() {
     // ─── RENDER ───────────────────────────────────────
     const payrollTotalDue = payroll.reduce((a, p) => a + parseFloat(p.total_amount || 0), 0)
     const payrollNotes = payroll.reduce((a, p) => a + parseInt(p.notes_completed || 0), 0)
-    const perfAvg =
-        performance.length > 0
-            ? Math.round(performance.reduce((a, p) => a + parseInt(p.overall_avg || 0), 0) / performance.length)
-            : null
     const activeUsersCount = safe.filter((u) => u.status === 'active').length
     const inactiveUsersCount = safe.filter((u) => u.status === 'inactive').length
 
@@ -1447,11 +1398,6 @@ function Admin() {
                     { label: 'Staff', value: String(payroll.length) },
                     { label: 'Notes', value: String(payrollNotes) },
                     { label: 'Total due', value: `$${payrollTotalDue.toFixed(2)}` },
-                ]
-            case 'performance':
-                return [
-                    { label: 'Staff', value: String(performance.length) },
-                    { label: 'Avg score', value: perfAvg != null ? String(perfAvg) : '—' },
                 ]
             case 'audit':
                 return [
@@ -1914,160 +1860,6 @@ function Admin() {
                         </>
                     )}
 
-                    {/* ── PERFORMANCE ───────────────────────────── */}
-                    {tab === 'performance' && (
-                        <>
-                            <div className="adm-stats-grid adm-stats-grid--performance">
-                                {[
-                                    {
-                                        label: 'Total Staff',
-                                        value: performance.length,
-                                        icon: '📝',
-                                        hint: 'Evaluated this cycle',
-                                        tone: 'teal',
-                                    },
-                                    {
-                                        label: 'Active Contributors',
-                                        value: performance.filter((p) => p.status === 'active').length,
-                                        icon: '✅',
-                                        hint: 'Contributing now',
-                                        tone: 'green',
-                                    },
-                                    {
-                                        label: 'Avg Quality Score',
-                                        value: performance.length > 0
-                                            ? Math.round(performance.reduce((a, p) => a + parseInt(p.overall_avg || 0), 0) / performance.length)
-                                            : '—',
-                                        icon: '⭐',
-                                        hint: 'QPS weighted average',
-                                        tone: 'orange',
-                                    },
-                                    {
-                                        label: 'Total Notes',
-                                        value: performance.reduce((a, p) => a + parseInt(p.notes_completed || 0), 0),
-                                        icon: '📋',
-                                        hint: 'Reviewed throughput',
-                                        tone: 'violet',
-                                    },
-                                ].map((item) => (
-                                    <div key={item.label} className={`adm-perf-card adm-perf-card--${item.tone}`}>
-                                        <div className="adm-perf-card__head">
-                                            <div className="adm-perf-card__k">{item.label}</div>
-                                            <div className="adm-perf-card__icon" aria-hidden>{item.icon}</div>
-                                        </div>
-                                        <div className="adm-perf-card__v">{item.value}</div>
-                                        <div className="adm-perf-card__hint">{item.hint}</div>
-                                        <div className="adm-perf-card__meter"><span /></div>
-                                    </div>
-                                ))}
-                            </div>
-                            <div className="adm-performance-summary">
-                                <div className="adm-performance-summary__chip">
-                                    <span className="adm-performance-summary__k">Top score</span>
-                                    <span className="adm-performance-summary__v">
-                                        {performance.length ? Math.max(...performance.map((p) => parseInt(p.overall_avg || 0))) : 0}
-                                    </span>
-                                </div>
-                                <div className="adm-performance-summary__chip">
-                                    <span className="adm-performance-summary__k">Improvement candidates</span>
-                                    <span className="adm-performance-summary__v">
-                                        {performance.filter((p) => parseInt(p.overall_avg || 0) > 0 && parseInt(p.overall_avg || 0) < 75).length}
-                                    </span>
-                                </div>
-                                <div className="adm-performance-summary__chip">
-                                    <span className="adm-performance-summary__k">Excellence rate</span>
-                                    <span className="adm-performance-summary__v">
-                                        {performance.length
-                                            ? `${Math.round((performance.filter((p) => parseInt(p.overall_avg || 0) >= 90).length / performance.length) * 100)}%`
-                                            : '0%'}
-                                    </span>
-                                </div>
-                            </div>
-                            <div className="adm-section-head">
-                                <div className="adm-section-label adm-section-label--inline">Staff performance</div>
-                                <button type="button" className="adm-btn-primary" onClick={loadPerformance}>Refresh</button>
-                            </div>
-                            {perfLoading ? (
-                                <LoadingBox variant="table" />
-                            ) : performance.length === 0 ? (
-                                <AdminEmpty
-                                    icon="📈"
-                                    title="No graded performance yet"
-                                    hint="Once QPS submits grades on notes, scores and trends appear here automatically."
-                                />
-                            ) : (
-                                <>
-                                <Suspense fallback={<div className="adm-chart-strip adm-chart-strip--loading adm-chart-strip--perf" aria-hidden />}>
-                                    <PerformanceMiniChart performance={performance} />
-                                </Suspense>
-                                <div className="adm-table-scroll adm-table-scroll--wide">
-                                <div className="adm-table-wrap adm-table-wrap--cards">
-                                    <div className="adm-table__head">
-                                        <div style={{ flex: 2 }}>Name</div>
-                                        <div style={{ flex: 1 }}>Role</div>
-                                        <div style={{ flex: 1 }}>Notes</div>
-                                        <div style={{ flex: 1 }}>Accuracy</div>
-                                        <div style={{ flex: 1 }}>Completeness</div>
-                                        <div style={{ flex: 1 }}>Terminology</div>
-                                        <div style={{ flex: 1 }}>Formatting</div>
-                                        <div style={{ flex: 1 }}>Overall</div>
-                                    </div>
-                                    {performance.map((p, i) => (
-                                        <div key={i} className="adm-table__row">
-                                            <div className="adm-td" data-label="Name" style={{ flex: 2 }}>
-                                                <div style={{ fontWeight: 600 }}>{p.name}</div>
-                                                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{displayEmail(p.email)}</div>
-                                            </div>
-                                            <div className="adm-td" data-label="Role" style={{ flex: 1 }}>
-                                                <span
-                                                    className="adm-badge"
-                                                    style={{
-                                                        ...(ROLE_CFG[p.role] && {
-                                                            background: ROLE_CFG[p.role].bg,
-                                                            color: ROLE_CFG[p.role].color,
-                                                        }),
-                                                    }}
-                                                >
-                                                    {ROLE_CFG[p.role]?.icon} {p.role}
-                                                </span>
-                                            </div>
-                                            <div className="adm-td" data-label="Notes" style={{ flex: 1, fontSize: 13 }}>{p.notes_completed}</div>
-                                            <div className="adm-td" data-label="Accuracy" style={{ flex: 1 }}>
-                                                <ScoreBar value={parseInt(p.accuracy_avg)} />
-                                            </div>
-                                            <div className="adm-td" data-label="Completeness" style={{ flex: 1 }}>
-                                                <ScoreBar value={parseInt(p.completeness_avg)} />
-                                            </div>
-                                            <div className="adm-td" data-label="Terminology" style={{ flex: 1 }}>
-                                                <ScoreBar value={parseInt(p.terminology_avg)} />
-                                            </div>
-                                            <div className="adm-td" data-label="Formatting" style={{ flex: 1 }}>
-                                                <ScoreBar value={parseInt(p.formatting_avg)} />
-                                            </div>
-                                            <div className="adm-td" data-label="Overall" style={{ flex: 1 }}>
-                                                {parseInt(p.overall_avg) > 0 ? (
-                                                    <span
-                                                        style={{
-                                                            fontWeight: 800,
-                                                            fontSize: 15,
-                                                            color: p.overall_avg >= 90 ? '#059669' : p.overall_avg >= 75 ? '#d97706' : '#e11d48',
-                                                        }}
-                                                    >
-                                                        {p.overall_avg}
-                                                    </span>
-                                                ) : (
-                                                    <span style={{ color: '#94a3b8' }}>—</span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                                </div>
-                                </>
-                            )}
-                        </>
-                    )}
-
                     {/* ── AUDIT LOGS ────────────────────────────── */}
                     {tab === 'audit' && (
                         <div className="adm-module--audit">
@@ -2241,9 +2033,15 @@ function Admin() {
                                             <div className="adm-form-group">
                                                 <label className="adm-form-label">Target format</label>
                                                 <select className="adm-input" value={settingsForm.ffmpeg_target_format} onChange={(e) => handleSettingInput('ffmpeg_target_format', e.target.value)}>
-                                                    <option value="mp3">mp3</option>
                                                     <option value="wav">wav</option>
+                                                    <option value="mp3">mp3</option>
+                                                    <option value="ogg">ogg (Opus - smallest, fastest)</option>
+                                                    <option value="webm">webm</option>
+                                                    <option value="flac">flac</option>
                                                 </select>
+                                                <p className="adm-form-hint" style={{ marginTop: 6, fontSize: 12, color: '#64748b' }}>
+                                                    OGG Opus recommended — smallest file size, fastest upload, excellent voice quality.
+                                                </p>
                                             </div>
                                             <div className="adm-form-group">
                                                 <label className="adm-form-label">Compression (0–9, mp3 VBR)</label>

@@ -38,14 +38,34 @@ async function processAudioForTranscription(absInPath, settings) {
     console.warn('[audioProcessing] ffmpeg not found; using original file')
     return { path: absInPath, tempPaths }
   }
-  const ext = settings.ffmpeg_target_format === 'wav' ? 'wav' : 'mp3'
+  const SUPPORTED_FORMATS = ['wav', 'mp3', 'ogg', 'webm', 'flac']
+  const ext = SUPPORTED_FORMATS.includes(String(settings.ffmpeg_target_format || '').toLowerCase())
+    ? String(settings.ffmpeg_target_format).toLowerCase()
+    : 'mp3'
   const out = path.join(os.tmpdir(), `anot_tx_${Date.now()}.${ext}`)
   const q = Math.max(0, Math.min(9, Number(settings.ffmpeg_compression) || 5))
   const args = ['-y', '-i', absInPath, '-ar', '16000', '-ac', '1', '-af', 'highpass=f=80']
-  if (ext === 'mp3') {
-    args.push('-c:a', 'libmp3lame', '-q:a', String(q))
-  } else {
-    args.push('-c:a', 'pcm_s16le')
+  switch (ext) {
+    case 'mp3':
+      args.push('-c:a', 'libmp3lame', '-q:a', String(q))
+      break
+    case 'wav':
+      args.push('-c:a', 'pcm_s16le')
+      break
+    case 'flac':
+      // FLAC compression level 0–12 (higher = smaller/slower). Map the 0–9 slider directly.
+      args.push('-c:a', 'flac', '-compression_level', String(Math.min(q, 12)))
+      break
+    case 'ogg':
+    case 'webm': {
+      // Opus is ideal for voice: small files, fast uploads. Map the 0–9 compression
+      // slider to a VoIP-range bitrate (q=0 → 64k best quality, q=9 → 16k smallest).
+      const bitrate = Math.round(64 - (q / 9) * 48)
+      args.push('-c:a', 'libopus', '-b:a', `${bitrate}k`, '-application', 'voip')
+      break
+    }
+    default:
+      args.push('-c:a', 'libmp3lame', '-q:a', String(q))
   }
   args.push(out)
   try {

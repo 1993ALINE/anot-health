@@ -1,9 +1,24 @@
 const fs = require('fs')
+const path = require('path')
 const { loadAiSettings, useDeepgram } = require('./aiSettings')
 const { isReachableWebhookUrl } = require('../utils/webhookReachability')
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms))
+}
+
+function getMimeTypeFromPath(filePath) {
+  const ext = path.extname(filePath).toLowerCase()
+  const mimeTypes = {
+    '.webm': 'audio/webm',
+    '.wav': 'audio/wav',
+    '.mp3': 'audio/mpeg',
+    '.m4a': 'audio/mp4',
+    '.ogg': 'audio/ogg',
+    '.flac': 'audio/flac',
+    '.opus': 'audio/opus',
+  }
+  return mimeTypes[ext] || null
 }
 
 function extractDeepgramText(result) {
@@ -37,44 +52,104 @@ function extractDeepgramText(result) {
 }
 
 async function transcribeWithDeepgram(absPath, settings, visitId) {
-  const { createClient } = require('@deepgram/sdk')
   const { appendDeepgramVisitQuery } = require('../utils/webhookSignature')
+  
   const apiKey = settings.deepgram_api_key
   if (!apiKey) return null
-  const client = createClient(apiKey)
-  const opts = {
-    model: 'nova-2-medical',
-    smart_format: true,
-    punctuate: true,
-    diarize: true,
-    utterances: true,
-    language: 'en-US',
-    filler_words: false,
-    numerals: true,
-  }
-  const stream = fs.createReadStream(absPath)
+  
+  // Detect mimetype from file extension
+  const mimetype = getMimeTypeFromPath(absPath) || 'audio/webm'
+  const fileExt = path.extname(absPath).toLowerCase()
+  
+  console.log(`[aiTranscription] Transcribing file: ${path.basename(absPath)}`)
+  console.log(`[aiTranscription] File extension: ${fileExt}, mimetype: ${mimetype}`)
+  
+  // Use configured model or default to nova-2-medical
+  const model = settings.deepgram_model || 'nova-2-medical'
+  const language = settings.deepgram_language || 'en-US'
+  
+  // Build query parameters
+  const queryParams = new URLSearchParams({
+    model,
+    language,
+    smart_format: 'true',
+    punctuate: 'true',
+    diarize: 'true',
+    utterances: 'true',
+    filler_words: 'false',
+    numerals: 'true',
+  })
+  
+  // Check if using webhook callback
   const baseCallback = String(settings.deepgram_webhook_url || '').trim()
   const id = parseInt(String(visitId), 10)
+  
   if (baseCallback && Number.isInteger(id) && isReachableWebhookUrl(baseCallback)) {
     const callbackUrl = appendDeepgramVisitQuery(baseCallback, id)
     if (callbackUrl) {
-      const callbackObj = { toString: () => callbackUrl }
-      const { result, error } = await client.listen.prerecorded.transcribeFileCallback(stream, callbackObj, opts)
-      if (error) {
-        const msg = error.message || error.err_msg || JSON.stringify(error)
-        throw new Error(String(msg).slice(0, 500))
-      }
+      console.log(`[aiTranscription] Using webhook callback for visit ${id}`)
+      queryParams.set('callback', callbackUrl)
+    }
+  }
+  
+  const url = `https://api.deepgram.com/v1/listen?${queryParams.toString()}`
+  
+  console.log(`[aiTranscription] Using direct HTTP request to Deepgram API`)
+  console.log(`[aiTranscription] Model: ${model}, Language: ${language}`)
+  console.log(`[aiTranscription] Content-Type: ${mimetype}`)
+  
+  try {
+    // Read the audio file as a buffer
+    const audioBuffer = await fs.promises.readFile(absPath)
+    console.log(`[aiTranscription] Audio file size: ${audioBuffer.length} bytes`)
+    
+    // Send direct HTTP request to Deepgram
+    console.log(`[aiTranscription] Sending request to Deepgram...`)
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Token ${apiKey}`,
+        'Content-Type': mimetype,
+      },
+      body: audioBuffer,
+    })
+    
+    console.log(`[aiTranscription] Deepgram response status: ${response.status}`)
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error(`[aiTranscription] Deepgram API error (${response.status}):`, errorText.slice(0, 500))
+      throw new Error(`Deepgram API error: ${response.status} ${response.statusText} - ${errorText.slice(0, 200)}`)
+    }
+    
+    const result = await response.json()
+    console.log(`[aiTranscription] Received response from Deepgram`)
+    
+    // Check if using webhook (callback will return request_id)
+    if (result.request_id && queryParams.has('callback')) {
+      console.log(`[aiTranscription] Webhook request submitted with ID: ${result.request_id}`)
+      // Check if there's an immediate transcript
       const immediate = extractDeepgramText(result)
       if (immediate) return immediate
       return '__DEFERRED__'
     }
+    
+    // Extract transcript from synchronous response
+    const transcript = extractDeepgramText(result)
+    if (!transcript) {
+      console.warn('[aiTranscription] Deepgram returned empty transcript')
+      console.warn('[aiTranscription] Response structure:', JSON.stringify(result).slice(0, 500))
+    }
+    
+    return transcript
+  } catch (error) {
+    console.error(`[aiTranscription] Deepgram request failed:`, error.message)
+    console.error(`[aiTranscription] File: ${absPath}, mimetype: ${mimetype}`)
+    if (error.cause) {
+      console.error(`[aiTranscription] Error cause:`, error.cause)
+    }
+    throw error
   }
-  const { result, error } = await client.listen.prerecorded.transcribeFile(stream, opts)
-  if (error) {
-    const msg = error.message || error.err_msg || JSON.stringify(error)
-    throw new Error(String(msg).slice(0, 500))
-  }
-  return extractDeepgramText(result)
 }
 
 /**

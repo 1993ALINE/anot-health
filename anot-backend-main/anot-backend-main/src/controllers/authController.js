@@ -39,6 +39,7 @@ const generateToken = (user) => {
 const login = async (req, res) => {
     try {
         await ensureUserProfileSchema()
+
         const { email, password, role } = req.body
 
         // Validate input (role optional — server uses the account's role from the database)
@@ -72,6 +73,7 @@ const login = async (req, res) => {
         }
 
         const passwordMatch = await bcrypt.compare(password, user.password)
+
         if (!passwordMatch) {
             void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_FAILED', 'auth', String(user.id), 'Authentication failed', { req, status: 'failed', action_category: 'authentication', metadata: { stage: 'password' } }).catch(() => {})
             return res.status(401).json(INVALID)

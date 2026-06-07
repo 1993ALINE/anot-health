@@ -18,6 +18,8 @@ const isAdminPortal = (role) => role === 'admin' || role === 'super_admin'
 const isElevatedAccount = (role) => ELEVATED_ROLES.has(role)
 
 /** Keys Super Admin may grant to Admin accounts (must match userController + frontend). */
+// NOTE: 'performance' intentionally omitted — performance reports belong to the
+// QPS role, not the Admin portal.
 const GRANTABLE_ADMIN_MODULE_KEYS = [
     'overview',
     'clinicians',
@@ -26,7 +28,6 @@ const GRANTABLE_ADMIN_MODULE_KEYS = [
     'admins',
     'assignments',
     'payroll',
-    'performance',
     'audit',
     'settings',
     'system-profile',

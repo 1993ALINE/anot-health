@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { authAPI, usersAPI, notesAPI, API_BASE } from '../../services/api'
+import { authAPI, usersAPI, notesAPI, adminAPI } from '../../services/api'
 import { useBranding } from '../../services/branding'
 import SystemProfileManager from '../../components/SystemProfileManager'
 import PortalAudioPlayer from '../../components/PortalAudioPlayer'
@@ -22,16 +22,6 @@ function fmtTime(t) {
   const [h, m] = t.split(':')
   const hour = parseInt(h)
   return `${hour > 12 ? hour - 12 : hour === 0 ? 12 : hour}:${m} ${hour >= 12 ? 'PM' : 'AM'}`
-}
-
-function fmtSecs(s) {
-  if (!s || isNaN(s) || !isFinite(s) || s < 0) return '00:00'
-  return `${String(Math.floor(s / 60)).padStart(2,'0')}:${String(Math.floor(s % 60)).padStart(2,'0')}`
-}
-
-function fmtDuration(secs) {
-  if (!secs) return '—'
-  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2,'0')}`
 }
 
 function fmtQpsDate(d) {
@@ -75,10 +65,12 @@ function QPS() {
   const [selectedProvider, setSelectedProvider] = useState(null)
   const [notes, setNotes]                       = useState([])
   const [gradedNotes, setGradedNotes]           = useState([])
+  const [performance, setPerformance]           = useState([])
   const [selectedNote, setSelectedNote]         = useState(null)
   const [loadingProviders, setLoadingProviders] = useState(true)
   const [loadingNotes, setLoadingNotes]         = useState(false)
   const [loadingGraded, setLoadingGraded]       = useState(false)
+  const [loadingPerformance, setLoadingPerformance] = useState(false)
   const [submitting, setSubmitting]             = useState(false)
   const [notif, setNotif]                       = useState(null)
   const [scores, setScores]                     = useState({ accuracy: 88, completeness: 92, terminology: 85, formatting: 95 })
@@ -150,9 +142,19 @@ function QPS() {
     finally { setLoadingGraded(false) }
   }
 
+  const loadPerformance = async () => {
+    try {
+      setLoadingPerformance(true)
+      const data = await adminAPI.getPerformance()
+      setPerformance((data.performance || []).filter(p => p.role === 'scribe'))
+    } catch (err) { showNotif(`Failed to load performance: ${err.message}`, 'error') }
+    finally { setLoadingPerformance(false) }
+  }
+
   useEffect(() => { loadProviders() }, [])
   useEffect(() => { loadGradedNotes() }, [])
   useEffect(() => { if (activeTab === 'graded') loadGradedNotes() }, [activeTab])
+  useEffect(() => { if (activeTab === 'performance') loadPerformance() }, [activeTab]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const openNote = (note) => {
     setSelectedNote(note)
@@ -234,7 +236,7 @@ function QPS() {
       </div>
       <p className="sf-sidebar-rich__nav-label">Workspace</p>
       <nav className="sf-nav sf-sidebar-rich__nav" aria-label="Main">
-        {[['notes','📋','Notes'],['graded','⭐','Graded']].map(([k, icon, label]) => (
+        {[['notes','📋','Notes'],['graded','⭐','Graded'],['performance','📈','Performance']].map(([k, icon, label]) => (
           <div
             key={k}
             role="button"
@@ -357,6 +359,70 @@ function QPS() {
                 </div>
               )
               })}
+            </div>
+          </div>
+        </div>
+        {portalToast}
+      </div>
+    )
+  }
+
+  // ─── PERFORMANCE REPORTS ──────────────────────────
+
+  if (screen === 'performance') {
+    const avgScore = performance.length
+      ? Math.round(performance.reduce((a, p) => a + parseInt(p.overall_avg || 0, 10), 0) / performance.length)
+      : 0
+    const totalNotes = performance.reduce((a, p) => a + parseInt(p.notes_completed || 0, 10), 0)
+    return (
+      <div className="sf-page sf-portal adm-shell qps-portal">
+        <Sidebar />
+        <div className="sf-main sf-portal__main">
+          <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
+          <PortalTopbar
+            drawerMode={drawerMode}
+            sidebarOpen={sidebar.open}
+            onMenuClick={sidebar.toggle}
+            navControlsId="qps-sidebar"
+            moduleTitle="Performance Reports"
+            brandName={branding.system_name || 'Anot'}
+            user={currentUser}
+            avatarFallback="Q"
+            onViewProfile={() => handleNav('profile')}
+            onLogout={requestLogout}
+            menuId="qps-account-menu"
+          />
+          <div className="sf-body">
+            <p className="qps-page-intro">
+              Scribe quality and productivity, aggregated from the grades you submit.
+            </p>
+            <div className="qps-stats-wrap">
+              <div className="sf-stats" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+                <StatCard label="Scribes Tracked"  value={performance.length} variant="total" />
+                <StatCard label="Avg Overall Score" value={`${avgScore}%`}     variant="graded" />
+                <StatCard label="Notes Completed"   value={totalNotes}         variant="review" />
+              </div>
+            </div>
+            <div className="qps-notes-list-block">
+              <div className="sf-section-label">Scribe Performance</div>
+              {loadingPerformance ? <Loading /> : performance.length === 0 ? (
+                <Empty icon="📈" title="No graded performance yet" sub="Scores appear here once you grade scribe notes." />
+              ) : performance.map(p => (
+                <div key={p.id} className="sf-row qps-note-card">
+                  <div className="sf-row-left">
+                    <span className="qps-row-icon" aria-hidden>📝</span>
+                    <div>
+                      <div className="sf-row-name">{p.name}</div>
+                      <div className="sf-row-meta">
+                        {p.notes_completed || 0} notes · Accuracy {p.accuracy_avg || 0}% · Completeness {p.completeness_avg || 0}% · Terminology {p.terminology_avg || 0}% · Formatting {p.formatting_avg || 0}%
+                      </div>
+                    </div>
+                  </div>
+                  <div className="sf-row-right">
+                    <span className="badge badge-green">{p.overall_avg || 0}%</span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>

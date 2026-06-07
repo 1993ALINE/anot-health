@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, useSidebarOffCanvasMode, portalSidebarAriaHidden, ConfirmDialog, PortalSidebarBrand } from '../shared'
-import { authAPI, usersAPI, visitsAPI, notesAPI, API_BASE } from '../../services/api'
+import { authAPI, usersAPI, visitsAPI, notesAPI, isAbortError } from '../../services/api'
 import { useBranding } from '../../services/branding'
 import SystemProfileManager from '../../components/SystemProfileManager'
 import PortalAudioPlayer from '../../components/PortalAudioPlayer'
@@ -113,6 +113,16 @@ function fmtDisplayDate(dateStr) {
   return fmtShortDate(dateStr)
 }
 
+function fmtDisplayDateTime(value) {
+  if (!value) return ''
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return fmtDisplayDate(value)
+  return d.toLocaleString('en-US', {
+    year: 'numeric', month: 'long', day: 'numeric',
+    hour: 'numeric', minute: '2-digit',
+  })
+}
+
 function fmtDuration(secs) {
   if (!secs) return '—'
   return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
@@ -185,11 +195,11 @@ function Scribe() {
   const [loadingNote, setLoadingNote]             = useState(false)
   const [loadingNotes, setLoadingNotes]           = useState(false)
   const [loadingGrades, setLoadingGrades]         = useState(false)
-  const [saving, setSaving]                       = useState(false)
+  const [savingDraft, setSavingDraft]             = useState(false)
+  const [uploadingToEMR, setUploadingToEMR]       = useState(false)
   const [notif, setNotif]                         = useState(null)
   const [activeRecIdx, setActiveRecIdx]           = useState(0)
   const [txSegments, setTxSegments]               = useState([])
-  const [transcribeSubmitting, setTranscribeSubmitting] = useState(false)
   const [generatingDraft, setGeneratingDraft] = useState(false)
   const [confirmDialog, setConfirmDialog]         = useState(null)
   const [confirmLoading, setConfirmLoading]         = useState(false)
@@ -199,7 +209,8 @@ function Scribe() {
   const [baseline, setBaseline] = useState({ visitId: null, final: '', tx: '' })
   const [recordingsError, setRecordingsError] = useState(null)
   const dayStatsLoadingRef = useRef(new Set())
-  const loadingRef = useRef(false)
+  const recordingsAbortRef = useRef(null)
+  const noteAbortRef = useRef(null)
 
   const drawerMode = usePortalDrawerMode()
   const offCanvasSidebar = useSidebarOffCanvasMode()
@@ -301,30 +312,43 @@ function Scribe() {
   }
 
   const loadRecordings = useCallback(async (providerId, date) => {
-    if (loadingRef.current) return
-    loadingRef.current = true
+    // Cancel any in-flight load so a slow response for a previous
+    // provider/date can never overwrite the latest selection.
+    recordingsAbortRef.current?.abort()
+    const controller = new AbortController()
+    recordingsAbortRef.current = controller
     try {
       setLoadingRecordings(true)
       setRecordingsError(null)
-      const data = await visitsAPI.getAll(providerId, date)
+      const data = await visitsAPI.getAll(providerId, date, controller.signal)
+      if (controller.signal.aborted) return
       const all  = data.visits || []
       setRecordings(all.filter(v => !['upcoming', 'scheduled', 'in-progress'].includes(v.status)))
-    } catch {
+    } catch (err) {
+      if (isAbortError(err) || controller.signal.aborted) return
       setRecordings([])
       setRecordingsError('Could not load recordings. Check your connection and try again later.')
       showNotif('Failed to load recordings.', 'red')
     } finally {
-      setLoadingRecordings(false)
-      loadingRef.current = false
+      if (recordingsAbortRef.current === controller) {
+        recordingsAbortRef.current = null
+        setLoadingRecordings(false)
+      }
     }
   }, [showNotif])
 
   const loadNote = useCallback(
     async (visitId, opts = {}) => {
       const mergeOnly = !!opts.mergeOnly
+      // Cancel any in-flight note load so quickly switching recordings can't
+      // resolve out of order and show the wrong note in the editor.
+      noteAbortRef.current?.abort()
+      const controller = new AbortController()
+      noteAbortRef.current = controller
       try {
         if (!mergeOnly) setLoadingNote(true)
-        const data = await notesAPI.getByVisit(visitId)
+        const data = await notesAPI.getByVisit(visitId, controller.signal)
+        if (controller.signal.aborted) return false
         const n = data.note
         if (mergeOnly) {
           if (n) {
@@ -360,7 +384,8 @@ function Scribe() {
         setTxSegments(segs)
         markBaseline(visitId, fn, segs)
         return true
-      } catch {
+      } catch (err) {
+        if (isAbortError(err) || controller.signal.aborted) return false
         if (!mergeOnly) {
           setNote(null)
           setFinalNote('')
@@ -370,7 +395,10 @@ function Scribe() {
         }
         return false
       } finally {
-        if (!mergeOnly) setLoadingNote(false)
+        if (noteAbortRef.current === controller) {
+          noteAbortRef.current = null
+          if (!mergeOnly) setLoadingNote(false)
+        }
       }
     },
     [markBaseline, showNotif],
@@ -437,6 +465,13 @@ function Scribe() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps -- initial load only
 
   useEffect(() => {
+    return () => {
+      recordingsAbortRef.current?.abort()
+      noteAbortRef.current?.abort()
+    }
+  }, [])
+
+  useEffect(() => {
     if (activeTab === 'notes')  loadMyNotes()
     if (activeTab === 'grades') loadGrades()
   }, [activeTab]) // eslint-disable-line react-hooks/exhaustive-deps -- tab switch only; loaders intentionally omitted
@@ -455,7 +490,7 @@ function Scribe() {
     if (!selectedRec?.id) return
     if (!finalNote.trim()) { showNotif('Please write the note before saving.', 'amber'); return }
     try {
-      setSaving(true)
+      setSavingDraft(true)
       const trans = txSegments.length > 0 ? JSON.stringify(txSegments) : undefined
       const saved = await notesAPI.saveDraft(selectedRec.id, finalNote, trans, note?.ai_draft)
       if (saved.note) {
@@ -471,14 +506,14 @@ function Scribe() {
       }
       showNotif('Draft saved successfully')
     } catch (err) { showNotif(`Save failed: ${err.message}`, 'red') }
-    finally { setSaving(false) }
+    finally { setSavingDraft(false) }
   }
 
   const uploadToEMR = async () => {
     if (!selectedRec?.id) return
     if (!finalNote.trim()) { showNotif('Please write the note before uploading.', 'amber'); return }
     try {
-      setSaving(true)
+      setUploadingToEMR(true)
       const trans = txSegments.length > 0 ? JSON.stringify(txSegments) : undefined
       const saved = await notesAPI.saveDraft(selectedRec.id, finalNote, trans, note?.ai_draft)
       await notesAPI.submitNote(note?.id || saved.note.id)
@@ -487,7 +522,7 @@ function Scribe() {
       markBaseline(selectedRec.id, finalNote, txSegments)
       showNotif('Note submitted to clinician.')
     } catch (err) { showNotif(`Upload failed: ${err.message}`, 'red') }
-    finally { setSaving(false) }
+    finally { setUploadingToEMR(false) }
   }
 
   const runGenerateDraft = async () => {
@@ -502,21 +537,6 @@ function Scribe() {
       showNotif('Failed to generate. Check API key in Admin settings.', 'red')
     } finally {
       setGeneratingDraft(false)
-    }
-  }
-
-  const runTranscribe = async () => {
-    if (!selectedRec?.id) return
-    try {
-      setTranscribeSubmitting(true)
-      await visitsAPI.runTranscription(selectedRec.id)
-      setSelectedRec((prev) => (prev ? { ...prev, transcription_status: 'processing' } : prev))
-      showNotif('Transcription started — updating automatically every 30 seconds.')
-      await loadNote(selectedRec.id, { mergeOnly: true })
-    } catch (err) {
-      showNotif(err.message || 'Could not start transcription.', 'red')
-    } finally {
-      setTranscribeSubmitting(false)
     }
   }
 
@@ -588,6 +608,42 @@ function Scribe() {
     }
     go()
   }
+
+  const applyEhrUpload = useCallback((updatedNote) => {
+    if (!updatedNote) return
+    const noteId = updatedNote.id
+    const visitId = updatedNote.visit_id
+    setNote((prev) => (prev && String(prev.id) === String(noteId)
+      ? { ...prev, ehr_uploaded_at: updatedNote.ehr_uploaded_at, ehr_uploaded_by: updatedNote.ehr_uploaded_by }
+      : prev))
+    setViewingMyNote((prev) => (prev && String(prev.id) === String(noteId)
+      ? { ...prev, ehr_uploaded_at: updatedNote.ehr_uploaded_at, ehr_uploaded_by: updatedNote.ehr_uploaded_by }
+      : prev))
+    setMyNotes((prev) => prev.map((n) =>
+      String(n.id) === String(noteId) || String(n.visit_id) === String(visitId)
+        ? { ...n, ehr_uploaded_at: updatedNote.ehr_uploaded_at, ehr_uploaded_by: updatedNote.ehr_uploaded_by }
+        : n))
+  }, [])
+
+  const requestUploadToEHR = useCallback((noteId) => {
+    if (!noteId) return
+    setConfirmDialog({
+      tone: 'primary',
+      title: 'Upload to EHR',
+      message: 'Are you sure you want to mark this note as uploaded to EHR?',
+      confirmText: 'Upload to EHR',
+      cancelText: 'Cancel',
+      onConfirm: async () => {
+        try {
+          const data = await notesAPI.uploadToEHR(noteId)
+          applyEhrUpload(data.note)
+          showNotif('Note marked as uploaded to EHR.')
+        } catch (err) {
+          showNotif(err.message || 'Failed to upload to EHR.', 'red')
+        }
+      },
+    })
+  }, [applyEhrUpload, showNotif])
 
   const handleNav = useCallback((tab) => {
     leaveNoteScreen(() => {
@@ -1122,7 +1178,7 @@ function Scribe() {
              recordings.map(rec => {
               const effectiveStatus = ['submitted','uploaded'].includes(rec.note_status) ? rec.note_status : rec.status
               const s    = STATUS_CFG[effectiveStatus] || { label: effectiveStatus, cls: 'badge-gray' }
-              const isDone = ['submitted','uploaded'].includes(rec.note_status)
+              const isDone = ['submitted','uploaded'].includes(effectiveStatus)
               return (
                 <div key={rec.id} className="sf-row">
                   <div className="sf-row-left">
@@ -1158,6 +1214,8 @@ function Scribe() {
     const submittedRaw = note?.updated_at || viewingMyNote.updated_at
     const submittedLabel = submittedRaw ? fmtDisplayDate(submittedRaw) : '—'
     const statusLabel = viewingMyNote.status === 'uploaded' ? 'Graded' : 'Submitted'
+    const ehrUploadedAt = note?.ehr_uploaded_at || viewingMyNote.ehr_uploaded_at || null
+    const ehrUploaded = !!ehrUploadedAt
 
     return (
       <div className="sf-page sf-portal adm-shell scribe-portal">
@@ -1193,6 +1251,30 @@ function Scribe() {
                     {statusLabel}
                   </span>
                   <span className="scribe-note-readonly__submitted-date">Submitted {submittedLabel}</span>
+                  {ehrUploaded ? (
+                    <span className="scribe-status-badge scribe-status-badge--ehr">✓ Uploaded to EHR</span>
+                  ) : null}
+                </div>
+                <div className="scribe-note-readonly__ehr">
+                  {ehrUploaded ? (
+                    <>
+                      <button type="button" className="btn btn-navy" disabled>
+                        ✓ Uploaded to EHR
+                      </button>
+                      <span className="scribe-note-readonly__ehr-date">
+                        Uploaded {fmtDisplayDateTime(ehrUploadedAt)}
+                      </span>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-navy"
+                      onClick={() => requestUploadToEHR(noteId)}
+                      disabled={loadingNote || !noteId}
+                    >
+                      Upload to EHR
+                    </button>
+                  )}
                 </div>
               </header>
               {loadingNote ? (
@@ -1239,7 +1321,6 @@ function Scribe() {
       : txSt === 'completed' ? { label: 'Completed', cls: 'badge-green' }
         : txSt === 'failed' ? { label: 'Failed', cls: 'badge-gray' }
           : { label: 'Idle', cls: 'badge-amber' }
-  const txComplete = txSt === 'completed'
   return (
     <div className="sf-page-fixed sf-portal adm-shell scribe-portal">
       {sessionTimeoutModal}
@@ -1276,34 +1357,6 @@ function Scribe() {
           }
         />
 
-        <div className="sf-note-toolbar" role="toolbar" aria-label="Note data">
-          {isDirty ? <span className="sf-note-toolbar__pill">Unsaved changes</span> : null}
-          <span
-            className={
-              txSt === 'processing' || txSt === 'failed'
-                ? 'sf-note-toolbar__hint'
-                : 'sf-note-toolbar__hint scribe-note-banner'
-            }
-          >
-            {txSt === 'processing'
-              ? 'Transcription is running on the server (auto-refresh every 30s).'
-              : txSt === 'failed'
-                ? 'Transcription failed — check audio format (install ffmpeg on server for .webm), Deepgram/Groq keys in Admin → Settings, then click Transcribe audio again.'
-                : 'Edits stay in your browser until you save a draft or submit to the clinician.'}
-          </span>
-          {isDirty ? (
-            <button
-              type="button"
-              className="sf-note-toolbar__btn sf-note-toolbar__btn--danger"
-              onClick={onDiscardReloadFromServer}
-              disabled={noteRefreshing || loadingNote}
-              title="Replace note and transcript with the latest from the server"
-            >
-              Discard edits and reload
-            </button>
-          ) : null}
-        </div>
-
         <div className="sf-note-workspace">
           <div className="sf-note-workspace__top">
             <PortalAudioPlayer
@@ -1318,16 +1371,8 @@ function Scribe() {
             title="Transcription"
             className="sf-note-panel--transcription"
             allowExpand={false}
-            badges={<span className={`badge ${txBadge.cls}`}>{txBadge.label}</span>}
           >
             <div className="scribe-note-panel-content">
-              {!isDone && !txComplete && (
-                <div className="scribe-note-panel-content__actions">
-                  <button type="button" className="btn btn-navy" disabled={transcribeSubmitting || !selectedRec?.id} onClick={runTranscribe}>
-                    {transcribeSubmitting ? 'Starting…' : 'Transcribe audio'}
-                  </button>
-                </div>
-              )}
               {loadingNote ? <div style={{ color: '#64748B', fontSize: 13 }}>Loading...</div> : (
                 <textarea
                   className="sf-textarea sf-textarea-transcript"
@@ -1348,12 +1393,12 @@ function Scribe() {
               )}
               {!loadingNote && !currentSeg && txSt === 'failed' && (
                 <div className="sf-notif sf-notif-amber" style={{ borderRadius: 10, fontSize: 12, lineHeight: 1.6 }}>
-                  Transcription could not be completed. Try Transcribe audio again, or ask an admin to set GROQ_API_KEY and/or Deepgram in Settings.
+                  Transcription could not be completed. Ask an admin to verify the Deepgram API key in Settings, or have the clinician re-record the visit.
                 </div>
               )}
               {!loadingNote && !currentSeg && txSt !== 'processing' && txSt !== 'failed' && (
                 <div style={{ color: '#64748B', fontSize: 12, lineHeight: 1.6 }}>
-                  No transcript yet. Use &quot;Transcribe audio&quot; or wait for the clinician to finish the visit if auto-transcription is enabled.
+                  No transcript yet. Transcription runs automatically once the clinician finishes the visit — this updates on its own.
                 </div>
               )}
             </div>
@@ -1421,8 +1466,8 @@ function Scribe() {
             )}
             {!isDone && (
               <div className="sf-bottom-bar">
-                <button type="button" className="btn scribe-save-draft-btn" onClick={saveDraft} disabled={saving}>{saving ? 'Saving...' : 'Save Draft'}</button>
-                <button className="btn btn-teal" style={{ marginLeft: 'auto' }} onClick={uploadToEMR} disabled={saving}>{saving ? 'Uploading...' : 'Upload to EMR'}</button>
+                <button type="button" className="btn scribe-save-draft-btn" onClick={saveDraft} disabled={savingDraft}>{savingDraft ? 'Saving...' : 'Save Draft'}</button>
+                <button className="btn btn-teal" style={{ marginLeft: 'auto' }} onClick={uploadToEMR} disabled={uploadingToEMR}>{uploadingToEMR ? 'Uploading...' : 'Upload to EMR'}</button>
               </div>
             )}
             {isDone && (

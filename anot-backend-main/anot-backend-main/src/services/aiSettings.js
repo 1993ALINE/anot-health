@@ -26,9 +26,17 @@ const TTL_MS = 4000
 
 function rowToRuntime(row) {
   if (!row) return { ...DEFAULTS, deepgram_api_key: null, anthropic_api_key: null }
-  const key = row.deepgram_api_key_enc ? decryptString(row.deepgram_api_key_enc) : null
+
+  const encryptedKey = row.deepgram_api_key_enc
+  const key = encryptedKey ? decryptString(encryptedKey) : null
+
   const anthropicKey = row.anthropic_api_key_enc ? decryptString(row.anthropic_api_key_enc) : null
   const model = String(row.anthropic_model || DEFAULTS.anthropic_model).trim()
+
+  if (encryptedKey && !key) {
+    console.error('[aiSettings] Deepgram API key could not be decrypted (check SETTINGS_ENCRYPTION_KEY / JWT_SECRET).')
+  }
+
   return {
     deepgram_enabled: !!row.deepgram_enabled,
     deepgram_api_key: key,
@@ -40,7 +48,7 @@ function rowToRuntime(row) {
     anthropic_api_key: anthropicKey,
     anthropic_model: ANTHROPIC_MODELS.has(model) ? model : DEFAULTS.anthropic_model,
     ffmpeg_enabled: !!row.ffmpeg_enabled,
-    ffmpeg_target_format: ['wav', 'mp3'].includes(String(row.ffmpeg_target_format || '').toLowerCase())
+    ffmpeg_target_format: ['wav', 'mp3', 'ogg', 'webm', 'flac'].includes(String(row.ffmpeg_target_format || '').toLowerCase())
       ? String(row.ffmpeg_target_format).toLowerCase()
       : 'mp3',
     ffmpeg_compression: Math.max(0, Math.min(9, Number(row.ffmpeg_compression) || DEFAULTS.ffmpeg_compression)),
@@ -51,7 +59,9 @@ function rowToRuntime(row) {
 
 async function loadAiSettings() {
   const now = Date.now()
-  if (cache.value && now - cache.at < TTL_MS) return cache.value
+  if (cache.value && now - cache.at < TTL_MS) {
+    return cache.value
+  }
   await ensureMediaAndAiSchema()
   const cols = await getSystemSettingsColumns()
   const r = await pool.query('SELECT * FROM system_settings WHERE id = 1')
@@ -66,7 +76,10 @@ function invalidateAiSettingsCache() {
 }
 
 function useDeepgram(settings) {
-  return !!(settings?.deepgram_enabled && settings?.deepgram_api_key && String(settings.deepgram_api_key).trim())
+  const enabled = settings?.deepgram_enabled
+  const hasKey = settings?.deepgram_api_key
+  const keyValid = hasKey && String(settings.deepgram_api_key).trim()
+  return !!(enabled && hasKey && keyValid)
 }
 
 async function getAnthropicKey() {

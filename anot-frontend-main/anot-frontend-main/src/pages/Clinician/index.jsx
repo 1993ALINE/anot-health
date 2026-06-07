@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { authAPI, visitsAPI, patientsAPI, notesAPI, API_BASE } from '../../services/api'
+import { authAPI, visitsAPI, patientsAPI, notesAPI, API_BASE, isAbortError } from '../../services/api'
 import { useBranding } from '../../services/branding'
 import SystemProfileManager from '../../components/SystemProfileManager'
 import PortalSidebarFooter from '../../components/PortalSidebarFooter'
@@ -646,7 +646,9 @@ function notesCardActionKind(h) {
 }
 
 function isNoteDetailCompleted(note) {
-  return note?.status === 'uploaded' || note?.note_status === 'uploaded' || !!note?.locked_at
+  // A note is only "completed" (locked) when the clinician has locked it.
+  // The "uploaded" status just means uploaded to EHR, not locked by clinician.
+  return !!note?.locked_at
 }
 
 function isNoteDetailReadyForReview(note) {
@@ -1486,6 +1488,9 @@ function Clinician() {
   const [addPaused, setAddPaused]   = useState(false)
   const [showAdd, setShowAdd]       = useState(false)
   const [reviewNote, setReview]     = useState(null)
+  const [editingNote, setEditingNote] = useState(false)
+  const [editedNoteContent, setEditedNoteContent] = useState('')
+  const [savingNote, setSavingNote] = useState(false)
   const [aiVisit, setAiVisit]       = useState(null)
   const [aiVisitFromNotes, setAiVisitFromNotes] = useState(false)
   const [playVisit, setPlayVisit]   = useState(null)
@@ -1542,6 +1547,37 @@ function Clinician() {
 
   const tRef  = useRef(null), mRef  = useRef(null), cRef  = useRef([])
   const atRef = useRef(null), arRef = useRef(null), acRef = useRef([])
+  const visitsAbortRef = useRef(null)
+  const historyAbortRef = useRef(null)
+
+  // Release the microphone and stop any in-flight recorder when the portal
+  // unmounts (route change / logout). Without this the mic stays live (red
+  // recording indicator) and the MediaStream leaks after the user signs out.
+  // Also cancel in-flight schedule/history loads so they cannot setState after
+  // unmount or resolve out of order.
+  useEffect(() => {
+    return () => {
+      clearInterval(tRef.current)
+      clearInterval(atRef.current)
+      for (const rec of [mRef.current, arRef.current]) {
+        try {
+          if (rec && rec.state !== 'inactive') {
+            rec.onstop = null
+            rec.ondataavailable = null
+            rec.stop()
+          }
+          rec?.stream?.getTracks().forEach((t) => t.stop())
+        } catch { /* recorder already torn down */ }
+      }
+      mRef.current = null
+      arRef.current = null
+      cRef.current = []
+      acRef.current = []
+      visitsAbortRef.current?.abort()
+      historyAbortRef.current?.abort()
+    }
+  }, [])
+
   const scheduleDays = useMemo(() => [-2, -1, 0, 1, 2].map((d) => weekCenterOff + d), [weekCenterOff])
 
   const shiftScheduleOff = (delta) => {
@@ -1615,38 +1651,57 @@ function Clinician() {
   }
 
   const loadVisits = async (opts = {}) => {
+    // Cancel any in-flight schedule load so a slow response for a previous day
+    // can't overwrite the day the user just switched to.
+    visitsAbortRef.current?.abort()
+    const controller = new AbortController()
+    visitsAbortRef.current = controller
+    const dayKey = localDate(off)
     try {
       setLoading(true)
-      const d = await visitsAPI.getByDate(localDate(off))
+      const d = await visitsAPI.getByDate(dayKey, controller.signal)
+      if (controller.signal.aborted) return
       setVisits(d.visits || [])
       setScheduleDayCounts((prev) => ({
         ...prev,
-        [localDate(off)]: (d.visits || []).length,
+        [dayKey]: (d.visits || []).length,
       }))
       setScheduleDayBreakdown((prev) => ({
         ...prev,
-        [localDate(off)]: scheduleDayStatusBreakdown(d.visits || [], off),
+        [dayKey]: scheduleDayStatusBreakdown(d.visits || [], off),
       }))
       setScheduleSyncedAt(new Date().toISOString())
       if (opts.notify) showToast('Schedule updated')
     } catch (e) {
+      if (isAbortError(e) || controller.signal.aborted) return
       showToast(e.message, 'error')
     } finally {
-      setLoading(false)
+      if (visitsAbortRef.current === controller) {
+        visitsAbortRef.current = null
+        setLoading(false)
+      }
     }
   }
 
   const loadHistory = async (opts = {}) => {
+    historyAbortRef.current?.abort()
+    const controller = new AbortController()
+    historyAbortRef.current = controller
     try {
       if (!opts.silent) setLoading(true)
-      const d = await visitsAPI.getHistory()
+      const d = await visitsAPI.getHistory(controller.signal)
+      if (controller.signal.aborted) return
       setHistory(d.visits || [])
       setHistorySyncedAt(new Date().toISOString())
       if (opts.notify) showToast('History updated')
     } catch (e) {
+      if (isAbortError(e) || controller.signal.aborted) return
       if (!opts.silent) showToast(e.message, 'error')
     } finally {
-      if (!opts.silent) setLoading(false)
+      if (historyAbortRef.current === controller) {
+        historyAbortRef.current = null
+        if (!opts.silent) setLoading(false)
+      }
     }
   }
 
@@ -1792,7 +1847,11 @@ function Clinician() {
     }
   }, [readyForReviewCount])
 
-  const getMime = () => { const t = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4']; return t.find(x => MediaRecorder.isTypeSupported(x)) || '' }
+  // Prefer OGG Opus (smallest files, fastest upload), then WebM Opus, then plain WebM.
+  const getMime = () => {
+    const candidates = ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/webm']
+    return candidates.find((x) => MediaRecorder.isTypeSupported(x)) || ''
+  }
 
   const startVisit = async (v) => {
     if (active) return
@@ -2041,9 +2100,46 @@ function Clinician() {
 
   const openNoteFromCard = (h) => openNoteDetail(h)
 
+  const startEditingNote = () => {
+    setEditedNoteContent(reviewNote.final_note || '')
+    setEditingNote(true)
+  }
+
+  const cancelEditingNote = () => {
+    setEditingNote(false)
+    setEditedNoteContent('')
+  }
+
+  const saveEditedNote = async () => {
+    if (!reviewNote?.note_id) return
+    setSavingNote(true)
+    try {
+      const data = await notesAPI.updateNote(reviewNote.note_id, editedNoteContent)
+      setReview((prev) => ({
+        ...prev,
+        final_note: editedNoteContent,
+      }))
+      setHistory((prev) =>
+        prev.map((v) =>
+          v.id === reviewNote.id
+            ? { ...v, final_note: editedNoteContent }
+            : v
+        )
+      )
+      setEditingNote(false)
+      showToast('Note updated successfully')
+    } catch (err) {
+      showToast(err.message || 'Failed to update note', 'error')
+    } finally {
+      setSavingNote(false)
+    }
+  }
+
   const closeNoteDetail = () => {
     setLockConfirmOpen(false)
     setReview(null)
+    setEditingNote(false)
+    setEditedNoteContent('')
   }
 
   const confirmLockNote = async () => {
@@ -2237,6 +2333,7 @@ function Clinician() {
               <button type="button" className="cl-note-detail-back" onClick={closeNoteDetail}>
                 ← Back to Notes
               </button>
+              
               <div className="cl-note-detail-header">
                 <div className="cl-note-detail-chip">
                   <span className="cl-note-detail-chip__icon" aria-hidden>📄</span>
@@ -2247,39 +2344,160 @@ function Clinician() {
                     <span className="cl-note-detail-chip__lock" title="Locked" aria-label="Locked">🔒</span>
                   ) : null}
                 </div>
-                {isNoteDetailReadyForReview(reviewNote) ? (
-                  <div className="cl-note-detail-actions">
-                    {!editReq[reviewNote.note_id] ? (
+              </div>
+
+              {/* Action Bar - Always visible for unlocked notes */}
+              {!isNoteDetailCompleted(reviewNote) && (
+                <div style={{
+                  display: 'flex',
+                  gap: '12px',
+                  padding: '16px',
+                  background: '#F9FAFB',
+                  borderRadius: '12px',
+                  marginBottom: '16px',
+                  border: '1px solid #E5E7EB',
+                  flexWrap: 'wrap',
+                  alignItems: 'center',
+                }}>
+                  {editingNote ? (
+                    <>
                       <button
                         type="button"
-                        className="btn"
-                        onClick={async () => {
-                          try {
-                            await notesAPI.requestEdit(reviewNote.note_id)
-                            setEditReq((p) => ({ ...p, [reviewNote.note_id]: true }))
-                            showToast('Edit request sent')
-                          } catch (e) {
-                            showToast(e.message, 'error')
-                          }
+                        style={{
+                          padding: '10px 20px',
+                          borderRadius: '8px',
+                          border: '1px solid #D1D5DB',
+                          background: 'white',
+                          color: '#374151',
+                          fontWeight: 600,
+                          fontSize: '14px',
+                          cursor: 'pointer',
                         }}
+                        onClick={cancelEditingNote}
+                        disabled={savingNote}
                       >
-                        ✏️ Request Edit
+                        Cancel
                       </button>
-                    ) : (
-                      <span className="badge badge-amber">✓ Edit Requested</span>
-                    )}
-                    <button
-                      type="button"
-                      className="cl-notes-btn-lock"
-                      onClick={() => setLockConfirmOpen(true)}
-                    >
-                      🔒 Lock Note
-                    </button>
-                  </div>
-                ) : null}
-              </div>
+                      <button
+                        type="button"
+                        style={{
+                          padding: '10px 20px',
+                          borderRadius: '8px',
+                          border: 'none',
+                          background: '#10B981',
+                          color: 'white',
+                          fontWeight: 600,
+                          fontSize: '14px',
+                          cursor: savingNote ? 'not-allowed' : 'pointer',
+                          opacity: savingNote ? 0.6 : 1,
+                        }}
+                        onClick={saveEditedNote}
+                        disabled={savingNote}
+                      >
+                        {savingNote ? 'Saving...' : '💾 Save Changes'}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        style={{
+                          padding: '10px 20px',
+                          borderRadius: '8px',
+                          border: 'none',
+                          background: '#3B82F6',
+                          color: 'white',
+                          fontWeight: 600,
+                          fontSize: '14px',
+                          cursor: 'pointer',
+                        }}
+                        onClick={startEditingNote}
+                      >
+                        ✏️ Edit Note
+                      </button>
+                      
+                      <button
+                        type="button"
+                        style={{
+                          padding: '10px 20px',
+                          borderRadius: '8px',
+                          border: 'none',
+                          background: '#10B981',
+                          color: 'white',
+                          fontWeight: 600,
+                          fontSize: '14px',
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => setLockConfirmOpen(true)}
+                      >
+                        🔒 Lock Note
+                      </button>
+                      
+                      {!editReq[reviewNote.note_id] ? (
+                        <button
+                          type="button"
+                          style={{
+                            padding: '10px 20px',
+                            borderRadius: '8px',
+                            border: '1px solid #D1D5DB',
+                            background: 'white',
+                            color: '#374151',
+                            fontWeight: 600,
+                            fontSize: '14px',
+                            cursor: 'pointer',
+                          }}
+                          onClick={async () => {
+                            try {
+                              await notesAPI.requestEdit(reviewNote.note_id)
+                              setEditReq((p) => ({ ...p, [reviewNote.note_id]: true }))
+                              showToast('Edit request sent')
+                            } catch (e) {
+                              showToast(e.message, 'error')
+                            }
+                          }}
+                        >
+                          ↩️ Request Edit from Scribe
+                        </button>
+                      ) : (
+                        <span style={{
+                          padding: '8px 16px',
+                          borderRadius: '8px',
+                          background: '#FEF3C7',
+                          color: '#92400E',
+                          fontSize: '13px',
+                          fontWeight: 600,
+                        }}>
+                          ✓ Edit Requested
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
               <div className="sf-note-card">
-                <pre className="sf-note-pre">{reviewNote.final_note || 'Note not available.'}</pre>
+                {editingNote ? (
+                  <textarea
+                    className="sf-textarea"
+                    style={{
+                      width: '100%',
+                      minHeight: '400px',
+                      fontFamily: 'ui-monospace, monospace',
+                      fontSize: '13px',
+                      lineHeight: '1.6',
+                      padding: '16px',
+                      border: '2px solid #4F46E5',
+                      borderRadius: '8px',
+                      resize: 'vertical',
+                    }}
+                    value={editedNoteContent}
+                    onChange={(e) => setEditedNoteContent(e.target.value)}
+                    disabled={savingNote}
+                    autoFocus
+                  />
+                ) : (
+                  <pre className="sf-note-pre">{reviewNote.final_note || 'Note not available.'}</pre>
+                )}
               </div>
               {lockConfirmOpen ? (
                 <div
@@ -2798,7 +3016,7 @@ function Clinician() {
 
               {uploading && (
                 <div className="sf-notif sf-notif-green" style={{ borderRadius: 10, marginBottom: 14 }}>
-                  ⏳ Uploading & preparing note...
+                  ⏳ Uploading audio...
                 </div>
               )}
 

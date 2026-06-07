@@ -81,10 +81,7 @@ const pool = new Pool(
   useUrl
     ? {
         connectionString: process.env.DATABASE_URL,
-        ssl:
-          process.env.DATABASE_SSL_INSECURE === 'true'
-            ? { rejectUnauthorized: false }
-            : { rejectUnauthorized: true },
+        ssl: { rejectUnauthorized: true },
       }
     : {
         host: process.env.DB_HOST,
@@ -92,9 +89,7 @@ const pool = new Pool(
         database: process.env.DB_NAME,
         user: process.env.DB_USER,
         password: process.env.DB_PASSWORD,
-        ...(process.env.DB_SSL === 'true'
-          ? { ssl: { rejectUnauthorized: process.env.DATABASE_SSL_INSECURE !== 'true' } }
-          : {}),
+        ...(process.env.DB_SSL === 'true' ? { ssl: { rejectUnauthorized: true } } : {}),
       },
 )
 

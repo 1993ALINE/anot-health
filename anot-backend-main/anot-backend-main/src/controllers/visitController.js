@@ -394,6 +394,7 @@ const deleteVisit = async (req, res) => {
 
 const getVisitHistory = async (req, res) => {
   try {
+    await ensureNoteLockColumns()
     const clinician_id = req.user.id
 
     const durationCol = await visitDurationSelect('v')

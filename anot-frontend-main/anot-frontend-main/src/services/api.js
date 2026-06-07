@@ -30,6 +30,11 @@ export const API_BASE = (() => {
   return DEFAULT_PROD_API
 })()
 
+/** True when a request was cancelled via AbortController (stale/superseded load). */
+export function isAbortError(err) {
+  return !!err && (err.name === 'AbortError' || err.code === 20)
+}
+
 /** True when `fetch` did not get a normal HTTP response (backend down, DNS, CORS, blocked port, etc.). */
 export function isLikelyNetworkFailure(err) {
   if (!err) return false
@@ -227,19 +232,19 @@ export const patientsAPI = {
 // ─── VISITS ───────────────────────────────────────────────────────────────────
 
 export const visitsAPI = {
-  getByDate: async (date) => {
-    const res = await fetch(`${BASE_URL}/visits/my?date=${encodeURIComponent(date)}`, { headers: headers() })
+  getByDate: async (date, signal) => {
+    const res = await fetch(`${BASE_URL}/visits/my?date=${encodeURIComponent(date)}`, { headers: headers(), signal })
     return handleResponse(res)
   },
-  getHistory: async () => {
-    const res = await fetch(`${BASE_URL}/visits/history`, { headers: headers() })
+  getHistory: async (signal) => {
+    const res = await fetch(`${BASE_URL}/visits/history`, { headers: headers(), signal })
     return handleResponse(res)
   },
-  getAll: async (providerId, date) => {
+  getAll: async (providerId, date, signal) => {
     const params = new URLSearchParams()
     if (providerId) params.append('provider_id', providerId)
     if (date)       params.append('date', date)
-    const res = await fetch(`${BASE_URL}/visits?${params.toString()}`, { headers: headers() })
+    const res = await fetch(`${BASE_URL}/visits?${params.toString()}`, { headers: headers(), signal })
     return handleResponse(res)
   },
   create: async (visitData) => {
@@ -341,8 +346,8 @@ export const visitsAPI = {
 // ─── NOTES ────────────────────────────────────────────────────────────────────
 
 export const notesAPI = {
-  getByVisit: async (visitId) => {
-    const res = await fetch(`${BASE_URL}/notes/visit/${visitId}`, { headers: headers() })
+  getByVisit: async (visitId, signal) => {
+    const res = await fetch(`${BASE_URL}/notes/visit/${visitId}`, { headers: headers(), signal })
     return handleResponse(res)
   },
   getMyNotes: async () => {
@@ -380,11 +385,26 @@ export const notesAPI = {
     })
     return handleResponse(res)
   },
+  updateNote: async (noteId, finalNote) => {
+    const res = await fetch(`${BASE_URL}/notes/${noteId}`, {
+      method: 'PUT',
+      headers: headers(),
+      body: JSON.stringify({ final_note: finalNote }),
+    })
+    return handleResponse(res)
+  },
   requestEdit: async (noteId, message) => {
     const res = await fetch(`${BASE_URL}/notes/${noteId}/request-edit`, {
       method: 'PUT',
       headers: headers(),
       body: JSON.stringify({ message }),
+    })
+    return handleResponse(res)
+  },
+  uploadToEHR: async (noteId) => {
+    const res = await fetch(`${BASE_URL}/notes/${noteId}/upload-ehr`, {
+      method: 'POST',
+      headers: headers(),
     })
     return handleResponse(res)
   },
@@ -463,19 +483,6 @@ export const settingsAPI = {
       method: 'PUT',
       headers: headers(),
       body: JSON.stringify(settings),
-    })
-    return handleResponse(res)
-  },
-}
-
-// ─── CLINICIAN SUPPORT CHAT ───────────────────────────────────────────────────
-
-export const supportAPI = {
-  chat: async (messages) => {
-    const res = await fetch(`${BASE_URL}/support/chat`, {
-      method: 'POST',
-      headers: headers(),
-      body: JSON.stringify({ messages }),
     })
     return handleResponse(res)
   },

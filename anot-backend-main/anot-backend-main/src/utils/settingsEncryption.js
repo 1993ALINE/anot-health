@@ -26,7 +26,9 @@ function decryptString(blob) {
     const decipher = crypto.createDecipheriv('aes-256-gcm', keyBuf(), iv)
     decipher.setAuthTag(tag)
     return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8')
-  } catch {
+  } catch (err) {
+    console.error('[settingsEncryption] Decryption failed:', err.message)
+    console.error('[settingsEncryption] Check that SETTINGS_ENCRYPTION_KEY or JWT_SECRET matches the key used during encryption')
     return null
   }
 }

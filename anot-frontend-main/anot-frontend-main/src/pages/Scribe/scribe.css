@@ -315,6 +315,30 @@
   color: #6b7280;
 }
 
+.scribe-portal .scribe-status-badge--ehr {
+  background: #eef2ff;
+  color: #4260e9;
+  border: 1px solid #4260e9;
+}
+
+.scribe-portal .scribe-note-readonly__ehr {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.scribe-portal .scribe-note-readonly__ehr .btn:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.scribe-portal .scribe-note-readonly__ehr-date {
+  font-size: 13px;
+  color: #6b7280;
+}
+
 .scribe-portal .scribe-note-readonly__loading,
 .scribe-portal .scribe-note-readonly__empty {
   font-size: 14px;
@@ -642,14 +666,13 @@
   cursor: default;
 }
 
-/* Note editor — equal-height three-column layout */
+/* Note editor — equal-height three-column layout (dynamic height) */
 .scribe-portal .sf-note-workspace__panels {
   display: flex;
   flex-direction: row;
   align-items: stretch;
-  height: calc(100vh - 280px);
-  min-height: 500px;
-  flex: none;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
