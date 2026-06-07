@@ -15,9 +15,12 @@ import { authAPI } from '../services/api'
  * @returns {React.ReactNode} The warning modal (portaled to <body>) or null.
  */
 
-const TOTAL_MS = 15 * 60 * 1000
-const WARNING_MS = 2 * 60 * 1000
+const TOTAL_MS = 15 * 60 * 1000 // 15 minutes total inactivity → logout
+const WARNING_MS = 2 * 60 * 1000 // warning shows 2 minutes before logout
 const IDLE_BEFORE_WARNING_MS = TOTAL_MS - WARNING_MS // 13 minutes
+
+// Toggle verbose debugging while testing the idle timer.
+const DEBUG = false
 
 const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'click']
 
@@ -59,6 +62,7 @@ export function useSessionTimeout(enabled = true) {
   const resetTimerRef = useRef(() => {})
 
   useEffect(() => {
+    if (DEBUG) console.log('[SessionTimeout] hook running. enabled =', enabled)
     if (!enabled) {
       setShowWarning(false)
       return undefined
@@ -66,7 +70,9 @@ export function useSessionTimeout(enabled = true) {
 
     let timeoutId
     let warningId
+    let heartbeatId
     let loggedOut = false
+    let warningAt = 0
 
     const resetTimer = () => {
       if (loggedOut) return
@@ -74,8 +80,11 @@ export function useSessionTimeout(enabled = true) {
       clearTimeout(warningId)
       setShowWarning((prev) => (prev ? false : prev))
       setExpiresAt(null)
+      warningAt = Date.now() + IDLE_BEFORE_WARNING_MS
+      if (DEBUG) console.log('[SessionTimeout] timer reset at', new Date().toLocaleTimeString())
 
       warningId = setTimeout(() => {
+        if (DEBUG) console.log('[SessionTimeout] ⚠️ WARNING modal shown')
         setExpiresAt(Date.now() + WARNING_MS)
         setRemaining(WARNING_MS)
         setShowWarning(true)
@@ -83,6 +92,7 @@ export function useSessionTimeout(enabled = true) {
 
       timeoutId = setTimeout(() => {
         loggedOut = true
+        if (DEBUG) console.log('[SessionTimeout] 🚪 LOGOUT triggered (inactivity)')
         handleLogout()
       }, TOTAL_MS)
     }
@@ -91,9 +101,19 @@ export function useSessionTimeout(enabled = true) {
     events.forEach((e) => window.addEventListener(e, resetTimer, { passive: true }))
     resetTimer()
 
+    // Heartbeat: confirms the timer is counting down while idle.
+    if (DEBUG) {
+      heartbeatId = setInterval(() => {
+        if (loggedOut) return
+        const secsToWarning = Math.max(0, Math.round((warningAt - Date.now()) / 1000))
+        console.log(`[SessionTimeout] counting… ${secsToWarning}s until warning`)
+      }, 1000)
+    }
+
     return () => {
       clearTimeout(timeoutId)
       clearTimeout(warningId)
+      clearInterval(heartbeatId)
       events.forEach((e) => window.removeEventListener(e, resetTimer, { passive: true }))
     }
   }, [enabled])
