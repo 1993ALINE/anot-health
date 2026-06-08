@@ -18,7 +18,8 @@
  *        cd anot-frontend-main/anot-frontend-main && npm run dev
  *   2. Backend API running at          E2E_API_URL   (default http://127.0.0.1:5000)
  *        cd anot-backend-main/anot-backend-main && npm run dev
- *   3. Dev users seeded (clinician/scribe/qps/admin@dev.anot.local):
+ *   3. Dev users seeded (clinician/scribe/qps@dev.anot.local) + the super-admin
+ *      account (atiqur@anot.health):
  *        cd anot-backend-main/anot-backend-main && ALLOW_DEV_SEED=true node scripts/seed-dev-users.js
  *   4. Credentials present in  playwright/.env  (git-ignored).
  *
@@ -45,6 +46,11 @@
  */
 
 const { test, expect, request: pwRequest } = require('@playwright/test')
+const { settleBetweenSpecFiles } = require('./support/settle')
+
+// Pause ~2s before this suite's setup so back-to-back suites don't overload the
+// dev backend (a source of ECONNRESET). See tests/e2e/support/settle.js.
+settleBetweenSpecFiles()
 
 // ── Config / credentials (from playwright/.env via playwright.config.js) ──────
 const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:5173'

@@ -10,8 +10,17 @@ const BASE_URL = process.env.E2E_BASE_URL || 'http://localhost:5173'
 module.exports = defineConfig({
   testDir: './tests/e2e',
 
-  // Each spec gets 30s. The cross-role workflow is serial, so we keep workers at 1.
-  timeout: 30_000,
+  // Wait for the backend + frontend to actually be up before any suite runs.
+  // This (plus the per-file settle delay in tests/e2e/support/settle.js and the
+  // ECONNRESET retry in the admin spec) keeps the dev backend from being hit
+  // before it's ready / faster than it can recover between suites.
+  globalSetup: require.resolve('./playwright/global-setup.js'),
+
+  // 60s per test: the admin suite (and the full cross-role workflow) can run
+  // slowly when the backend is under load and connections are being retried, so
+  // we give every spec generous headroom. The cross-role flow is serial, so we
+  // keep workers at 1.
+  timeout: 60_000,
   expect: { timeout: 10_000 },
 
   // The full clinician → scribe → clinician → QPS → admin flow is inherently
