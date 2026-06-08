@@ -144,10 +144,9 @@ if ! aws rds describe-db-instances --db-instance-identifier "$DB_INSTANCE_ID" >/
     --vpc-security-group-ids "$DB_SG_ID" \
     --no-publicly-accessible \
     --no-multi-az \
-    --backup-retention-period 7 \
+    --backup-retention-period 0 \
     --storage-encrypted \
-    --no-auto-minor-version-upgrade \
-    --copy-tags-to-snapshot >/dev/null
+    --no-auto-minor-version-upgrade >/dev/null
   log "Waiting for RDS to become available (this can take ~5-10 minutes)..."
   aws rds wait db-instance-available --db-instance-identifier "$DB_INSTANCE_ID"
 else
