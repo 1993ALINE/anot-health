@@ -1,0 +1,84 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Cloud Build pipeline: build the Anot backend image and deploy it to Cloud Run.
+#
+# Run from the repository root:
+#   gcloud builds submit --config deploy/google-cloud/cloudbuild.yaml \
+#     --substitutions=_REGION=us-central1,_SERVICE=anot-backend,\
+# _AR_REPO=anot,_SQL_INSTANCE=anot-postgres,_BUCKET=$PROJECT_ID-anot-audio
+#
+# Secrets (JWT_SECRET, DB_PASSWORD, ANTHROPIC_API_KEY, ...) are read from Secret
+# Manager at deploy time via --set-secrets, so they never appear in this file.
+# Non-secret config is supplied via --set-env-vars.
+# ─────────────────────────────────────────────────────────────────────────────
+
+substitutions:
+  _REGION: "us-central1"
+  _SERVICE: "anot-backend"
+  _AR_REPO: "anot"
+  _SQL_INSTANCE: "anot-postgres"          # Cloud SQL instance id (not the full connection name)
+  _DB_NAME: "anot"
+  _DB_USER: "anot_app"
+  _BUCKET: ""                              # GCS bucket for audio; defaults below if empty
+  _CORS_ORIGINS: ""                        # e.g. https://your-app.web.app,https://your-app.firebaseapp.com
+  _TAG: "latest"                           # image tag; setup.sh passes a timestamped value
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  dynamicSubstitutions: true
+
+images:
+  - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_SERVICE}:${_TAG}"
+  - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_SERVICE}:latest"
+
+steps:
+  # ── Build ──────────────────────────────────────────────────────────────────
+  # Build context is the backend directory (where the Dockerfile lives).
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_SERVICE}:${_TAG}"
+      - -t
+      - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_SERVICE}:latest"
+      - anot-backend-main/anot-backend-main
+
+  # ── Push ───────────────────────────────────────────────────────────────────
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - --all-tags
+      - "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_SERVICE}"
+
+  # ── Deploy to Cloud Run ──────────────────────────────────────────────────────
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        # NOTE: $$VAR escapes a shell variable so Cloud Build does not treat it
+        # as a build substitution. ${_FOO} / ${PROJECT_ID} ARE build substitutions.
+        BUCKET="${_BUCKET}"
+        if [ -z "$$BUCKET" ]; then BUCKET="${PROJECT_ID}-anot-audio"; fi
+        SQL_CONN="${PROJECT_ID}:${_REGION}:${_SQL_INSTANCE}"
+
+        gcloud run deploy "${_SERVICE}" \
+          --image="${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_SERVICE}:${_TAG}" \
+          --region="${_REGION}" \
+          --platform=managed \
+          --allow-unauthenticated \
+          --port=8080 \
+          --cpu=1 \
+          --memory=1Gi \
+          --min-instances=0 \
+          --max-instances=10 \
+          --timeout=600 \
+          --execution-environment=gen2 \
+          --add-cloudsql-instances="$$SQL_CONN" \
+          --add-volume="name=audio,type=cloud-storage,bucket=$$BUCKET" \
+          --add-volume-mount="volume=audio,mount-path=/app/src/uploads" \
+          --set-env-vars="^@^NODE_ENV=production@DB_HOST=/cloudsql/$$SQL_CONN@DB_NAME=${_DB_NAME}@DB_USER=${_DB_USER}@CORS_ORIGINS=${_CORS_ORIGINS}" \
+          --set-secrets="JWT_SECRET=anot-jwt-secret:latest,DB_PASSWORD=anot-db-password:latest,ANTHROPIC_API_KEY=anot-anthropic-key:latest,DEEPGRAM_WEBHOOK_SECRET=anot-deepgram-webhook-secret:latest,SETTINGS_ENCRYPTION_KEY=anot-settings-encryption-key:latest"
