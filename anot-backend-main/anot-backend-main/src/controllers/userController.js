@@ -15,6 +15,7 @@ const {
 } = require('../utils/adminPortalAccess')
 const { ensureUserProfileSchema } = require('../utils/ensureUserProfileSchema')
 const { userSelectList, hasRatePerNoteColumn } = require('../utils/userColumns')
+const { invalidateUserAuthCache } = require('../middleware/auth')
 
 const VALID_ROLES = ['clinician', 'scribe', 'qps', 'admin', 'super_admin']
 
@@ -226,6 +227,10 @@ const updateUser = async (req, res) => {
             result.rows[0].admin_modules = null
         }
 
+        // A role change must invalidate any cached session so the next request
+        // sees the new role (and rejects tokens carrying the stale role).
+        invalidateUserAuthCache(id)
+
         const auditWrites = [
             auditLog(req.user, 'USER_UPDATED', 'user', id,
                 `Updated: ${name} (${email}) — role: ${role}`,
@@ -339,6 +344,10 @@ const toggleStatus = async (req, res) => {
             [newStatus, id]
         )
 
+        // Drop the cached session state so a deactivation takes effect on the
+        // next request instead of after the 60s revocation-cache TTL.
+        invalidateUserAuthCache(id)
+
         await auditLog(req.user,
             newStatus === 'active' ? 'USER_ACTIVATED' : 'USER_DEACTIVATED',
             'user', id,
@@ -384,6 +393,7 @@ const deleteUser = async (req, res) => {
             return res.status(400).json({ error: 'The system Super Admin account cannot be deleted.' })
         }
         await pool.query('DELETE FROM users WHERE id = $1', [id])
+        invalidateUserAuthCache(id)
         await auditLog(req.user, 'USER_DELETED', 'user', id, `Deleted: ${target.name}`,
             { req, module_key: 'admins', action_category: 'delete', status: 'critical' })
         res.status(200).json({ message: 'User deleted successfully.' })

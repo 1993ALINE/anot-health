@@ -116,9 +116,12 @@ app.use(cors(corsOptions))
 // ─── RATE LIMITING ────────────────────────────────────────────────────────────
 // General API limit + stricter limit on auth routes to slow brute-force attempts.
 
+const isProduction = process.env.NODE_ENV === 'production'
+
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max:      1000, // TODO: Set back to 100 for production
+  // Strict in production; relaxed locally so dev testing isn't throttled.
+  max:      isProduction ? 100 : 1000,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests. Please try again later.' },
@@ -126,8 +129,8 @@ const apiLimiter = rateLimit({
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  // TODO: Set back to 10 for production — raised to 100 to unblock local dev testing.
-  max:      100,
+  // Strict in production to slow brute-force; relaxed locally for dev testing.
+  max:      isProduction ? 10 : 100,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many login attempts. Please try again in 15 minutes.' },

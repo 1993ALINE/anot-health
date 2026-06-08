@@ -89,6 +89,7 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
   const audioRef = useRef(null)
   const blobUrlsRef = useRef({})
   const durationsRef = useRef({})
+  const playbackRateRef = useRef(playbackRate)
   const visitIdRef = useRef(visitId)
   const lastProgressUiRef = useRef(0)
   const lastProgressSecRef = useRef(-1)
@@ -179,7 +180,9 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
 
         audio.pause()
         audio.currentTime = 0
-        audio.playbackRate = playbackRate
+        // Read the latest speed from a ref so this (heavy) load effect doesn't
+        // need `playbackRate` as a dependency and re-run on every speed change.
+        audio.playbackRate = playbackRateRef.current
         audio.src = url
 
         let dur = await waitForAudioDuration(audio)
@@ -250,6 +253,7 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
   }, [])
 
   useEffect(() => {
+    playbackRateRef.current = playbackRate
     if (audioRef.current) audioRef.current.playbackRate = playbackRate
   }, [playbackRate])
 

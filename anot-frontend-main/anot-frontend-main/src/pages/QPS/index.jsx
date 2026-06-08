@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authAPI, usersAPI, notesAPI, adminAPI } from '../../services/api'
 import { useBranding } from '../../services/branding'
@@ -110,19 +110,19 @@ function QPS() {
 
   // ── API ───────────────────────────────────────────
 
-  const showNotif = (msg, type = 'success') => {
+  const showNotif = useCallback((msg, type = 'success') => {
     setNotif({ msg, type })
     setTimeout(() => setNotif(null), 3000)
-  }
+  }, [])
 
-  const loadProviders = async () => {
+  const loadProviders = useCallback(async () => {
     try {
       setLoadingProviders(true)
       const data = await usersAPI.getByRole('clinician')
       setProviders(data.users || [])
     } catch (err) { showNotif(`Failed to load providers: ${err.message}`, 'error') }
     finally { setLoadingProviders(false) }
-  }
+  }, [showNotif])
 
   const loadNotes = async (providerId) => {
     try {
@@ -133,14 +133,14 @@ function QPS() {
     finally { setLoadingNotes(false) }
   }
 
-  const loadGradedNotes = async () => {
+  const loadGradedNotes = useCallback(async () => {
     try {
       setLoadingGraded(true)
       const data = await notesAPI.getAllNotes(null, 'uploaded')
       setGradedNotes(data.notes || [])
     } catch (err) { showNotif(`Failed to load graded notes: ${err.message}`, 'error') }
     finally { setLoadingGraded(false) }
-  }
+  }, [showNotif])
 
   const loadPerformance = async () => {
     try {
@@ -151,9 +151,9 @@ function QPS() {
     finally { setLoadingPerformance(false) }
   }
 
-  useEffect(() => { loadProviders() }, [])
-  useEffect(() => { loadGradedNotes() }, [])
-  useEffect(() => { if (activeTab === 'graded') loadGradedNotes() }, [activeTab])
+  useEffect(() => { loadProviders() }, [loadProviders])
+  useEffect(() => { loadGradedNotes() }, [loadGradedNotes])
+  useEffect(() => { if (activeTab === 'graded') loadGradedNotes() }, [activeTab, loadGradedNotes])
   useEffect(() => { if (activeTab === 'performance') loadPerformance() }, [activeTab]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const openNote = (note) => {

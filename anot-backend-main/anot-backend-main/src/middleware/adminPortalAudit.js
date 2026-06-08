@@ -1,4 +1,4 @@
-const { auditLog } = require('../utils/auditLogger')
+const { auditLog, reportAuditFailure } = require('../utils/auditLogger')
 
 const lastLogged = new Map()
 const THROTTLE_MS = 90_000
@@ -26,7 +26,7 @@ function logAdminPortalModuleAccess(moduleKey) {
                 key,
                 `Viewed admin module: ${key}`,
                 { req, module_key: key, action_category: 'module_access', status: 'success' }
-            ).catch(() => {})
+            ).catch(reportAuditFailure)
         })
     }
 }

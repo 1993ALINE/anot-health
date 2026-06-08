@@ -1620,7 +1620,7 @@ function Clinician() {
     setScreenState('schedule')
   }, [])
 
-  const showToast = (msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500) }
+  const showToast = useCallback((msg, type = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500) }, [])
   const [confirmDialog, setConfirmDialog] = useState(null)
   const [confirmLoading, setConfirmLoading] = useState(false)
   const [lockConfirmOpen, setLockConfirmOpen] = useState(false)
@@ -1650,7 +1650,7 @@ function Clinician() {
     })
   }
 
-  const loadVisits = async (opts = {}) => {
+  const loadVisits = useCallback(async (opts = {}) => {
     // Cancel any in-flight schedule load so a slow response for a previous day
     // can't overwrite the day the user just switched to.
     visitsAbortRef.current?.abort()
@@ -1681,9 +1681,9 @@ function Clinician() {
         setLoading(false)
       }
     }
-  }
+  }, [off, showToast])
 
-  const loadHistory = async (opts = {}) => {
+  const loadHistory = useCallback(async (opts = {}) => {
     historyAbortRef.current?.abort()
     const controller = new AbortController()
     historyAbortRef.current = controller
@@ -1703,7 +1703,7 @@ function Clinician() {
         if (!opts.silent) setLoading(false)
       }
     }
-  }
+  }, [showToast])
 
   useEffect(() => {
     const id = setInterval(() => setLiveNow(new Date()), 1000)
@@ -1718,7 +1718,7 @@ function Clinician() {
         onSuccess: () => showToast('Queued recording uploaded successfully'),
       }),
     )
-  }, [])
+  }, [showToast])
 
   useEffect(() => {
     const onKey = (e) => {
@@ -1737,8 +1737,8 @@ function Clinician() {
     goToToday()
   }, [])
 
-  useEffect(() => { loadHistory({ silent: true }) }, [])
-  useEffect(() => { if (screen === 'schedule') loadVisits() }, [off, screen])
+  useEffect(() => { loadHistory({ silent: true }) }, [loadHistory])
+  useEffect(() => { if (screen === 'schedule') loadVisits() }, [off, screen, loadVisits])
   useEffect(() => {
     if (screen !== 'schedule') return
     setScheduleDayCounts((prev) => ({
@@ -1752,7 +1752,7 @@ function Clinician() {
   }, [visits, off, screen])
   useEffect(() => {
     if (screen === 'notes') loadHistory()
-  }, [screen])
+  }, [screen, loadHistory])
 
   useEffect(() => {
     if (screen !== 'profile') return
@@ -1866,7 +1866,23 @@ function Clinician() {
       setActive(v); setPaused(false); setTimer(0)
       tRef.current = setInterval(() => setTimer(t => t + 1), 1000)
       showToast('🎙 Recording started')
-    } catch { showToast('Microphone access denied.', 'error') }
+    } catch {
+      // Tear down anything that started before the failure so we never leak a
+      // live mic stream (red recording indicator) or a running timer.
+      clearInterval(tRef.current)
+      const rec = mRef.current
+      try {
+        if (rec && rec.state !== 'inactive') {
+          rec.onstop = null
+          rec.ondataavailable = null
+          rec.stop()
+        }
+        rec?.stream?.getTracks().forEach(t => t.stop())
+      } catch { /* recorder already torn down */ }
+      mRef.current = null
+      cRef.current = []
+      showToast('Failed to start visit. Please try again.', 'error')
+    }
   }
 
   const pauseResume = () => {

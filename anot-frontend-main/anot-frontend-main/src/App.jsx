@@ -1,11 +1,23 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/Login/index'
-import Clinician from './pages/Clinician/index'
-import Scribe from './pages/Scribe/index'
-import QPS from './pages/QPS/index'
-import Admin from './pages/Admin/index'
 import { authAPI } from './services/api'
+
+// Code-split each portal so the initial load only ships the login + shell.
+// Each portal is a large bundle (recorder, charts, editors) only needed once
+// the user reaches that role's dashboard.
+const Clinician = lazy(() => import('./pages/Clinician/index'))
+const Scribe = lazy(() => import('./pages/Scribe/index'))
+const QPS = lazy(() => import('./pages/QPS/index'))
+const Admin = lazy(() => import('./pages/Admin/index'))
+
+function PortalLoading() {
+  return (
+    <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>
+      Loading…
+    </div>
+  )
+}
 import { dashboardPathForRole, roleMatchesPortal } from './auth/dashboardPaths'
 import { applyBrandingToDocument, getCachedBranding, refreshBranding } from './services/branding'
 import { SplashGate, useReleaseSplash } from './splash/SplashGate'
@@ -97,29 +109,31 @@ function App() {
   return (
     <BrowserRouter>
       <SplashGate>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/" element={<RootHome />} />
+        <Suspense fallback={<PortalLoading />}>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/" element={<RootHome />} />
 
-          <Route
-            path="/clinician"
-            element={<ProtectedRoute element={<Clinician />} allowedRole="clinician" />}
-          />
-          <Route
-            path="/scribe"
-            element={<ProtectedRoute element={<Scribe />} allowedRole="scribe" />}
-          />
-          <Route
-            path="/qps"
-            element={<ProtectedRoute element={<QPS />} allowedRole="qps" />}
-          />
-          <Route
-            path="/admin"
-            element={<ProtectedRoute element={<Admin />} allowedRole="admin" />}
-          />
+            <Route
+              path="/clinician"
+              element={<ProtectedRoute element={<Clinician />} allowedRole="clinician" />}
+            />
+            <Route
+              path="/scribe"
+              element={<ProtectedRoute element={<Scribe />} allowedRole="scribe" />}
+            />
+            <Route
+              path="/qps"
+              element={<ProtectedRoute element={<QPS />} allowedRole="qps" />}
+            />
+            <Route
+              path="/admin"
+              element={<ProtectedRoute element={<Admin />} allowedRole="admin" />}
+            />
 
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          </Routes>
+        </Suspense>
       </SplashGate>
     </BrowserRouter>
   )

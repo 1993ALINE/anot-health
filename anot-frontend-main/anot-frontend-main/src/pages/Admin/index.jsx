@@ -1097,8 +1097,6 @@ function Admin() {
             }
             showToast('Module permissions updated successfully')
             setModulePermUser(null)
-        } catch (err) {
-            throw err
         } finally {
             setModulePermSaving(false)
         }

@@ -1,6 +1,21 @@
 const pool = require('../config/db')
+const Sentry = require('@sentry/node')
 
 let colsReady = false
+
+/**
+ * Standard handler for fire-and-forget audit writes. Audit failures must never
+ * crash a request, but they also must never be swallowed silently — a missing
+ * audit trail is a HIPAA compliance gap. Log it and report to Sentry.
+ */
+function reportAuditFailure(err) {
+    console.error('Audit log failed:', err)
+    try {
+        Sentry.captureException(err)
+    } catch (_) {
+        /* Sentry not initialized (e.g. tests) — console.error already happened */
+    }
+}
 
 const AUDIT_OPTIONAL_COLUMNS = [
     { name: 'ip_address', ddl: `ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS ip_address VARCHAR(64)` },
@@ -161,4 +176,4 @@ async function auditLog(user, action, entityType, entityId, details, sixth, seve
     )
 }
 
-module.exports = { auditLog, ensureAuditColumns, inferActionCategory, requestMeta }
+module.exports = { auditLog, ensureAuditColumns, inferActionCategory, requestMeta, reportAuditFailure }
