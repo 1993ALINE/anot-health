@@ -1,6 +1,0 @@
-﻿
-> anot@0.0.0 preview
-> vite preview
-
-  Γ₧£  Local:   http://localhost:4173/
-  Γ₧£  Network: use --host to expose
