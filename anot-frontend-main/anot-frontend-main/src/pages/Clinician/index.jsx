@@ -3045,19 +3045,29 @@ function Clinician() {
                       ['MRN *', 'text', 'e.g. MRN-00421', 'mrn'],
                       ['Date of Birth', 'date', '', 'dob'],
                       ['Appointment Time *', 'time', '', 'time'],
-                    ].map(([label, type, ph, key]) => (
-                      <div key={key} className="sf-form-group">
-                        <label className="sf-form-label" htmlFor={`pt-${key}`}>{label}</label>
-                        <input
-                          id={`pt-${key}`}
-                          className="sf-input"
-                          type={type}
-                          placeholder={ph}
-                          value={pt[key]}
-                          onChange={(e) => setPt({ ...pt, [key]: e.target.value })}
-                        />
-                      </div>
-                    ))}
+                    ].map(([label, type, ph, key]) => {
+                      const isPicker = type === 'date' || type === 'time'
+                      const openPicker = (e) => {
+                        if (!isPicker) return
+                        try { e.currentTarget.showPicker?.() } catch (_) { /* unsupported */ }
+                      }
+                      return (
+                        <div key={key} className="sf-form-group">
+                          <label className="sf-form-label" htmlFor={`pt-${key}`}>{label}</label>
+                          <input
+                            id={`pt-${key}`}
+                            className="sf-input"
+                            type={type}
+                            placeholder={ph}
+                            value={pt[key]}
+                            onChange={(e) => setPt({ ...pt, [key]: e.target.value })}
+                            onClick={openPicker}
+                            onFocus={openPicker}
+                            style={isPicker ? { cursor: 'pointer' } : undefined}
+                          />
+                        </div>
+                      )
+                    })}
                     <div className="sf-form-group">
                       <label className="sf-form-label" htmlFor="pt-type">Visit Type</label>
                       <select id="pt-type" className="sf-input" value={pt.type} onChange={(e) => setPt({ ...pt, type: e.target.value })}>
@@ -3092,6 +3102,7 @@ function Clinician() {
                     const breakdown = scheduleDayBreakdownFor(o, off, visits, scheduleDayBreakdown)
                     const dayDots = scheduleDayDots(breakdown)
                     const isToday = localDate(o, 'input') === localDate(0, 'input')
+                    const isActive = o === off
                     return (
                       <div key={o} className="cl-date-nav__day-wrap portal-cal-strip__day-wrap">
                         <ErrorBoundary fallback={null}>
@@ -3122,7 +3133,7 @@ function Clinician() {
                                     borderRadius: '50%',
                                     display: 'inline-block',
                                     margin: '0 2px',
-                                    background: isToday ? '#FFFFFF' : color,
+                                    background: isActive ? '#FFFFFF' : color,
                                   }}
                                 />
                               ))}

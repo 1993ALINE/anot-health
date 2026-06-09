@@ -518,20 +518,23 @@
   color: #fff !important;
 }
 
-/* Today pill: solid indigo only — remove the extra blue border/ring that
-   portal-calendar-strip.css applies to the today pill. High specificity (6 classes)
-   to win over .sf-portal .portal-cal-strip ... .active rules. */
-.cl-portal.cl-clinician-shell .portal-cal-strip .sf-date-nav-day.cl-date-nav__day.cl-date-nav__day--today,
-.cl-portal.cl-clinician-shell .portal-cal-strip .sf-date-nav-day.cl-date-nav__day.portal-cal-strip__day--today {
-  background: #4F46E5 !important;
-  border: 1px solid #4F46E5 !important;
+/* Today (when not selected) looks like a normal day — white background, plain
+   border, only a small "TODAY" label. No special background color. High specificity
+   (6 classes) to win over portal-calendar-strip.css today styling. */
+.cl-portal.cl-clinician-shell .portal-cal-strip .sf-date-nav-day.cl-date-nav__day.cl-date-nav__day--today:not(.active),
+.cl-portal.cl-clinician-shell .portal-cal-strip .sf-date-nav-day.cl-date-nav__day.portal-cal-strip__day--today:not(.active) {
+  background: #fff !important;
+  border: 1px solid #e5e7eb !important;
   box-shadow: none !important;
 }
 
-.cl-portal.cl-clinician-shell .portal-cal-strip .sf-date-nav-day.cl-date-nav__day.cl-date-nav__day--today .cl-date-nav__day-name,
-.cl-portal.cl-clinician-shell .portal-cal-strip .sf-date-nav-day.cl-date-nav__day.cl-date-nav__day--today .cl-date-nav__day-num,
-.cl-portal.cl-clinician-shell .portal-cal-strip .sf-date-nav-day.cl-date-nav__day.cl-date-nav__day--today .cl-date-nav__today-label {
-  color: #fff !important;
+.cl-portal.cl-clinician-shell .portal-cal-strip .sf-date-nav-day.cl-date-nav__day.cl-date-nav__day--today:not(.active) .cl-date-nav__day-name,
+.cl-portal.cl-clinician-shell .portal-cal-strip .sf-date-nav-day.cl-date-nav__day.cl-date-nav__day--today:not(.active) .cl-date-nav__day-num {
+  color: #374151 !important;
+}
+
+.cl-portal.cl-clinician-shell .portal-cal-strip .sf-date-nav-day.cl-date-nav__day.cl-date-nav__day--today:not(.active) .cl-date-nav__today-label {
+  color: #4F46E5 !important;
 }
 
 /* ─── Live chat (Contact) ──────────────────────────────────────────────────── */
