@@ -1,13 +1,17 @@
 import { Fragment, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import './login.css'
-import { authAPI, isLikelyNetworkFailure } from '../../services/api'
+import { API_BASE, authAPI, isLikelyNetworkFailure } from '../../services/api'
 import { dashboardPathForRole } from '../../auth/dashboardPaths'
 import { DEFAULT_BRAND_LOGO_SRC, useBranding } from '../../services/branding'
 import { useReleaseSplash } from '../../splash/SplashGate'
 
 function networkErrorMessage() {
-  return 'Cannot reach the API. Start the backend (port 5000), e.g. from the backend folder: npm run dev. On Windows, the app calls http://127.0.0.1:5000 — ensure nothing else blocks that.'
+  const isLocalApi = API_BASE.includes('localhost') || API_BASE.includes('127.0.0.1')
+  if (isLocalApi) {
+    return 'Cannot reach the API. Start the backend (port 5000), e.g. from the backend folder: npm run dev. On Windows, the app calls http://127.0.0.1:5000 — ensure nothing else blocks that.'
+  }
+  return 'Service temporarily unavailable. Please refresh the page in a few seconds.'
 }
 
 function humanizeAuthError(err) {
