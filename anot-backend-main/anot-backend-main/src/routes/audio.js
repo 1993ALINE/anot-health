@@ -1,31 +1,19 @@
 const express = require('express')
 const router = express.Router()
 const multer = require('multer')
-const path = require('path')
-const fs = require('fs')
 const pool = require('../config/db')
 const { protect, restrict } = require('../middleware/auth')
 const { runAIPipeline } = require('../utils/aiPipeline')
 const { getVisitForUser } = require('../utils/visitAccess')
 const { loadAiSettings } = require('../services/aiSettings')
+const { uploadAudio, getSignedAudioUrl, dbPathToKey } = require('../services/s3Storage')
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dir = path.join(__dirname, '../uploads')
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
-    cb(null, dir)
-  },
-  filename: (req, file, cb) => {
-    const ext = file.mimetype.includes('mp4') ? 'mp4' : file.mimetype.includes('ogg') ? 'ogg' : 'webm'
-    const unique = `visit_${req.params.visitId}_${Date.now()}.${ext}`
-    cb(null, unique)
-  },
-})
+// Files are buffered in memory then uploaded to S3 (local disk is wiped on
+// every Elastic Beanstalk redeploy, so nothing durable can live there).
 
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 500 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith('audio/')) {
@@ -36,78 +24,12 @@ const upload = multer({
   },
 })
 
-// ─── Helper: stream file ──────────────────────────────────────────────────────
-
-function streamFile(req, res, filePath) {
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).json({ error: 'Audio file not found on server.' })
-  }
-  const stat = fs.statSync(filePath)
-  const fileSize = stat.size
-  const ext = path.extname(filePath).toLowerCase()
-  const mimeType = ext === '.mp4' ? 'audio/mp4' : ext === '.ogg' ? 'audio/ogg' : ext === '.mp3' ? 'audio/mpeg' : 'audio/webm'
-
-  const onStreamError = (stream) => {
-    res.on('close', () => stream.destroy())
-    stream.on('error', (err) => {
-      console.error('Audio stream error:', err.message)
-      if (!res.headersSent) res.status(500).end()
-      else res.destroy(err)
-    })
-  }
-
-  // Honor HTTP Range requests so audio players can seek and so browsers
-  // (notably Safari) that require 206 Partial Content can play the media.
-  const rangeHeader = req.headers.range
-  if (rangeHeader) {
-    const match = /^bytes=(\d*)-(\d*)$/.exec(String(rangeHeader).trim())
-    if (!match || (match[1] === '' && match[2] === '')) {
-      res.writeHead(416, { 'Content-Range': `bytes */${fileSize}` })
-      return res.end()
-    }
-
-    let start
-    let end
-    if (match[1] === '') {
-      // Suffix range: last N bytes (bytes=-500)
-      const suffix = parseInt(match[2], 10)
-      start = Math.max(fileSize - suffix, 0)
-      end = fileSize - 1
-    } else {
-      start = parseInt(match[1], 10)
-      end = match[2] === '' ? fileSize - 1 : parseInt(match[2], 10)
-    }
-
-    if (end > fileSize - 1) end = fileSize - 1
-    if (Number.isNaN(start) || Number.isNaN(end) || start > end || start >= fileSize) {
-      res.writeHead(416, { 'Content-Range': `bytes */${fileSize}` })
-      return res.end()
-    }
-
-    res.writeHead(206, {
-      'Content-Range': `bytes ${start}-${end}/${fileSize}`,
-      'Accept-Ranges': 'bytes',
-      'Content-Length': end - start + 1,
-      'Content-Type': mimeType,
-    })
-    const stream = fs.createReadStream(filePath, { start, end })
-    onStreamError(stream)
-    return stream.pipe(res)
-  }
-
-  res.writeHead(200, {
-    'Content-Length': fileSize,
-    'Content-Type': mimeType,
-    'Accept-Ranges': 'bytes',
-  })
-  const stream = fs.createReadStream(filePath)
-  onStreamError(stream)
-  stream.pipe(res)
+function extFromMimetype(mimetype) {
+  return mimetype.includes('mp4') ? 'mp4' : mimetype.includes('ogg') ? 'ogg' : 'webm'
 }
 
-function unlinkSilently(filePath) {
-  if (!filePath) return
-  fs.promises.unlink(filePath).catch(() => { /* best-effort */ })
+function buildAudioFilename(visitId, mimetype) {
+  return `visit_${visitId}_${Date.now()}.${extFromMimetype(mimetype)}`
 }
 
 async function maybeAutoTranscribe(visitId, user, req) {
@@ -131,18 +53,18 @@ router.post('/:visitId', protect, restrict('clinician'), upload.single('audio'),
 
     const visit = await getVisitForUser(visitId, req.user)
     if (!visit) {
-      unlinkSilently(req.file.path)
       return res.status(404).json({ error: 'Visit not found or not yours.' })
     }
 
     const settings = await loadAiSettings()
     const maxBytes = (settings.ffmpeg_max_upload_mb || 100) * 1024 * 1024
     if (req.file.size > maxBytes) {
-      unlinkSilently(req.file.path)
       return res.status(413).json({ error: `Audio exceeds max size (${settings.ffmpeg_max_upload_mb} MB).` })
     }
 
-    const audioPath = `/uploads/${req.file.filename}`
+    const filename = buildAudioFilename(visitId, req.file.mimetype)
+    const audioPath = `/uploads/${filename}`
+    await uploadAudio(dbPathToKey(audioPath), req.file.buffer, req.file.mimetype)
 
     const existingFiles = visit.audio_file || ''
     const updated = existingFiles ? `${existingFiles},${audioPath}` : audioPath
@@ -152,13 +74,12 @@ router.post('/:visitId', protect, restrict('clinician'), upload.single('audio'),
     res.status(200).json({
       message: 'Audio uploaded successfully.',
       audio_file: audioPath,
-      filename: req.file.filename,
+      filename,
       size: req.file.size,
     })
 
     await maybeAutoTranscribe(visitId, req.user, req)
   } catch (err) {
-    if (req.file) unlinkSilently(req.file.path)
     console.error('Audio upload error:', err.message)
     res.status(500).json({ error: 'Failed to upload audio.' })
   }
@@ -173,18 +94,19 @@ router.post('/:visitId/append', protect, restrict('clinician'), upload.single('a
 
     const visit = await getVisitForUser(visitId, req.user)
     if (!visit) {
-      unlinkSilently(req.file.path)
       return res.status(404).json({ error: 'Visit not found or not yours.' })
     }
 
     const settings = await loadAiSettings()
     const maxBytes = (settings.ffmpeg_max_upload_mb || 100) * 1024 * 1024
     if (req.file.size > maxBytes) {
-      unlinkSilently(req.file.path)
       return res.status(413).json({ error: `Audio exceeds max size (${settings.ffmpeg_max_upload_mb} MB).` })
     }
 
-    const newPath = `/uploads/${req.file.filename}`
+    const filename = buildAudioFilename(visitId, req.file.mimetype)
+    const newPath = `/uploads/${filename}`
+    await uploadAudio(dbPathToKey(newPath), req.file.buffer, req.file.mimetype)
+
     const existing = visit.audio_file || ''
     const updated = existing ? `${existing},${newPath}` : newPath
 
@@ -201,7 +123,6 @@ router.post('/:visitId/append', protect, restrict('clinician'), upload.single('a
       runAIPipeline(visitId, { user: req.user, req }).catch((err) => console.error('AI re-run error:', err.message))
     })
   } catch (err) {
-    if (req.file) unlinkSilently(req.file.path)
     console.error('Append audio error:', err.message)
     res.status(500).json({ error: 'Failed to upload additional recording.' })
   }
@@ -223,7 +144,9 @@ router.get('/:visitId/count', protect, restrict('clinician', 'scribe', 'qps'), a
   }
 })
 
-// ─── GET /api/audio/:visitId — Stream audio (supports ?index=N) ──────────────
+// ─── GET /api/audio/:visitId — Serve audio (supports ?index=N) ────────────────
+// Redirects to a presigned S3 URL (valid 1 hour). S3 handles Range requests
+// natively, so seeking and Safari's 206 Partial Content requirement still work.
 
 router.get('/:visitId', protect, restrict('clinician', 'scribe', 'qps'), async (req, res) => {
   try {
@@ -245,11 +168,11 @@ router.get('/:visitId', protect, restrict('clinician', 'scribe', 'qps'), async (
       return res.status(400).json({ error: 'Invalid audio path.' })
     }
 
-    const audioPath = path.join(__dirname, '..', filePath)
-    streamFile(req, res, audioPath)
+    const signedUrl = await getSignedAudioUrl(dbPathToKey(filePath))
+    res.redirect(302, signedUrl)
   } catch (err) {
-    console.error('Audio stream error:', err.message)
-    res.status(500).json({ error: 'Failed to stream audio.' })
+    console.error('Audio serve error:', err.message)
+    res.status(500).json({ error: 'Failed to serve audio.' })
   }
 })
 

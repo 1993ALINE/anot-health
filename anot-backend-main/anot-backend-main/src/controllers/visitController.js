@@ -1,5 +1,3 @@
-const fs   = require('fs')
-const path = require('path')
 const pool = require('../config/db')
 const { withTransaction } = require('../config/db')
 const { auditLog } = require('../utils/auditLogger')
@@ -11,6 +9,7 @@ const {
 } = require('../utils/visitSchemaCompat')
 const { getVisitForUser } = require('../utils/visitAccess')
 const { addColumnIfMissing } = require('../utils/schemaDdl')
+const { deleteAudio, dbPathToKey } = require('../services/s3Storage')
 
 async function ensureNoteLockColumns() {
   await addColumnIfMissing('notes', 'locked_at', 'ALTER TABLE notes ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ')
@@ -340,8 +339,8 @@ const updateVisit = async (req, res) => {
 }
 
 // ─── DELETE VISIT ─────────────────────────────────────────────────────────────
-// Transactional: notes + visit + audit all-or-nothing. Also unlinks any audio
-// files the visit owned so we don't leak disk on Railway.
+// Transactional: notes + visit + audit all-or-nothing. Also deletes any S3
+// audio objects the visit owned so we don't leak storage.
 
 const deleteVisit = async (req, res) => {
   try {
@@ -374,13 +373,12 @@ const deleteVisit = async (req, res) => {
     if (audioFiles.notFound)  return res.status(404).json({ error: 'Visit not found.' })
     if (audioFiles.forbidden) return res.status(403).json({ error: 'Not authorized.' })
 
-    // Best-effort cleanup of audio files after the DB commit. We deliberately
-    // do this AFTER commit so a delete that succeeds in DB isn't undone by
-    // an unlink error.
+    // Best-effort cleanup of S3 audio objects after the DB commit. We
+    // deliberately do this AFTER commit so a delete that succeeds in DB isn't
+    // undone by an S3 error.
     for (const rel of audioFiles.files || []) {
       if (!/^\/uploads\/[\w.\-]+$/.test(rel)) continue
-      const abs = path.join(__dirname, '..', rel)
-      fs.promises.unlink(abs).catch(() => { /* best-effort */ })
+      deleteAudio(dbPathToKey(rel)).catch(() => { /* best-effort */ })
     }
 
     res.status(200).json({ message: 'Visit deleted.' })

@@ -5,6 +5,7 @@ const { auditLog } = require('./auditLogger')
 const { loadAiSettings, getAnthropicKey } = require('../services/aiSettings')
 const { processAudioForTranscription, unlinkTempPaths } = require('../services/audioProcessingService')
 const { transcribeFileWithRetries } = require('../services/aiTranscriptionService')
+const { downloadAudioToTemp, dbPathToKey } = require('../services/s3Storage')
 const { setVisitTranscriptionStatus } = require('./visitSchemaCompat')
 const { isReachableWebhookUrl } = require('./webhookReachability')
 
@@ -232,28 +233,33 @@ async function runAIPipeline(visitId, options = {}) {
         console.warn(`Skipping invalid audio path for visit ${id}: ${audioPath}`)
         continue
       }
-      const fullPath = path.join(__dirname, '..', audioPath)
-      if (!fs.existsSync(fullPath)) {
-        console.warn(`Audio file not found: ${fullPath}`)
-        continue
-      }
-      const fileSize = fs.statSync(fullPath).size
-      if (fileSize === 0) {
-        console.warn(`Audio file is empty: ${fullPath}`)
-        continue
-      }
-      const maxBytes = (settings.ffmpeg_max_upload_mb || 100) * 1024 * 1024
-      if (fileSize > maxBytes) {
-        console.warn(`Audio over limit (${settings.ffmpeg_max_upload_mb}MB): ${fullPath}`)
+
+      // Audio lives in S3 (local disk is wiped on EB redeploys); download to a
+      // temp file so ffmpeg/Deepgram can work with a local path.
+      let fullPath
+      try {
+        fullPath = await downloadAudioToTemp(dbPathToKey(audioPath))
+      } catch (e) {
+        console.warn(`Audio not found in S3 for visit ${id} (${audioPath}):`, e.message)
         continue
       }
 
-      let tempPaths = []
-      let transcribePath = fullPath
+      let tempPaths = [fullPath]
       try {
+        const fileSize = fs.statSync(fullPath).size
+        if (fileSize === 0) {
+          console.warn(`Audio file is empty: ${audioPath}`)
+          continue
+        }
+        const maxBytes = (settings.ffmpeg_max_upload_mb || 100) * 1024 * 1024
+        if (fileSize > maxBytes) {
+          console.warn(`Audio over limit (${settings.ffmpeg_max_upload_mb}MB): ${audioPath}`)
+          continue
+        }
+
         const proc = await processAudioForTranscription(fullPath, settings)
-        transcribePath = proc.path
-        tempPaths = proc.tempPaths || []
+        const transcribePath = proc.path
+        tempPaths = tempPaths.concat(proc.tempPaths || [])
         console.log(`🎙 Transcribing: ${path.basename(transcribePath)} (${Math.round(fileSize / 1024)}KB source)`)
         const text = await transcribeFileWithRetries(transcribePath, settings, 3, useAsyncDeepgram ? id : undefined)
         if (text === '__DEFERRED__') {
