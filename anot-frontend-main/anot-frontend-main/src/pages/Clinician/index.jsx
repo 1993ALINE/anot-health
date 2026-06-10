@@ -261,6 +261,33 @@ function IconCalendar() {
   )
 }
 
+/**
+ * Convert a freely-typed date of birth ("15 Jan 1990", "15/01/1990", "1990-01-15")
+ * to the YYYY-MM-DD format the API requires.
+ * Returns: '' when empty, the ISO string when parseable, or null when not understood.
+ * Numeric day/month input is treated day-first (15/01/1990 = 15 Jan).
+ */
+function normalizeDob(text) {
+  const t = String(text || '').trim()
+  if (!t) return ''
+  if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(t)) {
+    const [y, m, d] = t.split('-').map(Number)
+    const iso = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    return Number.isNaN(Date.parse(iso)) ? null : iso
+  }
+  const dmy = t.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/)
+  if (dmy) {
+    const [, d, m, y] = dmy
+    const iso = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    return Number.isNaN(Date.parse(iso)) ? null : iso
+  }
+  const parsed = new Date(t)
+  if (!Number.isNaN(parsed.getTime())) {
+    return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`
+  }
+  return null
+}
+
 function IconMic() {
   return (
     <svg className="cl-schedule-cta__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
@@ -884,8 +911,8 @@ function AudioModal({ visitId, visit, onClose, showToast }) {
           : null
 
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:900, display:'flex', alignItems:'flex-end', justifyContent:'center', padding:'0 0 32px' }}>
-      <div style={{ background:'#fff', borderRadius:24, padding:28, width:'100%', maxWidth:500, margin:'0 16px', boxShadow:'0 24px 64px rgba(0,0,0,0.25)' }}>
+    <div className="cl-audio-modal-overlay" style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:900, display:'flex', alignItems:'flex-end', justifyContent:'center', padding:'0 0 32px' }}>
+      <div className="cl-audio-modal" style={{ background:'#fff', borderRadius:24, padding:28, width:'100%', maxWidth:500, margin:'0 16px', boxShadow:'0 24px 64px rgba(0,0,0,0.25)' }}>
         <audio ref={aRef} preload="metadata" style={{ display:'none' }} />
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20 }}>
           <div>
@@ -905,7 +932,7 @@ function AudioModal({ visitId, visit, onClose, showToast }) {
         )}
         <div style={{ display:'flex', alignItems:'center', gap:12 }}>
           <button onClick={() => skip(-10)} style={{ padding:'8px 14px', borderRadius:10, background:'#E2E8F0', border:'none', fontSize:13, fontWeight:700, cursor:'pointer', color:'#475569' }}>−10s</button>
-          <button onClick={toggle} style={{ width:52, height:52, borderRadius:'50%', background:'linear-gradient(135deg,#4260E9,#7B61FF)', color:'#fff', border:'none', fontSize:20, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+          <button className="cl-audio-modal__play" onClick={toggle} style={{ width:52, height:52, borderRadius:'50%', background:'linear-gradient(135deg,#4260E9,#7B61FF)', color:'#fff', border:'none', fontSize:20, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
             {status === 'loading' ? '⏳' : playing ? '⏸' : '▶'}
           </button>
           <button onClick={() => skip(10)} style={{ padding:'8px 14px', borderRadius:10, background:'#E2E8F0', border:'none', fontSize:13, fontWeight:700, cursor:'pointer', color:'#475569' }}>+10s</button>
@@ -1448,6 +1475,7 @@ function Clinician() {
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [scheduleSort, setScheduleSort] = useState('time')
   const calendarBtnRef = useRef(null)
+  const dobPickerRef = useRef(null)
 
   const applyScheduleOff = useCallback((valueOrFn) => {
     setScheduleDate((prev) => {
@@ -1986,11 +2014,16 @@ function Clinician() {
     if (!pt.name.trim()) { setPtErr('Patient name required'); return }
     if (!pt.mrn.trim())  { setPtErr('MRN required'); return }
     if (!pt.time)        { setPtErr('Time required'); return }
+    const dobIso = normalizeDob(pt.dob)
+    if (dobIso === null) {
+      setPtErr('Could not understand the date of birth — try a format like 15 Jan 1990 or 1990-01-15.')
+      return
+    }
     try {
       let patient
       let linkedExistingMrn = false
       try {
-        const d = await patientsAPI.create({ name:pt.name.trim(), mrn:pt.mrn.trim().toUpperCase(), date_of_birth:pt.dob||null })
+        const d = await patientsAPI.create({ name:pt.name.trim(), mrn:pt.mrn.trim().toUpperCase(), date_of_birth:dobIso||null })
         patient = d.patient
       } catch (e) {
         if (e.payload?.patient) {
@@ -3046,6 +3079,48 @@ function Clinician() {
                       ['Date of Birth', 'date', '', 'dob'],
                       ['Appointment Time *', 'time', '', 'time'],
                     ].map(([label, type, ph, key]) => {
+                      if (key === 'dob') {
+                        const dobIso = normalizeDob(pt.dob) || ''
+                        const openDobPicker = () => {
+                          const el = dobPickerRef.current
+                          if (!el) return
+                          try { el.showPicker?.() } catch (_) { el.focus() }
+                        }
+                        return (
+                          <div key={key} className="sf-form-group">
+                            <label className="sf-form-label" htmlFor="pt-dob">{label}</label>
+                            <div style={{ position: 'relative' }}>
+                              <input
+                                id="pt-dob"
+                                className="sf-input"
+                                type="text"
+                                placeholder="e.g. 15 Jan 1990 or 1990-01-15"
+                                value={pt.dob}
+                                onChange={(e) => setPt({ ...pt, dob: e.target.value })}
+                                autoComplete="off"
+                                style={{ width: '100%', paddingRight: 40 }}
+                              />
+                              <input
+                                ref={dobPickerRef}
+                                type="date"
+                                tabIndex={-1}
+                                aria-hidden="true"
+                                value={dobIso}
+                                onChange={(e) => setPt({ ...pt, dob: e.target.value })}
+                                style={{ position: 'absolute', right: 10, bottom: 0, width: 1, height: 1, opacity: 0, border: 0, padding: 0, pointerEvents: 'none' }}
+                              />
+                              <button
+                                type="button"
+                                aria-label="Open date picker"
+                                onClick={openDobPicker}
+                                style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', display: 'flex', alignItems: 'center', background: 'none', border: 'none', padding: 6, cursor: 'pointer', color: '#6b7280' }}
+                              >
+                                <IconCalendar />
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      }
                       const isPicker = type === 'date' || type === 'time'
                       const openPicker = (e) => {
                         if (!isPicker) return

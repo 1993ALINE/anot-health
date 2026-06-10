@@ -278,6 +278,82 @@
     color: var(--text-main);
 }
 
+/* Mobile: audit table becomes stacked label/value cards */
+@media (max-width: 768px) {
+    .adm-auditpro-table-scroll {
+        overflow-x: visible;
+    }
+
+    .adm-auditpro-table {
+        min-width: 0;
+        font-size: 14px;
+    }
+
+    .adm-auditpro-table thead {
+        display: none;
+    }
+
+    .adm-auditpro-table tbody {
+        display: block;
+        padding: 12px;
+    }
+
+    .adm-auditpro-table tbody tr {
+        display: block;
+        margin-bottom: 12px;
+        padding: 14px;
+        border: 1px solid var(--auditpro-border);
+        border-radius: 14px;
+        background: #fff;
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+    }
+
+    .adm-auditpro-table tbody tr:last-child {
+        margin-bottom: 0;
+    }
+
+    .adm-auditpro-table td {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        width: 100%;
+        max-width: none !important;
+        padding: 6px 0;
+        border-bottom: 1px dashed rgba(148, 163, 184, 0.25);
+    }
+
+    .adm-auditpro-table td:last-child {
+        border-bottom: none;
+    }
+
+    .adm-auditpro-table td[data-label]::before {
+        content: attr(data-label);
+        flex: 0 0 88px;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+    }
+
+    .adm-auditpro-table td[data-label='']::before {
+        display: none;
+    }
+
+    .adm-auditpro-table td .adm-auditpro-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        min-height: 44px;
+        font-size: 14px;
+    }
+
+    .adm-auditpro-pagination .adm-auditpro-btn {
+        min-height: 44px;
+    }
+}
+
 .adm-auditpro-status {
     display: inline-flex;
     align-items: center;

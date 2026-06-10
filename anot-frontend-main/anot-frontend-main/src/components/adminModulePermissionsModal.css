@@ -379,9 +379,13 @@
     box-shadow: 0 8px 22px color-mix(in srgb, var(--brand-primary) 35%, transparent);
 }
 
-@media (max-width: 560px) {
+@media (max-width: 768px) {
     .adm-modperm-dialog {
-        max-height: 100vh;
+        width: 100vw;
+        max-width: none;
+        min-height: 100vh;
+        min-height: 100dvh;
+        max-height: none;
         border-radius: 0;
     }
 
@@ -392,5 +396,11 @@
 
     .adm-modperm-grid {
         grid-template-columns: 1fr;
+    }
+
+    .adm-modperm-btn {
+        min-height: 44px;
+        width: 100%;
+        justify-content: center;
     }
 }

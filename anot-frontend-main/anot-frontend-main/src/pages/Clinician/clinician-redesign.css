@@ -1011,8 +1011,9 @@
   }
 
   .cl-portal.cl-clinician-shell.sf-portal .sf-sidebar.sf-sidebar--rich.adm-sidebar.cl-sidebar {
-    width: 280px;
-    transform: translateX(-280px);
+    width: 100vw;
+    max-width: 100vw;
+    transform: translateX(-100%);
   }
 
   .cl-portal.cl-clinician-shell.sf-portal .sf-sidebar.sf-sidebar--rich.adm-sidebar.cl-sidebar.open {
@@ -1608,5 +1609,49 @@
 @media (max-width: 768px) {
   .cl-portal.cl-clinician-shell .cl-refresh-label {
     display: none;
+  }
+}
+
+/* ─── Recording controls: large, centered on mobile ──────────────────────── */
+@media (max-width: 768px) {
+  .cl-portal.cl-clinician-shell .cl-schedule-row__actions .cl-schedule-cta,
+  .cl-portal.cl-clinician-shell .cl-schedule-row__actions .cl-schedule-tooltip-wrap > .cl-schedule-cta {
+    min-height: 60px;
+    font-size: 16px;
+  }
+
+  .cl-portal.cl-clinician-shell .sf-rec-banner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    text-align: center;
+  }
+
+  .cl-portal.cl-clinician-shell .sf-rec-banner .sf-audio-controls {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .cl-portal.cl-clinician-shell .sf-rec-banner .sf-audio-controls .btn {
+    flex: 1 1 0;
+    min-height: 60px;
+    justify-content: center;
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-schedule-add-rec {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .cl-portal.cl-clinician-shell .cl-schedule-add-rec .btn {
+    flex: 1 1 calc(50% - 6px);
+    min-height: 60px;
+    justify-content: center;
+    font-size: 15px;
+    font-weight: 700;
   }
 }

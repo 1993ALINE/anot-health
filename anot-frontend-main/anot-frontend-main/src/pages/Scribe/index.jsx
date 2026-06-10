@@ -674,6 +674,14 @@ function Scribe() {
         aria-hidden={portalSidebarAriaHidden(offCanvasSidebar, sidebar.open)}
       >
       <div className="sf-sidebar-top sf-sidebar-rich__top">
+        <button
+          type="button"
+          className="adm-sidebar__close"
+          onClick={sidebar.close}
+          aria-label="Close navigation menu"
+        >
+          ✕
+        </button>
         <PortalSidebarBrand branding={branding} subtitle="Scribe Portal" />
       </div>
       <p className="sf-sidebar-rich__nav-label">Workspace</p>

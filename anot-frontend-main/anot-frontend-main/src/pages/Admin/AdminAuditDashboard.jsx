@@ -571,24 +571,24 @@ export default function AdminAuditDashboard({ showToast, currentUser, onMeta }) 
                             <tbody>
                                 {logs.map((log) => (
                                     <tr key={log.id} className={isRiskRow(log) ? 'adm-auditpro-row--risk' : ''}>
-                                        <td>
+                                        <td data-label="Status">
                                             <span className={`adm-auditpro-status ${STATUS_STYLES[log.status] || 'adm-auditpro-status--success'}`}>
                                                 {log.status || 'success'}
                                             </span>
                                         </td>
-                                        <td className="adm-auditpro-mono">{formatAuditDateTime(log.created_at)}</td>
-                                        <td>{log.user_name || '—'}</td>
-                                        <td>{log.user_role || '—'}</td>
-                                        <td>{log.module_key || '—'}</td>
-                                        <td>{log.action_category || '—'}</td>
-                                        <td>{formatActionLabel(log.action)}</td>
-                                        <td className="adm-auditpro-mono">{log.ip_address || '—'}</td>
-                                        <td>{shortDevice(log.user_agent_full || log.user_agent)}</td>
-                                        <td style={{ maxWidth: 220, lineHeight: 1.35, color: 'var(--text-muted)' }}>
+                                        <td data-label="Occurred" className="adm-auditpro-mono">{formatAuditDateTime(log.created_at)}</td>
+                                        <td data-label="User">{log.user_name || '—'}</td>
+                                        <td data-label="Role">{log.user_role || '—'}</td>
+                                        <td data-label="Module">{log.module_key || '—'}</td>
+                                        <td data-label="Category">{log.action_category || '—'}</td>
+                                        <td data-label="Action">{formatActionLabel(log.action)}</td>
+                                        <td data-label="IP" className="adm-auditpro-mono">{log.ip_address || '—'}</td>
+                                        <td data-label="Device">{shortDevice(log.user_agent_full || log.user_agent)}</td>
+                                        <td data-label="Details" style={{ maxWidth: 220, lineHeight: 1.35, color: 'var(--text-muted)' }}>
                                             {(log.details || '—').slice(0, 160)}
                                             {(log.details || '').length > 160 ? '…' : ''}
                                         </td>
-                                        <td>
+                                        <td data-label="">
                                             <button type="button" className="adm-auditpro-btn" onClick={() => setSelected(log)}>
                                                 View
                                             </button>

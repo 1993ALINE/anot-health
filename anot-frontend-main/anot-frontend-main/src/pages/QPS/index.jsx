@@ -232,6 +232,14 @@ function QPS() {
         aria-hidden={portalSidebarAriaHidden(offCanvasSidebar, sidebar.open)}
       >
       <div className="sf-sidebar-top sf-sidebar-rich__top">
+        <button
+          type="button"
+          className="adm-sidebar__close"
+          onClick={sidebar.close}
+          aria-label="Close navigation menu"
+        >
+          ✕
+        </button>
         <PortalSidebarBrand branding={branding} subtitle="QPS Portal" />
       </div>
       <p className="sf-sidebar-rich__nav-label">Workspace</p>
@@ -315,7 +323,7 @@ function QPS() {
               Tip: Use <strong>View Grade</strong> to reopen rubric scores, your comment, and the full note.
             </div>
             <div className="qps-stats-wrap">
-              <div className="sf-stats" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+              <div className="sf-stats qps-stats--three">
                 <StatCard label="Total Graded"      value={gradedNotes.length} variant="graded" />
                 <StatCard label="Providers Covered" value={[...new Set(gradedNotes.map(n => n.clinician_id))].length} variant="total" />
                 <StatCard label="This Month"        value={gradedNotes.filter(n => {
@@ -397,7 +405,7 @@ function QPS() {
               Scribe quality and productivity, aggregated from the grades you submit.
             </p>
             <div className="qps-stats-wrap">
-              <div className="sf-stats" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+              <div className="sf-stats qps-stats--three">
                 <StatCard label="Scribes Tracked"  value={performance.length} variant="total" />
                 <StatCard label="Avg Overall Score" value={`${avgScore}%`}     variant="graded" />
                 <StatCard label="Notes Completed"   value={totalNotes}         variant="review" />
@@ -571,7 +579,7 @@ function QPS() {
               Work the review queue for <strong style={{ color: 'var(--text-main)' }}>{selectedProvider?.name ?? 'Unknown'}</strong> — notes listed here still need your grade. Completed reviews are on the Graded tab.
             </p>
             <div className="qps-stats-wrap">
-              <div className="sf-stats" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+              <div className="sf-stats qps-stats--three">
                 <StatCard label="Total"        value={notes.length}        variant="total" />
                 <StatCard label="Needs Review" value={pendingNotes.length} variant="review" />
                 <StatCard label="Graded"       value={gradedCount}         variant="graded" />

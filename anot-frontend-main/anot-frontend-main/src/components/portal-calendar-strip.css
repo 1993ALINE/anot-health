@@ -285,12 +285,19 @@
   padding: 0;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
   .sf-portal .portal-cal-strip .portal-cal-strip__days,
   .sf-portal .portal-cal-strip .sf-date-nav-days {
     overflow-x: auto;
     flex-wrap: nowrap;
     justify-content: flex-start;
     padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .sf-portal .portal-cal-strip .portal-cal-strip__day,
+  .sf-portal .portal-cal-strip .sf-date-nav-day {
+    flex: 0 0 auto;
+    min-height: 44px;
   }
 }

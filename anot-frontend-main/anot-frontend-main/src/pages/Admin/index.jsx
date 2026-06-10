@@ -312,7 +312,7 @@ function getRoleSemantic(user, role) {
     }
 }
 
-function AdminSidebar({ tab, onSelectTab, currentUser, onRequestSignOut, badges, branding, sidebarOpen, navItems }) {
+function AdminSidebar({ tab, onSelectTab, currentUser, onRequestSignOut, badges, branding, sidebarOpen, onClose, navItems }) {
     const sidebarDrawerMode = usePortalDrawerMode()
 
     const navBadge = (itemKey) => {
@@ -334,6 +334,14 @@ function AdminSidebar({ tab, onSelectTab, currentUser, onRequestSignOut, badges,
             aria-hidden={portalSidebarAriaHidden(sidebarDrawerMode, sidebarOpen)}
         >
             <div className="sf-sidebar-top sf-sidebar-rich__top">
+                <button
+                    type="button"
+                    className="adm-sidebar__close"
+                    onClick={onClose}
+                    aria-label="Close navigation menu"
+                >
+                    ✕
+                </button>
                 <PortalSidebarBrand branding={branding} subtitle={isSuperAdmin(currentUser) ? 'Super Admin' : 'Admin Panel'} />
             </div>
             <p className="sf-sidebar-rich__nav-label">Platform</p>
@@ -1485,6 +1493,7 @@ function Admin() {
                 badges={sidebarBadges}
                 branding={branding}
                 sidebarOpen={sidebar.open}
+                onClose={sidebar.close}
                 navItems={navItems}
             />
             <div className="sf-main sf-portal__main">
