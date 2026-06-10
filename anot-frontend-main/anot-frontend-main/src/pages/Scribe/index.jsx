@@ -1322,6 +1322,13 @@ function Scribe() {
 
   const notePhase = selectedRec?.note_status ?? selectedRec?.status
   const isDone = ['submitted', 'uploaded'].includes(notePhase)
+  // AI note already generated (real content, not the unavailable placeholder) —
+  // hide "Generate AI Draft" so scribes don't re-trigger an existing draft.
+  const hasAiDraft = Boolean(
+    note?.ai_draft &&
+    String(note.ai_draft).trim() &&
+    !note.ai_draft.startsWith('[AI draft unavailable')
+  )
   const currentSeg = txSegments[activeRecIdx] ?? ''
   const txSt = note?.transcription_status || selectedRec?.transcription_status
   const txBadge =
@@ -1416,7 +1423,7 @@ function Scribe() {
             title="AI Draft"
             allowExpand={false}
             badges={
-              !isDone ? (
+              !isDone && !hasAiDraft ? (
                 <button
                   type="button"
                   className="scribe-generate-draft-btn"
