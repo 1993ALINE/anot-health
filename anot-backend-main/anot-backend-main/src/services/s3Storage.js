@@ -18,7 +18,7 @@ const { getSignedUrl } = require('@aws-sdk/s3-request-presigner')
 
 const AUDIO_BUCKET = process.env.S3_AUDIO_BUCKET || 'anot-audio-625242092266'
 const AWS_REGION = process.env.AWS_REGION || 'ap-southeast-1'
-const SIGNED_URL_TTL_SECONDS = 60 * 60 // 1 hour
+const SIGNED_URL_TTL_SECONDS = 604800 // 7 days (the SigV4 presigning maximum)
 
 const s3 = new S3Client({ region: AWS_REGION })
 
@@ -40,7 +40,7 @@ async function uploadAudio(key, buffer, contentType) {
   }))
 }
 
-/** Presigned GET URL, valid 1 hour. */
+/** Presigned GET URL, valid 7 days. */
 async function getSignedAudioUrl(key) {
   const command = new GetObjectCommand({ Bucket: AUDIO_BUCKET, Key: key })
   return getSignedUrl(s3, command, { expiresIn: SIGNED_URL_TTL_SECONDS })
