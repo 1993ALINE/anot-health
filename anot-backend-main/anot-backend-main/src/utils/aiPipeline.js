@@ -6,7 +6,7 @@ const { loadAiSettings, getAnthropicKey } = require('../services/aiSettings')
 const { processAudioForTranscription, unlinkTempPaths } = require('../services/audioProcessingService')
 const { transcribeFileWithRetries } = require('../services/aiTranscriptionService')
 const { downloadAudioToTemp, dbPathToKey } = require('../services/s3Storage')
-const { setVisitTranscriptionStatus } = require('./visitSchemaCompat')
+const { setVisitTranscriptionStatus, claimVisitTranscription } = require('./visitSchemaCompat')
 const { isReachableWebhookUrl } = require('./webhookReachability')
 
 const AI_DRAFT_UNAVAILABLE =
@@ -213,7 +213,13 @@ async function runAIPipeline(visitId, options = {}) {
       }
     }
 
-    await setVisitTranscriptionStatus(id, 'processing')
+    // Atomic claim: only one pipeline may process a visit at a time. Without
+    // this, near-simultaneous triggers (upload auto-transcribe + manual button)
+    // would both pass the status read above and double-run Deepgram/Anthropic.
+    if (!(await claimVisitTranscription(id))) {
+      console.log(`⏭  Skipping AI pipeline for visit ${id} (already processing)`)
+      return
+    }
     await auditLog(ctxUser, 'TRANSCRIPTION_STARTED', 'visit', String(id), 'AI transcription pipeline started', {
       ...auditOpts,
       status: 'success',
@@ -226,11 +232,18 @@ async function runAIPipeline(visitId, options = {}) {
     const useAsyncDeepgram =
       isReachableWebhookUrl(settings.deepgram_webhook_url) && audioFiles.length === 1
 
+    // Keep transcript order aligned with recording numbers: failed segments get
+    // a placeholder instead of being dropped, so "Recording 3" stays recording 3.
     const transcriptions = []
+    let successCount = 0
     let anyDeferred = false
-    for (const audioPath of audioFiles) {
+    for (let idx = 0; idx < audioFiles.length; idx++) {
+      const audioPath = audioFiles[idx]
+      const placeholder = `[Recording ${idx + 1}: transcription unavailable]`
+
       if (!/^\/uploads\/[\w.\-]+$/.test(audioPath)) {
         console.warn(`Skipping invalid audio path for visit ${id}: ${audioPath}`)
+        transcriptions.push(placeholder)
         continue
       }
 
@@ -241,6 +254,7 @@ async function runAIPipeline(visitId, options = {}) {
         fullPath = await downloadAudioToTemp(dbPathToKey(audioPath))
       } catch (e) {
         console.warn(`Audio not found in S3 for visit ${id} (${audioPath}):`, e.message)
+        transcriptions.push(placeholder)
         continue
       }
 
@@ -249,11 +263,13 @@ async function runAIPipeline(visitId, options = {}) {
         const fileSize = fs.statSync(fullPath).size
         if (fileSize === 0) {
           console.warn(`Audio file is empty: ${audioPath}`)
+          transcriptions.push(placeholder)
           continue
         }
         const maxBytes = (settings.ffmpeg_max_upload_mb || 100) * 1024 * 1024
         if (fileSize > maxBytes) {
           console.warn(`Audio over limit (${settings.ffmpeg_max_upload_mb}MB): ${audioPath}`)
+          transcriptions.push(placeholder)
           continue
         }
 
@@ -266,20 +282,26 @@ async function runAIPipeline(visitId, options = {}) {
           anyDeferred = true
           continue
         }
-        if (text) transcriptions.push(text)
+        if (text) {
+          transcriptions.push(text)
+          successCount++
+        } else {
+          transcriptions.push(placeholder)
+        }
       } catch (e) {
         console.error(`Transcription segment error for visit ${id}:`, e.message)
+        transcriptions.push(placeholder)
       } finally {
         await unlinkTempPaths(tempPaths)
       }
     }
 
-    if (transcriptions.length === 0 && anyDeferred) {
+    if (successCount === 0 && anyDeferred) {
       console.log(`⏳ Visit ${id}: Deepgram async callback pending (public webhook)`)
       return
     }
 
-    if (transcriptions.length === 0) {
+    if (successCount === 0) {
       console.warn(`No transcriptions generated for visit ${id}`)
       await setVisitTranscriptionStatus(id, 'failed')
       await auditLog(ctxUser, 'TRANSCRIPTION_FAILED', 'visit', String(id), 'No transcript produced from audio', {

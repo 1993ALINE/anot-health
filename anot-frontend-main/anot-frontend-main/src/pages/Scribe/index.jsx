@@ -221,6 +221,13 @@ function Scribe() {
     setBaseline({ visitId, final: final ?? '', tx })
   }, [])
 
+  // Latest values for callbacks that must not re-subscribe per keystroke
+  // (e.g. the 30s transcription poll's merge path).
+  const baselineRef = useRef(baseline)
+  baselineRef.current = baseline
+  const txSegmentsRef = useRef(txSegments)
+  txSegmentsRef.current = txSegments
+
   const isDirty = useMemo(() => {
     if (!selectedRec?.id || baseline.visitId !== selectedRec.id) return false
     return finalNote !== baseline.final || JSON.stringify(txSegments) !== baseline.tx
@@ -359,8 +366,21 @@ function Scribe() {
                 : prev,
             )
             if (n.transcription) {
-              const segs = parseTranscriptions(n.transcription)
-              setTxSegments(segs)
+              // Only take the server's transcript when the local segments are
+              // unedited — the 30s poll must never clobber in-progress edits.
+              const base = baselineRef.current
+              const hasBaseline = String(base.visitId) === String(visitId)
+              const locallyEdited =
+                hasBaseline && JSON.stringify(txSegmentsRef.current) !== base.tx
+              if (!locallyEdited) {
+                const segs = parseTranscriptions(n.transcription)
+                setTxSegments(segs)
+                setBaseline((prev) =>
+                  String(prev.visitId) === String(visitId)
+                    ? { ...prev, tx: JSON.stringify(segs) }
+                    : prev,
+                )
+              }
             }
           }
           return true
@@ -517,8 +537,11 @@ function Scribe() {
       const trans = txSegments.length > 0 ? JSON.stringify(txSegments) : undefined
       const saved = await notesAPI.saveDraft(selectedRec.id, finalNote, trans, note?.ai_draft)
       await notesAPI.submitNote(note?.id || saved.note.id)
-      setRecordings(prev => prev.map(r => r.id === selectedRec.id ? { ...r, status: 'submitted' } : r))
-      setSelectedRec(prev => ({ ...prev, status: 'submitted' }))
+      // note_status must be updated too: the editor's done-check reads
+      // note_status first (`?? status`), so leaving it at 'draft' would keep
+      // the note editable and allow a double submit.
+      setRecordings(prev => prev.map(r => r.id === selectedRec.id ? { ...r, status: 'submitted', note_status: 'submitted' } : r))
+      setSelectedRec(prev => ({ ...prev, status: 'submitted', note_status: 'submitted' }))
       markBaseline(selectedRec.id, finalNote, txSegments)
       showNotif('Note submitted to clinician.')
     } catch (err) { showNotif(`Upload failed: ${err.message}`, 'red') }
@@ -761,6 +784,7 @@ function Scribe() {
     const byProvider = myNotes.reduce((acc, n) => { const key = n.clinician_name || 'Unknown'; if (!acc[key]) acc[key] = []; acc[key].push(n); return acc }, {})
     return (
       <div className="sf-page sf-portal adm-shell scribe-portal">
+        {sessionTimeoutModal}
         {sidebarMarkup}
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
@@ -847,6 +871,7 @@ function Scribe() {
     const avgScore = grades.length > 0 ? Math.round(grades.reduce((a, g) => a + (g.overall_score || 0), 0) / grades.length) : 0
     return (
       <div className="sf-page sf-portal adm-shell scribe-portal">
+        {sessionTimeoutModal}
         {sidebarMarkup}
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
@@ -930,6 +955,7 @@ function Scribe() {
   if (screen === 'profile') {
     return (
       <div className="sf-page sf-portal adm-shell scribe-portal">
+        {sessionTimeoutModal}
         {sidebarMarkup}
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
@@ -987,6 +1013,7 @@ function Scribe() {
   if (screen === 'providers') {
     return (
       <div className="sf-page sf-portal adm-shell scribe-portal">
+        {sessionTimeoutModal}
         {sidebarMarkup}
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
@@ -1032,6 +1059,7 @@ function Scribe() {
     const QUICK = [{ label: 'Today', date: localDateStr(0) },{ label: 'Yesterday', date: localDateStr(-1) },{ label: '2 days ago', date: localDateStr(-2) },{ label: '3 days ago', date: localDateStr(-3) }]
     return (
       <div className="sf-page sf-portal adm-shell scribe-portal">
+        {sessionTimeoutModal}
         {sidebarMarkup}
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
@@ -1101,6 +1129,7 @@ function Scribe() {
     const submitted = recordings.filter(r => ['submitted','uploaded'].includes(r.status)).length
     return (
       <div className="sf-page sf-portal adm-shell scribe-portal">
+        {sessionTimeoutModal}
         {sidebarMarkup}
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
@@ -1227,6 +1256,7 @@ function Scribe() {
 
     return (
       <div className="sf-page sf-portal adm-shell scribe-portal">
+        {sessionTimeoutModal}
         {sidebarMarkup}
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />

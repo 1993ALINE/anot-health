@@ -255,13 +255,21 @@ const submitNote = async (req, res) => {
 
     const out = await withTransaction(async (client) => {
       const noteRow = await client.query(
-        'SELECT id, visit_id FROM notes WHERE id = $1 FOR UPDATE',
+        'SELECT id, visit_id, status, locked_at FROM notes WHERE id = $1 FOR UPDATE',
         [id]
       )
       if (!noteRow.rows[0]) return { notFound: true }
 
       const visit = await getVisitForUser(noteRow.rows[0].visit_id, req.user, client)
       if (!visit) return { forbidden: true }
+
+      // A locked (clinician-finalized) or already submitted/graded note must not
+      // be re-submitted — that would reopen finalized clinical documentation and
+      // corrupt the QPS grading lifecycle. Clinicians use request-edit to send
+      // it back to draft first.
+      if (noteRow.rows[0].locked_at || !['pending', 'draft'].includes(noteRow.rows[0].status)) {
+        return { conflict: true }
+      }
 
       const upd = await client.query(
         `UPDATE notes
@@ -292,6 +300,11 @@ const submitNote = async (req, res) => {
 
     if (out.notFound)  return res.status(404).json({ error: 'Note not found.' })
     if (out.forbidden) return res.status(403).json({ error: 'Not authorized for this note.' })
+    if (out.conflict) {
+      return res.status(409).json({
+        error: 'Note is already submitted, locked, or graded. Ask the clinician to request an edit first.',
+      })
+    }
 
     res.status(200).json({ message: 'Note submitted successfully.', note: out.note })
   } catch (err) {
@@ -388,8 +401,16 @@ const requestEdit = async (req, res) => {
       const visit = await getVisitForUser(noteRow.rows[0].visit_id, req.user, client)
       if (!visit) return { forbidden: true }
 
+      // Reopening for edits also releases the clinician lock; otherwise the
+      // scribe could never re-submit (and the clinician could never re-edit).
       await client.query(
-        `UPDATE notes SET status = 'draft', updated_at = NOW() WHERE id = $1`, [id]
+        `UPDATE notes
+            SET status = 'draft',
+                locked_at = NULL,
+                locked_by = NULL,
+                updated_at = NOW()
+          WHERE id = $1`,
+        [id]
       )
       await client.query(
         `UPDATE visits SET status = 'recording-uploaded' WHERE id = $1`,

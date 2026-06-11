@@ -40,10 +40,31 @@ async function setVisitTranscriptionStatus(visitId, status) {
   await pool.query(`UPDATE visits SET transcription_status = $1 WHERE id = $2`, [status, visitId])
 }
 
+/**
+ * Atomically claim transcription for a visit: flips transcription_status to
+ * 'processing' only if no other pipeline already holds it. Returns false when
+ * the claim is lost, so concurrent triggers (auto-on-upload + manual button)
+ * can't run the Deepgram/Anthropic pipeline twice for the same visit.
+ * Always succeeds on legacy schemas without the column (no guard possible).
+ */
+async function claimVisitTranscription(visitId) {
+  if (!(await visitHasTranscriptionStatus())) return true
+  const { rows } = await pool.query(
+    `UPDATE visits
+        SET transcription_status = 'processing'
+      WHERE id = $1
+        AND (transcription_status IS NULL OR transcription_status <> 'processing')
+      RETURNING id`,
+    [visitId]
+  )
+  return rows.length > 0
+}
+
 module.exports = {
   visitDurationSelect,
   visitTranscriptionStatusSelect,
   visitHasDurationSeconds,
   visitHasTranscriptionStatus,
   setVisitTranscriptionStatus,
+  claimVisitTranscription,
 }

@@ -66,10 +66,18 @@ router.post('/:visitId', protect, restrict('clinician'), upload.single('audio'),
     const audioPath = `/uploads/${filename}`
     await uploadAudio(dbPathToKey(audioPath), req.file.buffer, req.file.mimetype)
 
-    const existingFiles = visit.audio_file || ''
-    const updated = existingFiles ? `${existingFiles},${audioPath}` : audioPath
-
-    await pool.query('UPDATE visits SET audio_file = $1, status = $2 WHERE id = $3', [updated, 'recording-uploaded', visitId])
+    // Append atomically in SQL: a read-modify-write here would let two
+    // concurrent uploads overwrite each other and orphan an S3 object.
+    await pool.query(
+      `UPDATE visits
+          SET audio_file = CASE
+                WHEN audio_file IS NULL OR audio_file = '' THEN $1
+                ELSE audio_file || ',' || $1
+              END,
+              status = $2
+        WHERE id = $3`,
+      [audioPath, 'recording-uploaded', visitId]
+    )
 
     res.status(200).json({
       message: 'Audio uploaded successfully.',
@@ -107,10 +115,19 @@ router.post('/:visitId/append', protect, restrict('clinician'), upload.single('a
     const newPath = `/uploads/${filename}`
     await uploadAudio(dbPathToKey(newPath), req.file.buffer, req.file.mimetype)
 
-    const existing = visit.audio_file || ''
-    const updated = existing ? `${existing},${newPath}` : newPath
-
-    await pool.query('UPDATE visits SET audio_file = $1 WHERE id = $2', [updated, visitId])
+    // Atomic append (see primary upload route): avoids losing a concurrent
+    // upload's path and orphaning its S3 object.
+    const updResult = await pool.query(
+      `UPDATE visits
+          SET audio_file = CASE
+                WHEN audio_file IS NULL OR audio_file = '' THEN $1
+                ELSE audio_file || ',' || $1
+              END
+        WHERE id = $2
+        RETURNING audio_file`,
+      [newPath, visitId]
+    )
+    const updated = updResult.rows[0]?.audio_file || newPath
 
     res.status(200).json({
       message: 'Additional recording uploaded.',
@@ -145,8 +162,11 @@ router.get('/:visitId/count', protect, restrict('clinician', 'scribe', 'qps'), a
 })
 
 // ─── GET /api/audio/:visitId — Serve audio (supports ?index=N) ────────────────
-// Redirects to a presigned S3 URL (valid 1 hour). S3 handles Range requests
-// natively, so seeking and Safari's 206 Partial Content requirement still work.
+// Redirects to a presigned S3 URL (valid 7 days — SIGNED_URL_TTL_SECONDS in
+// s3Storage.js). S3 handles Range requests natively, so seeking and Safari's
+// 206 Partial Content requirement still work. NOTE: anyone holding the signed
+// URL can fetch the audio without auth for the full TTL; keep the TTL choice
+// deliberate for PHI.
 
 router.get('/:visitId', protect, restrict('clinician', 'scribe', 'qps'), async (req, res) => {
   try {

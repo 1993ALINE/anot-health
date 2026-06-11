@@ -58,11 +58,12 @@ const protect = async (req, res, next) => {
         try {
             state = await getUserAuthState(decoded.id)
         } catch (dbErr) {
-            // A transient DB error must not lock every authenticated user out —
-            // the downstream controller will surface a real outage as a 500.
+            // Fail closed: the revocation check is the only thing enforcing
+            // deactivation / role changes on already-issued tokens (up to 8h).
+            // If the DB is down, downstream queries would fail anyway, so
+            // refusing here costs nothing and never honors a revoked session.
             console.error('Auth status check failed:', dbErr.message)
-            req.user = decoded
-            return next()
+            return res.status(503).json({ error: 'Service temporarily unavailable. Please try again.' })
         }
 
         if (!state.found || state.status !== 'active') {

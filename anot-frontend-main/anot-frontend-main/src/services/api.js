@@ -98,15 +98,19 @@ export const authAPI = {
   },
   logout: async () => {
     const t = getToken()
-    if (t) {
-      try {
-        await fetch(`${BASE_URL}/auth/logout`, { method: 'POST', headers: headers() })
-      } catch {
-        /* ignore — still clear local session */
-      }
-    }
+    // Clear local session state FIRST. If the server call were awaited before
+    // clearing, navigating to /login would still see a token, fire getMe, and
+    // bounce the user back into their portal right after they clicked Log out.
+    const authHeaders = headers()
     localStorage.removeItem('token')
     localStorage.removeItem('user')
+    if (t) {
+      try {
+        await fetch(`${BASE_URL}/auth/logout`, { method: 'POST', headers: authHeaders })
+      } catch {
+        /* ignore — local session already cleared */
+      }
+    }
   },
   getCurrentUser: () => {
     const user = readStoredUser()
@@ -117,7 +121,10 @@ export const authAPI = {
   getMe: async () => {
     const res = await fetch(`${BASE_URL}/auth/me`, { headers: headers() })
     const data = await handleResponse(res)
-    if (data.user) localStorage.setItem('user', JSON.stringify(data.user))
+    // Don't re-persist the user if a logout cleared the session while this
+    // request was in flight — that would leave PHI-adjacent profile data in
+    // localStorage on a shared workstation after sign-out.
+    if (data.user && getToken()) localStorage.setItem('user', JSON.stringify(data.user))
     return data
   },
   updateMe: async ({ name, email, phone, avatar_data_url, personal_info }) => {

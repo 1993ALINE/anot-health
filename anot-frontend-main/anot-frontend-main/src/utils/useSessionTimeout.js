@@ -12,6 +12,10 @@ import { authAPI } from '../services/api'
  * click "Stay Logged In" to extend the session.
  *
  * @param {boolean} enabled - Only run while a user is logged in.
+ * @param {{ isBusy?: () => boolean }} [options] - `isBusy` is consulted when the
+ *   warning or logout would fire; returning true counts as activity and resets
+ *   the timer. Used so an in-progress encounter recording (which generates no
+ *   mouse/keyboard events) is never destroyed by an idle logout.
  * @returns {React.ReactNode} The warning modal (portaled to <body>) or null.
  */
 
@@ -33,7 +37,12 @@ async function handleLogout() {
     /* ignore — still clear local session and redirect */
   }
   try {
-    localStorage.clear()
+    // Remove only the session keys. localStorage.clear() would also wipe
+    // user customizations that survive an explicit logout (note templates,
+    // branding cache), making idle logout destructive in a way normal
+    // logout is not.
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
   } catch {
     /* ignore storage access errors */
   }
@@ -55,11 +64,13 @@ function formatCountdown(ms) {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-export function useSessionTimeout(enabled = true) {
+export function useSessionTimeout(enabled = true, options = {}) {
   const [showWarning, setShowWarning] = useState(false)
   const [expiresAt, setExpiresAt] = useState(null)
   const [remaining, setRemaining] = useState(WARNING_MS)
   const resetTimerRef = useRef(() => {})
+  const isBusyRef = useRef(options.isBusy)
+  isBusyRef.current = options.isBusy
 
   useEffect(() => {
     if (DEBUG) console.log('[SessionTimeout] hook running. enabled =', enabled)
@@ -84,6 +95,11 @@ export function useSessionTimeout(enabled = true) {
       if (DEBUG) console.log('[SessionTimeout] timer reset at', new Date().toLocaleTimeString())
 
       warningId = setTimeout(() => {
+        if (isBusyRef.current?.()) {
+          if (DEBUG) console.log('[SessionTimeout] busy (e.g. recording) — timer reset instead of warning')
+          resetTimer()
+          return
+        }
         if (DEBUG) console.log('[SessionTimeout] ⚠️ WARNING modal shown')
         setExpiresAt(Date.now() + WARNING_MS)
         setRemaining(WARNING_MS)
@@ -91,6 +107,13 @@ export function useSessionTimeout(enabled = true) {
       }, IDLE_BEFORE_WARNING_MS)
 
       timeoutId = setTimeout(() => {
+        // Never destroy in-flight work (an active recording holds unsaved
+        // audio in memory; a hard navigation would lose the whole encounter).
+        if (isBusyRef.current?.()) {
+          if (DEBUG) console.log('[SessionTimeout] busy — logout deferred, timer reset')
+          resetTimer()
+          return
+        }
         loggedOut = true
         if (DEBUG) console.log('[SessionTimeout] 🚪 LOGOUT triggered (inactivity)')
         handleLogout()

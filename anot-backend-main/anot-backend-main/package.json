@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "node --watch src/server.js",
+    "dev": "node --watch-path=./src src/server.js",
     "dev:nodemon": "nodemon src/server.js",
     "seed:dev": "node scripts/seed-dev-users.js --force-dev-seed",
     "migrate:visit-type-other": "node scripts/run-migration-visits-visit-type.js"

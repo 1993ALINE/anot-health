@@ -111,8 +111,10 @@ async function ensureAuditColumns() {
 
 function requestMeta(req) {
     if (!req) return { ip: null, ua: null, path: null }
-    const xf = (req.headers && req.headers['x-forwarded-for']) || ''
-    const ip = String(xf).split(',')[0].trim() || req.ip || req.socket?.remoteAddress || null
+    // req.ip respects Express `trust proxy`, so only the proxy-appended hop is
+    // trusted. Hand-parsing X-Forwarded-For would let any client spoof the IP
+    // recorded in the HIPAA audit log.
+    const ip = req.ip || req.socket?.remoteAddress || null
     const uaRaw = (req.headers && req.headers['user-agent']) || ''
     const ua = String(uaRaw).slice(0, 2000)
     const path = String(req.originalUrl || req.url || '').slice(0, 512)

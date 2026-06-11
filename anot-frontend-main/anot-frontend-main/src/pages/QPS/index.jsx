@@ -217,8 +217,11 @@ function QPS() {
   }
 
   // ─── SIDEBAR ──────────────────────────────────────
+  // Plain JSX expression (not an inline component): defining a component type
+  // inside the render function makes React unmount/remount the whole sidebar
+  // subtree on every state change (every keystroke in the grading comment).
 
-  const Sidebar = () => (
+  const sidebarMarkup = (
     <>
       <ConfirmDialog
         dialog={confirmDialog}
@@ -299,7 +302,8 @@ function QPS() {
   if (screen === 'graded') {
     return (
       <div className="sf-page sf-portal adm-shell qps-portal">
-        <Sidebar />
+        {sessionTimeoutModal}
+        {sidebarMarkup}
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
           <PortalTopbar
@@ -384,7 +388,8 @@ function QPS() {
     const totalNotes = performance.reduce((a, p) => a + parseInt(p.notes_completed || 0, 10), 0)
     return (
       <div className="sf-page sf-portal adm-shell qps-portal">
-        <Sidebar />
+        {sessionTimeoutModal}
+        {sidebarMarkup}
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
           <PortalTopbar
@@ -444,7 +449,8 @@ function QPS() {
   if (screen === 'profile') {
     return (
       <div className="sf-page sf-portal adm-shell qps-portal">
-        <Sidebar />
+        {sessionTimeoutModal}
+        {sidebarMarkup}
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
           <PortalTopbar
@@ -487,7 +493,8 @@ function QPS() {
   if (screen === 'provider') {
     return (
       <div className="sf-page sf-portal adm-shell qps-portal">
-        <Sidebar />
+        {sessionTimeoutModal}
+        {sidebarMarkup}
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
           <PortalTopbar
@@ -547,7 +554,8 @@ function QPS() {
     const gradedCount  = notes.filter(n => isGradedNote(n)).length
     return (
       <div className="sf-page sf-portal adm-shell qps-portal">
-        <Sidebar />
+        {sessionTimeoutModal}
+        {sidebarMarkup}
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
           <PortalTopbar
@@ -640,7 +648,7 @@ function QPS() {
   return (
     <div className="sf-page-fixed sf-portal adm-shell qps-portal">
       {sessionTimeoutModal}
-      <Sidebar />
+      {sidebarMarkup}
       <div className="sf-main-fixed sf-portal__main">
         <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
         <PortalTopbar

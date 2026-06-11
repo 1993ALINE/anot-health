@@ -392,7 +392,19 @@ const deleteUser = async (req, res) => {
         if (target.role === 'super_admin') {
             return res.status(400).json({ error: 'The system Super Admin account cannot be deleted.' })
         }
-        await pool.query('DELETE FROM users WHERE id = $1', [id])
+        try {
+            await pool.query('DELETE FROM users WHERE id = $1', [id])
+        } catch (err) {
+            // FK violation: the user is referenced by visits/notes/grades.
+            // Clinical records must never be orphaned, so deletion is refused —
+            // deactivate instead, which preserves the audit/clinical trail.
+            if (err.code === '23503') {
+                return res.status(409).json({
+                    error: `${target.name} has linked clinical records (visits, notes, or grades) and cannot be deleted. Deactivate the account instead.`,
+                })
+            }
+            throw err
+        }
         invalidateUserAuthCache(id)
         await auditLog(req.user, 'USER_DELETED', 'user', id, `Deleted: ${target.name}`,
             { req, module_key: 'admins', action_category: 'delete', status: 'critical' })

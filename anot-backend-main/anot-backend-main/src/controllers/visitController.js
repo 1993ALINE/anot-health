@@ -214,6 +214,27 @@ const updateVisitStatus = async (req, res) => {
     const accessible = await getVisitForUser(id, req.user)
     if (!accessible) return res.status(404).json({ error: 'Visit not found.' })
 
+    // Enforce the visit lifecycle: only adjacent moves are allowed, and a
+    // finalized ('uploaded') visit is immutable through this endpoint. This
+    // stops a fresh visit being jumped straight to 'uploaded', or a graded
+    // visit being reverted, which would desync the visit/note workflow.
+    const ALLOWED_TRANSITIONS = {
+      scheduled: ['upcoming', 'in-progress'],
+      upcoming: ['scheduled', 'in-progress'],
+      'in-progress': ['upcoming', 'recording-uploaded'],
+      'recording-uploaded': ['in-progress', 'note-ready'],
+      'note-ready': ['recording-uploaded', 'done', 'uploaded'],
+      done: ['uploaded'],
+      uploaded: [],
+    }
+    const current = accessible.status
+    const allowed = ALLOWED_TRANSITIONS[current] || []
+    if (status !== current && !allowed.includes(status)) {
+      return res.status(409).json({
+        error: `Cannot change visit status from '${current}' to '${status}'.`,
+      })
+    }
+
     const result = await pool.query(
       'UPDATE visits SET status = $1 WHERE id = $2 RETURNING *',
       [status, id]

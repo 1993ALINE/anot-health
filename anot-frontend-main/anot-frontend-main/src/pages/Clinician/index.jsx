@@ -646,9 +646,12 @@ function notesVisitHasRecording(h) {
 
 function notesVisitAppointmentPast(h) {
   if (!h?.visit_date) return false
+  // visit_date can arrive as a full ISO timestamp; without slicing, the
+  // concatenation below produces an Invalid Date and "overdue" never shows.
+  const datePart = String(h.visit_date).slice(0, 10)
   const timePart = h.visit_time || '23:59:59'
   const normalizedTime = timePart.length === 5 ? `${timePart}:00` : timePart
-  const appt = new Date(`${h.visit_date}T${normalizedTime}`)
+  const appt = new Date(`${datePart}T${normalizedTime}`)
   return !Number.isNaN(appt.getTime()) && appt < new Date()
 }
 
@@ -742,7 +745,7 @@ function notesScribeStatusMatch(h, filterKey) {
 }
 
 function notesDateSortKey(h) {
-  const date = h.visit_date || ''
+  const date = String(h.visit_date || '').slice(0, 10)
   const time = h.visit_time || '00:00:00'
   const normalized = time.length === 5 ? `${time}:00` : time
   return `${date}T${normalized}`
@@ -1466,7 +1469,13 @@ function Clinician() {
   const navigate    = useNavigate()
   const cu          = getCurrentUser()
   const sidebar     = useSidebar()
-  const sessionTimeoutModal = useSessionTimeout(!!cu && Object.keys(cu).length > 0)
+  // An active encounter recording generates no mouse/keyboard events, so it
+  // must count as activity — otherwise the 15-min idle logout would hard-
+  // navigate away and destroy the in-memory audio mid-encounter.
+  const sessionTimeoutModal = useSessionTimeout(!!cu && Object.keys(cu).length > 0, {
+    isBusy: () =>
+      [mRef.current?.state, arRef.current?.state].some((s) => s === 'recording' || s === 'paused'),
+  })
 
   const [screen, setScreenState]    = useState('schedule')
   const [scheduleDate, setScheduleDate] = useState(() => new Date())
@@ -1711,6 +1720,11 @@ function Clinician() {
     }
   }, [off, showToast])
 
+  // Latest loadVisits for callbacks installed once (e.g. the offline upload
+  // flush effect), so they don't need loadVisits in their dependency arrays.
+  const loadVisitsRef = useRef(loadVisits)
+  loadVisitsRef.current = loadVisits
+
   const loadHistory = useCallback(async (opts = {}) => {
     historyAbortRef.current?.abort()
     const controller = new AbortController()
@@ -1743,7 +1757,20 @@ function Clinician() {
       flushPendingAudioUploads({
         uploadPrimary: (visitId, blob) => visitsAPI.uploadAudio(visitId, blob),
         uploadAppend: (visitId, blob) => visitsAPI.appendAudio(visitId, blob),
-        onSuccess: () => showToast('Queued recording uploaded successfully'),
+        onSuccess: async (item) => {
+          // A queued primary recording means endVisit was deferred (ending a
+          // visit with no audio would hand the scribe nothing to transcribe).
+          // Now that the audio landed, finish the encounter properly.
+          if (item.mode === 'primary' && item.durationSeconds != null) {
+            try {
+              await visitsAPI.endVisit(item.visitId, item.durationSeconds)
+            } catch (err) {
+              console.error(err)
+            }
+          }
+          showToast('Queued recording uploaded successfully')
+          loadVisitsRef.current?.({ silent: true })
+        },
       }),
     )
   }, [showToast])
@@ -1922,6 +1949,7 @@ function Clinician() {
     try {
       clearInterval(tRef.current); setUploading(true)
       const rec = mRef.current, vid = active.id, pn = active.patient_name
+      let uploadQueued = false
       if (rec && rec.state !== 'inactive') {
         await new Promise(res => {
           rec.onstop = async () => {
@@ -1933,8 +1961,8 @@ function Clinician() {
                 console.error(err)
                 try {
                   const b = new Blob(cRef.current, { type: rec.mimeType || 'audio/webm' })
-                  await queueAudioUpload({ visitId: vid, blob: b, mode: 'primary' })
-                  showToast('Upload failed — recording saved and will retry when online.', 'error')
+                  await queueAudioUpload({ visitId: vid, blob: b, mode: 'primary', durationSeconds: timer })
+                  uploadQueued = true
                 } catch (qErr) {
                   console.error(qErr)
                   showToast('Upload failed. Check your connection and try again.', 'error')
@@ -1945,6 +1973,14 @@ function Clinician() {
           }
           rec.stop()
         })
+      }
+      if (uploadQueued) {
+        // Don't end the visit yet: ending without audio gives the scribe
+        // nothing to transcribe. The flush handler ends it once the queued
+        // upload succeeds (it retries every 45s and on reconnect).
+        showToast('Upload failed — recording is saved in this tab and will retry automatically. Keep this tab open.', 'error')
+        setActive(null); setTimer(0); setPaused(false); cRef.current = []; mRef.current = null
+        return
       }
       const endData = await visitsAPI.endVisit(vid, timer)
       const vr = endData.visit
@@ -1994,7 +2030,7 @@ function Clinician() {
               try {
                 const b = new Blob(acRef.current, { type: arRef.current.mimeType || 'audio/webm' })
                 await queueAudioUpload({ visitId: vid, blob: b, mode: 'append' })
-                showToast('Upload failed — saved locally and will retry when online.', 'error')
+                showToast('Upload failed — recording is saved in this tab and will retry automatically. Keep this tab open.', 'error')
               } catch {
                 showToast('Upload failed', 'error')
               }
@@ -2255,6 +2291,7 @@ function Clinician() {
   if (screen === 'contact') {
     return (
       <div className="sf-page sf-portal adm-shell cl-clinician-shell cl-portal">
+        {sessionTimeoutModal}
         <Sidebar {...sidebarProps} />
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
@@ -2291,6 +2328,7 @@ function Clinician() {
     const encDayLabel = off === 0 ? 'Encounters today' : `Encounters · ${localDate(off)}`
     return (
       <div className="sf-page sf-portal adm-shell cl-clinician-shell cl-portal">
+        {sessionTimeoutModal}
         <Sidebar {...sidebarProps} />
         <div className="sf-main sf-portal__main">
           <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />

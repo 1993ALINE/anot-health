@@ -216,7 +216,11 @@ const getAuditSummary = async (req, res) => {
 
 function csvEscape(s) {
     if (s == null) return ''
-    const t = String(s).replace(/"/g, '""')
+    let t = String(s)
+    // Neutralize spreadsheet formula injection: cells starting with = + - @
+    // (or tab/CR) execute as formulas when the export is opened in Excel/Sheets.
+    if (/^[=+\-@\t\r]/.test(t)) t = `'${t}`
+    t = t.replace(/"/g, '""')
     return `"${t}"`
 }
 
