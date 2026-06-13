@@ -60,28 +60,28 @@ const login = async (req, res) => {
         const INVALID = { error: 'Invalid email or password.' }
 
         if (!user) {
-            void auditLog({ name: 'Sign-in', role: 'anonymous' }, 'LOGIN_FAILED', 'auth', null, 'Authentication failed', { req, status: 'failed', action_category: 'authentication', metadata: { stage: 'lookup' } }).catch(reportAuditFailure)
+            void auditLog({ name: 'Sign-in', role: 'anonymous' }, 'LOGIN_FAILED', 'auth', null, 'Authentication failed', { req, module_key: 'authentication', status: 'failed', action_category: 'authentication', metadata: { stage: 'lookup' } }).catch(reportAuditFailure)
             return res.status(401).json(INVALID)
         }
         if (user.status !== 'active') {
-            void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_FAILED', 'auth', String(user.id), 'Authentication failed', { req, status: 'failed', action_category: 'authentication', metadata: { stage: 'inactive' } }).catch(reportAuditFailure)
+            void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_FAILED', 'auth', String(user.id), 'Authentication failed', { req, module_key: 'authentication', status: 'failed', action_category: 'authentication', metadata: { stage: 'inactive' } }).catch(reportAuditFailure)
             return res.status(401).json(INVALID)
         }
         if (role && user.role !== role) {
-            void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_FAILED', 'auth', String(user.id), 'Authentication failed', { req, status: 'failed', action_category: 'authentication', metadata: { stage: 'role_mismatch' } }).catch(reportAuditFailure)
+            void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_FAILED', 'auth', String(user.id), 'Authentication failed', { req, module_key: 'authentication', status: 'failed', action_category: 'authentication', metadata: { stage: 'role_mismatch' } }).catch(reportAuditFailure)
             return res.status(401).json(INVALID)
         }
 
         const passwordMatch = await bcrypt.compare(password, user.password)
 
         if (!passwordMatch) {
-            void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_FAILED', 'auth', String(user.id), 'Authentication failed', { req, status: 'failed', action_category: 'authentication', metadata: { stage: 'password' } }).catch(reportAuditFailure)
+            void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_FAILED', 'auth', String(user.id), 'Authentication failed', { req, module_key: 'authentication', status: 'failed', action_category: 'authentication', metadata: { stage: 'password' } }).catch(reportAuditFailure)
             return res.status(401).json(INVALID)
         }
 
         const token = generateToken(user)
 
-        void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_SUCCESS', 'auth', String(user.id), 'Signed in successfully', { req, status: 'success', action_category: 'authentication' }).catch(reportAuditFailure)
+        void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_SUCCESS', 'auth', String(user.id), 'Signed in successfully', { req, module_key: 'authentication', status: 'success', action_category: 'authentication' }).catch(reportAuditFailure)
 
         // Return user info and token
         res.status(200).json({
@@ -284,7 +284,7 @@ const changePassword = async (req, res) => {
         // Verify current password
         const match = await bcrypt.compare(currentPassword, user.password)
         if (!match) {
-            void auditLog(req.user, 'SELF_PASSWORD_CHANGE_FAILED', 'user', String(req.user.id), 'Current password incorrect', { req, status: 'failed', action_category: 'authorization' }).catch(reportAuditFailure)
+            void auditLog(req.user, 'SELF_PASSWORD_CHANGE_FAILED', 'user', String(req.user.id), 'Current password incorrect', { req, module_key: 'authentication', status: 'failed', action_category: 'authorization' }).catch(reportAuditFailure)
             return res.status(401).json({ error: 'Current password is incorrect.' })
         }
 
@@ -292,7 +292,7 @@ const changePassword = async (req, res) => {
 
         await pool.query('UPDATE users SET password = $1 WHERE id = $2', [hashed, req.user.id])
 
-        void auditLog(req.user, 'SELF_PASSWORD_CHANGED', 'user', String(req.user.id), 'User changed their own password', { req, status: 'success', action_category: 'authorization', metadata: { self: true } }).catch(reportAuditFailure)
+        void auditLog(req.user, 'SELF_PASSWORD_CHANGED', 'user', String(req.user.id), 'User changed their own password', { req, module_key: 'authentication', status: 'success', action_category: 'authorization', metadata: { self: true } }).catch(reportAuditFailure)
 
         res.status(200).json({ message: 'Password changed successfully.' })
     } catch (err) {
@@ -303,7 +303,7 @@ const changePassword = async (req, res) => {
 
 const logout = async (req, res) => {
     try {
-        void auditLog(req.user, 'LOGOUT', 'auth', String(req.user.id), 'User signed out', { req, status: 'success', action_category: 'authentication' }).catch(reportAuditFailure)
+        void auditLog(req.user, 'LOGOUT', 'auth', String(req.user.id), 'User signed out', { req, module_key: 'authentication', status: 'success', action_category: 'authentication' }).catch(reportAuditFailure)
         res.status(204).send()
     } catch (err) {
         console.error('Logout error:', err.message)
