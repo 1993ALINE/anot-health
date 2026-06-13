@@ -4,7 +4,7 @@ const pool = require('../config/db')
 const { auditLog } = require('./auditLogger')
 const { loadAiSettings, getAnthropicKey } = require('../services/aiSettings')
 const { processAudioForTranscription, unlinkTempPaths } = require('../services/audioProcessingService')
-const { transcribeFileWithRetries } = require('../services/aiTranscriptionService')
+const { transcribeFile } = require('../services/aiTranscriptionService')
 const { downloadAudioToTemp, dbPathToKey } = require('../services/s3Storage')
 const { setVisitTranscriptionStatus, claimVisitTranscription } = require('./visitSchemaCompat')
 const { isReachableWebhookUrl } = require('./webhookReachability')
@@ -277,7 +277,7 @@ async function runAIPipeline(visitId, options = {}) {
         const transcribePath = proc.path
         tempPaths = tempPaths.concat(proc.tempPaths || [])
         console.log(`🎙 Transcribing: ${path.basename(transcribePath)} (${Math.round(fileSize / 1024)}KB source)`)
-        const text = await transcribeFileWithRetries(transcribePath, settings, 3, useAsyncDeepgram ? id : undefined)
+        const text = await transcribeFile(transcribePath, settings, useAsyncDeepgram ? id : undefined)
         if (text === '__DEFERRED__') {
           anyDeferred = true
           continue

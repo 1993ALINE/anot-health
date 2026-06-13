@@ -21,6 +21,12 @@ const pool = new Pool(
       }
 )
 
+// Neon's pooler terminates idle connections; without this handler the emitted
+// 'error' event on an idle client crashes the whole process.
+pool.on('error', (err) => {
+  console.error('PostgreSQL idle client error (connection will be re-established):', err.message)
+})
+
 // Fatal on startup connect failure so Railway/process supervisor restarts cleanly
 // instead of serving a 100% 500 backend.
 pool.connect((err, client, release) => {
