@@ -7,6 +7,7 @@ const { runAIPipeline } = require('../utils/aiPipeline')
 const { getVisitForUser } = require('../utils/visitAccess')
 const { loadAiSettings } = require('../services/aiSettings')
 const { uploadAudio, getSignedAudioUrl, dbPathToKey } = require('../services/s3Storage')
+const cloudWatchAudit = require('../utils/logger')
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
 // Files are buffered in memory then uploaded to S3 (local disk is wiped on
@@ -86,6 +87,11 @@ router.post('/:visitId', protect, restrict('clinician'), upload.single('audio'),
       size: req.file.size,
     })
 
+    cloudWatchAudit.logDataAccess(
+      req.user.id, req.user.role, 'audio', visitId, 'UPLOAD', req.clientIp,
+      { filename, size: req.file.size, kind: 'primary' }
+    )
+
     await maybeAutoTranscribe(visitId, req.user, req)
   } catch (err) {
     console.error('Audio upload error:', err.message)
@@ -134,6 +140,11 @@ router.post('/:visitId/append', protect, restrict('clinician'), upload.single('a
       audio_file: newPath,
       total_recordings: updated.split(',').length,
     })
+
+    cloudWatchAudit.logDataAccess(
+      req.user.id, req.user.role, 'audio', visitId, 'UPLOAD', req.clientIp,
+      { filename, kind: 'append', total_recordings: updated.split(',').length }
+    )
 
     setImmediate(() => {
       console.log(`🔄 Re-running AI pipeline for visit ${visitId} after additional recording`)

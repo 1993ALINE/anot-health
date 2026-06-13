@@ -21,6 +21,9 @@ if (jwtSecret.length < 16 && process.env.NODE_ENV === 'production') {
 
 require('./config/db')
 
+const loggingMiddleware = require('./middleware/logging')
+const { initCloudWatch } = require('./utils/logger')
+
 const app = express()
 
 // Don't advertise the framework.
@@ -168,6 +171,12 @@ app.use((err, req, res, next) => {
 
 // Audio is served only via authorized GET /api/audio/:visitId (not a public /uploads URL).
 
+// ─── AUDIT LOGGING ──────────────────────────────────────────────────────────
+// Attaches req.clientIp (the trusted req.ip — not spoofable X-Forwarded-For) and
+// ships error responses to CloudWatch for HIPAA audit. Placed after trust proxy
+// + body parsing so the IP is correct, and ahead of all routes.
+app.use(loggingMiddleware)
+
 // ─── HEALTH CHECK ─────────────────────────────────────────────────────────────
 
 app.get('/', (req, res) => {
@@ -221,4 +230,7 @@ const HOST = process.env.BIND_HOST || '0.0.0.0'
 app.listen(PORT, HOST, () => {
   console.log(`🚀 Anot server running on http://127.0.0.1:${PORT} (bound ${HOST}:${PORT})`)
   console.log(`📋 Environment: ${process.env.NODE_ENV || 'development'}`)
+  // Provision the CloudWatch log group/stream. No-ops safely when audit
+  // shipping is disabled or AWS isn't configured (e.g. Railway).
+  initCloudWatch().catch((err) => console.error('CloudWatch init error:', err.message))
 })

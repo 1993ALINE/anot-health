@@ -1,4 +1,5 @@
 const pool = require('../config/db')
+const cloudWatchAudit = require('../utils/logger')
 const { encryptString } = require('../utils/settingsEncryption')
 const { invalidateAiSettingsCache } = require('../services/aiSettings')
 const { ensureMediaAndAiSchema } = require('../utils/ensureMediaSchema')
@@ -340,6 +341,35 @@ const updateSettings = async (req, res) => {
 
     invalidateAiSettingsCache()
     invalidateSettingsColumnCache()
+
+    // Emit a per-field audit event for every setting that actually changed.
+    // Secrets (API keys) are reported as set/cleared transitions only — never
+    // the value itself. Image data URLs are excluded entirely (noisy + large).
+    const trackedNext = {
+      system_name, system_email, phone, address, footer_text, support_contact, system_description,
+      primary_color, secondary_color, audit_retention_days,
+      deepgram_enabled, deepgram_model, deepgram_language,
+      deepgram_webhook_url: deepgram_webhook_raw || '', deepgram_auto_transcribe_on_upload,
+      anthropic_enabled, anthropic_model,
+      ffmpeg_enabled, ffmpeg_target_format, ffmpeg_compression, ffmpeg_max_upload_mb,
+      ffmpeg_preprocess_before_transcribe,
+    }
+    const norm = (v) => (v === null || v === undefined ? '' : String(v))
+    for (const [name, nextVal] of Object.entries(trackedNext)) {
+      const prevVal = cur[name]
+      if (norm(prevVal) !== norm(nextVal)) {
+        cloudWatchAudit.logSettingChange(req.user.id, req.user.role, name, norm(prevVal), norm(nextVal), req.clientIp)
+      }
+    }
+    if (newDeepgramKeySaved || payload.deepgram_clear_api_key === true) {
+      cloudWatchAudit.logSettingChange(req.user.id, req.user.role, 'deepgram_api_key',
+        cur.deepgram_api_key_enc ? 'set' : 'unset', deepgram_api_key_enc ? 'set' : 'cleared', req.clientIp)
+    }
+    if (newAnthropicKeySaved || payload.anthropic_clear_api_key === true) {
+      cloudWatchAudit.logSettingChange(req.user.id, req.user.role, 'anthropic_api_key',
+        cur.anthropic_api_key_enc ? 'set' : 'unset', anthropic_api_key_enc ? 'set' : 'cleared', req.clientIp)
+    }
+
     res.status(200).json({ message: 'Settings saved successfully.', settings: mapInternalRow(result.rows[0], columnSet) })
   } catch (err) {
     console.error('Update settings error:', err.message)

@@ -5,6 +5,7 @@ const { validatePassword } = require('../utils/passwordPolicy')
 const { isSuperAdmin, ASSIGNABLE_ROLES, ELEVATED_CREATABLE_ROLES } = require('../utils/roles')
 const { assertAdminMayUseStaffRole } = require('../utils/adminPortalAccess')
 const { auditLog, reportAuditFailure } = require('../utils/auditLogger')
+const cloudWatchAudit = require('../utils/logger')
 const { ensureUserProfileSchema } = require('../utils/ensureUserProfileSchema')
 
 function roleToStaffModule(role) {
@@ -55,20 +56,25 @@ const login = async (req, res) => {
 
         const user = result.rows[0]
 
+        const attemptedEmail = String(email).toLowerCase().trim()
+
         // Single generic message for every credential/role/status failure.
         // Distinct messages let an attacker enumerate accounts and roles.
         const INVALID = { error: 'Invalid email or password.' }
 
         if (!user) {
             void auditLog({ name: 'Sign-in', role: 'anonymous' }, 'LOGIN_FAILED', 'auth', null, 'Authentication failed', { req, module_key: 'authentication', status: 'failed', action_category: 'authentication', metadata: { stage: 'lookup' } }).catch(reportAuditFailure)
+            cloudWatchAudit.logLogin(null, attemptedEmail, null, req.clientIp, 'failure')
             return res.status(401).json(INVALID)
         }
         if (user.status !== 'active') {
             void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_FAILED', 'auth', String(user.id), 'Authentication failed', { req, module_key: 'authentication', status: 'failed', action_category: 'authentication', metadata: { stage: 'inactive' } }).catch(reportAuditFailure)
+            cloudWatchAudit.logLogin(user.id, attemptedEmail, user.role, req.clientIp, 'failure')
             return res.status(401).json(INVALID)
         }
         if (role && user.role !== role) {
             void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_FAILED', 'auth', String(user.id), 'Authentication failed', { req, module_key: 'authentication', status: 'failed', action_category: 'authentication', metadata: { stage: 'role_mismatch' } }).catch(reportAuditFailure)
+            cloudWatchAudit.logLogin(user.id, attemptedEmail, user.role, req.clientIp, 'failure')
             return res.status(401).json(INVALID)
         }
 
@@ -76,12 +82,14 @@ const login = async (req, res) => {
 
         if (!passwordMatch) {
             void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_FAILED', 'auth', String(user.id), 'Authentication failed', { req, module_key: 'authentication', status: 'failed', action_category: 'authentication', metadata: { stage: 'password' } }).catch(reportAuditFailure)
+            cloudWatchAudit.logLogin(user.id, attemptedEmail, user.role, req.clientIp, 'failure')
             return res.status(401).json(INVALID)
         }
 
         const token = generateToken(user)
 
         void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_SUCCESS', 'auth', String(user.id), 'Signed in successfully', { req, module_key: 'authentication', status: 'success', action_category: 'authentication' }).catch(reportAuditFailure)
+        cloudWatchAudit.logLogin(user.id, user.email, user.role, req.clientIp, 'success')
 
         // Return user info and token
         res.status(200).json({
@@ -304,6 +312,7 @@ const changePassword = async (req, res) => {
 const logout = async (req, res) => {
     try {
         void auditLog(req.user, 'LOGOUT', 'auth', String(req.user.id), 'User signed out', { req, module_key: 'authentication', status: 'success', action_category: 'authentication' }).catch(reportAuditFailure)
+        cloudWatchAudit.logLogout(req.user.id, req.user.email, req.clientIp)
         res.status(204).send()
     } catch (err) {
         console.error('Logout error:', err.message)

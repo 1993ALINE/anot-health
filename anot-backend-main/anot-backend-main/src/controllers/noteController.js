@@ -1,6 +1,7 @@
 const pool = require('../config/db')
 const { withTransaction } = require('../config/db')
 const { auditLog } = require('../utils/auditLogger')
+const cloudWatchAudit = require('../utils/logger')
 const { getVisitForUser } = require('../utils/visitAccess')
 const { visitDurationSelect, visitTranscriptionStatusSelect } = require('../utils/visitSchemaCompat')
 const { addColumnIfMissing } = require('../utils/schemaDdl')
@@ -237,6 +238,12 @@ const saveDraft = async (req, res) => {
     }
 
     res.status(200).json({ message: 'Draft saved successfully.', note: result.rows[0] })
+
+    const draftAction = existing.rows.length > 0 ? 'UPDATE' : 'CREATE'
+    cloudWatchAudit.logDataAccess(
+      req.user.id, req.user.role, 'note', result.rows[0].id, draftAction, req.clientIp,
+      { visit_id: visit_id, stage: 'draft' }
+    )
   } catch (err) {
     console.error('Save draft error:', err.message)
     res.status(500).json({ error: 'Server error.' })
@@ -306,6 +313,11 @@ const submitNote = async (req, res) => {
       })
     }
 
+    cloudWatchAudit.logDataAccess(
+      req.user.id, req.user.role, 'note', id, 'UPDATE', req.clientIp,
+      { visit_id: out.note.visit_id, stage: 'submitted' }
+    )
+
     res.status(200).json({ message: 'Note submitted successfully.', note: out.note })
   } catch (err) {
     console.error('Submit note error:', err.message)
@@ -371,6 +383,11 @@ const updateNoteContent = async (req, res) => {
     if (out.notFound) return res.status(404).json({ error: 'Note not found.' })
     if (out.forbidden) return res.status(403).json({ error: 'Not authorized for this note.' })
     if (out.locked) return res.status(409).json({ error: out.message })
+
+    cloudWatchAudit.logDataAccess(
+      req.user.id, req.user.role, 'note', id, 'UPDATE', req.clientIp,
+      { visit_id: out.note.visit_id, stage: 'content_edit' }
+    )
 
     res.status(200).json({ message: 'Note updated successfully.', note: out.note })
   } catch (err) {

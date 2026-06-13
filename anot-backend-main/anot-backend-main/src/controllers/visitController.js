@@ -1,6 +1,7 @@
 const pool = require('../config/db')
 const { withTransaction } = require('../config/db')
 const { auditLog, reportAuditFailure } = require('../utils/auditLogger')
+const cloudWatchAudit = require('../utils/logger')
 const { runAIPipeline } = require('../utils/aiPipeline')
 const {
   visitDurationSelect,
@@ -78,6 +79,11 @@ const getVisitsByDate = async (req, res) => {
         metadata: { scope: 'by_date', date: localDate, count: result.rows.length },
       }
     ).catch(reportAuditFailure)
+
+    cloudWatchAudit.logDataAccess(
+      req.user.id, req.user.role, 'visit', null, 'READ', req.clientIp,
+      { scope: 'by_date', date: localDate, count: result.rows.length }
+    )
   } catch (err) {
     console.error('Get visits error:', err.message)
     res.status(500).json({ error: 'Server error.' })
@@ -160,6 +166,11 @@ const getAllVisits = async (req, res) => {
         metadata: { scope: 'list', count: result.rows.length, provider_id: provider_id || null, date: date || null },
       }
     ).catch(reportAuditFailure)
+
+    cloudWatchAudit.logDataAccess(
+      req.user.id, req.user.role, 'visit', null, 'READ', req.clientIp,
+      { scope: 'list', count: result.rows.length }
+    )
   } catch (err) {
     console.error('Get all visits error:', err.message)
     res.status(500).json({ error: 'Server error.' })
@@ -241,6 +252,11 @@ const createVisit = async (req, res) => {
         },
       }
     ).catch(reportAuditFailure)
+
+    cloudWatchAudit.logDataAccess(
+      req.user.id, req.user.role, 'visit', result.rows[0].id, 'CREATE', req.clientIp,
+      { patient_id: pid, visit_type: visitTypeStr }
+    )
   } catch (err) {
     console.error('Create visit error:', err.message)
     res.status(500).json({ error: 'Server error.' })
@@ -310,6 +326,11 @@ const updateVisitStatus = async (req, res) => {
         metadata: { visit_id: Number(id) || id, changes: { status: { from: current, to: status } } },
       }
     ).catch(reportAuditFailure)
+
+    cloudWatchAudit.logDataAccess(
+      req.user.id, req.user.role, 'visit', id, 'UPDATE', req.clientIp,
+      { changes: { status: { from: current, to: status } } }
+    )
   } catch (err) {
     console.error('Update visit status error:', err.message)
     res.status(500).json({ error: 'Server error.' })
@@ -438,6 +459,11 @@ const updateVisit = async (req, res) => {
         },
       }
     ).catch(reportAuditFailure)
+
+    cloudWatchAudit.logDataAccess(
+      req.user.id, req.user.role, 'visit', id, 'UPDATE', req.clientIp,
+      { updated_fields: ['visit_time', 'visit_type'] }
+    )
   } catch (err) {
     console.error('Update visit error:', err.message)
     res.status(500).json({ error: 'Server error.' })
@@ -486,6 +512,8 @@ const deleteVisit = async (req, res) => {
       if (!/^\/uploads\/[\w.\-]+$/.test(rel)) continue
       deleteAudio(dbPathToKey(rel)).catch(() => { /* best-effort */ })
     }
+
+    cloudWatchAudit.logDataAccess(req.user.id, req.user.role, 'visit', id, 'DELETE', req.clientIp)
 
     res.status(200).json({ message: 'Visit deleted.' })
   } catch (err) {
@@ -539,6 +567,11 @@ const getVisitHistory = async (req, res) => {
         metadata: { scope: 'history', count: result.rows.length },
       }
     ).catch(reportAuditFailure)
+
+    cloudWatchAudit.logDataAccess(
+      req.user.id, req.user.role, 'visit', null, 'READ', req.clientIp,
+      { scope: 'history', count: result.rows.length }
+    )
   } catch (err) {
     console.error('Get visit history error:', err.message)
     res.status(500).json({ error: 'Server error.' })
