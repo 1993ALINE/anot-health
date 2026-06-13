@@ -148,6 +148,24 @@ app.use((req, res, next) => {
 })
 app.use(express.urlencoded({ extended: true, limit: '2mb' }))
 
+// Body-parser failures must not surface as opaque 500s. A malformed JSON body
+// (e.g. a client sending `{"patient_id":,...}`) makes express.json() throw a
+// SyntaxError with status 400; an oversized body throws status 413. Without this
+// handler those errors fall through to the generic 500 ("Internal server error"),
+// which is what made POST /api/visits, POST /api/patients and the audit routes
+// look "broken" / "return invalid JSON". We catch them here — before the Sentry
+// error handler — so the client gets an actionable 4xx and we don't log garbage
+// payloads as server errors.
+app.use((err, req, res, next) => {
+  if (err && (err.type === 'entity.parse.failed' || (err.status === 400 && 'body' in err))) {
+    return res.status(400).json({ error: 'Invalid JSON in request body.' })
+  }
+  if (err && (err.type === 'entity.too.large' || err.status === 413)) {
+    return res.status(413).json({ error: 'Request body is too large.' })
+  }
+  return next(err)
+})
+
 // Audio is served only via authorized GET /api/audio/:visitId (not a public /uploads URL).
 
 // ─── HEALTH CHECK ─────────────────────────────────────────────────────────────
