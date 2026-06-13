@@ -1,5 +1,10 @@
 const pool = require('../config/db')
+const { withTransaction } = require('../config/db')
 const { ensureAuditColumns } = require('../utils/auditLogger')
+
+// HIPAA §164.316(b)(2) requires retention of compliance records for 6 years.
+// We default to 7 years (2555 days) to keep a safety margin.
+const DEFAULT_AUDIT_RETENTION_DAYS = 2555
 const { isSuperAdmin } = require('../utils/roles')
 
 const MAX_PAGE_SIZE = 500
@@ -356,9 +361,11 @@ async function ensureAuditRetentionColumn() {
     await addColumnIfMissing(
         'system_settings',
         'audit_retention_days',
-        `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS audit_retention_days INTEGER NOT NULL DEFAULT 365`,
+        `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS audit_retention_days INTEGER NOT NULL DEFAULT ${DEFAULT_AUDIT_RETENTION_DAYS}`,
     )
-    await pool.query(`UPDATE system_settings SET audit_retention_days = GREATEST(30, LEAST(COALESCE(audit_retention_days, 365), 3650)) WHERE id = 1`)
+    // Enforce a HIPAA-compliant floor: never let retention drop below 6 years
+    // (2190 days), and cap at 10 years (3650) to bound table growth.
+    await pool.query(`UPDATE system_settings SET audit_retention_days = GREATEST(2190, LEAST(COALESCE(audit_retention_days, ${DEFAULT_AUDIT_RETENTION_DAYS}), 3650)) WHERE id = 1`)
     settingsColsReady = true
 }
 
@@ -377,12 +384,18 @@ const applyRetention = async (req, res) => {
         await ensureAuditColumns()
         await ensureAuditRetentionColumn()
         const r = await pool.query('SELECT audit_retention_days FROM system_settings WHERE id = 1')
-        const days = Math.max(30, Math.min(Number(r.rows[0]?.audit_retention_days) || 365, 3650))
-        const del = await pool.query(
-            `DELETE FROM audit_logs
-             WHERE created_at < (NOW() - ($1::int * INTERVAL '1 day'))`,
-            [days]
-        )
+        const days = Math.max(2190, Math.min(Number(r.rows[0]?.audit_retention_days) || DEFAULT_AUDIT_RETENTION_DAYS, 3650))
+        // audit_logs is append-only (enforced by a DB trigger). The retention
+        // purge is the ONE sanctioned deleter: it opts in via a transaction-local
+        // GUC that the trigger checks, so only rows past the retention window can go.
+        const del = await withTransaction(async (client) => {
+            await client.query(`SET LOCAL anot.allow_audit_purge = 'on'`)
+            return client.query(
+                `DELETE FROM audit_logs
+                 WHERE created_at < (NOW() - ($1::int * INTERVAL '1 day'))`,
+                [days]
+            )
+        })
         await auditLogSafe(req.user, 'AUDIT_RETENTION_APPLIED', 'audit', null, `Purged events older than ${days} days (${del.rowCount} rows).`, { req, status: 'warning', module_key: 'audit', action_category: 'admin' })
         res.json({ deleted: del.rowCount, retention_days: days })
     } catch (err) {

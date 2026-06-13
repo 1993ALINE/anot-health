@@ -1,6 +1,6 @@
 const pool = require('../config/db')
 const { withTransaction } = require('../config/db')
-const { auditLog } = require('../utils/auditLogger')
+const { auditLog, reportAuditFailure } = require('../utils/auditLogger')
 const { runAIPipeline } = require('../utils/aiPipeline')
 const {
   visitDurationSelect,
@@ -63,6 +63,21 @@ const getVisitsByDate = async (req, res) => {
     )
 
     res.status(200).json({ visits: result.rows })
+
+    void auditLog(
+      req.user,
+      'VISITS_VIEWED',
+      'visit',
+      null,
+      `Viewed ${result.rows.length} visit(s) for ${localDate}`,
+      {
+        req,
+        module_key: 'clinical',
+        action_category: 'read',
+        status: 'success',
+        metadata: { scope: 'by_date', date: localDate, count: result.rows.length },
+      }
+    ).catch(reportAuditFailure)
   } catch (err) {
     console.error('Get visits error:', err.message)
     res.status(500).json({ error: 'Server error.' })
@@ -130,6 +145,21 @@ const getAllVisits = async (req, res) => {
 
     const result = await pool.query(query, params)
     res.status(200).json({ visits: result.rows })
+
+    void auditLog(
+      req.user,
+      'VISITS_VIEWED',
+      'visit',
+      null,
+      `Viewed visit list (${result.rows.length} record(s))`,
+      {
+        req,
+        module_key: 'clinical',
+        action_category: 'read',
+        status: 'success',
+        metadata: { scope: 'list', count: result.rows.length, provider_id: provider_id || null, date: date || null },
+      }
+    ).catch(reportAuditFailure)
   } catch (err) {
     console.error('Get all visits error:', err.message)
     res.status(500).json({ error: 'Server error.' })
@@ -189,6 +219,28 @@ const createVisit = async (req, res) => {
     )
 
     res.status(201).json({ message: 'Visit scheduled successfully.', visit: full.rows[0] })
+
+    // Fire-and-forget: the row is already committed, so an audit failure must
+    // not turn a successful create into a 500. reportAuditFailure surfaces it.
+    void auditLog(
+      req.user,
+      'VISIT_CREATED',
+      'visit',
+      String(result.rows[0].id),
+      `Visit scheduled (${visitTypeStr}) for ${visit_date} ${String(visit_time).trim()}`,
+      {
+        req,
+        module_key: 'clinical',
+        action_category: 'create',
+        status: 'success',
+        metadata: {
+          visit_id: result.rows[0].id,
+          patient_id: pid,
+          visit_date,
+          visit_type: visitTypeStr,
+        },
+      }
+    ).catch(reportAuditFailure)
   } catch (err) {
     console.error('Create visit error:', err.message)
     res.status(500).json({ error: 'Server error.' })
@@ -243,6 +295,21 @@ const updateVisitStatus = async (req, res) => {
     if (!result.rows[0]) return res.status(404).json({ error: 'Visit not found.' })
 
     res.status(200).json({ message: 'Visit status updated.', visit: result.rows[0] })
+
+    void auditLog(
+      req.user,
+      'VISIT_STATUS_UPDATED',
+      'visit',
+      String(id),
+      `Visit status changed: ${current} → ${status}`,
+      {
+        req,
+        module_key: 'clinical',
+        action_category: 'update',
+        status: 'success',
+        metadata: { visit_id: Number(id) || id, changes: { status: { from: current, to: status } } },
+      }
+    ).catch(reportAuditFailure)
   } catch (err) {
     console.error('Update visit status error:', err.message)
     res.status(500).json({ error: 'Server error.' })
@@ -353,6 +420,24 @@ const updateVisit = async (req, res) => {
     if (!result.rows[0]) return res.status(404).json({ error: 'Visit not found.' })
 
     res.status(200).json({ message: 'Visit updated.', visit: result.rows[0] })
+
+    void auditLog(
+      req.user,
+      'VISIT_UPDATED',
+      'visit',
+      String(id),
+      'Visit details updated (time/type)',
+      {
+        req,
+        module_key: 'clinical',
+        action_category: 'update',
+        status: 'success',
+        metadata: {
+          visit_id: Number(id) || id,
+          changes: { visit_time: String(visit_time).trim(), visit_type: vtype },
+        },
+      }
+    ).catch(reportAuditFailure)
   } catch (err) {
     console.error('Update visit error:', err.message)
     res.status(500).json({ error: 'Server error.' })
@@ -438,6 +523,22 @@ const getVisitHistory = async (req, res) => {
     )
 
     res.status(200).json({ visits: result.rows })
+
+    // History returns finalized note content (PHI), so access is audited.
+    void auditLog(
+      req.user,
+      'VISIT_HISTORY_VIEWED',
+      'visit',
+      null,
+      `Viewed visit history (${result.rows.length} record(s))`,
+      {
+        req,
+        module_key: 'clinical',
+        action_category: 'read',
+        status: 'success',
+        metadata: { scope: 'history', count: result.rows.length },
+      }
+    ).catch(reportAuditFailure)
   } catch (err) {
     console.error('Get visit history error:', err.message)
     res.status(500).json({ error: 'Server error.' })
