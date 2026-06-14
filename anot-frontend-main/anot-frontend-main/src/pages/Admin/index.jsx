@@ -621,6 +621,11 @@ function Admin() {
     const [addError, setAddError]     = useState('')
     const [addLoading, setAddLoading] = useState(false)
 
+    // One-time credential reveal modal (shown after a temp password is generated
+    // by the server on registration or password reset).
+    const [credential, setCredential] = useState(null)
+    const [credentialCopied, setCredentialCopied] = useState(false)
+
     // Edit user modal
     const [editUser, setEditUser]       = useState(null)
     const [editLoading, setEditLoading] = useState(false)
@@ -628,8 +633,6 @@ function Admin() {
 
     // Reset password modal
     const [resetUser, setResetUser]           = useState(null)
-    const [resetPass, setResetPass]           = useState('')
-    const [showResetPass, setShowResetPass]   = useState(false)
     const [resetLoading, setResetLoading]     = useState(false)
     const [resetError, setResetError]         = useState('')
     const [confirmDialog, setConfirmDialog]   = useState(null)
@@ -981,7 +984,9 @@ function Admin() {
         if (!cleanName)  { setAddError('Name is required.'); return }
         if (!cleanEmail) { setAddError('Email is required.'); return }
         if (!cleanEmail.includes('@')) { setAddError('Enter a valid email.'); return }
-        {
+        // Password is optional: blank means the server generates a secure temp
+        // password. Only validate a password the admin actually typed.
+        if (newUserPassword) {
             const pwCheck = validatePassword(newUserPassword)
             if (!pwCheck.valid) { setAddError(pwCheck.message); return }
         }
@@ -990,7 +995,7 @@ function Admin() {
             const payload = {
                 name: cleanName,
                 email: cleanEmail,
-                password: newUserPassword,
+                password: newUserPassword || undefined,
                 role: addRole,
                 phone: cleanPhone || undefined,
                 specialty: addRole === 'clinician' ? (cleanSpecialty || undefined) : undefined,
@@ -1008,7 +1013,19 @@ function Admin() {
             setNewUser({ name: '', email: '', specialty: '', phone: '', npi: '', license: '' })
             setNewUserPassword('')
             setShowAdd(false)
-            showToast(`${data.user.name} registered successfully`)
+            if (data.temporaryPassword) {
+                // Reveal the server-generated credential exactly once.
+                setCredentialCopied(false)
+                setCredential({
+                    title: 'Account created',
+                    name: data.user.name,
+                    email: data.user.email,
+                    password: data.temporaryPassword,
+                    note: 'This temporary password is shown only once. The user must change it on first login.',
+                })
+            } else {
+                showToast(`${data.user.name} registered successfully`)
+            }
         } catch (err) {
             if (err?.status === 403) {
                 setAddError('You do not have permission to register users. Please sign in as an admin.')
@@ -1023,13 +1040,15 @@ function Admin() {
         if (!newUser.name.trim())  { setAddError('Name is required.'); return }
         if (!newUser.email.trim()) { setAddError('Email is required.'); return }
         if (!newUser.email.includes('@')) { setAddError('Enter a valid email.'); return }
-        {
+        if (newUserPassword) {
             const pwCheck = validatePassword(newUserPassword)
             if (!pwCheck.valid) { setAddError(pwCheck.message); return }
         }
         setConfirmDialog({
             title: 'Confirm account creation',
-            message: `Create ${ROLE_CFG[addRole]?.label || 'user'} account for ${newUser.name.trim()}?`,
+            message: newUserPassword
+                ? `Create ${ROLE_CFG[addRole]?.label || 'user'} account for ${newUser.name.trim()}?`
+                : `Create ${ROLE_CFG[addRole]?.label || 'user'} account for ${newUser.name.trim()}? A secure temporary password will be generated and shown once.`,
             confirmText: `Create ${ROLE_CFG[addRole]?.label || 'user'} account`,
             tone: 'primary',
             onConfirm: registerUser,
@@ -1145,15 +1164,25 @@ function Admin() {
     // ── Reset password ────────────────────────────────
     const resetPassword = async () => {
         setResetError('')
-        {
-            const pwCheck = validatePassword(resetPass)
-            if (!pwCheck.valid) { setResetError(pwCheck.message); return }
-        }
+        if (!resetUser) return
+        const target = resetUser
         try {
             setResetLoading(true)
-            await usersAPI.resetPassword(resetUser.id, resetPass)
-            showToast(`Password reset for ${resetUser.name}`)
-            setResetUser(null); setResetPass(''); setShowResetPass(false)
+            // The server generates a secure temporary password and returns it once.
+            const data = await usersAPI.resetPassword(target.id)
+            setResetUser(null)
+            if (data.temporaryPassword) {
+                setCredentialCopied(false)
+                setCredential({
+                    title: 'Password reset',
+                    name: target.name,
+                    email: target.email,
+                    password: data.temporaryPassword,
+                    note: 'This temporary password is shown only once. The user must change it on next login.',
+                })
+            } else {
+                showToast(`Password reset for ${target.name}`)
+            }
         } catch (err) { setResetError(err.message) }
         finally { setResetLoading(false) }
     }
@@ -2148,10 +2177,13 @@ function Admin() {
                                     </div>
                                 ))}
                                 <div className="adm-form-group">
-                                    <label className="adm-form-label">Initial password *</label>
-                                    <input className="adm-input" type="password" placeholder="Min. 12 chars, mixed case, number & symbol"
+                                    <label className="adm-form-label">Initial password (optional)</label>
+                                    <input className="adm-input" type="password" placeholder="Leave blank to auto-generate a secure password"
                                            value={newUserPassword} onChange={(e) => setNewUserPassword(e.target.value)} autoComplete="new-password" />
                                     <PasswordStrengthMeter password={newUserPassword} />
+                                    <div className="adm-modal__hint" style={{ marginTop: 6 }}>
+                                        Leave blank and a secure temporary password will be generated and shown once.
+                                    </div>
                                 </div>
                             </div>
                             {addError && <div className="adm-err">⚠ {addError}</div>}
@@ -2293,28 +2325,68 @@ function Admin() {
                         <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 18 }}>
                             <strong style={{ color: 'var(--text-main)' }}>{resetUser.name}</strong> · {displayEmail(resetUser.email)} · {resetUser.role}
                         </div>
-                        <div className="adm-form-group">
-                            <label className="adm-form-label">New password</label>
-                            <div className="adm-modal__pw-wrap">
-                                <input className="adm-input" style={{ paddingRight: 44 }}
-                                       type={showResetPass ? 'text' : 'password'}
-                                       placeholder="Min. 12 chars, mixed case, number & symbol"
-                                       value={resetPass}
-                                       onChange={(e) => setResetPass(e.target.value)} />
-                                <button type="button" className="adm-modal__eye" onClick={() => setShowResetPass((p) => !p)}
-                                        aria-label={showResetPass ? 'Hide password' : 'Show password'}>
-                                    {showResetPass ? '🙈' : '👁️'}
-                                </button>
-                            </div>
-                            <PasswordStrengthMeter password={resetPass} />
+                        <div className="adm-modal__hint">
+                            A secure temporary password will be generated for this user and shown to you once.
+                            The user must change it on their next login.
                         </div>
-                        <div className="adm-modal__hint">Share the new password securely with the user.</div>
                         {resetError && <div className="adm-err">⚠ {resetError}</div>}
                         <div className="adm-modal__footer adm-modal__footer--action">
                             <button type="button" className="adm-btn-primary adm-btn-primary--modal-action" onClick={requestResetPassword} disabled={resetLoading}>
-                                {resetLoading ? 'Resetting…' : 'Reset password'}
+                                {resetLoading ? 'Resetting…' : 'Reset & generate password'}
                             </button>
-                            <button type="button" className="adm-btn-ghost adm-btn-ghost--modal-action" onClick={() => { setResetUser(null); setResetPass(''); setShowResetPass(false) }}>Cancel</button>
+                            <button type="button" className="adm-btn-ghost adm-btn-ghost--modal-action" onClick={() => setResetUser(null)}>Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── ONE-TIME CREDENTIAL REVEAL MODAL ───────────── */}
+            {credential && (
+                <div className="adm-modal-overlay" role="presentation" onClick={(e) => e.target === e.currentTarget && setCredential(null)}>
+                    <div className="adm-modal">
+                        <div className="adm-modal__title">🔑 {credential.title}</div>
+                        <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>
+                            <strong style={{ color: 'var(--text-main)' }}>{credential.name}</strong> · {displayEmail(credential.email)}
+                        </div>
+                        <div className="adm-form-group">
+                            <label className="adm-form-label">Temporary password</label>
+                            <div className="adm-modal__pw-wrap">
+                                <input
+                                    className="adm-input"
+                                    style={{ paddingRight: 44, fontFamily: 'monospace', fontWeight: 600, letterSpacing: '0.5px' }}
+                                    type="text"
+                                    readOnly
+                                    value={credential.password}
+                                    onFocus={(e) => e.target.select()}
+                                />
+                            </div>
+                        </div>
+                        <div className="adm-modal__hint" style={{ color: 'var(--danger, #c0392b)' }}>
+                            ⚠ {credential.note}
+                        </div>
+                        <div className="adm-modal__footer adm-modal__footer--action">
+                            <button
+                                type="button"
+                                className="adm-btn-primary adm-btn-primary--modal-action"
+                                onClick={async () => {
+                                    try {
+                                        await navigator.clipboard.writeText(credential.password)
+                                        setCredentialCopied(true)
+                                        showToast('Temporary password copied to clipboard')
+                                    } catch {
+                                        showToast('Copy failed — select the password and copy manually', 'error')
+                                    }
+                                }}
+                            >
+                                {credentialCopied ? 'Copied ✓' : 'Copy password'}
+                            </button>
+                            <button
+                                type="button"
+                                className="adm-btn-ghost adm-btn-ghost--modal-action"
+                                onClick={() => setCredential(null)}
+                            >
+                                Close
+                            </button>
                         </div>
                     </div>
                 </div>

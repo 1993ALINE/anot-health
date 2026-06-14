@@ -238,11 +238,12 @@ export const usersAPI = {
     const res = await fetch(`${BASE_URL}/assignments/my-clinicians`, { headers: headers() })
     return handleResponse(res)
   },
-  resetPassword: async (id, password) => {
+  // The server generates the temporary password and returns it once; the client
+  // no longer supplies one.
+  resetPassword: async (id) => {
     const res = await fetch(`${BASE_URL}/users/${id}/reset-password`, {
       method: 'PUT',
       headers: headers(),
-      body: JSON.stringify({ password }),
     })
     return handleResponse(res)
   },
