@@ -37,6 +37,7 @@ async function uploadAudio(key, buffer, contentType) {
     Key: key,
     Body: buffer,
     ContentType: contentType,
+    ServerSideEncryption: 'AES256',
   }))
 }
 
