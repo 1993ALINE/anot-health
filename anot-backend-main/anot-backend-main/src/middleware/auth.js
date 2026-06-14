@@ -76,6 +76,18 @@ const protect = async (req, res, next) => {
         // Attach user info to the request
         req.user = decoded
 
+        // Forced-rotation scope: a token carrying require_password_change is the
+        // short-lived token issued at login for accounts that must rotate their
+        // password. It may ONLY reach the change-password endpoint — everything
+        // else is blocked server-side so the temp credential cannot be used to
+        // access PHI or any other feature.
+        if (req.user.require_password_change === true && !req.path.includes('/change-password')) {
+            return res.status(403).json({
+                error: 'Password change required before accessing other features',
+                code: 'FORCE_PASSWORD_CHANGE',
+            })
+        }
+
         next()
     } catch (err) {
         return res.status(401).json({ error: 'Not authorized. Invalid token.' })

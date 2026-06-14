@@ -8,20 +8,23 @@ const { persistTranscriptionAndDraft } = require('../utils/aiPipeline')
 const WEBHOOK_USER = { name: 'Deepgram Webhook', role: 'system' }
 
 /**
- * POST /api/webhooks/deepgram?visit_id=&sig=
- * Deepgram async callback (or manual replay). Signature uses DEEPGRAM_WEBHOOK_SECRET or JWT_SECRET.
+ * POST /api/webhooks/deepgram?visit_id=&ts=&sig=
+ * Deepgram async callback. Signature is an HMAC over visit_id + timestamp using
+ * DEEPGRAM_WEBHOOK_SECRET and is rejected if older than the replay window.
  */
 const postDeepgramWebhook = async (req, res) => {
   try {
     const visitIdRaw = req.query.visit_id ?? req.body?.metadata?.visit_id
     const visitId = parseInt(String(visitIdRaw), 10)
     const sig = req.query.sig ?? req.body?.sig
+    const ts = req.query.ts ?? req.body?.ts
 
     if (!Number.isInteger(visitId)) {
       return res.status(400).json({ error: 'visit_id required.' })
     }
-    if (!verifyDeepgramVisitToken(visitId, sig)) {
-      return res.status(401).json({ error: 'Invalid or missing signature.' })
+    // Verify HMAC signature AND timestamp (rejects replays older than 5 min).
+    if (!verifyDeepgramVisitToken(visitId, sig, ts)) {
+      return res.status(401).json({ error: 'Invalid or expired webhook signature.' })
     }
 
     const texts = extractTranscriptsFromDeepgramBody(req.body)

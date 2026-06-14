@@ -1,8 +1,22 @@
 const crypto = require('crypto')
 
+let warnedMissingKey = false
+
 function keyBuf() {
-  const secret = process.env.SETTINGS_ENCRYPTION_KEY || process.env.JWT_SECRET || 'anot-dev-settings-key'
-  return crypto.createHash('sha256').update(String(secret), 'utf8').digest()
+  const key = process.env.SETTINGS_ENCRYPTION_KEY
+  if (!key) {
+    // Never fall back to JWT_SECRET (key reuse) — fail closed in production.
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('SETTINGS_ENCRYPTION_KEY must be set in production')
+    }
+    if (!warnedMissingKey) {
+      console.warn('[⚠️] SETTINGS_ENCRYPTION_KEY not set, using temporary dev-only key')
+      warnedMissingKey = true
+    }
+    // Stable dev-only key so values stay decryptable across restarts in dev.
+    return crypto.createHash('sha256').update('anot-dev-settings-key', 'utf8').digest()
+  }
+  return crypto.createHash('sha256').update(String(key), 'utf8').digest()
 }
 
 /** AES-256-GCM; returns base64(iv+tag+ciphertext) or null */
@@ -28,7 +42,7 @@ function decryptString(blob) {
     return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8')
   } catch (err) {
     console.error('[settingsEncryption] Decryption failed:', err.message)
-    console.error('[settingsEncryption] Check that SETTINGS_ENCRYPTION_KEY or JWT_SECRET matches the key used during encryption')
+    console.error('[settingsEncryption] Check that SETTINGS_ENCRYPTION_KEY matches the key used during encryption')
     return null
   }
 }

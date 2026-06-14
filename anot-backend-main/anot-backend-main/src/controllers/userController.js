@@ -499,6 +499,39 @@ const updateRate = async (req, res) => {
     }
 }
 
+// ─── SECURE TEMP PASSWORD GENERATOR ───────────────────────────────────────────
+// Generates a 16-char password that is guaranteed to satisfy the HIPAA
+// complexity policy (one upper, one lower, one digit, one special). Uses
+// crypto.randomInt for cryptographically-secure selection — Math.random is a
+// predictable PRNG and must never be used for credential generation.
+
+const PWD_UPPER = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+const PWD_LOWER = 'abcdefghijklmnopqrstuvwxyz'
+const PWD_NUMS = '0123456789'
+const PWD_SPECIAL = '!@#$%^&*-_=+'
+const PWD_ALL = PWD_UPPER + PWD_LOWER + PWD_NUMS + PWD_SPECIAL
+
+const pick = (charset) => charset[crypto.randomInt(charset.length)]
+
+const generateSecurePassword = () => {
+    // Guarantee one character from each required class.
+    const chars = [pick(PWD_UPPER), pick(PWD_LOWER), pick(PWD_NUMS), pick(PWD_SPECIAL)]
+
+    // Fill the remaining length from the full alphabet.
+    for (let i = chars.length; i < 16; i++) {
+        chars.push(pick(PWD_ALL))
+    }
+
+    // Cryptographically-secure Fisher–Yates shuffle so the guaranteed classes
+    // are not pinned to the first four positions.
+    for (let i = chars.length - 1; i > 0; i--) {
+        const j = crypto.randomInt(i + 1)
+        ;[chars[i], chars[j]] = [chars[j], chars[i]]
+    }
+
+    return chars.join('')
+}
+
 // ─── RESET PASSWORD ───────────────────────────────────────────────────────────
 
 const resetPassword = async (req, res) => {
@@ -529,7 +562,7 @@ const resetPassword = async (req, res) => {
         // Generate a random 16-character temporary password server-side. The
         // admin never chooses it, and the user is forced to change it on first
         // login, so the admin does not retain knowledge of the real credential.
-        const tempPassword = crypto.randomBytes(12).toString('base64').slice(0, 16)
+        const tempPassword = generateSecurePassword()
 
         const pwCheck = validatePassword(tempPassword)
         if (!pwCheck.valid) {
