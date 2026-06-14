@@ -92,8 +92,30 @@ export const authAPI = {
       body: JSON.stringify({ email, password }),
     })
     const data = await handleResponse(res)
-    localStorage.setItem('token', data.token)
-    localStorage.setItem('user', JSON.stringify(data.user))
+    // Only persist a session when the server issued a real token. Gated logins
+    // (e.g. requirePhiTraining / requirePasswordChange) return a temporaryToken
+    // instead — the caller drives the follow-up step before a session exists.
+    if (data.token && data.user) {
+      localStorage.setItem('token', data.token)
+      localStorage.setItem('user', JSON.stringify(data.user))
+    }
+    return data
+  },
+  /**
+   * Completes the PHI-training gate. Exchanges the short-lived temporaryToken
+   * from login for a real session token, then persists the session.
+   */
+  acknowledgePhiTraining: async (temporaryToken) => {
+    const res = await fetch(`${BASE_URL}/auth/acknowledge-phi-training`, {
+      method: 'POST',
+      headers: headers(false),
+      body: JSON.stringify({ temporaryToken }),
+    })
+    const data = await handleResponse(res)
+    if (data.token && data.user) {
+      localStorage.setItem('token', data.token)
+      localStorage.setItem('user', JSON.stringify(data.user))
+    }
     return data
   },
   logout: async () => {

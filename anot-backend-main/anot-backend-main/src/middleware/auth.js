@@ -88,6 +88,17 @@ const protect = async (req, res, next) => {
             })
         }
 
+        // PHI-training scope: the short-lived token issued at login for accounts
+        // that must acknowledge training is verified by the acknowledge endpoint
+        // directly (from the request body). It must never be honored as a Bearer
+        // credential on any protected route, so we reject it here outright.
+        if (req.user.requirePhiTraining === true) {
+            return res.status(403).json({
+                error: 'PHI training acknowledgment required before accessing other features',
+                code: 'PHI_TRAINING_REQUIRED',
+            })
+        }
+
         next()
     } catch (err) {
         return res.status(401).json({ error: 'Not authorized. Invalid token.' })

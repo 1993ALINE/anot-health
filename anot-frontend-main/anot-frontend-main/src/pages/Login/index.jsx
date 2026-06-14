@@ -5,6 +5,7 @@ import { API_BASE, authAPI, isLikelyNetworkFailure } from '../../services/api'
 import { dashboardPathForRole } from '../../auth/dashboardPaths'
 import { DEFAULT_BRAND_LOGO_SRC, useBranding } from '../../services/branding'
 import { useReleaseSplash } from '../../splash/SplashGate'
+import PhiTrainingModal from '../../components/PhiTrainingModal'
 
 function networkErrorMessage() {
   const isLocalApi = API_BASE.includes('localhost') || API_BASE.includes('127.0.0.1')
@@ -208,7 +209,18 @@ export default function Login() {
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [phiTrainingToken, setPhiTrainingToken] = useState(null)
   const reducedMotion = usePrefersReducedMotion()
+
+  const goToDashboard = (user) => {
+    const path = dashboardPathForRole(user?.role)
+    if (!path) {
+      authAPI.logout()
+      setError('Your account does not have access to this application.')
+      return
+    }
+    navigate(path, { replace: true })
+  }
 
   useEffect(() => {
     if (phase !== 'session') return
@@ -254,13 +266,13 @@ export default function Login() {
     setLoading(true)
     try {
       const data = await authAPI.login(email.trim(), password)
-      const path = dashboardPathForRole(data.user?.role)
-      if (!path) {
-        authAPI.logout()
-        setError('Your account does not have access to this application.')
+      // PHI awareness training gate: no session token yet — show the mandatory
+      // acknowledgment modal and finish the login once the user acknowledges.
+      if (data.requirePhiTraining) {
+        setPhiTrainingToken(data.temporaryToken)
         return
       }
-      navigate(path, { replace: true })
+      goToDashboard(data.user)
     } catch (err) {
       setError(humanizeAuthError(err))
     } finally {
@@ -408,6 +420,16 @@ export default function Login() {
           </div>
         </div>
       </div>
+
+      {phiTrainingToken ? (
+        <PhiTrainingModal
+          temporaryToken={phiTrainingToken}
+          onAcknowledged={(user) => {
+            setPhiTrainingToken(null)
+            goToDashboard(user)
+          }}
+        />
+      ) : null}
     </div>
   )
 }

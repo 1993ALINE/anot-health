@@ -19,6 +19,10 @@ function roleToStaffModule(role) {
     return m[role] || 'admins'
 }
 
+// Current PHI awareness training revision. Bumping this re-prompts every user to
+// re-acknowledge on their next login (see the login gate + acknowledge endpoint).
+const PHI_TRAINING_VERSION = 1
+
 // ─── GENERATE JWT TOKEN ───────────────────────────────────────────────────────
 
 const generateToken = (user) => {
@@ -34,6 +38,27 @@ const generateToken = (user) => {
         { expiresIn: process.env.JWT_EXPIRES_IN || '8h' }
     )
 }
+
+// Shape of the user object returned to the client on a successful session start.
+// Shared by login and the PHI-training acknowledgment so both stay in sync.
+const toAuthUser = (user) => ({
+    id:        user.id,
+    name:      user.name,
+    email:     user.email,
+    role:      user.role,
+    specialty: user.specialty,
+    phone:     user.phone,
+    npi:       user.npi,
+    license:   user.license,
+    status:    user.status,
+    avatar_data_url: user.avatar_data_url || null,
+    personal_info: user.personal_info || null,
+    admin_modules: user.admin_modules ?? null,
+})
+
+/** True when the account must (re)acknowledge the current PHI training revision. */
+const needsPhiTraining = (user) =>
+    !user.phi_training_acknowledged || Number(user.phi_training_version) < PHI_TRAINING_VERSION
 
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
 
@@ -108,6 +133,29 @@ const login = async (req, res) => {
             })
         }
 
+        // PHI awareness training gate. The credentials are valid, but the user
+        // must acknowledge the current training revision before we hand out a
+        // real session token. We issue a short-lived token scoped (by the
+        // protect middleware) to the acknowledge endpoint only — it cannot reach
+        // any PHI until the acknowledgment is recorded.
+        if (needsPhiTraining(user)) {
+            const temporaryToken = jwt.sign(
+                { id: user.id, name: user.name, email: user.email, role: user.role, requirePhiTraining: true },
+                process.env.JWT_SECRET,
+                { expiresIn: '15m' }
+            )
+
+            void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_PHI_TRAINING_REQUIRED', 'auth', String(user.id), 'Login requires PHI training acknowledgment', { req, module_key: 'authentication', status: 'warning', action_category: 'authorization' }).catch(reportAuditFailure)
+            cloudWatchAudit.logLogin(user.id, user.email, user.role, req.clientIp, 'success')
+
+            return res.status(200).json({
+                success: true,
+                requirePhiTraining: true,
+                temporaryToken,
+                message: 'You must acknowledge the PHI awareness training before accessing the application.',
+            })
+        }
+
         const token = generateToken(user)
 
         void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_SUCCESS', 'auth', String(user.id), 'Signed in successfully', { req, module_key: 'authentication', status: 'success', action_category: 'authentication' }).catch(reportAuditFailure)
@@ -117,24 +165,77 @@ const login = async (req, res) => {
         res.status(200).json({
             message: 'Login successful',
             token,
-            user: {
-                id:        user.id,
-                name:      user.name,
-                email:     user.email,
-                role:      user.role,
-                specialty: user.specialty,
-                phone:     user.phone,
-                npi:       user.npi,
-                license:   user.license,
-                status:    user.status,
-                avatar_data_url: user.avatar_data_url || null,
-                personal_info: user.personal_info || null,
-                admin_modules: user.admin_modules ?? null,
-            },
+            user: toAuthUser(user),
         })
     } catch (err) {
         console.error('Login error:', err.message)
         res.status(500).json({ error: 'Server error during login.' })
+    }
+}
+
+// ─── ACKNOWLEDGE PHI TRAINING ─────────────────────────────────────────────────
+// Completes the PHI-training gate from login. The client presents the short-lived
+// temporaryToken issued at login; on success we record the acknowledgment and
+// hand back a normal 8h session token so the user can proceed to their dashboard.
+
+const acknowledgePhiTraining = async (req, res) => {
+    try {
+        await ensureUserProfileSchema()
+
+        const { temporaryToken } = req.body || {}
+        if (!temporaryToken) {
+            return res.status(400).json({ error: 'Missing training token. Please sign in again.' })
+        }
+
+        let decoded
+        try {
+            decoded = jwt.verify(temporaryToken, process.env.JWT_SECRET)
+        } catch (_) {
+            return res.status(401).json({ error: 'Your session expired. Please sign in again.' })
+        }
+
+        // Only the short-lived tokens issued at login for the training / forced
+        // rotation flows may complete this step.
+        if (decoded.requirePhiTraining !== true && decoded.require_password_change !== true) {
+            return res.status(403).json({ error: 'This token cannot be used to acknowledge training.' })
+        }
+
+        const result = await pool.query('SELECT * FROM users WHERE id = $1', [decoded.id])
+        const user = result.rows[0]
+        if (!user || user.status !== 'active') {
+            return res.status(401).json({ error: 'Account is unavailable. Please contact your administrator.' })
+        }
+
+        const updated = await pool.query(
+            `UPDATE users
+             SET phi_training_acknowledged = true,
+                 phi_training_acknowledged_at = NOW(),
+                 phi_training_version = $1
+             WHERE id = $2
+             RETURNING *`,
+            [PHI_TRAINING_VERSION, user.id]
+        )
+        const fresh = updated.rows[0]
+
+        void auditLog(
+            { id: fresh.id, name: fresh.name, role: fresh.role },
+            'PHI_TRAINING_ACKNOWLEDGED',
+            'user',
+            String(fresh.id),
+            'User acknowledged PHI awareness training',
+            { req, module_key: 'authentication', status: 'success', action_category: 'authorization', metadata: { phi_training_version: PHI_TRAINING_VERSION } }
+        ).catch(reportAuditFailure)
+
+        const token = generateToken(fresh)
+
+        res.status(200).json({
+            message: 'PHI training acknowledged.',
+            token,
+            user: toAuthUser(fresh),
+        })
+    } catch (err) {
+        console.error('Acknowledge PHI training error:', err.message)
+        res.status(500).json({ error: 'Server error while recording acknowledgment.' })
     }
 }
 
@@ -351,4 +452,4 @@ const logout = async (req, res) => {
     }
 }
 
-module.exports = { login, register, getMe, updateMe, changePassword, logout }
+module.exports = { login, register, getMe, updateMe, changePassword, logout, acknowledgePhiTraining }
