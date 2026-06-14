@@ -167,6 +167,21 @@ export const authAPI = {
     })
     return handleResponse(res)
   },
+  /**
+   * Forced first-login password change. The short-lived temporaryToken from a
+   * `requirePasswordChange` login is sent as the Bearer credential (it is scoped
+   * server-side to this endpoint only); no current password is required. The
+   * endpoint returns no session — the caller should re-authenticate with the new
+   * password to continue any remaining gates (e.g. PHI training).
+   */
+  changePasswordWithToken: async (temporaryToken, newPassword) => {
+    const res = await fetch(`${BASE_URL}/auth/change-password`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${temporaryToken}` },
+      body: JSON.stringify({ newPassword }),
+    })
+    return handleResponse(res)
+  },
 }
 
 // ─── USERS ────────────────────────────────────────────────────────────────────

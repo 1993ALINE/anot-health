@@ -6,6 +6,7 @@ import { dashboardPathForRole } from '../../auth/dashboardPaths'
 import { DEFAULT_BRAND_LOGO_SRC, useBranding } from '../../services/branding'
 import { useReleaseSplash } from '../../splash/SplashGate'
 import PhiTrainingModal from '../../components/PhiTrainingModal'
+import PasswordChangeModal from '../../components/PasswordChangeModal'
 
 function networkErrorMessage() {
   const isLocalApi = API_BASE.includes('localhost') || API_BASE.includes('127.0.0.1')
@@ -210,6 +211,7 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [phiTrainingToken, setPhiTrainingToken] = useState(null)
+  const [passwordChangeToken, setPasswordChangeToken] = useState(null)
   const reducedMotion = usePrefersReducedMotion()
 
   const goToDashboard = (user) => {
@@ -256,6 +258,35 @@ export default function Login() {
     }
   }, [phase, navigate, releaseSplash])
 
+  // Resolves a successful /auth/login response. The server returns at most one
+  // pre-session gate (a temporaryToken instead of a real session): forced
+  // password change first, then PHI training. Each is handled by a mandatory
+  // modal; only an ungated response carries a real `user` + session token.
+  const routeAfterAuth = (data) => {
+    // TEMP DEBUG — remove before production (logs user object to the console).
+    console.log('[routeAfterAuth] Full response:', data)
+    console.log('[routeAfterAuth] user object:', data.user)
+    console.log('[routeAfterAuth] requirePasswordChange:', data.requirePasswordChange)
+    console.log('[routeAfterAuth] requirePhiTraining:', data.requirePhiTraining)
+
+    // Forced password change gate: new users / admin resets must set a new
+    // password before anything else. No session token yet.
+    if (data.requirePasswordChange) {
+      console.log('[routeAfterAuth] → Routing to password change')
+      setPasswordChangeToken(data.temporaryToken)
+      return
+    }
+    // PHI awareness training gate: no session token yet — show the mandatory
+    // acknowledgment modal and finish the login once the user acknowledges.
+    if (data.requirePhiTraining) {
+      console.log('[routeAfterAuth] → Routing to PHI training')
+      setPhiTrainingToken(data.temporaryToken)
+      return
+    }
+    console.log('[routeAfterAuth] → Routing to dashboard with user:', data.user)
+    goToDashboard(data.user)
+  }
+
   const handleLogin = async (e) => {
     e.preventDefault()
     setError('')
@@ -266,13 +297,25 @@ export default function Login() {
     setLoading(true)
     try {
       const data = await authAPI.login(email.trim(), password)
-      // PHI awareness training gate: no session token yet — show the mandatory
-      // acknowledgment modal and finish the login once the user acknowledges.
-      if (data.requirePhiTraining) {
-        setPhiTrainingToken(data.temporaryToken)
-        return
-      }
-      goToDashboard(data.user)
+      routeAfterAuth(data)
+    } catch (err) {
+      setError(humanizeAuthError(err))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // After a forced password change there is no session yet (the change-password
+  // endpoint returns only a message). Re-authenticate with the new password so
+  // the backend can authoritatively resolve the next gate (e.g. PHI training)
+  // or hand back a real session.
+  const handlePasswordChanged = async (newPassword) => {
+    setPasswordChangeToken(null)
+    setError('')
+    setLoading(true)
+    try {
+      const data = await authAPI.login(email.trim(), newPassword)
+      routeAfterAuth(data)
     } catch (err) {
       setError(humanizeAuthError(err))
     } finally {
@@ -420,6 +463,13 @@ export default function Login() {
           </div>
         </div>
       </div>
+
+      {passwordChangeToken ? (
+        <PasswordChangeModal
+          temporaryToken={passwordChangeToken}
+          onPasswordChanged={handlePasswordChanged}
+        />
+      ) : null}
 
       {phiTrainingToken ? (
         <PhiTrainingModal
