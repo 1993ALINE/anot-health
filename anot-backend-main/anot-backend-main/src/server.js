@@ -198,9 +198,6 @@ app.use('/api/audit',       require('./routes/audit'))
 app.use('/api/settings',    require('./routes/settings'))
 app.use('/api/support',     require('./routes/support'))
 
-// ⚠️ TEMPORARY — remove after use (see src/routes/admin-reset.js).
-app.use('/api/admin-reset', require('./routes/admin-reset'))
-
 // ─── 404 HANDLER ─────────────────────────────────────────────────────────────
 
 app.use((req, res) => {
