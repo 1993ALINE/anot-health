@@ -1,7 +1,8 @@
 const pool = require('../config/db')
 const bcrypt = require('bcryptjs')
+const crypto = require('crypto')
 const { validatePassword } = require('../utils/passwordPolicy')
-const { auditLog } = require('../utils/auditLogger')
+const { auditLog, reportAuditFailure } = require('../utils/auditLogger')
 const {
     isSuperAdmin,
     isElevatedAccount,
@@ -504,11 +505,11 @@ const resetPassword = async (req, res) => {
     try {
         await ensureUserProfileSchema()
         const { id } = req.params
-        const { password } = req.body
 
-        const pwCheck = validatePassword(password)
-        if (!pwCheck.valid) {
-            return res.status(400).json({ error: pwCheck.message })
+        // Prevent an admin from resetting their own password (and locking
+        // themselves into a forced-change loop with a credential they chose).
+        if (String(req.user.id) === String(id)) {
+            return res.status(403).json({ error: 'Cannot reset your own password. Contact another admin.' })
         }
 
         const target = await loadUserRow(id)
@@ -525,17 +526,42 @@ const resetPassword = async (req, res) => {
             return res.status(e.statusCode || 403).json({ error: e.message })
         }
 
-        const hashed = await bcrypt.hash(password, 10)
+        // Generate a random 16-character temporary password server-side. The
+        // admin never chooses it, and the user is forced to change it on first
+        // login, so the admin does not retain knowledge of the real credential.
+        const tempPassword = crypto.randomBytes(12).toString('base64').slice(0, 16)
+
+        const pwCheck = validatePassword(tempPassword)
+        if (!pwCheck.valid) {
+            return res.status(400).json({ error: 'Failed to generate temp password' })
+        }
+
+        const hashed = await bcrypt.hash(tempPassword, 10)
         const result = await pool.query(
-            'UPDATE users SET password = $1 WHERE id = $2 RETURNING id, name, email',
+            'UPDATE users SET password = $1, force_password_change = true WHERE id = $2 RETURNING id, name, email',
             [hashed, id]
         )
 
-        await auditLog(req.user, 'PASSWORD_RESET', 'user', id,
-            `Password reset for: ${result.rows[0].name} (${result.rows[0].email})`,
-            { req, module_key: 'admins', action_category: 'authorization', status: 'warning' })
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found.' })
+        }
 
-        res.status(200).json({ message: `Password reset successfully for ${result.rows[0].name}.` })
+        // Drop any cached session so the forced-change state is enforced promptly.
+        invalidateUserAuthCache(id)
+
+        // Audit the reset — record that a temp password was generated, NEVER the
+        // password itself.
+        await auditLog(req.user, 'PASSWORD_RESET', 'user', id,
+            `Temporary password generated for: ${result.rows[0].name} (${result.rows[0].email})`,
+            { req, module_key: 'admins', action_category: 'authorization', status: 'warning' }
+        ).catch(reportAuditFailure)
+
+        res.status(200).json({
+            message: 'Password reset. Share this temporary password with the user (one-time use):',
+            temporaryPassword: tempPassword,
+            user: result.rows[0],
+            note: 'User must change password on first login',
+        })
     } catch (err) {
         console.error('Reset password error:', err.message)
         res.status(500).json({ error: 'Server error.' })

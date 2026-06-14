@@ -1,4 +1,5 @@
 const pool = require('../config/db')
+const { auditLog, reportAuditFailure } = require('../utils/auditLogger')
 
 // ─── GET ALL PATIENTS ─────────────────────────────────────────────────────────
 
@@ -30,6 +31,11 @@ const getAllPatients = async (req, res) => {
         } else {
             return res.status(403).json({ error: 'Not authorized.' })
         }
+
+        await auditLog(req.user, 'PATIENTS_VIEWED', 'patient', null,
+            `Viewed ${result.rows.length} patient(s)`,
+            { req, module_key: 'clinical', action_category: 'read' }).catch(reportAuditFailure)
+
         res.status(200).json({ patients: result.rows })
     } catch (err) {
         console.error('Get patients error:', err.message)
@@ -77,9 +83,14 @@ const createPatient = async (req, res) => {
             [name.trim(), normalizedMrn, date_of_birth || null]
         )
 
+        const newPatient = result.rows[0]
+        await auditLog(req.user, 'PATIENT_CREATED', 'patient', newPatient.id,
+            `Created patient: ${newPatient.name}`,
+            { req, module_key: 'clinical', action_category: 'create', metadata: { mrn: newPatient.mrn } }).catch(reportAuditFailure)
+
         res.status(201).json({
             message: 'Patient created successfully.',
-            patient: result.rows[0],
+            patient: newPatient,
         })
     } catch (err) {
         console.error('Create patient error:', err.message)
@@ -122,7 +133,13 @@ const getPatient = async (req, res) => {
         if (!result.rows[0]) {
             return res.status(404).json({ error: 'Patient not found.' })
         }
-        res.status(200).json({ patient: result.rows[0] })
+
+        const patient = result.rows[0]
+        await auditLog(req.user, 'PATIENT_VIEWED', 'patient', patient.id,
+            `Viewed patient: ${patient.name}`,
+            { req, module_key: 'clinical', action_category: 'read' }).catch(reportAuditFailure)
+
+        res.status(200).json({ patient })
     } catch (err) {
         console.error('Get patient error:', err.message)
         res.status(500).json({ error: 'Server error.' })

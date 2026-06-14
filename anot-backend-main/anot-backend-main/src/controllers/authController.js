@@ -86,6 +86,28 @@ const login = async (req, res) => {
             return res.status(401).json(INVALID)
         }
 
+        // Forced password change (seeded accounts, admin temp-password resets).
+        // Authentication succeeded, but we only issue a short-lived token scoped
+        // to the password-change endpoint until the user picks a new password.
+        if (user.force_password_change) {
+            const temporaryToken = jwt.sign(
+                { id: user.id, name: user.name, email: user.email, role: user.role, require_password_change: true },
+                process.env.JWT_SECRET,
+                { expiresIn: '15m' }
+            )
+
+            void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_PASSWORD_CHANGE_REQUIRED', 'auth', String(user.id), 'Login requires password change', { req, module_key: 'authentication', status: 'warning', action_category: 'authentication' }).catch(reportAuditFailure)
+            cloudWatchAudit.logLogin(user.id, user.email, user.role, req.clientIp, 'success')
+
+            return res.status(200).json({
+                success: true,
+                requirePasswordChange: true,
+                force_password_change: true,
+                temporaryToken,
+                message: 'You must change your password before accessing the application',
+            })
+        }
+
         const token = generateToken(user)
 
         void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_SUCCESS', 'auth', String(user.id), 'Signed in successfully', { req, module_key: 'authentication', status: 'success', action_category: 'authentication' }).catch(reportAuditFailure)
@@ -271,9 +293,15 @@ const updateMe = async (req, res) => {
 
 const changePassword = async (req, res) => {
     try {
+        await ensureUserProfileSchema()
         const { currentPassword, newPassword } = req.body
 
-        if (!currentPassword || !newPassword) {
+        // A forced first-login change is authorized by the short-lived token
+        // issued at login (require_password_change claim), so the current
+        // password is not required in that flow.
+        const isTemporaryPasswordChange = req.user.require_password_change === true
+
+        if (!newPassword || (!isTemporaryPasswordChange && !currentPassword)) {
             return res.status(400).json({ error: 'Current and new password are required.' })
         }
 
@@ -289,18 +317,21 @@ const changePassword = async (req, res) => {
             return res.status(401).json({ error: 'Session invalid. Please sign in again.' })
         }
 
-        // Verify current password
-        const match = await bcrypt.compare(currentPassword, user.password)
-        if (!match) {
-            void auditLog(req.user, 'SELF_PASSWORD_CHANGE_FAILED', 'user', String(req.user.id), 'Current password incorrect', { req, module_key: 'authentication', status: 'failed', action_category: 'authorization' }).catch(reportAuditFailure)
-            return res.status(401).json({ error: 'Current password is incorrect.' })
+        // Verify current password (skipped only for the forced temp-password flow)
+        if (!isTemporaryPasswordChange) {
+            const match = await bcrypt.compare(currentPassword, user.password)
+            if (!match) {
+                void auditLog(req.user, 'SELF_PASSWORD_CHANGE_FAILED', 'user', String(req.user.id), 'Current password incorrect', { req, module_key: 'authentication', status: 'failed', action_category: 'authorization' }).catch(reportAuditFailure)
+                return res.status(401).json({ error: 'Current password is incorrect.' })
+            }
         }
 
         const hashed = await bcrypt.hash(newPassword, 10)
 
-        await pool.query('UPDATE users SET password = $1 WHERE id = $2', [hashed, req.user.id])
+        // Always clear the forced-change flag once a new password is set.
+        await pool.query('UPDATE users SET password = $1, force_password_change = false WHERE id = $2', [hashed, req.user.id])
 
-        void auditLog(req.user, 'SELF_PASSWORD_CHANGED', 'user', String(req.user.id), 'User changed their own password', { req, module_key: 'authentication', status: 'success', action_category: 'authorization', metadata: { self: true } }).catch(reportAuditFailure)
+        void auditLog(req.user, 'SELF_PASSWORD_CHANGED', 'user', String(req.user.id), 'User changed their own password', { req, module_key: 'authentication', status: 'success', action_category: 'authorization', metadata: { self: true, forced: isTemporaryPasswordChange } }).catch(reportAuditFailure)
 
         res.status(200).json({ message: 'Password changed successfully.' })
     } catch (err) {
