@@ -300,8 +300,8 @@ const register = async (req, res) => {
         // Insert new user. A generated temp password forces a rotation on first
         // login; an admin-chosen password does not.
         const result = await pool.query(
-            `INSERT INTO users (name, email, password, role, specialty, phone, npi, license, status, force_password_change, phi_training_acknowledged)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active', $9, false)
+            `INSERT INTO users (name, email, password, role, specialty, phone, npi, license, status, force_password_change, phi_training_acknowledged, phi_training_version)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active', $9, false, $10)
                  RETURNING id, name, email, role, specialty, phone, status, avatar_data_url, personal_info, admin_modules, created_at`,
             [
                 name.trim(),
@@ -313,6 +313,7 @@ const register = async (req, res) => {
                 npi || null,
                 license || null,
                 !!temporaryPassword,
+                PHI_TRAINING_VERSION,
             ]
         )
 
