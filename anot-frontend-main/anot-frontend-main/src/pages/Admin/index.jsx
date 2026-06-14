@@ -392,9 +392,7 @@ function AdminUserTable({
     onOpenModulePermissions,
     setEditUser,
     setResetUser,
-    setResetPass,
     setResetError,
-    setShowResetPass,
     toggleStatus,
     setAddRole,
     setShowAdd,
@@ -540,9 +538,7 @@ function AdminUserTable({
                                     style={{ color: '#92400e' }}
                                     onClick={() => {
                                         setResetUser(u)
-                                        setResetPass('')
                                         setResetError('')
-                                        setShowResetPass(false)
                                     }}
                                 >
                                     🔑 Reset
@@ -1003,6 +999,12 @@ function Admin() {
                 license: addRole === 'clinician' ? (cleanLicense || undefined) : undefined,
             }
             const data = await usersAPI.register(payload)
+            // Log the API response for debugging (never the temp password itself).
+            console.log('[Admin] register response:', {
+                ok: true,
+                userId: data?.user?.id,
+                generatedPassword: !!data?.temporaryPassword,
+            })
             // Optimistic upsert for instant feedback.
             setUsers((prev) => {
                 const next = [data.user, ...prev.filter((u) => u.id !== data.user.id)]
@@ -1027,6 +1029,7 @@ function Admin() {
                 showToast(`${data.user.name} registered successfully`)
             }
         } catch (err) {
+            console.error('[Admin] register failed:', { status: err?.status, message: err?.message, payload: err?.payload })
             if (err?.status === 403) {
                 setAddError('You do not have permission to register users. Please sign in as an admin.')
             } else {
@@ -1170,6 +1173,12 @@ function Admin() {
             setResetLoading(true)
             // The server generates a secure temporary password and returns it once.
             const data = await usersAPI.resetPassword(target.id)
+            // Log the API response for debugging (never the temp password itself).
+            console.log('[Admin] resetPassword response:', {
+                ok: true,
+                userId: data?.user?.id,
+                generatedPassword: !!data?.temporaryPassword,
+            })
             setResetUser(null)
             if (data.temporaryPassword) {
                 setCredentialCopied(false)
@@ -1183,7 +1192,10 @@ function Admin() {
             } else {
                 showToast(`Password reset for ${target.name}`)
             }
-        } catch (err) { setResetError(err.message) }
+        } catch (err) {
+            console.error('[Admin] resetPassword failed:', { status: err?.status, message: err?.message, payload: err?.payload })
+            setResetError(err.message)
+        }
         finally { setResetLoading(false) }
     }
 
@@ -1468,9 +1480,7 @@ function Admin() {
         onOpenModulePermissions: setModulePermUser,
         setEditUser,
         setResetUser,
-        setResetPass,
         setResetError,
-        setShowResetPass,
         toggleStatus,
         setAddRole,
         setShowAdd,

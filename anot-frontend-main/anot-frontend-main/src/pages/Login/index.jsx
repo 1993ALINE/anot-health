@@ -263,27 +263,29 @@ export default function Login() {
   // password change first, then PHI training. Each is handled by a mandatory
   // modal; only an ungated response carries a real `user` + session token.
   const routeAfterAuth = (data) => {
-    // TEMP DEBUG — remove before production (logs user object to the console).
-    console.log('[routeAfterAuth] Full response:', data)
-    console.log('[routeAfterAuth] user object:', data.user)
-    console.log('[routeAfterAuth] requirePasswordChange:', data.requirePasswordChange)
-    console.log('[routeAfterAuth] requirePhiTraining:', data.requirePhiTraining)
+    // Safe diagnostics: log only the routing decision + non-PII gate flags.
+    // Never log the user object or full response (PHI/PII) to the console.
+    console.log('[routeAfterAuth] gates:', {
+      requirePasswordChange: !!data.requirePasswordChange,
+      requirePhiTraining: !!data.requirePhiTraining,
+      hasSessionToken: !!data.token,
+    })
 
     // Forced password change gate: new users / admin resets must set a new
     // password before anything else. No session token yet.
     if (data.requirePasswordChange) {
-      console.log('[routeAfterAuth] → Routing to password change')
+      console.log('[routeAfterAuth] → password change modal')
       setPasswordChangeToken(data.temporaryToken)
       return
     }
     // PHI awareness training gate: no session token yet — show the mandatory
     // acknowledgment modal and finish the login once the user acknowledges.
     if (data.requirePhiTraining) {
-      console.log('[routeAfterAuth] → Routing to PHI training')
+      console.log('[routeAfterAuth] → PHI training modal')
       setPhiTrainingToken(data.temporaryToken)
       return
     }
-    console.log('[routeAfterAuth] → Routing to dashboard with user:', data.user)
+    console.log('[routeAfterAuth] → dashboard')
     goToDashboard(data.user)
   }
 
