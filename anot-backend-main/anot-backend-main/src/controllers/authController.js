@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs')
 const jwt = require('jsonwebtoken')
 const pool = require('../config/db')
-const { validatePassword } = require('../utils/passwordPolicy')
+const { validatePassword, generateSecurePassword } = require('../utils/passwordPolicy')
 const { isSuperAdmin, ASSIGNABLE_ROLES, ELEVATED_CREATABLE_ROLES } = require('../utils/roles')
 const { assertAdminMayUseStaffRole } = require('../utils/adminPortalAccess')
 const { auditLog, reportAuditFailure } = require('../utils/auditLogger')
@@ -244,11 +244,21 @@ const acknowledgePhiTraining = async (req, res) => {
 const register = async (req, res) => {
     try {
         await ensureUserProfileSchema()
-        const { name, email, password, role, specialty, phone, npi, license } = req.body
+        const { name, email, role, specialty, phone, npi, license } = req.body
+        let { password } = req.body
 
-        // Validate required fields
-        if (!name || !email || !password || !role) {
-            return res.status(400).json({ error: 'Name, email, password and role are required.' })
+        // Validate required fields (password is optional — generated if omitted)
+        if (!name || !email || !role) {
+            return res.status(400).json({ error: 'Name, email, and role are required.' })
+        }
+
+        // When the admin does not supply a password, generate a secure temporary
+        // one and force the user to rotate it on first login. It is returned ONCE
+        // in the response so the admin can hand it over via a secure channel.
+        let temporaryPassword = null
+        if (!password) {
+            password = generateSecurePassword()
+            temporaryPassword = password
         }
 
         if (role === 'super_admin') {
@@ -287,10 +297,11 @@ const register = async (req, res) => {
         // Hash the password
         const hashedPassword = await bcrypt.hash(password, 10)
 
-        // Insert new user
+        // Insert new user. A generated temp password forces a rotation on first
+        // login; an admin-chosen password does not.
         const result = await pool.query(
-            `INSERT INTO users (name, email, password, role, specialty, phone, npi, license, status)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active')
+            `INSERT INTO users (name, email, password, role, specialty, phone, npi, license, status, force_password_change)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active', $9)
                  RETURNING id, name, email, role, specialty, phone, status, avatar_data_url, personal_info, admin_modules, created_at`,
             [
                 name.trim(),
@@ -301,14 +312,18 @@ const register = async (req, res) => {
                 phone || null,
                 npi || null,
                 license || null,
+                !!temporaryPassword,
             ]
         )
 
-        void auditLog(req.user, 'USER_REGISTERED', 'user', String(result.rows[0].id), `Registered ${role}: ${name.trim()}`, { req, module_key: roleToStaffModule(role), action_category: 'create', status: 'success', metadata: { created_role: role } }).catch(reportAuditFailure)
+        void auditLog(req.user, 'USER_REGISTERED', 'user', String(result.rows[0].id), `Registered ${role}: ${name.trim()}`, { req, module_key: roleToStaffModule(role), action_category: 'create', status: 'success', metadata: { created_role: role, generated_password: !!temporaryPassword } }).catch(reportAuditFailure)
 
         res.status(201).json({
             message: `${role} registered successfully.`,
             user: result.rows[0],
+            // Returned only when the server generated the credential, so the admin
+            // can relay it once. Never the bcrypt hash.
+            temporaryPassword: temporaryPassword || null,
         })
     } catch (err) {
         if (err.code === '23505' && err.constraint === 'users_one_super_admin') {
