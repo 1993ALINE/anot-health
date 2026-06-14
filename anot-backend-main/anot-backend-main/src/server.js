@@ -23,6 +23,7 @@ require('./config/db')
 
 const loggingMiddleware = require('./middleware/logging')
 const { initCloudWatch } = require('./utils/logger')
+const { ensureUserProfileSchema } = require('./utils/ensureUserProfileSchema')
 
 const app = express()
 
@@ -227,10 +228,28 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000
 // Bind IPv4 explicitly so http://127.0.0.1:PORT always hits this process on Windows/WSL.
 const HOST = process.env.BIND_HOST || '0.0.0.0'
-app.listen(PORT, HOST, () => {
-  console.log(`🚀 Anot server running on http://127.0.0.1:${PORT} (bound ${HOST}:${PORT})`)
-  console.log(`📋 Environment: ${process.env.NODE_ENV || 'development'}`)
-  // Provision the CloudWatch log group/stream. No-ops safely when audit
-  // shipping is disabled or AWS isn't configured (e.g. Railway).
-  initCloudWatch().catch((err) => console.error('CloudWatch init error:', err.message))
-})
+
+// Apply idempotent schema (users profile/PHI/forced-password columns) before we
+// accept traffic, so the columns exist on a fresh deploy without waiting for the
+// first login to lazily create them. ALTER TABLE ... IF NOT EXISTS is a no-op
+// when the columns are already present.
+const startServer = async () => {
+  try {
+    console.log('[Startup] Ensuring user profile schema...')
+    await ensureUserProfileSchema()
+    console.log('[Startup] ✅ Schema ready')
+  } catch (err) {
+    console.error('[Startup] Schema initialization failed:', err.message)
+    process.exit(1)
+  }
+
+  app.listen(PORT, HOST, () => {
+    console.log(`🚀 Anot server running on http://127.0.0.1:${PORT} (bound ${HOST}:${PORT})`)
+    console.log(`📋 Environment: ${process.env.NODE_ENV || 'development'}`)
+    // Provision the CloudWatch log group/stream. No-ops safely when audit
+    // shipping is disabled or AWS isn't configured (e.g. Railway).
+    initCloudWatch().catch((err) => console.error('CloudWatch init error:', err.message))
+  })
+}
+
+startServer()
