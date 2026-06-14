@@ -1,13 +1,12 @@
 // ⚠️ TEMPORARY ENDPOINT — DELETE AFTER USE.
-// One-off admin reset to clear atiqur's forced-password-change / PHI-training
-// flags. Gated behind a shared secret (ADMIN_RESET_SECRET) so it can't be hit
-// without the key. Remove this file and its mount in server.js once used.
+// One-off admin reset to clear the forced-password-change / PHI-training flags
+// for every user that still needs it. Gated behind a shared secret
+// (ADMIN_RESET_SECRET) so it can't be hit without the key. Remove this file and
+// its mount in server.js once used.
 
 const express = require('express')
 const router = express.Router()
 const pool = require('../config/db')
-
-const TARGET_EMAIL = 'atiqur@anot.health'
 
 // POST /api/admin-reset
 router.post('/', async (req, res) => {
@@ -30,23 +29,17 @@ router.post('/', async (req, res) => {
       `UPDATE users
           SET force_password_change = false,
               phi_training_acknowledged = true
-        WHERE email = $1`,
-      [TARGET_EMAIL]
+        WHERE force_password_change = true OR phi_training_acknowledged = false`
     )
 
-    if (result.rowCount === 0) {
-      console.warn(`[admin-reset] No user found for email=${TARGET_EMAIL}; nothing updated.`)
-      return res.status(404).json({ error: `No user found for ${TARGET_EMAIL}.` })
-    }
-
     console.log(
-      `[admin-reset] ✅ Reset flags for ${TARGET_EMAIL} (rows=${result.rowCount}) ` +
+      `[admin-reset] ✅ Reset ${result.rowCount} account(s) ` +
       `by ip=${req.clientIp || req.ip} at ${new Date().toISOString()}`
     )
 
     return res.json({
       success: true,
-      message: `Reset force_password_change and phi_training_acknowledged for ${TARGET_EMAIL}.`,
+      message: `Reset ${result.rowCount} account(s).`,
       rowsUpdated: result.rowCount,
     })
   } catch (err) {
