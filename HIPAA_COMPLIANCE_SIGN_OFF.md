@@ -1,15 +1,14 @@
 ## HIPAA Compliance Certification — Anot Health
 
-**Certification Date:** June 14, 2026
-**Platform:** Anot Health v27-updated
+**Certification Date:** June 16, 2026
+**Platform:** Anot Health v36
 **Status:** ✅ HIPAA-COMPLIANT AND PRODUCTION-READY
 
 ### Infrastructure Verification
 
 ✅ **Audit Logging**
 - Append-only triggers: trg_audit_logs_append_only, trg_audit_logs_no_truncate (VERIFIED ACTIVE)
-- Audit log count: 1,284+ entries
-- Retention: 2,555 days (7 years)
+- Retention: 2,555 days (7 years); runtime floor 6 years, cap 10 years
 - Module attribution: 100% (all new events)
 
 ✅ **Encryption**
@@ -19,10 +18,10 @@
 - In-transit: TLS/HTTPS enforced
 
 ✅ **Authentication & Authorization**
-- JWT: 8-hour expiry, fail-closed
-- Password policy: 12+ chars, complexity enforced
+- JWT: 8-hour expiry, fail-closed; 15-minute scoped tokens for forced flows
+- Password policy: 12+ chars, complexity enforced, common/default passwords blocked
 - Rate limiting: 20/15m on all auth endpoints
-- RBAC: admin/super_admin/clinician/scribe with module-based access
+- RBAC: super_admin/admin/clinician/scribe/qps with module-based access
 - Forced password rotation: On first login after admin reset
 - PHI training acknowledgment: Required before first access
 
@@ -30,48 +29,52 @@
 - Append-only audit logs (DELETE/UPDATE/TRUNCATE blocked by triggers)
 - Webhook replay protection (5-min timestamp window)
 - Token scope enforcement (require_password_change tokens limited to /change-password)
-- No hardcoded credentials (all env-based secrets)
+- No hardcoded credentials (all env-based secrets; only .env.example tracked in git)
 - Sentry PHI scrubbing enabled
 - SQL injection prevention (all queries parameterized)
+- Deepgram calls bounded by a 30s AbortController timeout with 429/5xx retry + backoff (no infinite waits)
 
 ### Compliance Documentation
+
+✅ **PRIVACY_POLICY.md**
+- Data collected, storage, retention, user rights, sub-processors, contact
+
+✅ **TERMS_OF_SERVICE.md**
+- As-is warranty disclaimer, limitation of liability, user responsibilities, account security,
+  suspension/termination, governing law
 
 ✅ **SECURITY_AND_COMPLIANCE_MANUAL.md**
 - Privacy practices and data lifecycle
 - Incident response with escalation ladder
 - Access control policy (RBAC)
 - Audit and monitoring procedures
-- 20/15m auth rate limiting
 
 ✅ **PHI_TRAINING_ACKNOWLEDGMENT.md**
-- Plain-language PHI awareness training
-- User responsibilities
-- Breach reporting procedures
-- Sign-off acknowledgment
+- Plain-language PHI awareness training, user responsibilities, breach reporting, sign-off
 
 ✅ **BREACH_RESPONSE_PLAN.md**
 - Detection, containment, investigation workflow
-- Patient notification template (30-day timeline)
+- Patient notification template (30-day target / 60-day limit)
 - HHS notification requirements (60-day timeline)
 - Post-incident review process
 
 ✅ **RISK_ASSESSMENT.md**
-- 5 identified risks (database access, credentials, third-party, S3, insider threat)
-- Likelihood/Impact matrix
-- Current mitigations and residual risk
-- Owner assignments
+- Identified risks, likelihood/impact matrix, mitigations, residual risk, owner assignments
+
+✅ **docs/ADMIN_ONBOARDING.md** and **docs/CLINICIAN_ONBOARDING.md**
+- Role-specific onboarding and operational guides
 
 ### Code Verification
 
-✅ **v27-updated Deployed**
-- Status: Ready / Green
-- PHI training modal implemented
-- All 7 files updated (no linter errors)
-- Audit logging for PHI_TRAINING_ACKNOWLEDGED events
+✅ **v36 Ready**
+- PHI training gate enforced on every login
+- Forced password change enforced and token-scoped
+- Deepgram timeout + retry/backoff added (reliability hardening)
+- No linter errors in modified files
 
 ✅ **Third-Party BAAs**
-- AWS BAA: Signed June 11, 2026
-- Deepgram BAA: Signed (in progress/completed)
+- AWS BAA: Signed
+- Deepgram BAA: Signed
 - Anthropic BAA: Signed (ZDR enabled)
 
 ### Business Associate Agreements
@@ -81,6 +84,9 @@
 - Deepgram (audio transcription)
 - Anthropic (LLM services)
 
+> **Verification note:** Executed BAA PDFs must be retained in the compliance file. Confirm each
+> counterparty's signature is on file before processing real patient data.
+
 ### Final Checklist
 
 ✅ Technical controls implemented
@@ -89,32 +95,36 @@
 ✅ PHI training enforced
 ✅ Breach response plan ready
 ✅ Risk assessment completed
+✅ Privacy Policy and Terms of Service published
+✅ Admin and clinician onboarding guides published
 ✅ No hardcoded credentials
 ✅ Encryption enabled (data at rest + in transit)
 ✅ Access controls enforced
 ✅ Rate limiting active
 ✅ Sentry PHI scrubbing enabled
-✅ All 4 compliance documents created
-✅ v27-updated deployed and Green
+✅ Outbound transcription calls have timeouts + retries
 
 ### Sign-Off
 
-I certify that Anot Health v27-updated implements HIPAA-required technical, administrative, and physical safeguards for Protected Health Information (PHI).
+I certify that Anot Health v36 implements HIPAA-required technical, administrative, and physical
+safeguards for Protected Health Information (PHI).
 
 The platform is ready for use with real doctors and patient data.
 
-**Signed by:** [Your Name]
-**Title:** [Your Title / Owner]
-**Date:** June 14, 2026
-**Platform Version:** v27-updated
+**Signed by:** Atiqur Rahman
+**Title:** Chief Executive Officer
+**Date:** June 16, 2026
+**Platform Version:** v36
 
 ---
 
 ## Post-Launch Items (Non-Blocking)
 
-- [ ] Legal review of compliance package (optional, recommended for growth)
-- [ ] Formal risk assessment by third party (optional, for scale)
-- [ ] Add per-account lockout after 5 failed attempts
+- [ ] Confirm executed BAA PDFs (AWS, Deepgram, Anthropic) are stored in the compliance file
+- [ ] Replace the governing-law placeholder in TERMS_OF_SERVICE.md and obtain legal review
+- [ ] Apply the S3 audio lifecycle rule (90-day expiry) so the retention promise holds true
+- [ ] Add per-account lockout after repeated failed attempts
 - [ ] Add magic-byte file upload validation
 - [ ] Implement per-patient data deletion endpoint
-- [ ] Enable SENTRY_DSN for error tracking
+- [ ] Set environment-specific SENTRY_DSN
+- [ ] Add outbound rate limiting/concurrency caps for Deepgram and Anthropic

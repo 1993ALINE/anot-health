@@ -3,6 +3,62 @@ const path = require('path')
 const { loadAiSettings, useDeepgram } = require('./aiSettings')
 const { isReachableWebhookUrl } = require('../utils/webhookReachability')
 
+// Bound every Deepgram HTTP call so a stalled connection can't hang the
+// transcription pipeline (and block the clinician) indefinitely. 30s is ample
+// for callback/async mode (Deepgram returns a request_id almost immediately);
+// override with settings.deepgram_timeout_ms for long sync transcriptions.
+const DEEPGRAM_TIMEOUT_MS = 30000
+
+// Retry transient failures (HTTP 429 rate limits, 5xx, timeouts/network blips)
+// with exponential backoff. Non-transient failures (401 auth, 400 bad request)
+// are never retried.
+const DEEPGRAM_MAX_ATTEMPTS = 3
+const DEEPGRAM_BACKOFF_BASE_MS = 500
+const DEEPGRAM_BACKOFF_MAX_MS = 8000
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/** fetch() with an AbortController timeout. Rejects with a tagged error on timeout. */
+async function fetchWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...options, signal: controller.signal })
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      const e = new Error(`Deepgram request timed out after ${timeoutMs}ms`)
+      e.isTimeout = true
+      throw e
+    }
+    throw err
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+/**
+ * Backoff delay before the next retry. Honors a Retry-After header (seconds or
+ * HTTP-date) when present, otherwise uses exponential backoff with jitter.
+ * @param {number} attempt 1-based attempt number that just failed
+ * @param {Response|null} response the failed response (for Retry-After)
+ */
+function backoffDelayMs(attempt, response) {
+  const retryAfter = response?.headers?.get?.('retry-after')
+  if (retryAfter != null && retryAfter !== '') {
+    const asSeconds = Number(retryAfter)
+    if (Number.isFinite(asSeconds)) {
+      return Math.min(Math.max(asSeconds, 0) * 1000, DEEPGRAM_BACKOFF_MAX_MS)
+    }
+    const asDate = Date.parse(retryAfter)
+    if (Number.isFinite(asDate)) {
+      return Math.min(Math.max(asDate - Date.now(), 0), DEEPGRAM_BACKOFF_MAX_MS)
+    }
+  }
+  const exponential = DEEPGRAM_BACKOFF_BASE_MS * 2 ** (attempt - 1)
+  const jitter = Math.floor(Math.random() * DEEPGRAM_BACKOFF_BASE_MS)
+  return Math.min(exponential + jitter, DEEPGRAM_BACKOFF_MAX_MS)
+}
+
 function getMimeTypeFromPath(filePath) {
   const ext = path.extname(filePath).toLowerCase()
   const mimeTypes = {
@@ -81,45 +137,84 @@ async function transcribeWithDeepgram(absPath, settings, visitId) {
 
   const url = `https://api.deepgram.com/v1/listen?${queryParams.toString()}`
 
+  const timeoutMs = Number(settings.deepgram_timeout_ms) > 0
+    ? Number(settings.deepgram_timeout_ms)
+    : DEEPGRAM_TIMEOUT_MS
+
+  // Read the audio once; the buffer is reused across retry attempts.
+  let audioBuffer
   try {
-    const audioBuffer = await fs.promises.readFile(absPath)
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Token ${apiKey}`,
-        'Content-Type': mimetype,
-      },
-      body: audioBuffer,
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => '')
-      if (response.status === 401) {
-        console.error('[aiTranscription] Deepgram auth failed - invalid/expired API key')
-        console.error('[aiTranscription] FIX: Update API key in app.anot.health/settings')
-      } else if (response.status === 429) {
-        console.error('[aiTranscription] Deepgram rate limit - quota exceeded')
-      } else {
-        console.error('[aiTranscription] Deepgram API error:', response.status, response.statusText)
-        console.error('[aiTranscription] Response:', errorText.slice(0, 500))
-      }
-      return null
-    }
-
-    const result = await response.json()
-
-    // Callback mode returns a request_id; transcript arrives later via webhook
-    if (result.request_id && queryParams.has('callback')) {
-      const immediate = extractDeepgramText(result)
-      if (immediate) return immediate
-      return '__DEFERRED__'
-    }
-
-    return extractDeepgramText(result)
+    audioBuffer = await fs.promises.readFile(absPath)
   } catch (error) {
-    console.error('[aiTranscription] Network error:', error.message)
+    console.error('[aiTranscription] Failed to read audio file:', error.message)
     return null
   }
+
+  const fetchOptions = {
+    method: 'POST',
+    headers: {
+      'Authorization': `Token ${apiKey}`,
+      'Content-Type': mimetype,
+    },
+    body: audioBuffer,
+  }
+
+  for (let attempt = 1; attempt <= DEEPGRAM_MAX_ATTEMPTS; attempt++) {
+    try {
+      const response = await fetchWithTimeout(url, fetchOptions, timeoutMs)
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => '')
+        const transient = response.status === 429 || response.status >= 500
+
+        if (response.status === 401) {
+          console.error('[aiTranscription] Deepgram auth failed - invalid/expired API key')
+          console.error('[aiTranscription] FIX: Update API key in app.anot.health/settings')
+          return null
+        }
+
+        if (transient && attempt < DEEPGRAM_MAX_ATTEMPTS) {
+          const delay = backoffDelayMs(attempt, response)
+          const reason = response.status === 429 ? 'rate limit (429)' : `server error (${response.status})`
+          console.warn(`[aiTranscription] Deepgram ${reason} - retrying in ${delay}ms (attempt ${attempt}/${DEEPGRAM_MAX_ATTEMPTS})`)
+          await sleep(delay)
+          continue
+        }
+
+        if (response.status === 429) {
+          console.error('[aiTranscription] Deepgram rate limit - quota exceeded (retries exhausted)')
+        } else {
+          console.error('[aiTranscription] Deepgram API error:', response.status, response.statusText)
+          console.error('[aiTranscription] Response:', errorText.slice(0, 500))
+        }
+        return null
+      }
+
+      const result = await response.json()
+
+      // Callback mode returns a request_id; transcript arrives later via webhook
+      if (result.request_id && queryParams.has('callback')) {
+        const immediate = extractDeepgramText(result)
+        if (immediate) return immediate
+        return '__DEFERRED__'
+      }
+
+      return extractDeepgramText(result)
+    } catch (error) {
+      // Timeouts and network blips are transient — back off and retry.
+      if (attempt < DEEPGRAM_MAX_ATTEMPTS) {
+        const delay = backoffDelayMs(attempt, null)
+        const label = error.isTimeout ? 'timeout' : 'network error'
+        console.warn(`[aiTranscription] Deepgram ${label} (${error.message}) - retrying in ${delay}ms (attempt ${attempt}/${DEEPGRAM_MAX_ATTEMPTS})`)
+        await sleep(delay)
+        continue
+      }
+      console.error('[aiTranscription] Deepgram request failed (retries exhausted):', error.message)
+      return null
+    }
+  }
+
+  return null
 }
 
 /**
