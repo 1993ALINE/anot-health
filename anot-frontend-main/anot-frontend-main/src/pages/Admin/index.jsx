@@ -7,6 +7,7 @@ import PasswordStrengthMeter from '../../components/PasswordStrengthMeter'
 import { validatePassword } from '../../utils/passwordPolicy'
 import AdminModulePermissionsModal from '../../components/AdminModulePermissionsModal'
 import AdminAuditDashboard from './AdminAuditDashboard'
+import SystemHealth from './SystemHealth'
 import { SfAccountMenu, useSidebar, Overlay, usePortalDrawerMode, portalSidebarAriaHidden, PortalSidebarBrand } from '../shared'
 import { isSuperAdmin, ADMIN_GRANTABLE_MODULE_KEYS, ADMIN_DEFAULT_MODULE_KEYS_FOR_ADMIN, ADMIN_PORTAL_MODULES, adminMayOpenTab, resolvedAdminModuleKeys } from '../../auth/roles'
 import ErrorBoundary, { PortalCrashFallback } from '../../components/ErrorBoundary'
@@ -80,6 +81,7 @@ const NAV = [
     { key: 'assignments', icon: '🔗', label: 'Assignments' },
     { key: 'payroll',     icon: '💳', label: 'Payroll' },
     { key: 'audit',       icon: '🔍', label: 'Audit Logs' },
+    { key: 'health',      icon: '💓', label: 'System Health' },
     { key: 'settings',    icon: '🛠', label: 'Settings' },
     { key: 'system-profile', icon: '👤', label: 'Profile Management' },
 ]
@@ -93,6 +95,7 @@ const MODULE_META = {
     assignments:   { tagline: 'Who documents whom — keep pairs accurate and current.' },
     payroll:       { tagline: 'Compensation tied to completed notes and agreed rates.' },
     audit:         { tagline: 'Enterprise activity monitoring, security analytics, and immutable compliance exports.' },
+    health:        { tagline: 'Live status of core services, API integrations, and platform metrics.' },
     settings:      { tagline: 'Policies, defaults, and security posture.' },
     'system-profile': { tagline: 'Manage your profile identity and security settings.' },
 }
@@ -1491,6 +1494,10 @@ function Admin() {
 
     const navItems = useMemo(() => {
         const keys = new Set(resolvedAdminModuleKeys(currentUser))
+        // System Health is Super Admin-only and intentionally not part of the
+        // grantable admin-module set (the backend enforces super_admin too), so
+        // it's surfaced here rather than via resolvedAdminModuleKeys.
+        if (isSuperAdmin(currentUser)) keys.add('health')
         return NAV.filter((n) => keys.has(n.key))
     }, [currentUser])
 
@@ -1912,6 +1919,11 @@ function Admin() {
                         <div className="adm-module--audit">
                             <AdminAuditDashboard showToast={showToast} currentUser={currentUser} onMeta={setAuditDashMeta} />
                         </div>
+                    )}
+
+                    {/* ── SYSTEM HEALTH ─────────────────────────── */}
+                    {tab === 'health' && isSuperAdmin(currentUser) && (
+                        <SystemHealth showToast={showToast} />
                     )}
 
                     {/* ── SETTINGS ──────────────────────────────── */}

@@ -505,6 +505,10 @@ export const adminAPI = {
     const res = await fetch(`${BASE_URL}/audit/retention/apply`, { method: 'POST', headers: headers() })
     return handleResponse(res)
   },
+  getSystemHealth: async () => {
+    const res = await fetch(`${BASE_URL}/admin/health`, { headers: headers() })
+    return handleResponse(res)
+  },
   generateAI: async (visitId) => {
     const res = await fetch(`${BASE_URL}/visits/${visitId}/generate-ai`, {
       method: 'POST',

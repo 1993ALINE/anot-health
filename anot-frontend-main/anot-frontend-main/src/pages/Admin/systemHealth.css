@@ -1,0 +1,223 @@
+/* System Health dashboard — scoped under .sysh- prefix to avoid bleeding into
+   the rest of the Admin portal styles. */
+
+.sysh-root {
+  --sysh-ok: #047857;
+  --sysh-ok-bg: #ecfdf5;
+  --sysh-ok-border: #a7f3d0;
+  --sysh-warn: #b45309;
+  --sysh-warn-bg: #fffbeb;
+  --sysh-warn-border: #fde68a;
+  --sysh-crit: #be123c;
+  --sysh-crit-bg: #fff1f2;
+  --sysh-crit-border: #fecdd3;
+  --sysh-muted: #64748b;
+  --sysh-text: #0f172a;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* ── Header / refresh bar ─────────────────────────────────────────────── */
+.sysh-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.sysh-bar__meta {
+  font-size: 13px;
+  color: var(--sysh-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.sysh-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #4260e9;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, opacity 0.15s ease;
+}
+.sysh-refresh-btn:hover:not(:disabled) { background: #2d49c7; }
+.sysh-refresh-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.sysh-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: sysh-spin 0.7s linear infinite;
+}
+.sysh-spinner--dark { border-color: rgba(15, 23, 42, 0.2); border-top-color: #4260e9; }
+@keyframes sysh-spin { to { transform: rotate(360deg); } }
+
+/* ── Overall status card ──────────────────────────────────────────────── */
+.sysh-status-card {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 28px;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+.sysh-status-card--healthy { border-color: var(--sysh-ok-border); background: var(--sysh-ok-bg); }
+.sysh-status-card--degraded { border-color: var(--sysh-warn-border); background: var(--sysh-warn-bg); }
+.sysh-status-card--critical { border-color: var(--sysh-crit-border); background: var(--sysh-crit-bg); }
+
+.sysh-orb {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  position: relative;
+}
+.sysh-orb::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  animation: sysh-pulse 2s ease-out infinite;
+}
+.sysh-orb--healthy { background: var(--sysh-ok); box-shadow: 0 0 0 6px rgba(4, 120, 87, 0.15); }
+.sysh-orb--healthy::after { box-shadow: 0 0 0 0 rgba(4, 120, 87, 0.4); }
+.sysh-orb--degraded { background: #d97706; box-shadow: 0 0 0 6px rgba(217, 119, 6, 0.15); }
+.sysh-orb--degraded::after { box-shadow: 0 0 0 0 rgba(217, 119, 6, 0.4); }
+.sysh-orb--critical { background: #e11d48; box-shadow: 0 0 0 6px rgba(225, 29, 72, 0.15); }
+.sysh-orb--critical::after { box-shadow: 0 0 0 0 rgba(225, 29, 72, 0.45); }
+@keyframes sysh-pulse {
+  0% { box-shadow: 0 0 0 0 currentColor; opacity: 0.5; }
+  100% { box-shadow: 0 0 0 18px currentColor; opacity: 0; }
+}
+
+.sysh-status-text { display: flex; flex-direction: column; gap: 4px; }
+.sysh-status-label { font-size: 28px; font-weight: 700; line-height: 1.1; }
+.sysh-status-card--healthy .sysh-status-label { color: var(--sysh-ok); }
+.sysh-status-card--degraded .sysh-status-label { color: var(--sysh-warn); }
+.sysh-status-card--critical .sysh-status-label { color: var(--sysh-crit); }
+.sysh-status-sub { font-size: 13px; color: var(--sysh-muted); }
+
+/* ── Section titles ───────────────────────────────────────────────────── */
+.sysh-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--sysh-muted);
+  margin: 0 0 12px;
+}
+
+/* ── Components grid ──────────────────────────────────────────────────── */
+.sysh-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+}
+.sysh-comp-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border-left-width: 4px;
+}
+.sysh-comp-card--ok { border-left-color: var(--sysh-ok); }
+.sysh-comp-card--error { border-left-color: var(--sysh-crit); }
+
+.sysh-comp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sysh-comp-name { font-size: 15px; font-weight: 700; color: var(--sysh-text); }
+.sysh-comp-icon { font-size: 18px; }
+
+.sysh-comp-latency { display: flex; align-items: baseline; gap: 6px; }
+.sysh-comp-latency b { font-size: 24px; font-weight: 700; color: var(--sysh-text); }
+.sysh-comp-latency span { font-size: 12px; color: var(--sysh-muted); }
+
+.sysh-comp-msg { font-size: 13px; color: #334155; }
+.sysh-comp-card--error .sysh-comp-msg { color: var(--sysh-crit); font-weight: 600; }
+.sysh-comp-foot { font-size: 12px; color: var(--sysh-muted); }
+
+.sysh-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.sysh-pill--ok { background: var(--sysh-ok-bg); color: var(--sysh-ok); }
+.sysh-pill--error { background: var(--sysh-crit-bg); color: var(--sysh-crit); }
+
+/* ── Metrics ──────────────────────────────────────────────────────────── */
+.sysh-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+.sysh-metric-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.sysh-metric-value { font-size: 30px; font-weight: 700; color: var(--sysh-text); line-height: 1; }
+.sysh-metric-value--alert { color: var(--sysh-crit); }
+.sysh-metric-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sysh-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── Error banner ─────────────────────────────────────────────────────── */
+.sysh-error {
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: var(--sysh-crit-bg);
+  border: 1px solid var(--sysh-crit-border);
+  color: var(--sysh-crit);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ── Skeleton ─────────────────────────────────────────────────────────── */
+.sysh-skeleton {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 37%, #f1f5f9 63%);
+  background-size: 400% 100%;
+  animation: sysh-shimmer 1.4s ease infinite;
+  border-radius: 8px;
+}
+@keyframes sysh-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+@media (max-width: 640px) {
+  .sysh-status-card { flex-direction: column; text-align: center; align-items: center; }
+  .sysh-bar { flex-direction: column; align-items: stretch; }
+  .sysh-refresh-btn { justify-content: center; }
+}
