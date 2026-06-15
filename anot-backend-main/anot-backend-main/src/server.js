@@ -197,6 +197,7 @@ app.use('/api/audio',       require('./routes/audio'))
 app.use('/api/audit',       require('./routes/audit'))
 app.use('/api/settings',    require('./routes/settings'))
 app.use('/api/support',     require('./routes/support'))
+app.use('/api/admin',       require('./routes/admin'))
 
 // ─── 404 HANDLER ─────────────────────────────────────────────────────────────
 
