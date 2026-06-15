@@ -1,0 +1,11 @@
+{
+  "Rules": [
+    {
+      "ID": "expire-encounter-audio-after-90-days",
+      "Filter": { "Prefix": "uploads/" },
+      "Status": "Enabled",
+      "Expiration": { "Days": 90 },
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 }
+    }
+  ]
+}

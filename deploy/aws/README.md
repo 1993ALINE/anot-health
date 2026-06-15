@@ -195,6 +195,32 @@ aws rds modify-db-instance --db-instance-identifier $DB_INSTANCE_ID --no-publicl
 
 ---
 
+## Audio retention — PHI lifecycle  ⚠️ apply once
+
+Encounter audio (PHI) is stored in the audio S3 bucket under the `uploads/`
+prefix. The app only deletes an object when its visit is deleted, so without a
+bucket lifecycle rule audio would be retained indefinitely. The PHI awareness
+training shown to every user states audio is **deleted after 90 days**, so this
+rule must be applied for that statement to hold true.
+
+Apply the rule in [`s3-audio-lifecycle.json`](./s3-audio-lifecycle.json) to the
+audio bucket (objects expire 90 days after creation):
+
+```bash
+AUDIO_BUCKET="anot-audio-$(aws sts get-caller-identity --query Account --output text)"
+aws s3api put-bucket-lifecycle-configuration \
+  --bucket "$AUDIO_BUCKET" \
+  --lifecycle-configuration file://deploy/aws/s3-audio-lifecycle.json
+
+# Verify
+aws s3api get-bucket-lifecycle-configuration --bucket "$AUDIO_BUCKET"
+```
+
+To change or remove the retention window, edit `Expiration.Days` in the JSON and
+re-apply, or `aws s3api delete-bucket-lifecycle --bucket "$AUDIO_BUCKET"`.
+
+---
+
 ## Manual / CI deploys
 
 **Backend only** (after the first full setup) — repackage and push a new version:

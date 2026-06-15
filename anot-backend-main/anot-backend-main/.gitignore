@@ -1,5 +1,13 @@
 node_modules
-.env
+
+# Environment / secrets — never commit any .env variant (.env, .env.backup, .env.production, ...)
+.env*
+!.env.example
+
 uploads/
 src/uploads/
 *.log
+
+# Build artifacts
+*.zip
+*.tar.gz
