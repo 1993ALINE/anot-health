@@ -10,6 +10,8 @@ const pool = new Pool(
     ? {
         connectionString: process.env.DATABASE_URL,
         ssl: { rejectUnauthorized: false },
+        connectionTimeoutMillis: 10000,
+        idleTimeoutMillis: 30000,
       }
     : {
         host:     process.env.DB_HOST,
@@ -57,4 +59,7 @@ async function withTransaction(fn) {
 
 module.exports = pool
 module.exports.withTransaction = withTransaction
+
+
+
 
