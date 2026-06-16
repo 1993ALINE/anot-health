@@ -62,61 +62,86 @@ Parameter naming: the leaf segment becomes the env var, e.g.
 Run `scripts/deploy-v40-ssm.ps1` block-by-block. **Edit the CONFIG region at the
 top first** (especially `$EbEnvName` and `$HealthUrl`).
 
+The script runs **BACKUP + 8 phases (Phases 0–8)**, preceded by a read-only
+PRE-FLIGHT check.
+
 | Phase | What | Approx wait | Reversible? |
 | --- | --- | --- | --- |
-| 1 | Pre-flight checks (identity, EB, RDS, health) | ~1 min | n/a (read-only) |
-| 2 | Backups: export EB config + RDS snapshot | **5–10 min** (snapshot) | n/a |
-| 3 | Generate new `SETTINGS_ENCRYPTION_KEY` | ~10 s | n/a (in memory) |
+| PRE-FLIGHT | Tooling + identity + EB/RDS/health checks | ~1 min | n/a (read-only) |
+| BACKUP | Export EB config + create RDS snapshot | **5–10 min** (snapshot) | n/a |
+| 0 | IAM: grant EB instance role `ssm:GetParametersByPath` + `kms:Decrypt` | ~1 min | remove policy |
+| 1 | Prepare secret values (generate DB password / `JWT_SECRET` / webhook secret; **reuse** the existing `SETTINGS_ENCRYPTION_KEY`) | ~10 s | n/a (in memory) |
+| 2 | Build v40 artifact (`npm install`, tar zip) + register app version | ~2–3 min | n/a |
+| 3 | Rotate the RDS master password (applied immediately) | **5–10 min** | restore snapshot / reset password |
 | 4 | Put all secrets into SSM SecureStrings | ~2 min | delete params |
-| 5 | IAM: grant EB instance role `ssm:GetParametersByPath` + `kms:Decrypt` | ~1 min | remove policy |
-| 6 | Re-encrypt `system_settings` (dry-run → live) | ~1 min | restore snapshot |
-| 7 | Build v40 artifact (`npm install`, zip) | ~2–3 min | n/a |
-| 8 | Enable `USE_SSM=true` on EB env | ~2–3 min | set `false` |
-| 9 | Deploy v40 app version | ~3–5 min | redeploy v39 |
-| 10 | Verify (health, login, settings decrypt, AI note) | ~2 min | n/a |
-| 11 | Remove plaintext secrets from EB env props | ~2–3 min | re-add from backup |
+| 5 | Verify required secrets exist in SSM (deploy **gate**) | ~1 min | n/a (read-only) |
+| 6 | Enable `USE_SSM=true` **and** deploy v40 (one atomic env update) | ~3–5 min | redeploy v39 / set `false` |
+| 7 | Verify v40 health — endpoint reports `v40` + EB `Green` (**gate**) | ~2 min | n/a |
+| 8 | Remove plaintext secrets from EB env props (**only if Phase 7 passed**) | ~2–3 min | re-add via `restore-v39-secrets.ps1` |
 
-**Total: ~30–40 minutes**, most of it the RDS snapshot in Phase 2.
+**Total: ~30–45 minutes**, most of it the RDS snapshot (BACKUP) and the RDS
+password rotation (Phase 3).
+
+> **`SETTINGS_ENCRYPTION_KEY` is NOT rotated by this deploy.** Phase 1 copies the
+> existing key into SSM unchanged so the encrypted `system_settings` blobs stay
+> decryptable. Rotating that key is a **separate** operation —
+> `scripts/reencrypt-settings-key.js` (dry-run → live) — and is **not** part of
+> `deploy-v40-ssm.ps1`. See "Rotating the settings key" below.
 
 ### Ordering rationale (why this sequence is safe)
 
-1. **Backup before any change** (Phase 2) — RDS snapshot is the data rollback.
-2. **SSM + IAM before deploy** (Phases 4–5) — so when `USE_SSM` flips on, the
-   params and permissions already exist.
-3. **Re-encrypt before deploy** (Phase 6) — the NEW key goes to SSM in Phase 4;
-   v39 still runs with the OLD key from EB env. We rotate the DB blobs to the
-   NEW key while the app is untouched. The dry-run proves the OLD key is correct
-   before any write.
-4. **Enable SSM, then deploy** (Phases 8–9) — v40 reads the NEW key from SSM and
-   can decrypt the freshly re-encrypted blobs.
-5. **Remove plaintext last** (Phase 11) — only after the app is verified healthy
-   on SSM, so a failure at any earlier point still has the EB env fallback.
+1. **Backup before any change** (BACKUP) — the RDS snapshot + EB config export
+   are the rollback base; nothing destructive runs until they exist.
+2. **Build before destructive changes** (Phase 2) — `npm install` / zip can fail,
+   so we fail BEFORE rotating the DB password or writing SSM; a bad build never
+   leaves prod half-migrated.
+3. **Rotate DB password, then store secrets** (Phases 3–4) — the new
+   `DB_PASSWORD` / `DATABASE_URL` are written to SSM alongside the rest.
+4. **Verify SSM before deploy** (Phase 5) — refuse to deploy v40 unless every
+   required secret is already present in SSM.
+5. **Enable SSM and deploy atomically** (Phase 6) — `USE_SSM=true` and the v40
+   version ship in a single `update-environment`, so v40 boots with SSM on and
+   reads the rotated password on first boot. There is no window where v40 runs
+   without SSM.
+6. **Health gate before removing plaintext** (Phase 7) — confirm v40 is actually
+   live (endpoint reports `v40`) and EB is `Green` first.
+7. **Remove plaintext last** (Phase 8) — only after Phase 7 passes, so a failure
+   at any earlier point still has the EB env-property fallback (restore it with
+   `restore-v39-secrets.ps1`).
 
 ---
 
 ## Testing checklist (verify each phase)
 
-- **Phase 1** — `aws sts get-caller-identity` shows account `625242092266`; EB
+- **PRE-FLIGHT** — `aws sts get-caller-identity` shows account `625242092266`; EB
   env health is `Green`; RDS status `available`; health URL returns JSON.
-- **Phase 2** — `backup-v39-*/eb-config-settings-v39.json` exists and is
-  non-empty; `aws rds describe-db-snapshots --db-snapshot-identifier <id>` shows
+- **BACKUP** — `backup-v39-*/eb-config-settings-v39.json` exists and is
+  non-empty; `backup-v39-*/rds-snapshot-id.txt` exists and
+  `aws rds describe-db-snapshots --db-snapshot-identifier <id>` shows
   `available`.
+- **Phase 0** — `aws iam get-role-policy --role-name aws-elasticbeanstalk-ec2-role
+  --policy-name anot-ssm-read-prod` returns the policy.
+- **Phase 1** — console prints `All secret values prepared.` and reports the
+  existing `SETTINGS_ENCRYPTION_KEY` was reused (not regenerated). Values live in
+  memory only and are never echoed.
+- **Phase 2** — `dist/anot-backend-v40.zip` exists; the script confirms the
+  archive uses forward-slash (Unix) paths; `package.json` shows
+  `@aws-sdk/client-ssm` and `1.40.0`.
+- **Phase 3** — after the rotation, `aws rds describe-db-instances
+  --db-instance-identifier anot-postgres` shows `DBInstanceStatus: available`.
 - **Phase 4** — `aws ssm get-parameters-by-path --path /anot/prod --recursive
   --query 'Parameters[].Name'` lists every expected secret name.
-- **Phase 5** — `aws iam get-role-policy --role-name aws-elasticbeanstalk-ec2-role
-  --policy-name anot-ssm-read-prod` returns the policy.
-- **Phase 6** — dry-run prints `would have re-encrypted N/N blob(s)`; live run
-  prints `✅ Done. Committed N`. (If the OLD key is wrong it aborts with
-  `decryption with OLD key failed` and writes nothing.)
-- **Phase 7** — `dist/anot-backend-v40.zip` exists; `package.json` shows
-  `@aws-sdk/client-ssm` and `1.40.0`.
-- **Phase 8** — `describe-configuration-settings` shows `USE_SSM=true`.
-- **Phase 9** — environment `VersionLabel` is `v40`, health `Green`.
-- **Phase 10** — health endpoint returns `"version":"v40"`; **EB logs contain
-  `[loadSecrets] ✅ Loaded N parameter(s) from SSM`**; you can log in; Admin →
-  Settings shows the saved Deepgram/Anthropic keys (proves re-encryption + new
-  key match); generating an AI note works.
-- **Phase 11** — after env props removed and the env restarts, health still
+- **Phase 5** — the gate prints all required secrets present; it aborts BEFORE
+  deploy if any of `JWT_SECRET`, `SETTINGS_ENCRYPTION_KEY`, `DB_PASSWORD`,
+  `DATABASE_URL`, `ANTHROPIC_API_KEY` is missing.
+- **Phase 6** — `describe-configuration-settings` shows `USE_SSM=true`;
+  environment `VersionLabel` is `v40`, health `Green`; **EB logs contain
+  `[loadSecrets] ✅ Loaded N parameter(s) from SSM`**.
+- **Phase 7** — health endpoint returns `"version":"v40"`; you can log in (new
+  `JWT_SECRET` from SSM); Admin → Settings shows the saved Deepgram/Anthropic
+  keys (proves the preserved settings key still decrypts the blobs); generating
+  an AI note works (`ANTHROPIC_API_KEY` from SSM).
+- **Phase 8** — after env props removed and the env restarts, health still
   returns `v40` and login still works (proves the app is fully SSM-sourced).
 
 ### Quick log check
@@ -127,6 +152,31 @@ Start-Sleep 20
 aws elasticbeanstalk retrieve-environment-info --environment-name $EbEnvName --info-type tail
 # look for: [loadSecrets] ✅ Loaded N parameter(s) from SSM
 ```
+
+---
+
+## Rotating the settings key (separate operation, NOT part of the deploy)
+
+`deploy-v40-ssm.ps1` deliberately does **not** rotate `SETTINGS_ENCRYPTION_KEY` —
+doing so without re-encrypting the ciphertext would orphan every encrypted value
+in `system_settings` (saved Deepgram/Anthropic keys). To rotate it, run the
+transactional re-encryption script against prod **before** putting the NEW key
+into SSM:
+
+```powershell
+cd C:\Users\Administrator\Desktop\anot-health\anot-backend-main\anot-backend-main
+# DB creds must point at PROD RDS (same DATABASE_URL the app uses).
+$env:OLD_SETTINGS_ENCRYPTION_KEY = "<current key in the DB>"
+$env:NEW_SETTINGS_ENCRYPTION_KEY = "<the new key>"
+node scripts/reencrypt-settings-key.js --dry-run    # prints "would have re-encrypted N/N blob(s)"
+node scripts/reencrypt-settings-key.js              # transactional; prints "Done. Committed N"
+Remove-Item Env:OLD_SETTINGS_ENCRYPTION_KEY, Env:NEW_SETTINGS_ENCRYPTION_KEY
+```
+
+The script is all-or-nothing: if the OLD key can't decrypt a blob it ROLLBACKs
+and writes nothing, so a wrong key is safe. After a successful live run, put the
+NEW key into SSM (`/anot/prod/SETTINGS_ENCRYPTION_KEY`) and restart the
+environment. To reverse a rotation, see **R3** in `ROLLBACK_V40_SSM.md`.
 
 ---
 
