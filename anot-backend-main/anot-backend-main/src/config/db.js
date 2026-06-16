@@ -9,7 +9,7 @@ const pool = new Pool(
   useUrl
     ? {
         connectionString: process.env.DATABASE_URL,
-        ssl: { rejectUnauthorized: true },
+        ssl: { rejectUnauthorized: false },
       }
     : {
         host:     process.env.DB_HOST,
@@ -17,7 +17,7 @@ const pool = new Pool(
         database: process.env.DB_NAME,
         user:     process.env.DB_USER,
         password: process.env.DB_PASSWORD,
-        ...(process.env.DB_SSL === 'true' ? { ssl: { rejectUnauthorized: true } } : {}),
+        ...(process.env.DB_SSL === 'true' ? { ssl: { rejectUnauthorized: false } } : {}),
       }
 )
 
@@ -57,3 +57,4 @@ async function withTransaction(fn) {
 
 module.exports = pool
 module.exports.withTransaction = withTransaction
+
