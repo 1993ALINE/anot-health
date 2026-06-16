@@ -199,6 +199,15 @@ app.use('/api/settings',    require('./routes/settings'))
 app.use('/api/support',     require('./routes/support'))
 app.use('/api/admin',       require('./routes/health'))
 
+// TEMPORARY one-shot test-data cleanup endpoint (POST /api/admin/cleanup-test-users).
+// Mounted defensively: the route self-destructs (deletes its own source file) after
+// its first successful use, so a missing file on a later restart must not crash boot.
+try {
+  app.use('/api/admin',     require('./routes/admin'))
+} catch (err) {
+  console.warn('[startup] cleanup-test-users route not loaded (already self-destructed?):', err.message)
+}
+
 // ─── 404 HANDLER ─────────────────────────────────────────────────────────────
 
 app.use((req, res) => {
