@@ -28,13 +28,24 @@ RUN npm pkg delete dependencies.anot-workspace \
 # ── Stage 2: runtime ────────────────────────────────────────────────────────
 FROM node:20-bookworm-slim AS runtime
 
+# DB_SSL_CA points at the Amazon RDS CA bundle baked in below, so db.js verifies
+# the RDS server certificate (HIPAA: encrypted + authenticated DB connection).
 ENV NODE_ENV=production \
-    PORT=8080
+    PORT=8080 \
+    DB_SSL_CA=/opt/rds/rds-ca.pem
 
-# ffmpeg is the only system dependency required at runtime.
+# ffmpeg is required at runtime (audio preprocessing); ca-certificates + curl are
+# needed to fetch the RDS CA bundle over HTTPS.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ffmpeg \
+ && apt-get install -y --no-install-recommends ffmpeg ca-certificates curl \
  && rm -rf /var/lib/apt/lists/*
+
+# Amazon RDS global CA bundle (covers ap-southeast-1 and all regions). db.js
+# verifies the RDS server cert against this, so we never disable TLS validation.
+RUN mkdir -p /opt/rds \
+ && curl -fsSL -o /opt/rds/rds-ca.pem \
+      https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
+ && test -s /opt/rds/rds-ca.pem
 
 WORKDIR /app
 

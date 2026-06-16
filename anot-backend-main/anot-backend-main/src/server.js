@@ -181,7 +181,7 @@ app.use(loggingMiddleware)
 // ─── HEALTH CHECK ─────────────────────────────────────────────────────────────
 
 app.get('/', (req, res) => {
-  res.json({ message: '✅ Anot API is running', version: '1.0.0', status: 'healthy' })
+  res.json({ message: '✅ Anot API is running', version: 'v39', status: 'healthy' })
 })
 
 // ─── ROUTES ───────────────────────────────────────────────────────────────────
