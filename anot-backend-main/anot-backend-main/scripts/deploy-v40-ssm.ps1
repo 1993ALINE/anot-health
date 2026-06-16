@@ -203,7 +203,34 @@ Write-Step 'Reading current EB configuration (for fallbacks)...'
 $cfg = Invoke-Aws elasticbeanstalk describe-configuration-settings `
     --application-name $EbAppName --environment-name $EbEnvName --output json | ConvertFrom-Json
 $ebOpts = $cfg.ConfigurationSettings[0].OptionSettings
-function Get-EbVal { param([string]$Name) ($ebOpts | Where-Object { $_.OptionName -eq $Name }).Value }
+
+# Safely read a single EB option value by name. The AWS CLI / ConvertFrom-Json
+# can hand back option settings as a nested array (e.g. [[{...}]]), and a
+# Where-Object filter can match 0, 1, or many objects. Naively calling .Value on
+# that returns an array (or $null) instead of the string we want, which later
+# blows up calls like .Trim(). This normalizes all of those shapes to either a
+# clean non-empty trimmed string or $null.
+function Get-EbVal {
+    param([string]$Name)
+
+    # Force an array so .Count / indexing behave even for a single match.
+    # (Avoid the name $matches - that is PowerShell's automatic -match variable.)
+    $found = @($ebOpts | Where-Object { $_.OptionName -eq $Name })
+    if ($found.Count -eq 0) { return $null }
+
+    $val = $found[0].Value
+
+    # Defensively unwrap any nested arrays (e.g. [[ "value" ]]) down to a scalar.
+    while ($val -is [System.Array]) {
+        if ($val.Count -eq 0) { return $null }
+        $val = $val[0]
+    }
+    if ($null -eq $val) { return $null }
+
+    $str = ([string]$val).Trim()
+    if ([string]::IsNullOrEmpty($str)) { return $null }
+    return $str
+}
 
 New-Item -ItemType Directory -Force -Path $ArtifactDir | Out-Null
 Write-Ok 'Pre-flight checks passed.'
@@ -315,7 +342,7 @@ key, use scripts/reencrypt-settings-key.js first (see DEPLOYMENT_V40_SSM.md).
 # Third-party keys cannot be auto-generated. Reuse the current EB value if set,
 # otherwise prompt so we do not overwrite a live key with an empty string.
 function Resolve-ThirdPartyKey {
-    param([string]$EnvName, [switch]$Optional)
+    param([string]$EnvName, [switch]$Optional, [string]$PromptText)
     $existing = Get-EbVal $EnvName
     if (-not [string]::IsNullOrEmpty($existing)) {
         Write-Step "Reusing existing $EnvName from EB config."
@@ -325,10 +352,18 @@ function Resolve-ThirdPartyKey {
         Write-Warn "$EnvName not set in EB; leaving blank (optional)."
         return ''
     }
-    return (Read-Host "  Enter value for $EnvName")
+    # Required key is missing/empty in EB. Prompt rather than crash, and allow the
+    # operator to skip (Phase 5's SSM gate will catch a still-missing required key).
+    if ([string]::IsNullOrEmpty($PromptText)) { $PromptText = "Enter value for $EnvName" }
+    $entered = Read-Host "  $PromptText"
+    if ([string]::IsNullOrEmpty($entered)) {
+        Write-Warn "$EnvName left blank (skipped)."
+        return ''
+    }
+    return $entered.Trim()
 }
 
-$AnthropicApiKey = Resolve-ThirdPartyKey 'ANTHROPIC_API_KEY'
+$AnthropicApiKey = Resolve-ThirdPartyKey 'ANTHROPIC_API_KEY' -PromptText 'Paste NEW Anthropic API key (or press Enter to skip)'
 $DeepgramApiKey  = Resolve-ThirdPartyKey 'DEEPGRAM_API_KEY' -Optional
 $SentryDsn       = Resolve-ThirdPartyKey 'SENTRY_DSN' -Optional
 $SmtpHost        = Resolve-ThirdPartyKey 'SMTP_HOST' -Optional
