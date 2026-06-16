@@ -194,9 +194,20 @@ const acknowledgePhiTraining = async (req, res) => {
             return res.status(401).json({ error: 'Your session expired. Please sign in again.' })
         }
 
-        // Only the short-lived tokens issued at login for the training / forced
-        // rotation flows may complete this step.
-        if (decoded.requirePhiTraining !== true && decoded.require_password_change !== true) {
+        // A forced password rotation must happen BEFORE PHI training can be
+        // acknowledged — otherwise the short-lived require_password_change token
+        // could be exchanged here for a full session, skipping the mandatory
+        // password change entirely.
+        if (decoded.require_password_change === true) {
+            return res.status(403).json({
+                error: 'You must change your password before acknowledging PHI training.',
+                code: 'FORCE_PASSWORD_CHANGE',
+            })
+        }
+
+        // Only the short-lived PHI-training token issued at login may complete
+        // this step.
+        if (decoded.requirePhiTraining !== true) {
             return res.status(403).json({ error: 'This token cannot be used to acknowledge training.' })
         }
 

@@ -1,31 +1,42 @@
-require('../instrument.js')
+// ─── SECRETS BOOTSTRAP (must run first) ─────────────────────────────────────
+// loadSecrets() hydrates process.env from SSM (prod) or .env (local) BEFORE any
+// module that reads process.env at require-time is loaded. instrument.js reads
+// SENTRY_DSN on require, and ./config/db builds the PG Pool on require, so both
+// are deferred into bootstrap() below — after secrets are in place. See
+// src/config/loadSecrets.js for the full rationale.
+const loadSecrets = require('./config/loadSecrets')
 
-const Sentry       = require('@sentry/node')
-const express      = require('express')
-const cors         = require('cors')
-const helmet       = require('helmet')
-const dotenv       = require('dotenv')
-const rateLimit    = require('express-rate-limit')
+async function bootstrap() {
+  await loadSecrets()
 
-dotenv.config()
+  // Sentry init reads SENTRY_DSN — require only after secrets are loaded.
+  require('../instrument.js')
 
-const jwtSecret = process.env.JWT_SECRET?.trim()
-if (!jwtSecret) {
-  console.error('FATAL: JWT_SECRET is required.')
-  process.exit(1)
-}
-if (jwtSecret.length < 16 && process.env.NODE_ENV === 'production') {
-  console.error('FATAL: JWT_SECRET must be at least 16 characters in production.')
-  process.exit(1)
-}
+  const Sentry       = require('@sentry/node')
+  const express      = require('express')
+  const cors         = require('cors')
+  const helmet       = require('helmet')
+  const rateLimit    = require('express-rate-limit')
 
-require('./config/db')
+  const jwtSecret = process.env.JWT_SECRET?.trim()
+  if (!jwtSecret) {
+    console.error('FATAL: JWT_SECRET is required.')
+    process.exit(1)
+  }
+  if (jwtSecret.length < 16 && process.env.NODE_ENV === 'production') {
+    console.error('FATAL: JWT_SECRET must be at least 16 characters in production.')
+    process.exit(1)
+  }
 
-const loggingMiddleware = require('./middleware/logging')
-const { initCloudWatch } = require('./utils/logger')
-const { ensureUserProfileSchema } = require('./utils/ensureUserProfileSchema')
+  // ./config/db opens the PostgreSQL Pool the moment it is required, so this
+  // line must stay AFTER await loadSecrets() above.
+  require('./config/db')
 
-const app = express()
+  const loggingMiddleware = require('./middleware/logging')
+  const { initCloudWatch } = require('./utils/logger')
+  const { ensureUserProfileSchema } = require('./utils/ensureUserProfileSchema')
+
+  const app = express()
 
 // Don't advertise the framework.
 app.disable('x-powered-by')
@@ -181,7 +192,7 @@ app.use(loggingMiddleware)
 // ─── HEALTH CHECK ─────────────────────────────────────────────────────────────
 
 app.get('/', (req, res) => {
-  res.json({ message: '✅ Anot API is running', version: 'v39', status: 'healthy' })
+  res.json({ message: '✅ Anot API is running', version: 'v40', status: 'healthy' })
 })
 
 // ─── ROUTES ───────────────────────────────────────────────────────────────────
@@ -198,15 +209,6 @@ app.use('/api/audit',       require('./routes/audit'))
 app.use('/api/settings',    require('./routes/settings'))
 app.use('/api/support',     require('./routes/support'))
 app.use('/api/admin',       require('./routes/health'))
-
-// TEMPORARY one-shot test-data cleanup endpoint (POST /api/admin/cleanup-test-users).
-// Mounted defensively: the route self-destructs (deletes its own source file) after
-// its first successful use, so a missing file on a later restart must not crash boot.
-try {
-  app.use('/api/admin',     require('./routes/admin'))
-} catch (err) {
-  console.warn('[startup] cleanup-test-users route not loaded (already self-destructed?):', err.message)
-}
 
 // ─── 404 HANDLER ─────────────────────────────────────────────────────────────
 
@@ -262,4 +264,12 @@ const startServer = async () => {
   })
 }
 
-startServer()
+  startServer()
+} // end bootstrap()
+
+// Kick everything off. Any unhandled bootstrap error is fatal so the process
+// supervisor (EB/PM2) restarts cleanly instead of serving a half-initialised app.
+bootstrap().catch((err) => {
+  console.error('FATAL: bootstrap failed:', err && err.message ? err.message : err)
+  process.exit(1)
+})
