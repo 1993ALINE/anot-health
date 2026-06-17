@@ -1,10 +1,9 @@
 const Sentry = require("@sentry/node");
 
-// Prefer an environment-supplied DSN so each environment (dev/staging/prod) can
-// point at its own Sentry project — or disable reporting entirely by leaving it
-// unset. Falls back to the built-in project DSN so existing deploys keep working.
-const dsn = process.env.SENTRY_DSN ||
-  "https://430bb1403c4a23f88a01600f5f6164e3@o4511524578656256.ingest.us.sentry.io/4511524585406464";
+// DSN comes only from the environment (SSM in prod, .env locally). No hardcoded
+// fallback — leaving SENTRY_DSN unset simply disables error reporting rather than
+// shipping a credential in source.
+const dsn = process.env.SENTRY_DSN || undefined;
 
 Sentry.init({
   dsn,

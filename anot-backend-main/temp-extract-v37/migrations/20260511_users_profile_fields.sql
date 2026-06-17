@@ -1,0 +1,3 @@
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_data_url TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS personal_info TEXT;
+

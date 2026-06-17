@@ -69,6 +69,9 @@ $DefaultRole    = 'aws-elasticbeanstalk-ec2-role'   # fallback if discovery fail
 $S3PolicyName   = 'anot-s3-audio-prod'
 $HealthUrl      = 'https://api.anot.health/'
 $DefaultBucket  = "anot-audio-$AwsAccountId"         # s3Storage.js default
+$TargetVersion  = 'v40'                              # the version that must be live + Green
+$MaxHealthRetries = 10                               # how many times to poll EB health
+$HealthRetryDelaySeconds = 30                        # seconds between health polls
 
 # EB environment properties that carry static AWS credentials. Removing these is
 # what forces the instance profile to be used. (Region vars are NOT credentials
@@ -193,6 +196,90 @@ function Invoke-Aws {
 
         throw $detail
     }
+}
+
+# Read the current EB environment object (version/health/status) as a single
+# normalized record, or $null if it cannot be read.
+function Get-EbEnvironment {
+    $json = Invoke-Aws -Retries 3 -DelaySeconds 5 elasticbeanstalk describe-environments `
+        --application-name $EbAppName --environment-names $EbEnvName --output json | ConvertFrom-Json
+    if (-not $json.Environments -or @($json.Environments).Count -eq 0) { return $null }
+    return @($json.Environments)[0]
+}
+
+# Dump the most recent EB tail logs (best-effort) so a Red environment is
+# actionable without leaving the script. Never throws.
+function Show-EbLogs {
+    Write-Step 'Requesting EB tail logs (this can take a few seconds)...'
+    try {
+        Invoke-Aws -SkipInDryRun elasticbeanstalk request-environment-info `
+            --environment-name $EbEnvName --info-type tail | Out-Null
+        Start-Sleep -Seconds 8
+        $raw = Invoke-Aws -Retries 3 -DelaySeconds 5 elasticbeanstalk retrieve-environment-info `
+            --environment-name $EbEnvName --info-type tail --output json
+        $info = $raw | ConvertFrom-Json
+        $msgs = @($info.EnvironmentInfo)
+        if ($msgs.Count -eq 0) {
+            Write-Warn 'No tail-log bundle was returned by EB yet. Try again in a minute.'
+            return
+        }
+        foreach ($m in $msgs) {
+            $url = $m.Message
+            if ([string]::IsNullOrEmpty($url)) { continue }
+            Write-Diag "log bundle (instance $($m.Ec2InstanceId)): $url"
+            try {
+                $log = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 60
+                $text = [string]$log.Content
+                $lines = $text -split "`n"
+                $tail = if ($lines.Count -gt 120) { $lines[-120..-1] } else { $lines }
+                Write-Host '  ---- EB log tail (last 120 lines) ----' -ForegroundColor DarkGray
+                foreach ($l in $tail) { Write-Host "    $l" -ForegroundColor DarkGray }
+                Write-Host '  ---- end EB log tail ----' -ForegroundColor DarkGray
+            } catch {
+                Write-Warn "Could not download the log bundle: $($_.Exception.Message)"
+                Write-Diag "Open the URL above in a browser to read the logs."
+            }
+        }
+    } catch {
+        Write-Warn "Could not retrieve EB logs: $($_.Exception.Message)"
+        Write-Diag "Manual pull:"
+        Write-Diag "  aws elasticbeanstalk request-environment-info  --environment-name $EbEnvName --info-type tail"
+        Write-Diag "  aws elasticbeanstalk retrieve-environment-info --environment-name $EbEnvName --info-type tail"
+    }
+}
+
+# Poll EB until Health=Green AND VersionLabel matches the target, or until the
+# retry budget is exhausted. Returns the final environment object (caller
+# decides success/failure based on Health + VersionLabel).
+function Wait-ForGreen {
+    param(
+        [int]$MaxRetries = $MaxHealthRetries,
+        [int]$DelaySeconds = $HealthRetryDelaySeconds
+    )
+    $envNow = Get-EbEnvironment
+    if ($null -ne $envNow) {
+        Write-Diag "initial: version=$($envNow.VersionLabel)  health=$($envNow.Health)  status=$($envNow.HealthStatus)"
+        if ($envNow.Health -eq 'Green' -and $envNow.VersionLabel -eq $TargetVersion) {
+            Write-Ok "Environment already Green on $TargetVersion."
+            return $envNow
+        }
+    }
+
+    for ($i = 1; $i -le $MaxRetries; $i++) {
+        Write-Step "Health not Green yet; waiting $DelaySeconds s then re-checking (attempt $i/$MaxRetries)..."
+        Start-Sleep -Seconds $DelaySeconds
+        $envNow = Get-EbEnvironment
+        if ($null -eq $envNow) {
+            Write-Warn 'describe-environments returned no environment; retrying.'
+            continue
+        }
+        Write-Diag "poll $i/${MaxRetries}: version=$($envNow.VersionLabel)  health=$($envNow.Health)  status=$($envNow.HealthStatus)"
+        if ($envNow.Health -eq 'Green' -and $envNow.VersionLabel -eq $TargetVersion) {
+            Write-Ok "Environment reached Green on $TargetVersion after $i poll(s)."
+            return $envNow
+        }
+    }
+    return $envNow
 }
 #endregion
 
@@ -384,20 +471,34 @@ Write-Phase 'PHASE 4: Remove static AWS credentials from EB (atomic update)'
 if ($presentCredVars.Count -eq 0) {
     Write-Ok 'Nothing to remove from EB (no credential properties present). Skipping update.'
 } else {
-    $removeArgs = $presentCredVars | ForEach-Object {
+    # Build each removal as its own shorthand structure. CRITICAL: these must reach
+    # the AWS CLI as SEPARATE argv tokens (one per option), not a single
+    # space-joined string. Passing a PowerShell array straight to a
+    # ValueFromRemainingArguments parameter collapses it into one nested element
+    # that splatting then joins with spaces, which the CLI rejects as
+    # "Unknown options: Namespace=...AWS_ACCESS_KEY_ID Namespace=...". Instead we
+    # assemble one FLAT argument array and splat that, so every removal stays a
+    # distinct token.
+    $removeArgs = @($presentCredVars | ForEach-Object {
         "Namespace=aws:elasticbeanstalk:application:environment,OptionName=$_"
-    }
+    })
+
+    $updateArgs = @(
+        'elasticbeanstalk', 'update-environment',
+        '--application-name', $EbAppName,
+        '--environment-name', $EbEnvName,
+        '--option-settings',
+            "Namespace=aws:elasticbeanstalk:application:environment,OptionName=USE_SSM,Value=true",
+            "Namespace=aws:elasticbeanstalk:application:environment,OptionName=SSM_REGION,Value=$Region",
+            "Namespace=aws:elasticbeanstalk:application:environment,OptionName=SSM_PREFIX,Value=$SsmPrefix",
+        '--options-to-remove'
+    ) + $removeArgs   # array concatenation flattens $removeArgs into separate elements
 
     Confirm-Step "Remove $($presentCredVars.Count) credential propert(ies) from '$EbEnvName' and re-assert USE_SSM=true now?"
     Write-Step 'Submitting environment update (remove credentials + set USE_SSM=true)...'
+    Write-Diag "options-to-remove: $($removeArgs -join ' | ')"
     Invoke-Aws -SkipInDryRun -Retries 3 -DelaySeconds 5 -What 'update-environment (remove static AWS credentials)' `
-        elasticbeanstalk update-environment `
-        --application-name $EbAppName --environment-name $EbEnvName `
-        --option-settings `
-            "Namespace=aws:elasticbeanstalk:application:environment,OptionName=USE_SSM,Value=true" `
-            "Namespace=aws:elasticbeanstalk:application:environment,OptionName=SSM_REGION,Value=$Region" `
-            "Namespace=aws:elasticbeanstalk:application:environment,OptionName=SSM_PREFIX,Value=$SsmPrefix" `
-        --options-to-remove $removeArgs | Out-Null
+        @updateArgs | Out-Null
 
     if (-not $DryRun) {
         Write-Step 'Waiting for the environment to finish updating...'
@@ -421,12 +522,12 @@ if ($DryRun) {
     return
 }
 
-Write-Step 'Fetching EB environment health...'
-$envState = Invoke-Aws -Retries 3 -DelaySeconds 5 elasticbeanstalk describe-environments `
-    --application-name $EbAppName --environment-names $EbEnvName --output json | ConvertFrom-Json
-$envNow = @($envState.Environments)[0]
-Write-Diag "version: $($envNow.VersionLabel)  health: $($envNow.Health)  status: $($envNow.HealthStatus)"
+Write-Step "Polling EB health until Green on $TargetVersion (max $MaxHealthRetries x ${HealthRetryDelaySeconds}s)..."
+$envNow = Wait-ForGreen
 
+$isGreen = ($null -ne $envNow) -and ($envNow.Health -eq 'Green') -and ($envNow.VersionLabel -eq $TargetVersion)
+
+# Probe the public endpoint (informational - the EB gate above is authoritative).
 Write-Step "Querying public endpoint $HealthUrl ..."
 try {
     $resp = Invoke-WebRequest -Uri $HealthUrl -UseBasicParsing -TimeoutSec 30
@@ -436,15 +537,58 @@ try {
     Write-Warn "Health request failed: $($_.Exception.Message)"
 }
 
+if (-not $isGreen) {
+    $finalVer    = if ($envNow) { $envNow.VersionLabel } else { '(unknown)' }
+    $finalHealth = if ($envNow) { $envNow.Health }       else { '(unknown)' }
+    $finalStatus = if ($envNow) { $envNow.HealthStatus } else { '(unknown)' }
+
+    Write-Host ''
+    Write-Host ('=' * 78) -ForegroundColor Red
+    Write-Host '  STILL NOT GREEN AFTER RETRIES' -ForegroundColor Red
+    Write-Host ('=' * 78) -ForegroundColor Red
+    Write-Host "  version : $finalVer (target $TargetVersion)" -ForegroundColor Red
+    Write-Host "  health  : $finalHealth" -ForegroundColor Red
+    Write-Host "  status  : $finalStatus" -ForegroundColor Red
+    Write-Host ''
+    Write-Warn 'Dumping the most recent EB logs so you can see why it is unhealthy:'
+    Show-EbLogs
+    Write-Host ''
+    Write-Host '  Look for (these mean the fix worked at the credential layer):' -ForegroundColor Yellow
+    Write-Host '    [loadSecrets] No static AWS credential env vars present - using the instance profile.' -ForegroundColor DarkGray
+    Write-Host '    [loadSecrets] Loaded N parameter(s) from SSM: ...' -ForegroundColor DarkGray
+    Write-Host '  And NOT (these mean it is still broken):' -ForegroundColor Yellow
+    Write-Host '    is not authorized to perform: ssm:GetParametersByPath' -ForegroundColor DarkGray
+    Write-Host '    [loadSecrets] FATAL: SSM fetch failed' -ForegroundColor DarkGray
+    Write-Host ''
+    Write-Host '  Re-pull logs any time with:' -ForegroundColor Yellow
+    Write-Host "    aws elasticbeanstalk request-environment-info  --environment-name $EbEnvName --info-type tail" -ForegroundColor DarkGray
+    Write-Host "    aws elasticbeanstalk retrieve-environment-info --environment-name $EbEnvName --info-type tail" -ForegroundColor DarkGray
+    Write-Host ''
+    Write-Host '  If SSM/permissions are the blocker and you need service back now, see' -ForegroundColor Yellow
+    Write-Host '  ROLLBACK_V40_SSM.md (R2 disables SSM; R1 redeploys v39).' -ForegroundColor DarkGray
+    Write-Host ''
+    throw "v40 did not reach Green within $MaxHealthRetries retries (health=$finalHealth, version=$finalVer)."
+}
+
+# ------------------------------------------------------------------------------
+# SUCCESS: Health=Green AND VersionLabel=v40
+# ------------------------------------------------------------------------------
 Write-Host ''
-Write-Host '  NEXT: confirm loadSecrets now reads SSM via the instance profile.' -ForegroundColor Yellow
-Write-Host '  Tail the application logs and look for these lines (NOT an AccessDenied):' -ForegroundColor Yellow
+Write-Host ('=' * 78) -ForegroundColor Green
+Write-Host '  SUCCESS: v40 IS PRODUCTION-LIVE AND GREEN (SSM secrets via instance profile)' -ForegroundColor Green
+Write-Host ('=' * 78) -ForegroundColor Green
+Write-Host "  version : $($envNow.VersionLabel)" -ForegroundColor Green
+Write-Host "  health  : $($envNow.Health) ($($envNow.HealthStatus))" -ForegroundColor Green
+Write-Host "  endpoint: $HealthUrl" -ForegroundColor Green
+Write-Host ''
+Write-Host '  CONFIRM in the logs that loadSecrets now reads SSM via the instance profile' -ForegroundColor Yellow
+Write-Host '  (you should see these, and NOT an AccessDenied):' -ForegroundColor Yellow
 Write-Host '    [loadSecrets] No static AWS credential env vars present - using the instance profile.' -ForegroundColor DarkGray
 Write-Host '    [loadSecrets] Loaded N parameter(s) from SSM: ...' -ForegroundColor DarkGray
-Write-Host '' 
-Write-Host "  Pull logs with:" -ForegroundColor Yellow
-Write-Host "    aws elasticbeanstalk request-environment-info --environment-name $EbEnvName --info-type tail" -ForegroundColor DarkGray
-Write-Host "    aws elasticbeanstalk retrieve-environment-info  --environment-name $EbEnvName --info-type tail" -ForegroundColor DarkGray
+Write-Host ''
+Write-Host '  Pull logs with:' -ForegroundColor Yellow
+Write-Host "    aws elasticbeanstalk request-environment-info  --environment-name $EbEnvName --info-type tail" -ForegroundColor DarkGray
+Write-Host "    aws elasticbeanstalk retrieve-environment-info --environment-name $EbEnvName --info-type tail" -ForegroundColor DarkGray
 Write-Host ''
 Write-Host '  Functional checks:' -ForegroundColor Yellow
 Write-Host '    [ ] Log in (DB password + JWT_SECRET come from SSM)' -ForegroundColor Yellow
@@ -454,4 +598,4 @@ Write-Host ''
 Write-Host '  Defense in depth: rebuild + redeploy v40 to ship the loadSecrets.js purge:' -ForegroundColor Yellow
 Write-Host '    pwsh -File scripts/deploy-v40-ssm.ps1' -ForegroundColor DarkGray
 Write-Host ''
-Write-Ok 'Credential fix complete.'
+Write-Ok 'Credential fix complete. v40 is GREEN.'

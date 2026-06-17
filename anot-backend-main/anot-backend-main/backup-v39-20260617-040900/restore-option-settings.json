@@ -1,0 +1,52 @@
+[
+    {
+        "Namespace":  "aws:elasticbeanstalk:application:environment",
+        "OptionName":  "JWT_SECRET",
+        "Value":  "4pKahvJoJQMDXY6YkZar7PAfPEO3-4zlnTgwNiCmVvM_MfT3eOAvehjGVmmm0p3E"
+    },
+    {
+        "Namespace":  "aws:elasticbeanstalk:application:environment",
+        "OptionName":  "SETTINGS_ENCRYPTION_KEY",
+        "Value":  "ZMQz5qAXG6oz84C4zQbHYQ/MA5nPCAcIJenL0R2aa78="
+    },
+    {
+        "Namespace":  "aws:elasticbeanstalk:application:environment",
+        "OptionName":  "DATABASE_URL",
+        "Value":  "postgresql://anot_app:AnotHealth2026Secure123@anot-postgres.c5casia24do8.ap-southeast-1.rds.amazonaws.com:5432/anot"
+    },
+    {
+        "Namespace":  "aws:elasticbeanstalk:application:environment",
+        "OptionName":  "DB_PASSWORD",
+        "Value":  "Ea5bA3SPmlNB1wVcBamQyD9ETaGgB7FW"
+    },
+    {
+        "Namespace":  "aws:elasticbeanstalk:application:environment",
+        "OptionName":  "DB_USER",
+        "Value":  "anot_app"
+    },
+    {
+        "Namespace":  "aws:elasticbeanstalk:application:environment",
+        "OptionName":  "DB_HOST",
+        "Value":  "anot-postgres.c5casia24do8.ap-southeast-1.rds.amazonaws.com"
+    },
+    {
+        "Namespace":  "aws:elasticbeanstalk:application:environment",
+        "OptionName":  "DB_PORT",
+        "Value":  "5432"
+    },
+    {
+        "Namespace":  "aws:elasticbeanstalk:application:environment",
+        "OptionName":  "DB_NAME",
+        "Value":  "anot"
+    },
+    {
+        "Namespace":  "aws:elasticbeanstalk:application:environment",
+        "OptionName":  "ANTHROPIC_API_KEY",
+        "Value":  "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"
+    },
+    {
+        "Namespace":  "aws:elasticbeanstalk:application:environment",
+        "OptionName":  "DEEPGRAM_WEBHOOK_SECRET",
+        "Value":  "Fp5TtAqpflasIUJ6B9bDTft/mchHRXqy"
+    }
+]
