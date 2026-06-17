@@ -27,6 +27,19 @@
 //   the parameters. We page through GetParametersByPath WithDecryption:true and
 //   copy each parameter into process.env.
 //
+// CREDENTIALS (why we purge static keys in prod):
+//   AWS authentication in production comes from the EC2 INSTANCE PROFILE attached
+//   to the Elastic Beanstalk instances (role aws-elasticbeanstalk-ec2-role). The
+//   AWS SDK default credential chain, however, checks STATIC env-var keys
+//   (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_SESSION_TOKEN) and named
+//   profiles (AWS_PROFILE) BEFORE the instance profile. A leftover IAM-user key
+//   (e.g. the old "anot-s3-audio" S3 user) in the EB env or a bundled .env makes
+//   every SDK call authenticate as THAT user, and SSM then fails with:
+//     "User: arn:aws:iam::...:user/anot-s3-audio is not authorized to perform:
+//      ssm:GetParametersByPath".
+//   So when USE_SSM=true we strip those static credentials from process.env
+//   (before creating any AWS client) and let the SDK use the instance profile.
+//
 // SECURITY:
 //   We log the NAMES of the variables we loaded and a count — never the values.
 
@@ -43,6 +56,57 @@ dotenv.config()
  * The leaf segment is used verbatim (we store params already named like env
  * vars, e.g. /anot/prod/DB_PASSWORD), so casing is preserved.
  */
+/**
+ * Remove static AWS credentials from process.env so the AWS SDK falls through to
+ * the EC2 instance profile for EVERY client (SSM here, S3 in s3Storage.js, etc).
+ * This runs at boot BEFORE any AWS client is constructed (loadSecrets is awaited
+ * first in server.js), so it also neutralizes keys that arrived via a bundled
+ * .env, not just EB environment properties.
+ *
+ * Escape hatch: AWS_KEEP_ENV_CREDENTIALS=true keeps the static keys (for a box
+ * that legitimately must use them). Never logs credential values.
+ *
+ * @returns {string[]} names of the credential vars that were removed
+ */
+function purgeStaticAwsCredentials() {
+  if (String(process.env.AWS_KEEP_ENV_CREDENTIALS || '').toLowerCase() === 'true') {
+    console.warn(
+      '[loadSecrets] AWS_KEEP_ENV_CREDENTIALS=true — keeping static AWS env credentials ' +
+        '(the EC2 instance profile will NOT be forced).',
+    )
+    return []
+  }
+
+  const credentialVars = [
+    'AWS_ACCESS_KEY_ID',
+    'AWS_SECRET_ACCESS_KEY',
+    'AWS_SESSION_TOKEN',
+    'AWS_PROFILE',
+    'AWS_CREDENTIAL_PROFILES_FILE',
+    'AWS_SHARED_CREDENTIALS_FILE',
+    'AWS_CONFIG_FILE',
+  ]
+
+  const removed = []
+  for (const name of credentialVars) {
+    if (process.env[name] != null && process.env[name] !== '') {
+      delete process.env[name]
+      removed.push(name)
+    }
+  }
+
+  if (removed.length > 0) {
+    // Names only — never the secret values.
+    console.warn(
+      `[loadSecrets] Ignoring ${removed.length} static AWS credential var(s) so the EC2 ` +
+        `instance profile is used for all AWS calls: ${removed.join(', ')}`,
+    )
+  } else {
+    console.log('[loadSecrets] No static AWS credential env vars present — using the instance profile.')
+  }
+  return removed
+}
+
 function paramNameToEnvKey(fullName, prefix) {
   const normalizedPrefix = prefix.endsWith('/') ? prefix : `${prefix}/`
   const leaf = fullName.startsWith(normalizedPrefix)
@@ -84,6 +148,11 @@ async function loadSecrets() {
   const overwrite = String(process.env.SSM_NO_OVERRIDE || '').toLowerCase() !== 'true'
 
   console.log(`[loadSecrets] USE_SSM=true — loading parameters from "${prefix}" (region ${region})…`)
+
+  // Force the instance profile: drop any static IAM-user keys (e.g. the old
+  // anot-s3-audio S3 user) BEFORE the SSM client is created, otherwise the SDK
+  // authenticates as that user and GetParametersByPath is denied.
+  purgeStaticAwsCredentials()
 
   // Lazy-require the SDK so local/offline installs that never enable SSM don't
   // pay the import cost (and a missing dep can't crash dev boot).
