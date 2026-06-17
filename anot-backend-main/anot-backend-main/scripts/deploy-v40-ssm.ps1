@@ -312,15 +312,20 @@ function Get-AppVersion {
     return $null
 }
 
-# Verify v40 is actually live and healthy: the public endpoint must answer 200
-# AND report version v40, AND Elastic Beanstalk must report Health=Green. Returns
-# $true only when BOTH agree. This is the gate that protects the plaintext-secret
-# removal: we must never strip the EB env-property fallback while v40 is unhealthy,
-# because the v39 we'd roll back to cannot read secrets from SSM (no loadSecrets.js)
-# and would come up RED with no credentials at all.
+# Verify v40 is actually live and healthy. Elastic Beanstalk is the AUTHORITATIVE
+# signal: if EB reports Health=Green on VersionLabel=v40, the new instances booted,
+# passed their health checks, and are reading secrets from SSM. The public
+# https://api.anot.health/ probe is informational ONLY - it depends on external DNS
+# that can fail independently of the app (a separate infra concern), so a probe
+# failure must NOT block the deploy. Returns a result object so the caller can gate
+# on EB health while still surfacing the endpoint result.
+#
+# This still protects the plaintext-secret removal: we never strip the EB
+# env-property fallback unless EB confirms v40 is Green, because the v39 we'd roll
+# back to cannot read secrets from SSM (no loadSecrets.js) and would come up RED.
 function Test-V40Healthy {
     $endpointOk = $false
-    Write-Step "Querying $HealthUrl ..."
+    Write-Step "Querying $HealthUrl (informational - EB health is authoritative) ..."
     try {
         $response = Invoke-WebRequest -Uri $HealthUrl -UseBasicParsing -TimeoutSec 30
         Write-Step "HTTP $($response.StatusCode)"
@@ -333,25 +338,37 @@ function Test-V40Healthy {
         }
     }
     catch {
-        Write-Warn "Health request failed: $($_.Exception.Message)"
+        Write-Warn "Health probe failed (likely DNS/infra, not the app): $($_.Exception.Message)"
     }
 
-    Write-Step 'Fetching EB environment health...'
-    $envHealthy = $false
+    Write-Step 'Fetching EB environment health (authoritative)...'
+    $ebGreen = $false
+    $version = '(unknown)'
+    $health  = '(unknown)'
+    $status  = '(unknown)'
     try {
         $envState = Invoke-Aws elasticbeanstalk describe-environments `
             --application-name $EbAppName --environment-names $EbEnvName --output json | ConvertFrom-Json
         $envObj = $envState.Environments[0]
-        Write-Host "    Version: $($envObj.VersionLabel)  Health: $($envObj.Health)  Status: $($envObj.HealthStatus)" -ForegroundColor DarkGray
-        if ($envObj.Health -eq 'Green' -and $envObj.VersionLabel -eq $NewVersion) {
-            $envHealthy = $true
+        $version = $envObj.VersionLabel
+        $health  = $envObj.Health
+        $status  = $envObj.HealthStatus
+        Write-Host "    Version: $version  Health: $health  Status: $status" -ForegroundColor DarkGray
+        if ($health -eq 'Green' -and $version -eq $NewVersion) {
+            $ebGreen = $true
         }
     }
     catch {
         Write-Warn "Could not read EB environment health: $($_.Exception.Message)"
     }
 
-    return ($endpointOk -and $envHealthy)
+    return [pscustomobject]@{
+        EbGreen    = $ebGreen
+        EndpointOk = $endpointOk
+        Version    = $version
+        Health     = $health
+        Status     = $status
+    }
 }
 #endregion
 
@@ -911,15 +928,29 @@ if (-not $DryRun) {
 # to deploy (the bad backslash zip), but Phase 7 had ALREADY stripped the
 # plaintext secrets, so the v39 we rolled back to came up RED - it has no
 # loadSecrets.js and could not read anything from SSM. We now REFUSE to remove
-# the plaintext fallback unless v40 is confirmed live (endpoint reports v40) and
-# EB reports Green.
+# the plaintext fallback unless EB confirms v40 is Green.
+#
+# EB health is AUTHORITATIVE. The public https://api.anot.health/ probe depends on
+# external DNS that can fail on its own (a separate infra issue) - a probe failure
+# is logged as a warning but does NOT block Phase 8, because a Green v40 in EB
+# already proves the new instances booted and are reading secrets from SSM.
 Write-Phase 'PHASE 7: Verify v40 health (gate before plaintext removal)'
 
-$v40Healthy = Test-V40Healthy
+$healthResult = Test-V40Healthy
+$v40Healthy   = $healthResult.EbGreen
+
 if ($v40Healthy) {
-    Write-Ok "v40 verified healthy: endpoint reports $NewVersion and EB is Green."
+    if ($healthResult.EndpointOk) {
+        Write-Ok "v40 verified healthy: endpoint reports $NewVersion and EB is Green."
+    } else {
+        Write-Ok "v40 is GREEN per EB. DNS probe failed but EB health is authoritative. Proceeding to Phase 8."
+    }
+    # EB-Green is automated proof the app booted; login (JWT_SECRET + DB password
+    # from SSM) is the one thing only a human can confirm before we drop the
+    # plaintext fallback. Require an explicit acknowledgement here.
+    Confirm-Step "CONFIRM you have tested LOGIN against v40 (JWT + DB password from SSM) and it works. Proceed to remove the plaintext fallback?"
 } else {
-    Write-Warn "v40 is NOT confirmed healthy. Skipping Phase 8 (plaintext removal)."
+    Write-Warn "v40 is NOT Green in EB (Version=$($healthResult.Version), Health=$($healthResult.Health)). Skipping Phase 8 (plaintext removal)."
 }
 
 # ==============================================================================
@@ -936,15 +967,27 @@ if (-not $v40Healthy) {
     Write-Warn 'This keeps the rollback fallback intact. Investigate v40, then re-run this'
     Write-Warn 'script (it is safe to re-run) once the endpoint reports v40 and EB is Green.'
 } else {
-    Confirm-Step 'v40 is healthy. Remove the now-redundant plaintext secret env properties from EB?'
-    $removeArgs = $SecretsToRemove | ForEach-Object {
+    # The Phase 7 gate already confirmed EB-Green v40 and an operator login check,
+    # so we proceed straight to the removal here (no second prompt).
+    Write-Step 'v40 confirmed healthy in Phase 7. Removing the now-redundant plaintext secret env properties...'
+    # CRITICAL: each removal must reach the AWS CLI as its OWN argv token. Passing a
+    # PowerShell array directly to Invoke-Aws's ValueFromRemainingArguments parameter
+    # collapses it into one nested element that splatting then space-joins, which the
+    # CLI rejects ("Unknown options: Namespace=...A Namespace=...B"). Build one FLAT
+    # argument array and splat that instead.
+    $removeArgs = @($SecretsToRemove | ForEach-Object {
         "Namespace=aws:elasticbeanstalk:application:environment,OptionName=$_"
-    }
+    })
+    $removeUpdateArgs = @(
+        'elasticbeanstalk', 'update-environment',
+        '--application-name', $EbAppName,
+        '--environment-name', $EbEnvName,
+        '--options-to-remove'
+    ) + $removeArgs   # concatenation flattens $removeArgs into separate elements
     Write-Step 'Removing plaintext secret properties...'
+    Write-Diag "options-to-remove: $($removeArgs -join ' | ')"
     Invoke-Aws -SkipInDryRun -Retries 3 -DelaySeconds 5 -What 'update-environment (remove plaintext secrets)' `
-        elasticbeanstalk update-environment `
-        --application-name $EbAppName --environment-name $EbEnvName `
-        --options-to-remove $removeArgs | Out-Null
+        @removeUpdateArgs | Out-Null
 
     Write-Step 'Waiting for the environment to settle...'
     Invoke-Aws -SkipInDryRun elasticbeanstalk wait environment-updated `
