@@ -376,7 +376,11 @@ if ($alreadyCorrect) {
 # deeply nested (origins -> custom headers -> items, cache behaviors, etc.) and a
 # shallow ConvertTo-Json silently truncates them into "System.Object[]" strings.
 $updatedConfigFile = Join-Path $ArtifactDir "cloudfront-$DistributionId-UPDATED-$Stamp.json"
-$config | ConvertTo-Json -Depth 100 | Out-File -FilePath $updatedConfigFile -Encoding utf8
+# AWS CLI's file:// parser rejects a UTF-8 BOM ("ParamValidation: Expected: '=', received: '∩'").
+# Out-File -Encoding utf8 emits a BOM on Windows PowerShell, so write the bytes directly
+# with a BOM-less UTF-8 encoding instead.
+$jsonString = $config | ConvertTo-Json -Depth 100
+[System.IO.File]::WriteAllText($updatedConfigFile, $jsonString, [System.Text.UTF8Encoding]::new($false))
 Write-Step "Wrote updated distribution config to $updatedConfigFile"
 
 # ==============================================================================

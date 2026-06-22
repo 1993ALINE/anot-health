@@ -40,7 +40,11 @@
    * SSM              : Get*/GetParametersByPath scoped to /anot/prod/*.
    * CloudFormation   : describe stacks (read-only).
    * Logs             : describe (account-wide) + create/put/tail scoped to the
-                        anot-backend-prod and RDSOSMetrics log groups.
+                        anot-backend-prod and RDSOSMetrics log groups, plus
+                        create/put/retention scoped to aws-waf-logs-* groups.
+   * WAFv2 (CloudFront): List* (account-wide) + Get/Create/Update/Delete WebACL,
+                        IPSet, RuleGroup, and logging-config scoped to us-east-1
+                        'global' (CLOUDFRONT-scope) WAFv2 resources.
 
  WHAT THIS SCRIPT DOES (top to bottom):
    PRE-FLIGHT  Tooling + identity checks; warn loudly if you are running as root.
@@ -337,6 +341,19 @@ $RdsLogArnAll  = "arn:aws:logs:${Region}:${AwsAccountId}:log-group:RDSOSMetrics*
 $AudioBktArn   = "arn:aws:s3:::${AudioBucket}"
 $FrontBktArn   = "arn:aws:s3:::${FrontendBucket}"
 
+# WAFv2 for CloudFront is a GLOBAL feature, but its control plane AND its
+# CLOUDFRONT-scoped resources live ONLY in us-east-1 (ARN partition 'global').
+# WAF log groups for a CloudFront WebACL must also be in us-east-1 and MUST be
+# named 'aws-waf-logs-*'. So these ARNs are pinned to us-east-1 regardless of
+# $Region (ap-southeast-1) used by the regional resources above.
+$WafRegion       = 'us-east-1'
+$WafWebAclArn    = "arn:aws:wafv2:${WafRegion}:${AwsAccountId}:global/webacl/*"
+$WafIpSetArn     = "arn:aws:wafv2:${WafRegion}:${AwsAccountId}:global/ipset/*"
+$WafRuleGroupArn = "arn:aws:wafv2:${WafRegion}:${AwsAccountId}:global/rulegroup/*"
+$WafManagedArn   = "arn:aws:wafv2:${WafRegion}:${AwsAccountId}:global/managedruleset/*"
+$WafLogArn       = "arn:aws:logs:${WafRegion}:${AwsAccountId}:log-group:aws-waf-logs-*"
+$WafLogArnAll    = "arn:aws:logs:${WafRegion}:${AwsAccountId}:log-group:aws-waf-logs-*:*"
+
 $opsPolicy = [ordered]@{
     Version   = '2012-10-17'
     Statement = @(
@@ -513,6 +530,64 @@ $opsPolicy = [ordered]@{
                 'logs:PutRetentionPolicy'
             )
             Resource = @($EbLogArn, $EbLogArnAll, $RdsLogArn, $RdsLogArnAll)
+        },
+        # ----------------------------------------------------------------------
+        # WAFv2 (CloudFront WAF). List actions do not support resource-level
+        # scoping (same as cloudfront:List* / rds:Describe* above) so they use
+        # "*"; the mutating/read actions are scoped to us-east-1 'global' WAFv2
+        # resources (CLOUDFRONT scope). Lets the ops user run
+        # enable-cloudfront-waf.ps1 end-to-end.
+        # ----------------------------------------------------------------------
+        [ordered]@{
+            Sid      = 'WafV2GlobalList'
+            Effect   = 'Allow'
+            Action   = @(
+                'wafv2:ListWebACLs',
+                'wafv2:ListIPSets',
+                'wafv2:ListRuleGroups',
+                # NOTE: wafv2:ListRules is a WAF *Classic* action and has no WAFv2
+                # equivalent (rules live inside web ACLs / rule groups). Included
+                # because it was explicitly requested; it is harmless but inert.
+                'wafv2:ListRules'
+            )
+            Resource = '*'
+        },
+        [ordered]@{
+            Sid      = 'WafV2ManageCloudFront'
+            Effect   = 'Allow'
+            Action   = @(
+                'wafv2:GetWebACL',
+                'wafv2:CreateWebACL',
+                'wafv2:UpdateWebACL',
+                'wafv2:DeleteWebACL',
+                'wafv2:GetLoggingConfiguration',
+                'wafv2:PutLoggingConfiguration',
+                'wafv2:DeleteLoggingConfiguration',
+                'wafv2:CreateIPSet',
+                'wafv2:GetIPSet',
+                'wafv2:UpdateIPSet',
+                'wafv2:CreateRuleGroup',
+                'wafv2:GetRuleGroup',
+                # NOTE: wafv2:CreateRule is a WAF *Classic* action with no WAFv2
+                # equivalent (use CreateRuleGroup above). Included as requested.
+                'wafv2:CreateRule',
+                'wafv2:TagResource',
+                'wafv2:ListTagsForResource'
+            )
+            Resource = @($WafWebAclArn, $WafIpSetArn, $WafRuleGroupArn, $WafManagedArn)
+        },
+        [ordered]@{
+            Sid      = 'WafLogsCreateAndWrite'
+            Effect   = 'Allow'
+            Action   = @(
+                'logs:CreateLogGroup',
+                'logs:CreateLogStream',
+                'logs:PutLogEvents',
+                # Used by enable-cloudfront-waf.ps1 to set 30d retention on the
+                # 'aws-waf-logs-*' group; harmless if unused.
+                'logs:PutRetentionPolicy'
+            )
+            Resource = @($WafLogArn, $WafLogArnAll)
         }
     )
 }
