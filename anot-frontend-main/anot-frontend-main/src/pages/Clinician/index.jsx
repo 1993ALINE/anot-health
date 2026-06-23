@@ -6,6 +6,12 @@ import SystemProfileManager from '../../components/SystemProfileManager'
 import PortalSidebarFooter from '../../components/PortalSidebarFooter'
 import { useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, useSidebarOffCanvasMode, portalSidebarAriaHidden, ConfirmDialog, PortalSidebarBrand } from '../shared'
 import { queueAudioUpload, flushPendingAudioUploads, installOfflineUploadFlush } from '../../utils/offlineUploadQueue'
+import { addToQueue } from '../../utils/offlineAudioQueue'
+import {
+  requestBackgroundSync,
+  setOfflineUploadSuccessHandler,
+} from '../../utils/offlineSyncManager'
+import OfflineIndicator from './OfflineIndicator'
 import './clinician.css'
 import './clinician-redesign.css'
 import '../portalErrorBoundary.css'
@@ -1776,6 +1782,13 @@ function Clinician() {
   }, [showToast])
 
   useEffect(() => {
+    setOfflineUploadSuccessHandler(() => {
+      showToast('Offline recording uploaded successfully')
+      loadVisitsRef.current?.({ silent: true })
+    })
+  }, [showToast])
+
+  useEffect(() => {
     const onKey = (e) => {
       const t = e.target
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
@@ -1954,18 +1967,35 @@ function Clinician() {
         await new Promise(res => {
           rec.onstop = async () => {
             if (cRef.current.length > 0) {
-              try {
-                const b = new Blob(cRef.current, { type: rec.mimeType || 'audio/webm' })
-                await visitsAPI.uploadAudio(vid, b)
-              } catch (err) {
-                console.error(err)
+              const b = new Blob(cRef.current, { type: rec.mimeType || 'audio/webm' })
+              if (!navigator.onLine) {
                 try {
-                  const b = new Blob(cRef.current, { type: rec.mimeType || 'audio/webm' })
-                  await queueAudioUpload({ visitId: vid, blob: b, mode: 'primary', durationSeconds: timer })
+                  await addToQueue(b, active.patient_id, vid, {
+                    mode: 'primary',
+                    durationSeconds: timer,
+                    patientName: pn,
+                    timestamp: Date.now(),
+                    type: 'encounter',
+                  })
+                  await requestBackgroundSync()
                   uploadQueued = true
+                  showToast('Recording saved offline. Will upload when online.')
                 } catch (qErr) {
                   console.error(qErr)
-                  showToast('Upload failed. Check your connection and try again.', 'error')
+                  showToast('Could not save recording offline.', 'error')
+                }
+              } else {
+                try {
+                  await visitsAPI.uploadAudio(vid, b)
+                } catch (err) {
+                  console.error(err)
+                  try {
+                    await queueAudioUpload({ visitId: vid, blob: b, mode: 'primary', durationSeconds: timer })
+                    uploadQueued = true
+                  } catch (qErr) {
+                    console.error(qErr)
+                    showToast('Upload failed. Check your connection and try again.', 'error')
+                  }
                 }
               }
             }
@@ -1977,8 +2007,10 @@ function Clinician() {
       if (uploadQueued) {
         // Don't end the visit yet: ending without audio gives the scribe
         // nothing to transcribe. The flush handler ends it once the queued
-        // upload succeeds (it retries every 45s and on reconnect).
-        showToast('Upload failed — recording is saved in this tab and will retry automatically. Keep this tab open.', 'error')
+        // upload succeeds (IndexedDB when offline, in-memory retry when online).
+        if (navigator.onLine) {
+          showToast('Upload failed — recording is saved in this tab and will retry automatically. Keep this tab open.', 'error')
+        }
         setActive(null); setTimer(0); setPaused(false); cRef.current = []; mRef.current = null
         return
       }
@@ -2021,18 +2053,32 @@ function Clinician() {
       await new Promise(res => {
         arRef.current.onstop = async () => {
           if (acRef.current.length > 0) {
-            try {
-              const b = new Blob(acRef.current, { type: arRef.current.mimeType || 'audio/webm' })
-              await visitsAPI.appendAudio(vid, b)
-              showToast('✓ Additional recording uploaded')
-            } catch (err) {
-              console.error(err)
+            const b = new Blob(acRef.current, { type: arRef.current.mimeType || 'audio/webm' })
+            if (!navigator.onLine) {
               try {
-                const b = new Blob(acRef.current, { type: arRef.current.mimeType || 'audio/webm' })
-                await queueAudioUpload({ visitId: vid, blob: b, mode: 'append' })
-                showToast('Upload failed — recording is saved in this tab and will retry automatically. Keep this tab open.', 'error')
+                await addToQueue(b, addRec.patient_id, vid, {
+                  mode: 'append',
+                  patientName: addRec.patient_name,
+                  timestamp: Date.now(),
+                  type: 'append',
+                })
+                await requestBackgroundSync()
+                showToast('Recording saved offline. Will upload when online.')
               } catch {
-                showToast('Upload failed', 'error')
+                showToast('Could not save recording offline.', 'error')
+              }
+            } else {
+              try {
+                await visitsAPI.appendAudio(vid, b)
+                showToast('✓ Additional recording uploaded')
+              } catch (err) {
+                console.error(err)
+                try {
+                  await queueAudioUpload({ visitId: vid, blob: b, mode: 'append' })
+                  showToast('Upload failed — recording is saved in this tab and will retry automatically. Keep this tab open.', 'error')
+                } catch {
+                  showToast('Upload failed', 'error')
+                }
               }
             }
           }
@@ -2381,6 +2427,7 @@ function Clinician() {
   return (
     <div className="sf-page sf-portal adm-shell cl-clinician-shell cl-portal">
       {sessionTimeoutModal}
+      <OfflineIndicator showToast={showToast} />
       <Sidebar {...sidebarProps} />
       <div className="sf-main sf-portal__main">
         <Overlay open={sidebar.open} onClick={sidebar.close} className="adm-shell-overlay" />
