@@ -8,7 +8,6 @@ const cardStyle = {
   borderRadius: 12,
   boxShadow: '0 1px 4px rgba(0,0,0,0.08)',
   padding: 40,
-  maxWidth: 800,
   margin: '40px auto',
 }
 
@@ -91,7 +90,7 @@ export default function ContactScreen({ currentUser, showToast }) {
 
   return (
     <div className="cl-contact-page">
-      <div style={cardStyle}>
+      <div className="cl-contact-form-card" style={cardStyle}>
         {sent ? (
           <p role="status" style={{ fontSize: 15, color: '#374151', margin: 0 }}>
             Your message has been sent. We will get back to you within 24 hours.

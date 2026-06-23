@@ -333,7 +333,7 @@ function AdminSidebar({ tab, onSelectTab, currentUser, onRequestSignOut, badges,
     return (
         <aside
             id="adm-admin-sidebar"
-            className={`sf-sidebar sf-sidebar--rich adm-sidebar${sidebarOpen ? ' open' : ''}`}
+            className={`sidebar-wrapper sf-sidebar sf-sidebar--rich adm-sidebar${sidebarOpen ? ' open' : ''}`}
             aria-hidden={portalSidebarAriaHidden(sidebarDrawerMode, sidebarOpen)}
         >
             <div className="sf-sidebar-top sf-sidebar-rich__top">
@@ -1550,7 +1550,7 @@ function Admin() {
                     <div className="adm-topbar__start">
                         <button
                             type="button"
-                            className="adm-topbar__menu-btn"
+                            className="adm-topbar__menu-btn hamburger-menu"
                             onClick={sidebar.toggle}
                             aria-label={sidebar.open ? 'Close navigation menu' : 'Open navigation menu'}
                             aria-expanded={sidebar.open}

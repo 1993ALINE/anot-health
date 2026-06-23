@@ -239,7 +239,7 @@
 
 .adm-auditpro-table {
     width: 100%;
-    min-width: 960px;
+    min-width: 60rem;
     border-collapse: collapse;
     font-size: 12px;
 }
@@ -597,4 +597,25 @@
     100% {
         background-position: -100% 0;
     }
+}
+
+
+/* MOB-004: admin mobile width fix */
+@media (max-width: 768px) {
+  .adm-shell .adm-content,
+  .adm-shell .adm-module,
+  .adm-shell .adm-table-wrap,
+  .adm-auditpro-table,
+  .adm-audit-dashboard,
+  .adm-audit-dashboard .adm-audit-table-wrap {
+    max-width: 100%;
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .adm-shell .adm-form-grid,
+  .adm-shell .adm-stats-grid {
+    grid-template-columns: 1fr;
+  }
 }

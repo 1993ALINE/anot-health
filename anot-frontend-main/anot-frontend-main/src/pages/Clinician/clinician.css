@@ -2026,6 +2026,12 @@
   padding-bottom: 24px;
 }
 
+.cl-contact-form-card {
+  max-width: 50rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .cl-contact-section {
   background: #fff;
   border-radius: 12px;

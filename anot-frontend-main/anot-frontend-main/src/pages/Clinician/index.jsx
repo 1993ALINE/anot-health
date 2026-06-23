@@ -1300,7 +1300,7 @@ function Sidebar({ screen, setScreen, sidebar, currentUser, scheduleUpcomingBadg
       />
       <aside
         id="clinician-sidebar"
-        className={`sf-sidebar sf-sidebar--rich adm-sidebar cl-sidebar${sidebar.open ? ' open' : ''}`}
+        className={`sidebar-wrapper sf-sidebar sf-sidebar--rich adm-sidebar cl-sidebar${sidebar.open ? ' open' : ''}`}
         aria-hidden={portalSidebarAriaHidden(offCanvasSidebar, sidebar.open)}
       >
         <div className="cl-sidebar__header sf-sidebar-top sf-sidebar-rich__top">

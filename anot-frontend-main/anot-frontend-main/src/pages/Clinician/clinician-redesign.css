@@ -1,6 +1,6 @@
-/* Clinician portal visual redesign — scoped to .cl-portal.cl-clinician-shell */
+﻿/* Clinician portal visual redesign â€” scoped to .cl-portal.cl-clinician-shell */
 
-/* ─── Global status badges ─────────────────────────────────────────────────── */
+/* â”€â”€â”€ Global status badges â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cl-portal.cl-clinician-shell .cl-status-badge {
   display: inline-flex;
@@ -80,7 +80,7 @@
   border: 1px solid #16a34a !important;
 }
 
-/* ─── Sidebar (indigo) ─────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Sidebar (indigo) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cl-portal.cl-clinician-shell .cl-sidebar.sf-sidebar--rich.adm-sidebar {
   background: #4f46e5 !important;
@@ -228,7 +228,7 @@
   color: #fff !important;
 }
 
-/* ─── Main content ─────────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Main content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cl-portal.cl-clinician-shell .sf-portal__main .sf-body,
 .cl-portal.cl-clinician-shell .sf-portal__main .sf-body.cl-schedule,
@@ -247,7 +247,7 @@
   font-weight: 500;
 }
 
-/* ─── Stat cards ───────────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Stat cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cl-portal.cl-clinician-shell .cl-stat-cards {
   display: grid;
@@ -347,7 +347,7 @@
   color: #16a34a !important;
 }
 
-/* ─── Week date navigator ──────────────────────────────────────────────────── */
+/* â”€â”€â”€ Week date navigator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cl-portal.cl-clinician-shell .cl-date-nav {
   background: transparent;
@@ -518,7 +518,7 @@
   color: #fff !important;
 }
 
-/* Today (when not selected) looks like a normal day — white background, plain
+/* Today (when not selected) looks like a normal day â€” white background, plain
    border, only a small "TODAY" label. No special background color. High specificity
    (6 classes) to win over portal-calendar-strip.css today styling. */
 .cl-portal.cl-clinician-shell .portal-cal-strip .sf-date-nav-day.cl-date-nav__day.cl-date-nav__day--today:not(.active),
@@ -537,7 +537,7 @@
   color: #4F46E5 !important;
 }
 
-/* ─── Live chat (Contact) ──────────────────────────────────────────────────── */
+/* â”€â”€â”€ Live chat (Contact) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cl-portal.cl-clinician-shell .cl-contact-chat__empty-hint {
   flex: 1;
@@ -561,7 +561,7 @@
   color: #9ca3af;
 }
 
-/* ─── Patient cards ───────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Patient cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cl-portal.cl-clinician-shell .cl-schedule-visit-wrap {
   display: flex;
@@ -675,7 +675,7 @@
   line-height: 1;
 }
 
-/* ─── NOW divider ─────────────────────────────────────────────────────────── */
+/* â”€â”€â”€ NOW divider â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cl-portal.cl-clinician-shell .cl-now-divider {
   display: flex;
@@ -774,7 +774,7 @@
   white-space: nowrap;
 }
 
-/* ─── Schedule calendar picker ─────────────────────────────────────────────── */
+/* â”€â”€â”€ Schedule calendar picker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cl-portal.cl-clinician-shell .cl-calendar-btn {
   color: #4f46e5 !important;
@@ -799,7 +799,7 @@
   color: #fff !important;
 }
 
-/* ─── Notes filter tabs ────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Notes filter tabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cl-portal.cl-clinician-shell .cl-notes-tab {
   border-radius: 20px !important;
@@ -826,7 +826,7 @@
   font-size: 11px !important;
 }
 
-/* ─── Notes date range filter ──────────────────────────────────────────────── */
+/* â”€â”€â”€ Notes date range filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cl-portal.cl-clinician-shell .cl-notes-date-filter {
   display: flex;
@@ -890,7 +890,7 @@
   font-size: 13px !important;
 }
 
-/* ─── Notes waiting badges ─────────────────────────────────────────────────── */
+/* â”€â”€â”€ Notes waiting badges â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cl-portal.cl-clinician-shell .cl-notes-status-row {
   display: flex;
@@ -942,7 +942,7 @@
   align-self: center;
 }
 
-/* ─── Account dropdown (clinician) ───────────────────────────────────────── */
+/* â”€â”€â”€ Account dropdown (clinician) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cl-portal.cl-clinician-shell .sf-account-menu__panel.sf-account-menu__panel--clinician {
   background: #fff;
@@ -979,7 +979,7 @@
   display: none;
 }
 
-/* ─── Mobile responsive ────────────────────────────────────────────────────── */
+/* â”€â”€â”€ Mobile responsive â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 @media (max-width: 768px) {
   .cl-portal.cl-clinician-shell .adm-topbar__menu-btn {
@@ -1004,7 +1004,7 @@
   }
 
   .cl-portal.cl-clinician-shell .adm-topbar__menu-btn::before {
-    content: '☰';
+    content: 'â˜°';
     font-size: 24px;
     line-height: 1;
     color: #4f46e5;
@@ -1221,11 +1221,11 @@
   }
 }
 
-/* ─── Status-based card colors (action-required cards stand out) ───────────────
+/* â”€â”€â”€ Status-based card colors (action-required cards stand out) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
    Selectors cover canonical status classes plus the legacy variant names still
    emitted, so Schedule patient cards and Notes cards stay in sync. */
 
-/* READY FOR REVIEW — immediate clinician action (strong red). */
+/* READY FOR REVIEW â€” immediate clinician action (strong red). */
 .cl-portal.cl-clinician-shell .cl-patient-card--ready,
 .cl-portal.cl-clinician-shell .cl-patient-card--note-ready,
 .cl-portal.cl-clinician-shell .cl-patient-card--review,
@@ -1235,7 +1235,7 @@
   border-left: 3px solid #dc2626 !important;
 }
 
-/* OVERDUE — missed encounter (urgent amber). */
+/* OVERDUE â€” missed encounter (urgent amber). */
 .cl-portal.cl-clinician-shell .cl-patient-card--overdue,
 .cl-portal.cl-clinician-shell .sf-row.cl-patient-card.cl-patient-card--overdue,
 .cl-portal.cl-clinician-shell .cl-schedule-row.cl-patient-card.cl-patient-card--overdue,
@@ -1246,13 +1246,13 @@
   border-left: 3px solid #d97706 !important;
 }
 
-/* OVERDUE hover — slightly deeper amber. */
+/* OVERDUE hover â€” slightly deeper amber. */
 .cl-portal.cl-clinician-shell .cl-patient-card--overdue:hover,
 .cl-portal.cl-clinician-shell .cl-pending-card--overdue:hover {
   background: #fef3c7 !important;
 }
 
-/* WITH SCRIBE — no clinician action yet (calm white, orange accent). */
+/* WITH SCRIBE â€” no clinician action yet (calm white, orange accent). */
 .cl-portal.cl-clinician-shell .cl-patient-card--with-scribe,
 .cl-portal.cl-clinician-shell .cl-patient-card--processing,
 .cl-portal.cl-clinician-shell .cl-pending-card--with-scribe,
@@ -1263,7 +1263,7 @@
   border-left: 3px solid #ea580c !important;
 }
 
-/* UPCOMING — informational (white, blue accent). */
+/* UPCOMING â€” informational (white, blue accent). */
 .cl-portal.cl-clinician-shell .cl-patient-card--upcoming,
 .cl-portal.cl-clinician-shell .cl-pending-card--upcoming,
 .cl-portal.cl-clinician-shell .cl-pending-card--history-upcoming {
@@ -1272,7 +1272,7 @@
   border-left: 3px solid #2563eb !important;
 }
 
-/* COMPLETED — done (white, green accent). */
+/* COMPLETED â€” done (white, green accent). */
 .cl-portal.cl-clinician-shell .cl-patient-card--completed,
 .cl-portal.cl-clinician-shell .cl-patient-card--done,
 .cl-portal.cl-clinician-shell .cl-pending-card--completed,
@@ -1283,7 +1283,7 @@
   border-left: 3px solid #16a34a !important;
 }
 
-/* BADGES — action-required solid + filled; passive states soft outlined. */
+/* BADGES â€” action-required solid + filled; passive states soft outlined. */
 .cl-portal.cl-clinician-shell .cl-status-badge.badge-review,
 .cl-portal.cl-clinician-shell .cl-status-badge.badge-ready-for-review,
 .cl-portal.cl-clinician-shell .cl-schedule-status-row .cl-status-badge.badge-review,
@@ -1301,14 +1301,14 @@
   border: 1px solid #d97706 !important;
 }
 
-/* ════════════════════════════════════════════════════════════════════════════
-   MOBILE RESPONSIVE — clinician portal
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   MOBILE RESPONSIVE â€” clinician portal
    CSS-only. Scoped to .cl-portal.cl-clinician-shell so desktop is untouched.
-   Breakpoints: tablet ≤1023px · mobile ≤767px · small ≤479px · xsmall ≤399/379px
-   ════════════════════════════════════════════════════════════════════════════ */
+   Breakpoints: tablet â‰¤1023px Â· mobile â‰¤767px Â· small â‰¤479px Â· xsmall â‰¤399/379px
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
-/* ─── Global touch targets + iOS-zoom prevention (≤767px) ─────────────────── */
-@media (max-width: 767px) {
+/* â”€â”€â”€ Global touch targets + iOS-zoom prevention (â‰¤767px) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+@media (max-width: 768px) {
   /* 16px on all fields stops iOS from auto-zooming on focus. */
   .cl-portal.cl-clinician-shell input,
   .cl-portal.cl-clinician-shell select,
@@ -1341,8 +1341,8 @@
   }
 }
 
-/* ─── SCHEDULE: stat cards → 2×2 grid (≤767px) ───────────────────────────── */
-@media (max-width: 767px) {
+/* â”€â”€â”€ SCHEDULE: stat cards â†’ 2Ã—2 grid (â‰¤767px) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+@media (max-width: 768px) {
   .cl-portal.cl-clinician-shell .cl-stat-cards {
     display: grid !important;
     grid-template-columns: repeat(2, 1fr) !important;
@@ -1358,8 +1358,8 @@
   }
 }
 
-/* ─── SCHEDULE: week strip → 3 pills, horizontal scroll-snap (≤767px) ────── */
-@media (max-width: 767px) {
+/* â”€â”€â”€ SCHEDULE: week strip â†’ 3 pills, horizontal scroll-snap (â‰¤767px) â”€â”€â”€â”€â”€â”€ */
+@media (max-width: 768px) {
   .cl-portal.cl-clinician-shell .cl-date-nav__days,
   .cl-portal.cl-clinician-shell .portal-cal-strip__days {
     flex-wrap: nowrap !important;
@@ -1400,8 +1400,8 @@
   }
 }
 
-/* ─── SCHEDULE: patient cards (≤767px) ───────────────────────────────────── */
-@media (max-width: 767px) {
+/* â”€â”€â”€ SCHEDULE: patient cards (â‰¤767px) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+@media (max-width: 768px) {
   .cl-portal.cl-clinician-shell .cl-schedule-row.cl-patient-card {
     width: 100%;
     padding: 12px !important;
@@ -1425,8 +1425,8 @@
   }
 }
 
-/* ─── SCHEDULE: action buttons full width (≤479px) ───────────────────────── */
-@media (max-width: 479px) {
+/* â”€â”€â”€ SCHEDULE: action buttons full width (â‰¤479px) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+@media (max-width: 480px) {
   .cl-portal.cl-clinician-shell .cl-schedule-row__actions {
     width: 100%;
   }
@@ -1438,7 +1438,7 @@
   }
 }
 
-/* ─── SCHEDULE: stack time + patient info vertically (≤399px) ─────────────── */
+/* â”€â”€â”€ SCHEDULE: stack time + patient info vertically (â‰¤399px) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 @media (max-width: 399px) {
   .cl-portal.cl-clinician-shell .cl-schedule-row.cl-patient-card {
     flex-direction: column;
@@ -1450,8 +1450,8 @@
   }
 }
 
-/* ─── NOTES: filter tabs horizontally scrollable (≤767px) ────────────────── */
-@media (max-width: 767px) {
+/* â”€â”€â”€ NOTES: filter tabs horizontally scrollable (â‰¤767px) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+@media (max-width: 768px) {
   .cl-portal.cl-clinician-shell .cl-notes-tabs {
     flex-wrap: nowrap !important;
     overflow-x: auto;
@@ -1468,15 +1468,15 @@
   }
 }
 
-/* Hide tab counts on very small screens (≤379px). */
+/* Hide tab counts on very small screens (â‰¤379px). */
 @media (max-width: 379px) {
   .cl-portal.cl-clinician-shell .cl-notes-tab__count {
     display: none !important;
   }
 }
 
-/* ─── NOTES: search + filters row stacks (≤767px) ────────────────────────── */
-@media (max-width: 767px) {
+/* â”€â”€â”€ NOTES: search + filters row stacks (â‰¤767px) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+@media (max-width: 768px) {
   .cl-portal.cl-clinician-shell .cl-notes-search-row {
     flex-direction: column !important;
     align-items: stretch !important;
@@ -1491,8 +1491,8 @@
   }
 }
 
-/* ─── NOTES: collapsible filter panel stacks (≤767px) ────────────────────── */
-@media (max-width: 767px) {
+/* â”€â”€â”€ NOTES: collapsible filter panel stacks (â‰¤767px) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+@media (max-width: 768px) {
   .cl-portal.cl-clinician-shell .cl-notes-date-filter {
     display: flex;
     flex-wrap: wrap;
@@ -1525,8 +1525,8 @@
   }
 }
 
-/* ─── NOTES: note cards stack (≤767px) ───────────────────────────────────── */
-@media (max-width: 767px) {
+/* â”€â”€â”€ NOTES: note cards stack (â‰¤767px) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+@media (max-width: 768px) {
   .cl-portal.cl-clinician-shell .cl-pending-card {
     width: 100%;
     padding: 12px !important;
@@ -1548,13 +1548,13 @@
   }
 }
 
-/* ─── CONTACT US: full-width form (≤767px) ───────────────────────────────── */
-@media (max-width: 767px) {
+/* â”€â”€â”€ CONTACT US: full-width form (â‰¤767px) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+@media (max-width: 768px) {
   .cl-portal.cl-clinician-shell .cl-contact-page {
     padding-left: 16px !important;
     padding-right: 16px !important;
   }
-  /* The form card uses inline styles — override padding/width on mobile. */
+  /* The form card uses inline styles â€” override padding/width on mobile. */
   .cl-portal.cl-clinician-shell .cl-contact-page > div {
     max-width: 100% !important;
     padding: 16px !important;
@@ -1568,7 +1568,7 @@
   }
 }
 
-/* ─── SIDEBAR drawer touch targets (≤1023px — drawer already active) ──────── */
+/* â”€â”€â”€ SIDEBAR drawer touch targets (â‰¤1023px â€” drawer already active) â”€â”€â”€â”€â”€â”€â”€â”€ */
 @media (max-width: 1023px) {
   .cl-portal.cl-clinician-shell .sf-portal__main > .sf-overlay.adm-shell-overlay.open {
     background: rgba(0, 0, 0, 0.5);
@@ -1582,13 +1582,13 @@
   }
 }
 
-/* ─── Week-jump «/» buttons: hidden on desktop, shown on mobile ───────────── */
+/* â”€â”€â”€ Week-jump Â«/Â» buttons: hidden on desktop, shown on mobile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cl-portal.cl-clinician-shell .cl-date-nav__jump-prev,
 .cl-portal.cl-clinician-shell .cl-date-nav__jump-next {
   display: none;
 }
 
-@media (max-width: 767px) {
+@media (max-width: 768px) {
   .cl-portal.cl-clinician-shell .cl-date-nav__jump-prev,
   .cl-portal.cl-clinician-shell .cl-date-nav__jump-next {
     display: flex;
@@ -1605,14 +1605,14 @@
   }
 }
 
-/* ─── Refresh button: icon only on mobile ────────────────────────────────── */
+/* â”€â”€â”€ Refresh button: icon only on mobile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 @media (max-width: 768px) {
   .cl-portal.cl-clinician-shell .cl-refresh-label {
     display: none;
   }
 }
 
-/* ─── Recording controls: large, centered on mobile ──────────────────────── */
+/* â”€â”€â”€ Recording controls: large, centered on mobile â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 @media (max-width: 768px) {
   .cl-portal.cl-clinician-shell .cl-schedule-row__actions .cl-schedule-cta,
   .cl-portal.cl-clinician-shell .cl-schedule-row__actions .cl-schedule-tooltip-wrap > .cl-schedule-cta {
@@ -1653,5 +1653,101 @@
     justify-content: center;
     font-size: 15px;
     font-weight: 700;
+  }
+}
+
+/* MOBILE HAMBURGER & SIDEBAR OVERLAY */
+
+.cl-portal.cl-clinician-shell .hamburger-menu {
+  display: none;
+  background: none;
+  border: none;
+  font-size: 28px;
+  cursor: pointer;
+  padding: 8px 12px;
+  color: #4F46E5;
+  z-index: 1001;
+  margin-right: 12px;
+}
+
+@media (max-width: 768px) {
+  .cl-portal.cl-clinician-shell .hamburger-menu {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    box-shadow: none !important;
+  }
+
+  .cl-portal.cl-clinician-shell .hamburger-menu .adm-topbar__menu-line {
+    display: none;
+  }
+
+  .cl-portal.cl-clinician-shell .hamburger-menu::before {
+    content: '☰';
+    font-size: 28px;
+    line-height: 1;
+    color: #4F46E5;
+  }
+
+  .cl-portal.cl-clinician-shell .sidebar-wrapper.sf-sidebar {
+    width: 280px !important;
+    max-width: 280px !important;
+    transform: none !important;
+    left: -280px;
+    top: 0;
+    height: 100vh;
+    z-index: 1000;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.2);
+    transition: left 0.3s ease-in-out;
+    overflow-y: auto;
+  }
+
+  .cl-portal.cl-clinician-shell .sidebar-wrapper.sf-sidebar.open {
+    left: 0;
+    transform: none !important;
+  }
+
+  .cl-portal.cl-clinician-shell .sidebar-overlay.sf-overlay.open {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    backdrop-filter: blur(2px);
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .cl-portal.cl-clinician-shell .main-content,
+  .cl-portal.cl-clinician-shell .content-wrapper,
+  .cl-portal.cl-clinician-shell .page-container,
+  .cl-portal.cl-clinician-shell .sf-main,
+  .cl-portal.cl-clinician-shell .sf-main-fixed,
+  .cl-portal.cl-clinician-shell .sf-portal__main {
+    margin-left: 0 !important;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  .cl-portal.cl-clinician-shell .header,
+  .cl-portal.cl-clinician-shell .top-bar,
+  .cl-portal.cl-clinician-shell .adm-topbar,
+  .cl-portal.cl-clinician-shell .sf-topbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-left: 0.75rem !important;
+  }
+
+  .cl-portal.cl-clinician-shell .modal,
+  .cl-portal.cl-clinician-shell .dialog,
+  .cl-portal.cl-clinician-shell .adm-modal-overlay {
+    z-index: 1002 !important;
   }
 }

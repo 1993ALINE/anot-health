@@ -156,7 +156,7 @@
 }
 
 /* Drawer open: dim only the main column; keep topbar + menu above the scrim (mobile / tablet) */
-@media (max-width: 1024px) {
+@media (max-width: 768px) {
     .adm-shell.sf-portal .sf-portal__main {
         position: relative;
         isolation: isolate;
@@ -233,7 +233,7 @@
     background: rgba(255, 255, 255, 0.24);
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 768px) {
     .adm-shell .sf-sidebar.adm-sidebar .adm-sidebar__close {
         display: inline-flex;
     }
@@ -3112,7 +3112,7 @@
 }
 
 .adm-table-scroll--wide .adm-table-wrap {
-    min-width: 960px;
+    min-width: 60rem;
 }
 
 .adm-table-wrap .adm-btn-action {
@@ -3453,4 +3453,124 @@
         width: 34px;
         height: 34px;
     }
+}
+
+
+/* MOB-004: admin mobile width fix */
+@media (max-width: 768px) {
+  .adm-shell .adm-content,
+  .adm-shell .adm-module,
+  .adm-shell .adm-table-wrap,
+  .adm-shell .adm-table-scroll--wide .adm-table-wrap,
+  .adm-audit-dashboard,
+  .adm-audit-dashboard .adm-audit-table-wrap {
+    max-width: 100%;
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .adm-shell .adm-form-grid,
+  .adm-shell .adm-stats-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* MOBILE HAMBURGER & SIDEBAR OVERLAY */
+
+.adm-shell[data-adm-tab] .hamburger-menu {
+  display: none;
+  background: none;
+  border: none;
+  font-size: 28px;
+  cursor: pointer;
+  padding: 8px 12px;
+  color: #4F46E5;
+  z-index: 1001;
+  margin-right: 12px;
+}
+
+@media (max-width: 768px) {
+  .adm-shell[data-adm-tab] .hamburger-menu {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    box-shadow: none !important;
+  }
+
+  .adm-shell[data-adm-tab] .hamburger-menu .adm-topbar__menu-line {
+    display: none;
+  }
+
+  .adm-shell[data-adm-tab] .hamburger-menu::before {
+    content: '☰';
+    font-size: 28px;
+    line-height: 1;
+    color: #4F46E5;
+  }
+
+  .adm-shell[data-adm-tab] .sidebar-wrapper.sf-sidebar {
+    width: 280px !important;
+    max-width: 280px !important;
+    transform: none !important;
+    left: -280px;
+    top: 0;
+    height: 100vh;
+    z-index: 1000;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.2);
+    transition: left 0.3s ease-in-out;
+    overflow-y: auto;
+  }
+
+  .adm-shell[data-adm-tab] .sidebar-wrapper.sf-sidebar.open {
+    left: 0;
+    transform: none !important;
+  }
+
+  .adm-shell[data-adm-tab] .sidebar-overlay.sf-overlay.open {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    backdrop-filter: blur(2px);
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .adm-shell[data-adm-tab] .main-content,
+  .adm-shell[data-adm-tab] .content-wrapper,
+  .adm-shell[data-adm-tab] .page-container,
+  .adm-shell[data-adm-tab] .sf-main,
+  .adm-shell[data-adm-tab] .sf-main-fixed,
+  .adm-shell[data-adm-tab] .sf-portal__main {
+    margin-left: 0 !important;
+  }
+
+  .adm-shell[data-adm-tab] .sf-body {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  .adm-shell[data-adm-tab] .header,
+  .adm-shell[data-adm-tab] .top-bar,
+  .adm-shell[data-adm-tab] .adm-topbar,
+  .adm-shell[data-adm-tab] .sf-topbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-left: 0.75rem !important;
+  }
+
+  .adm-shell[data-adm-tab] .modal,
+  .adm-shell[data-adm-tab] .dialog,
+  .adm-shell[data-adm-tab] .adm-modal-overlay {
+    z-index: 1002 !important;
+  }
 }

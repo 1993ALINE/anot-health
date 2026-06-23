@@ -1902,3 +1902,23 @@ button.sf-back:hover { text-decoration: underline; }
     .sf-note-workspace__panels { grid-template-columns: 1fr; overflow-y: auto; }
     .sf-note-panel { min-height: 320px; }
 }
+
+/* MOB-002: tablet drawer bridge */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .sf-portal:not(.adm-shell) .sf-sidebar {
+    transform: translateX(-100%);
+  }
+  .sf-portal:not(.adm-shell) .sf-sidebar.open {
+    transform: translateX(0);
+  }
+  .sf-portal:not(.adm-shell) .sf-hamburger {
+    display: flex;
+  }
+  .sf-portal:not(.adm-shell) .sf-main,
+  .sf-portal:not(.adm-shell) .sf-main-fixed {
+    margin-left: 0;
+  }
+  .sf-portal:not(.adm-shell) .sf-topbar {
+    padding-left: 3.35rem;
+  }
+}

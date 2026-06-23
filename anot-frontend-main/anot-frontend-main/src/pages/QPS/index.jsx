@@ -231,7 +231,7 @@ function QPS() {
       />
       <aside
         id="qps-sidebar"
-        className={`sf-sidebar sf-sidebar--rich adm-sidebar${sidebar.open ? ' open' : ''}`}
+        className={`sidebar-wrapper sf-sidebar sf-sidebar--rich adm-sidebar${sidebar.open ? ' open' : ''}`}
         aria-hidden={portalSidebarAriaHidden(offCanvasSidebar, sidebar.open)}
       >
       <div className="sf-sidebar-top sf-sidebar-rich__top">

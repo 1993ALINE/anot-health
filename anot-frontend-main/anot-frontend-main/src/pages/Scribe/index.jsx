@@ -162,7 +162,7 @@ function ScoreBar({ value }) {
       <div style={{ flex: 1, height: 6, background: '#E2E8F0', borderRadius: 3, overflow: 'hidden' }}>
         <div style={{ width: `${value}%`, height: '100%', borderRadius: 3, background: value >= 90 ? '#00C896' : value >= 75 ? '#FFB547' : '#FF5A7A' }} />
       </div>
-      <span style={{ fontSize: 12, fontWeight: 600, color: '#1E293B', minWidth: 28 }}>{value}</span>
+      <span className="scribe-score-bar__value">{value}</span>
     </div>
   )
 }
@@ -693,7 +693,7 @@ function Scribe() {
       />
       <aside
         id="scribe-sidebar"
-        className={`sf-sidebar sf-sidebar--rich adm-sidebar${sidebar.open ? ' open' : ''}`}
+        className={`sidebar-wrapper sf-sidebar sf-sidebar--rich adm-sidebar${sidebar.open ? ' open' : ''}`}
         aria-hidden={portalSidebarAriaHidden(offCanvasSidebar, sidebar.open)}
       >
       <div className="sf-sidebar-top sf-sidebar-rich__top">
