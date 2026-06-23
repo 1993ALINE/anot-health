@@ -56,15 +56,15 @@ export function useSidebar() {
     return useMemo(() => ({ open, toggle, close }), [open, toggle, close])
 }
 
-/** True when portal sidebar is an off-canvas drawer (tablet / mobile). Matches Admin breakpoint. */
+/** True when portal sidebar is an off-canvas drawer (tablet / mobile). Matches global 768px drawer. */
 function subscribePortalDrawerMq(callback) {
-    const mq = window.matchMedia('(max-width: 1024px)')
+    const mq = window.matchMedia('(max-width: 768px)')
     mq.addEventListener('change', callback)
     return () => mq.removeEventListener('change', callback)
 }
 
 function getPortalDrawerMqSnapshot() {
-    return window.matchMedia('(max-width: 1024px)').matches
+    return window.matchMedia('(max-width: 768px)').matches
 }
 
 export function usePortalDrawerMode() {
@@ -119,7 +119,7 @@ export function PortalTopbar({
                 {drawerMode ? (
                     <button
                         type="button"
-                        className="adm-topbar__menu-btn"
+                        className="adm-topbar__menu-btn hamburger-menu"
                         aria-label={sidebarOpen ? 'Close navigation menu' : 'Open navigation menu'}
                         aria-expanded={sidebarOpen}
                         aria-controls={navControlsId || undefined}
@@ -168,7 +168,7 @@ export function Hamburger({ onClick }) {
 export function Overlay({ open, onClick, className = '' }) {
     return (
         <div
-            className={`sf-overlay${open ? ' open' : ''}${className ? ` ${className}` : ''}`.trim()}
+            className={`sf-overlay sidebar-overlay${open ? ' open' : ''}${className ? ` ${className}` : ''}`.trim()}
             onClick={onClick}
             aria-hidden={!open}
         />

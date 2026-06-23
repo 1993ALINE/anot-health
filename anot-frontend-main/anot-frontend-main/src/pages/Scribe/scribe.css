@@ -794,6 +794,14 @@
   flex: 1 1 100%;
 }
 
+.scribe-portal .scribe-score-bar__value {
+  font-size: 12px;
+  font-weight: 600;
+  color: #1E293B;
+  min-width: 1.75rem;
+  flex-shrink: 0;
+}
+
 @media (max-width: 768px) {
   .scribe-portal .sf-body {
     padding-left: 14px;
@@ -941,5 +949,143 @@
 
   .scribe-portal .sf-row-right .btn {
     flex: 1 1 100%;
+  }
+}
+
+/* Desktop: preserve three-column note editor row layout */
+@media (min-width: 769px) {
+  .scribe-portal .sf-note-workspace__panels {
+    flex-direction: row;
+    align-items: stretch;
+  }
+}
+
+/* MOB-007: scribe note editor mobile */
+@media (max-width: 768px) {
+  .scribe-portal .scribe-note-workspace,
+  .scribe-portal .scribe-note-panels,
+  .scribe-portal .scribe-note-layout {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+    overflow-x: hidden;
+    width: 100%;
+  }
+  .scribe-portal .scribe-note-panels > *,
+  .scribe-portal .scribe-note-layout > * {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .scribe-portal .scribe-final-note,
+  .scribe-portal .sf-note-panel,
+  .scribe-portal .sf-note-panel--expanded {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .scribe-portal .sf-note-toolbar {
+    flex-wrap: wrap;
+  }
+}
+
+/* MOBILE HAMBURGER & SIDEBAR OVERLAY */
+
+.scribe-portal .hamburger-menu {
+  display: none;
+  background: none;
+  border: none;
+  font-size: 28px;
+  cursor: pointer;
+  padding: 8px 12px;
+  color: #4F46E5;
+  z-index: 1001;
+  margin-right: 12px;
+}
+
+@media (max-width: 768px) {
+  .scribe-portal .hamburger-menu {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    box-shadow: none !important;
+  }
+
+  .scribe-portal .hamburger-menu .adm-topbar__menu-line {
+    display: none;
+  }
+
+  .scribe-portal .hamburger-menu::before {
+    content: '☰';
+    font-size: 28px;
+    line-height: 1;
+    color: #4F46E5;
+  }
+
+  .scribe-portal .sidebar-wrapper.sf-sidebar {
+    width: 280px !important;
+    max-width: 280px !important;
+    transform: none !important;
+    left: -280px;
+    top: 0;
+    height: 100vh;
+    z-index: 1000;
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.2);
+    transition: left 0.3s ease-in-out;
+    overflow-y: auto;
+  }
+
+  .scribe-portal .sidebar-wrapper.sf-sidebar.open {
+    left: 0;
+    transform: none !important;
+  }
+
+  .scribe-portal .sidebar-overlay.sf-overlay.open {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+    backdrop-filter: blur(2px);
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+
+  .scribe-portal .main-content,
+  .scribe-portal .content-wrapper,
+  .scribe-portal .page-container,
+  .scribe-portal .sf-main,
+  .scribe-portal .sf-main-fixed,
+  .scribe-portal .sf-portal__main {
+    margin-left: 0 !important;
+  }
+
+  .scribe-portal .sf-body {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  .scribe-portal .header,
+  .scribe-portal .top-bar,
+  .scribe-portal .adm-topbar,
+  .scribe-portal .sf-topbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding-left: 0.75rem !important;
+  }
+
+  .scribe-portal .modal,
+  .scribe-portal .dialog,
+  .scribe-portal .adm-modal-overlay {
+    z-index: 1002 !important;
   }
 }

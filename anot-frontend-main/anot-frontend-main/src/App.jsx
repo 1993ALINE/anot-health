@@ -21,6 +21,11 @@ function PortalLoading() {
 import { dashboardPathForRole, roleMatchesPortal } from './auth/dashboardPaths'
 import { applyBrandingToDocument, getCachedBranding, refreshBranding } from './services/branding'
 import { SplashGate, useReleaseSplash } from './splash/SplashGate'
+import {
+  startOnlineListener,
+  stopOnlineListener,
+  uploadQueuedAudio,
+} from './utils/offlineSyncManager'
 
 /** `/` → dashboard if already signed in, otherwise login. */
 function RootHome() {
@@ -104,6 +109,20 @@ function App() {
   useEffect(() => {
     applyBrandingToDocument(getCachedBranding())
     refreshBranding().catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/service-worker.js').catch((err) => {
+        console.warn('Service worker registration failed:', err)
+      })
+    }
+
+    startOnlineListener(async () => {
+      await uploadQueuedAudio()
+    })
+
+    return () => stopOnlineListener()
   }, [])
 
   return (
