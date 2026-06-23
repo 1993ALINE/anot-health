@@ -52,10 +52,16 @@ export function isLikelyNetworkFailure(err) {
 
 const BASE_URL = API_BASE
 
+/**
+ * Get auth token from local storage.
+ */
 const getToken = () => localStorage.getItem('token')
 
-const headers = (includeAuth = true) => {
-  const h = { 'Content-Type': 'application/json' }
+/**
+ * Build request headers for API calls.
+ */
+function buildRequestHeaders(includeAuth = true, extraHeaders = {}) {
+  const h = { 'Content-Type': 'application/json', ...extraHeaders }
   if (includeAuth) {
     const token = getToken()
     if (token) h['Authorization'] = `Bearer ${token}`
@@ -63,23 +69,64 @@ const headers = (includeAuth = true) => {
   return h
 }
 
+/** @deprecated Use buildRequestHeaders — kept for existing call sites. */
+const headers = buildRequestHeaders
+
+/**
+ * Parse response body text as JSON with fallback error payload.
+ */
+function parseResponseBody(text, res) {
+  if (!text) return {}
+  try {
+    return JSON.parse(text)
+  } catch {
+    return { error: res.ok ? 'Invalid response from server.' : (text.slice(0, 200) || 'Request failed') }
+  }
+}
+
+/**
+ * Build an Error from a failed API response.
+ */
+function createApiError(data, res) {
+  const err = new Error(data.error || `Request failed (${res.status})`)
+  err.status = res.status
+  err.payload = data
+  return err
+}
+
+/**
+ * Handle fetch response — parse body and throw on non-OK status.
+ */
 const handleResponse = async (res) => {
   const text = await res.text()
-  let data = {}
-  if (text) {
-    try {
-      data = JSON.parse(text)
-    } catch {
-      data = { error: res.ok ? 'Invalid response from server.' : (text.slice(0, 200) || 'Request failed') }
-    }
-  }
-  if (!res.ok) {
-    const err = new Error(data.error || `Request failed (${res.status})`)
-    err.status = res.status
-    err.payload = data
-    throw err
-  }
+  const data = parseResponseBody(text, res)
+  if (!res.ok) throw createApiError(data, res)
   return data
+}
+
+/**
+ * Build fetch options for JSON API requests.
+ */
+function buildFetchOptions(method, body, includeAuth = true, extraHeaders = {}) {
+  const options = {
+    method,
+    headers: buildRequestHeaders(includeAuth, extraHeaders),
+  }
+  if (body != null && method !== 'GET') {
+    options.body = JSON.stringify(body)
+  }
+  return options
+}
+
+/**
+ * Main API request orchestrator (method, path suffix, body, options).
+ */
+async function apiRequest(method, path, data = null, options = {}) {
+  const url = path.startsWith('http') ? path : `${BASE_URL}${path}`
+  const fetchOptions = buildFetchOptions(method, data, options.includeAuth !== false, options.headers)
+  if (options.signal) fetchOptions.signal = options.signal
+  const res = await fetch(url, fetchOptions)
+  return handleResponse(res)
 }
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────

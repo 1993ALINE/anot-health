@@ -45,40 +45,78 @@ async function maybeAutoTranscribe(visitId, user, req) {
   }
 }
 
-// ─── POST /api/audio/:visitId — Upload primary recording ─────────────────────
+/**
+ * Validate audio upload request
+ */
+async function validateAudioUpload(req, visitId) {
+  if (!req.file) throw Object.assign(new Error('No audio file uploaded.'), { status: 400 })
+  const visit = await getVisitForUser(visitId, req.user)
+  if (!visit) throw Object.assign(new Error('Visit not found or not yours.'), { status: 404 })
+  const settings = await loadAiSettings()
+  const maxBytes = (settings.ffmpeg_max_upload_mb || 100) * 1024 * 1024
+  if (req.file.size > maxBytes) {
+    throw Object.assign(
+      new Error(`Audio exceeds max size (${settings.ffmpeg_max_upload_mb} MB).`),
+      { status: 413 }
+    )
+  }
+  return { visit, settings }
+}
 
-router.post('/:visitId', protect, restrict('clinician'), upload.single('audio'), async (req, res) => {
-  try {
-    const { visitId } = req.params
-    if (!req.file) return res.status(400).json({ error: 'No audio file uploaded.' })
+/**
+ * Upload audio buffer to S3 and return DB path
+ */
+async function uploadAudioToStorage(visitId, file) {
+  const filename = buildAudioFilename(visitId, file.mimetype)
+  const audioPath = `/uploads/${filename}`
+  await uploadAudio(dbPathToKey(audioPath), file.buffer, file.mimetype)
+  return { audioPath, filename }
+}
 
-    const visit = await getVisitForUser(visitId, req.user)
-    if (!visit) {
-      return res.status(404).json({ error: 'Visit not found or not yours.' })
-    }
-
-    const settings = await loadAiSettings()
-    const maxBytes = (settings.ffmpeg_max_upload_mb || 100) * 1024 * 1024
-    if (req.file.size > maxBytes) {
-      return res.status(413).json({ error: `Audio exceeds max size (${settings.ffmpeg_max_upload_mb} MB).` })
-    }
-
-    const filename = buildAudioFilename(visitId, req.file.mimetype)
-    const audioPath = `/uploads/${filename}`
-    await uploadAudio(dbPathToKey(audioPath), req.file.buffer, req.file.mimetype)
-
-    // Append atomically in SQL: a read-modify-write here would let two
-    // concurrent uploads overwrite each other and orphan an S3 object.
-    await pool.query(
-      `UPDATE visits
+/**
+ * Atomically append audio path to visit record
+ */
+async function appendAudioPathToVisit(visitId, audioPath, status) {
+  const params = status
+    ? [audioPath, status, visitId]
+    : [audioPath, visitId]
+  const sql = status
+    ? `UPDATE visits
           SET audio_file = CASE
                 WHEN audio_file IS NULL OR audio_file = '' THEN $1
                 ELSE audio_file || ',' || $1
               END,
               status = $2
-        WHERE id = $3`,
-      [audioPath, 'recording-uploaded', visitId]
-    )
+        WHERE id = $3`
+    : `UPDATE visits
+          SET audio_file = CASE
+                WHEN audio_file IS NULL OR audio_file = '' THEN $1
+                ELSE audio_file || ',' || $1
+              END
+        WHERE id = $2
+        RETURNING audio_file`
+  const result = await pool.query(sql, params)
+  return status ? null : result.rows[0]?.audio_file
+}
+
+/**
+ * Handle audio upload route errors
+ */
+function handleAudioUploadError(res, err) {
+  const status = err.status || 500
+  const message = err.status ? err.message : 'Failed to upload audio.'
+  if (!err.status) console.error('Audio upload error:', err.message)
+  res.status(status).json({ error: message })
+}
+
+// ─── POST /api/audio/:visitId — Upload primary recording ─────────────────────
+
+router.post('/:visitId', protect, restrict('clinician'), upload.single('audio'), async (req, res) => {
+  try {
+    const { visitId } = req.params
+    await validateAudioUpload(req, visitId)
+    const { audioPath, filename } = await uploadAudioToStorage(visitId, req.file)
+    await appendAudioPathToVisit(visitId, audioPath, 'recording-uploaded')
 
     res.status(200).json({
       message: 'Audio uploaded successfully.',
@@ -94,8 +132,7 @@ router.post('/:visitId', protect, restrict('clinician'), upload.single('audio'),
 
     await maybeAutoTranscribe(visitId, req.user, req)
   } catch (err) {
-    console.error('Audio upload error:', err.message)
-    res.status(500).json({ error: 'Failed to upload audio.' })
+    handleAudioUploadError(res, err)
   }
 })
 
@@ -104,40 +141,13 @@ router.post('/:visitId', protect, restrict('clinician'), upload.single('audio'),
 router.post('/:visitId/append', protect, restrict('clinician'), upload.single('audio'), async (req, res) => {
   try {
     const { visitId } = req.params
-    if (!req.file) return res.status(400).json({ error: 'No audio file uploaded.' })
-
-    const visit = await getVisitForUser(visitId, req.user)
-    if (!visit) {
-      return res.status(404).json({ error: 'Visit not found or not yours.' })
-    }
-
-    const settings = await loadAiSettings()
-    const maxBytes = (settings.ffmpeg_max_upload_mb || 100) * 1024 * 1024
-    if (req.file.size > maxBytes) {
-      return res.status(413).json({ error: `Audio exceeds max size (${settings.ffmpeg_max_upload_mb} MB).` })
-    }
-
-    const filename = buildAudioFilename(visitId, req.file.mimetype)
-    const newPath = `/uploads/${filename}`
-    await uploadAudio(dbPathToKey(newPath), req.file.buffer, req.file.mimetype)
-
-    // Atomic append (see primary upload route): avoids losing a concurrent
-    // upload's path and orphaning its S3 object.
-    const updResult = await pool.query(
-      `UPDATE visits
-          SET audio_file = CASE
-                WHEN audio_file IS NULL OR audio_file = '' THEN $1
-                ELSE audio_file || ',' || $1
-              END
-        WHERE id = $2
-        RETURNING audio_file`,
-      [newPath, visitId]
-    )
-    const updated = updResult.rows[0]?.audio_file || newPath
+    await validateAudioUpload(req, visitId)
+    const { audioPath, filename } = await uploadAudioToStorage(visitId, req.file)
+    const updated = await appendAudioPathToVisit(visitId, audioPath) || audioPath
 
     res.status(200).json({
       message: 'Additional recording uploaded.',
-      audio_file: newPath,
+      audio_file: audioPath,
       total_recordings: updated.split(',').length,
     })
 
@@ -152,7 +162,8 @@ router.post('/:visitId/append', protect, restrict('clinician'), upload.single('a
     })
   } catch (err) {
     console.error('Append audio error:', err.message)
-    res.status(500).json({ error: 'Failed to upload additional recording.' })
+    const status = err.status || 500
+    res.status(status).json({ error: err.status ? err.message : 'Failed to upload additional recording.' })
   }
 })
 

@@ -147,6 +147,56 @@ function parseTranscriptions(raw) {
   }
 }
 
+/**
+ * Merge polled note data without clobbering local edits
+ */
+function mergePolledNoteData(note, visitId, baselineRef, txSegmentsRef) {
+  const updates = { note, selectedRecPatch: { transcription_status: note.transcription_status } }
+  if (!note.transcription) return updates
+
+  const base = baselineRef.current
+  const hasBaseline = String(base.visitId) === String(visitId)
+  const locallyEdited = hasBaseline && JSON.stringify(txSegmentsRef.current) !== base.tx
+  if (!locallyEdited) {
+    const segs = parseTranscriptions(note.transcription)
+    updates.txSegments = segs
+    updates.baselinePatch = { tx: JSON.stringify(segs) }
+  }
+  return updates
+}
+
+/**
+ * Apply full note load to editor state
+ */
+function buildFullNoteState(note, visitId, markBaseline) {
+  const fn = note.final_note || ''
+  const segs = parseTranscriptions(note.transcription)
+  markBaseline(visitId, fn, segs)
+  return { note, finalNote: fn, txSegments: segs, selectedRecPatch: { transcription_status: note.transcription_status } }
+}
+
+/**
+ * Reset note editor to empty state
+ */
+function buildEmptyNoteState() {
+  return {
+    note: null,
+    finalNote: '',
+    txSegments: [],
+    baseline: { visitId: null, final: '', tx: '' },
+  }
+}
+
+/**
+ * Handle note load failure
+ */
+function handleNoteLoadFailure(showNotif, mergeOnly) {
+  if (!mergeOnly) {
+    showNotif('Failed to load note. Please try again.', 'red')
+  }
+  return buildEmptyNoteState()
+}
+
 const STATUS_CFG = {
   'recording-uploaded': { label: 'Pending',   cls: 'badge-amber' },
   'note-ready':         { label: 'Pending',   cls: 'badge-amber' },
@@ -164,6 +214,111 @@ function ScoreBar({ value }) {
       </div>
       <span style={{ fontSize: 12, fontWeight: 600, color: '#1E293B', minWidth: 28 }}>{value}</span>
     </div>
+  )
+}
+
+const SCRIBE_NAV_ITEMS = [
+  { key: 'recordings', icon: '🎙', label: 'Recordings' },
+  { key: 'notes', icon: '📋', label: 'My Notes' },
+  { key: 'grades', icon: '⭐', label: 'My Grades', badgeKey: 'grades' },
+]
+
+function ScribeNavItem({ item, activeTab, badge, onNavigate }) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      className={`sf-nav-item sf-sidebar-rich__nav-item${activeTab === item.key ? ' active' : ''}`}
+      onClick={() => onNavigate(item.key)}
+      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onNavigate(item.key)}
+    >
+      <span className="sf-sidebar-rich__nav-ico">{item.icon}</span>
+      <span className="sf-sidebar-rich__nav-text">{item.label}</span>
+      {badge > 0 ? <span className="sf-sidebar-rich__nav-badge sf-sidebar-rich__nav-badge--subtle">{badge}</span> : null}
+    </div>
+  )
+}
+
+/**
+ * Scribe portal sidebar — navigation, provider chip, logout footer.
+ */
+function ScribeSidebar({
+  sidebar,
+  offCanvasSidebar,
+  branding,
+  activeTab,
+  gradesCount,
+  selectedProvider,
+  selectedDate,
+  screen,
+  currentUser,
+  confirmDialog,
+  confirmLoading,
+  onDismissConfirm,
+  onConfirm,
+  onNavigate,
+  onChangeProvider,
+  onLogout,
+}) {
+  return (
+    <>
+      <ConfirmDialog
+        dialog={confirmDialog}
+        loading={confirmLoading}
+        onDismiss={onDismissConfirm}
+        onConfirm={onConfirm}
+      />
+      <aside
+        id="scribe-sidebar"
+        className={`sf-sidebar sf-sidebar--rich adm-sidebar${sidebar.open ? ' open' : ''}`}
+        aria-hidden={portalSidebarAriaHidden(offCanvasSidebar, sidebar.open)}
+      >
+        <div className="sf-sidebar-top sf-sidebar-rich__top">
+          <button
+            type="button"
+            className="adm-sidebar__close"
+            onClick={sidebar.close}
+            aria-label="Close navigation menu"
+          >
+            ✕
+          </button>
+          <PortalSidebarBrand branding={branding} subtitle="Scribe Portal" />
+        </div>
+        <p className="sf-sidebar-rich__nav-label">Workspace</p>
+        <nav className="sf-nav sf-sidebar-rich__nav" aria-label="Main">
+          {SCRIBE_NAV_ITEMS.map((item) => (
+            <ScribeNavItem
+              key={item.key}
+              item={item}
+              activeTab={activeTab}
+              badge={item.badgeKey === 'grades' ? gradesCount : 0}
+              onNavigate={onNavigate}
+            />
+          ))}
+        </nav>
+        <div className="scribe-sidebar__fill" aria-hidden="true" />
+        <div className="scribe-sidebar__bottom">
+          {selectedProvider && (
+            <div className="sf-provider-chip">
+              <div className="sf-chip-label">Current Provider</div>
+              <div className="sf-chip-name">{selectedProvider.name}</div>
+              <div className="sf-chip-spec">{selectedProvider.specialty || 'Clinician'}</div>
+              {selectedDate && screen !== 'providers' && (
+                <div className="sf-chip-date">📅 {fmtShortDate(selectedDate)}</div>
+              )}
+              <div className="sf-chip-change" onClick={onChangeProvider}>
+                Change provider
+              </div>
+            </div>
+          )}
+          <PortalSidebarFooter
+            userName={currentUser.name || 'Scribe'}
+            role="scribe"
+            onLogout={onLogout}
+          />
+        </div>
+      </aside>
+    </>
   )
 }
 
@@ -347,8 +502,6 @@ function Scribe() {
   const loadNote = useCallback(
     async (visitId, opts = {}) => {
       const mergeOnly = !!opts.mergeOnly
-      // Cancel any in-flight note load so quickly switching recordings can't
-      // resolve out of order and show the wrong note in the editor.
       noteAbortRef.current?.abort()
       const controller = new AbortController()
       noteAbortRef.current = controller
@@ -357,61 +510,55 @@ function Scribe() {
         const data = await notesAPI.getByVisit(visitId, controller.signal)
         if (controller.signal.aborted) return false
         const n = data.note
+
         if (mergeOnly) {
           if (n) {
-            setNote(n)
+            const merged = mergePolledNoteData(n, visitId, baselineRef, txSegmentsRef)
+            setNote(merged.note)
             setSelectedRec((prev) =>
               prev && String(prev.id) === String(visitId)
-                ? { ...prev, transcription_status: n.transcription_status }
+                ? { ...prev, ...merged.selectedRecPatch }
                 : prev,
             )
-            if (n.transcription) {
-              // Only take the server's transcript when the local segments are
-              // unedited — the 30s poll must never clobber in-progress edits.
-              const base = baselineRef.current
-              const hasBaseline = String(base.visitId) === String(visitId)
-              const locallyEdited =
-                hasBaseline && JSON.stringify(txSegmentsRef.current) !== base.tx
-              if (!locallyEdited) {
-                const segs = parseTranscriptions(n.transcription)
-                setTxSegments(segs)
-                setBaseline((prev) =>
-                  String(prev.visitId) === String(visitId)
-                    ? { ...prev, tx: JSON.stringify(segs) }
-                    : prev,
-                )
-              }
+            if (merged.txSegments) {
+              setTxSegments(merged.txSegments)
+              setBaseline((prev) =>
+                String(prev.visitId) === String(visitId)
+                  ? { ...prev, ...merged.baselinePatch }
+                  : prev,
+              )
             }
           }
           return true
         }
+
         if (!n) {
-          setNote(null)
-          setFinalNote('')
-          setTxSegments([])
-          setBaseline({ visitId: null, final: '', tx: '' })
+          const empty = buildEmptyNoteState()
+          setNote(empty.note)
+          setFinalNote(empty.finalNote)
+          setTxSegments(empty.txSegments)
+          setBaseline(empty.baseline)
           return true
         }
-        setNote(n)
+
+        const loaded = buildFullNoteState(n, visitId, markBaseline)
+        setNote(loaded.note)
+        setFinalNote(loaded.finalNote)
+        setTxSegments(loaded.txSegments)
         setSelectedRec((prev) =>
           prev && String(prev.id) === String(visitId)
-            ? { ...prev, transcription_status: n.transcription_status }
+            ? { ...prev, ...loaded.selectedRecPatch }
             : prev,
         )
-        const fn = n.final_note || ''
-        setFinalNote(fn)
-        const segs = parseTranscriptions(n.transcription)
-        setTxSegments(segs)
-        markBaseline(visitId, fn, segs)
         return true
       } catch (err) {
         if (isAbortError(err) || controller.signal.aborted) return false
         if (!mergeOnly) {
-          setNote(null)
-          setFinalNote('')
-          setTxSegments([])
-          setBaseline({ visitId: null, final: '', tx: '' })
-          showNotif('Failed to load note. Please try again.', 'red')
+          const failed = handleNoteLoadFailure(showNotif, mergeOnly)
+          setNote(failed.note)
+          setFinalNote(failed.finalNote)
+          setTxSegments(failed.txSegments)
+          setBaseline(failed.baseline)
         }
         return false
       } finally {
@@ -684,80 +831,32 @@ function Scribe() {
   }, [])
 
   const sidebarMarkup = useMemo(() => (
-    <>
-      <ConfirmDialog
-        dialog={confirmDialog}
-        loading={confirmLoading}
-        onDismiss={() => !confirmLoading && setConfirmDialog(null)}
-        onConfirm={runConfirm}
-      />
-      <aside
-        id="scribe-sidebar"
-        className={`sf-sidebar sf-sidebar--rich adm-sidebar${sidebar.open ? ' open' : ''}`}
-        aria-hidden={portalSidebarAriaHidden(offCanvasSidebar, sidebar.open)}
-      >
-      <div className="sf-sidebar-top sf-sidebar-rich__top">
-        <button
-          type="button"
-          className="adm-sidebar__close"
-          onClick={sidebar.close}
-          aria-label="Close navigation menu"
-        >
-          ✕
-        </button>
-        <PortalSidebarBrand branding={branding} subtitle="Scribe Portal" />
-      </div>
-      <p className="sf-sidebar-rich__nav-label">Workspace</p>
-      <nav className="sf-nav sf-sidebar-rich__nav" aria-label="Main">
-        {[['recordings','🎙','Recordings'],['notes','📋','My Notes'],['grades','⭐','My Grades']].map(([k, icon, label]) => (
-          <div
-            key={k}
-            role="button"
-            tabIndex={0}
-            className={`sf-nav-item sf-sidebar-rich__nav-item${activeTab === k ? ' active' : ''}`}
-            onClick={() => handleNav(k)}
-            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handleNav(k)}
-          >
-            <span className="sf-sidebar-rich__nav-ico">{icon}</span>
-            <span className="sf-sidebar-rich__nav-text">{label}</span>
-            {k === 'grades' && grades.length > 0 ? <span className="sf-sidebar-rich__nav-badge sf-sidebar-rich__nav-badge--subtle">{grades.length}</span> : null}
-          </div>
-        ))}
-      </nav>
-      <div className="scribe-sidebar__fill" aria-hidden="true" />
-      <div className="scribe-sidebar__bottom">
-        {selectedProvider && (
-          <div className="sf-provider-chip">
-            <div className="sf-chip-label">Current Provider</div>
-            <div className="sf-chip-name">{selectedProvider.name}</div>
-            <div className="sf-chip-spec">{selectedProvider.specialty || 'Clinician'}</div>
-            {selectedDate && screen !== 'providers' && (
-              <div className="sf-chip-date">📅 {fmtShortDate(selectedDate)}</div>
-            )}
-            <div
-              className="sf-chip-change"
-              onClick={() =>
-                leaveNoteScreen(() => {
-                  setScreen('providers')
-                  setSelectedProvider(null)
-                  setSelectedRec(null)
-                  setRecordings([])
-                  sidebar.close()
-                })
-              }
-            >
-              Change provider
-            </div>
-          </div>
-        )}
-        <PortalSidebarFooter
-          userName={currentUser.name || 'Scribe'}
-          role="scribe"
-          onLogout={requestLogout}
-        />
-      </div>
-    </aside>
-    </>
+    <ScribeSidebar
+      sidebar={sidebar}
+      offCanvasSidebar={offCanvasSidebar}
+      branding={branding}
+      activeTab={activeTab}
+      gradesCount={grades.length}
+      selectedProvider={selectedProvider}
+      selectedDate={selectedDate}
+      screen={screen}
+      currentUser={currentUser}
+      confirmDialog={confirmDialog}
+      confirmLoading={confirmLoading}
+      onDismissConfirm={() => !confirmLoading && setConfirmDialog(null)}
+      onConfirm={runConfirm}
+      onNavigate={handleNav}
+      onChangeProvider={() =>
+        leaveNoteScreen(() => {
+          setScreen('providers')
+          setSelectedProvider(null)
+          setSelectedRec(null)
+          setRecordings([])
+          sidebar.close()
+        })
+      }
+      onLogout={requestLogout}
+    />
   ), [
     sidebar.open,
     offCanvasSidebar,

@@ -45,6 +45,111 @@ function displayEmail(email) {
   return email
 }
 
+/**
+ * Validate admin settings form
+ */
+function validateSettingsForm(form) {
+    if (!form.system_name.trim()) return 'System name is required.'
+    if (form.system_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.system_email)) {
+        return 'Enter a valid system email.'
+    }
+    const urls = ['website_url', 'facebook_url', 'linkedin_url', 'instagram_url', 'x_url']
+    for (const key of urls) {
+        const value = form[key]?.trim()
+        if (!value) continue
+        if (!/^https?:\/\/.+/i.test(value)) return `Enter a valid URL for ${key.replace('_url', '').replace('_', ' ')}.`
+    }
+    if (form.deepgram_enabled && !form.deepgram_api_key_set && !form.deepgram_api_key?.trim()) {
+        return 'Deepgram is enabled but no API key is saved. Enter a key or turn Deepgram off.'
+    }
+    if (form.anthropic_enabled && !form.anthropic_api_key_set && !form.anthropic_api_key?.trim()) {
+        return 'AI note generation is enabled but no Anthropic API key is saved. Enter a key or turn it off.'
+    }
+    return ''
+}
+
+/**
+ * Build settings API payload from form state
+ */
+function buildSettingsPayload(form) {
+    const payload = {
+        system_name: form.system_name.trim(),
+        system_email: form.system_email.trim(),
+        phone: form.phone.trim(),
+        address: form.address.trim(),
+        company_info: form.company_info.trim(),
+        footer_text: form.footer_text.trim(),
+        support_contact: form.support_contact.trim(),
+        logo_data_url: form.logo_data_url || '',
+        favicon_data_url: form.favicon_data_url || '',
+        primary_color: form.primary_color,
+        secondary_color: form.secondary_color,
+        system_description: form.system_description.trim(),
+        social_links: {
+            website_url: form.website_url.trim(),
+            facebook_url: form.facebook_url.trim(),
+            linkedin_url: form.linkedin_url.trim(),
+            instagram_url: form.instagram_url.trim(),
+            x_url: form.x_url.trim(),
+        },
+        audit_retention_days: Math.max(30, Math.min(Number(form.audit_retention_days) || 365, 3650)),
+        deepgram_enabled: !!form.deepgram_enabled,
+        deepgram_model: form.deepgram_model?.trim() || 'nova-2',
+        deepgram_language: form.deepgram_language?.trim() || 'en-US',
+        deepgram_webhook_url: form.deepgram_webhook_url?.trim() || '',
+        deepgram_auto_transcribe_on_upload: !!form.deepgram_auto_transcribe_on_upload,
+        anthropic_enabled: !!form.anthropic_enabled,
+        anthropic_model: form.anthropic_model || 'claude-haiku-4-5',
+        ffmpeg_enabled: !!form.ffmpeg_enabled,
+        ffmpeg_target_format: form.ffmpeg_target_format,
+        ffmpeg_compression: Math.max(0, Math.min(9, Number(form.ffmpeg_compression) || 5)),
+        ffmpeg_max_upload_mb: Math.max(1, Math.min(500, Number(form.ffmpeg_max_upload_mb) || 100)),
+        ffmpeg_preprocess_before_transcribe: !!form.ffmpeg_preprocess_before_transcribe,
+    }
+    if (form.deepgram_api_key?.trim()) payload.deepgram_api_key = form.deepgram_api_key.trim()
+    if (form.deepgram_clear_api_key) payload.deepgram_clear_api_key = true
+    if (form.anthropic_api_key?.trim()) payload.anthropic_api_key = form.anthropic_api_key.trim()
+    if (form.anthropic_clear_api_key) payload.anthropic_clear_api_key = true
+    return payload
+}
+
+/**
+ * Validate new user registration input
+ */
+function validateRegisterUserInput(newUser, newUserPassword, addRole) {
+    const cleanName = newUser.name.trim()
+    const cleanEmail = newUser.email.toLowerCase().trim()
+    if (!cleanName) return { error: 'Name is required.' }
+    if (!cleanEmail) return { error: 'Email is required.' }
+    if (!cleanEmail.includes('@')) return { error: 'Enter a valid email.' }
+    if (newUserPassword) {
+        const pwCheck = validatePassword(newUserPassword)
+        if (!pwCheck.valid) return { error: pwCheck.message }
+    }
+    return {
+        payload: {
+            name: cleanName,
+            email: cleanEmail,
+            password: newUserPassword || undefined,
+            role: addRole,
+            phone: (newUser.phone || '').trim() || undefined,
+            specialty: addRole === 'clinician' ? ((newUser.specialty || '').trim() || undefined) : undefined,
+            npi: addRole === 'clinician' ? ((newUser.npi || '').trim() || undefined) : undefined,
+            license: addRole === 'clinician' ? ((newUser.license || '').trim() || undefined) : undefined,
+        },
+    }
+}
+
+/**
+ * Handle registration API error
+ */
+function getRegisterUserErrorMessage(err) {
+    if (err?.status === 403) {
+        return 'You do not have permission to register users. Please sign in as an admin.'
+    }
+    return err.message || 'Registration failed. Please try again.'
+}
+
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 
 /** Primary brand palette — align with CSS :root (--brand-primary / --brand-secondary) */
@@ -385,6 +490,151 @@ function AdminSidebar({ tab, onSelectTab, currentUser, onRequestSignOut, badges,
     )
 }
 
+/**
+ * Filter admin user list by search query and status.
+ */
+function filterAdminUsers(userList, search, statusFilter) {
+    const q = search.toLowerCase()
+    return userList.filter((u) => {
+        const matchesSearch = !search || (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q)
+        const matchesStatus = statusFilter === 'all' || u.status === statusFilter
+        return matchesSearch && matchesStatus
+    })
+}
+
+/**
+ * CSS class suffix for admin table role styling.
+ */
+function getAdminTableRoleClass(role) {
+    if (role === 'clinician') return 'clinicians'
+    if (role === 'scribe') return 'scribes'
+    if (role === 'qps') return 'qps'
+    if (role === 'admin' || role === 'elevated') return 'admins'
+    return 'generic'
+}
+
+function buildNewUserDefaults(role) {
+    return {
+        addRole: role === 'elevated' ? 'admin' : role,
+        newUser: { name: '', email: '', specialty: '', phone: '', npi: '', license: '' },
+    }
+}
+
+function AdminTableToolbar({ cfg, search, filter, filteredCount, refreshing, onSearchChange, onFilterChange, onAddUser }) {
+    return (
+        <div className="adm-toolbar">
+            <input
+                className="adm-input adm-input--narrow"
+                placeholder={`Search ${cfg.label}s…`}
+                value={search}
+                onChange={(e) => onSearchChange(e.target.value)}
+            />
+            <select className="adm-input adm-input--select-compact" value={filter} onChange={(e) => onFilterChange(e.target.value)}>
+                <option value="all">All Status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+            </select>
+            <div className="adm-toolbar__actions" style={{ marginLeft: 'auto' }}>
+                <span className="adm-toolbar__meta">
+                    {filteredCount} {cfg.label}{filteredCount !== 1 ? 's' : ''}
+                    {refreshing ? ' · Syncing…' : ''}
+                </span>
+                <button type="button" className="adm-btn-primary" onClick={onAddUser}>
+                    + Add {cfg.label}
+                </button>
+            </div>
+        </div>
+    )
+}
+
+function AdminUserTableRow({
+    u, role, roleClass, isNew, isSuperAdminViewer, semantic,
+    onEdit, onOpenModulePermissions, onReset, onToggleStatus,
+}) {
+    const isSystemSuperRow = u.role === 'super_admin'
+    return (
+        <div className={`adm-table__row adm-table__row--${roleClass}${isNew ? ' adm-table__row--new' : ''}`}>
+            <div className="adm-td" data-label="Name" style={{ flex: 2 }}>
+                <div className="adm-usercell">
+                    <div className={`adm-usercell__avatar adm-usercell__avatar--${roleClass}`} aria-hidden>{initials(u.name)}</div>
+                    <div className="adm-usercell__meta">
+                        <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>{u.name}</div>
+                        <div className="adm-usercell__sub">
+                            {role === 'clinician' && (u.npi ? `NPI ${u.npi}` : 'Clinician profile')}
+                            {role === 'scribe' && 'Documentation specialist'}
+                            {role === 'qps' && 'Quality review specialist'}
+                            {(role === 'admin' || role === 'elevated') && (u.role === 'super_admin' ? 'Super Admin' : 'Platform administration')}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div className="adm-td" data-label="Email" style={{ flex: 2, fontSize: 12, color: 'var(--text-muted)' }}>{displayEmail(u.email)}</div>
+            <div className="adm-td" data-label={semantic.label} style={{ flex: 2 }}>
+                {role === 'clinician' ? (
+                    <span className="adm-specialty-chip">{semantic.value}</span>
+                ) : (
+                    <span className={`adm-role-chip adm-role-chip--${semantic.tone}`}>{semantic.value}</span>
+                )}
+            </div>
+            <div className="adm-td" data-label="Phone" style={{ flex: 1, fontSize: 12, color: 'var(--text-muted)' }}>
+                {u.phone || (
+                    <span className="adm-usercell__sub adm-usercell__sub--muted">Not set</span>
+                )}
+            </div>
+            <div className="adm-td" data-label="Status" style={{ flex: 1 }}>
+                <span
+                    className="adm-badge"
+                    style={{
+                        background: u.status === 'active' ? '#d1fae5' : '#eef2ff',
+                        color: u.status === 'active' ? '#065f46' : '#64748b',
+                    }}
+                >
+                    {u.status === 'active' ? '● Active' : '○ Inactive'}
+                </span>
+            </div>
+            <div className="adm-td adm-td--actions" data-label="Actions">
+                <button type="button" className="adm-btn-action" onClick={() => onEdit(u)}>
+                    Edit
+                </button>
+                {role === 'elevated' && u.role === 'admin' && isSuperAdminViewer && (
+                    <button
+                        type="button"
+                        className="adm-btn-action adm-btn-action--modules"
+                        title="Configure which admin portal sections this administrator can open"
+                        onClick={() => onOpenModulePermissions(u)}
+                    >
+                        Module permissions
+                    </button>
+                )}
+                <button
+                    type="button"
+                    className="adm-btn-action"
+                    style={{ color: '#92400e' }}
+                    onClick={() => onReset(u)}
+                >
+                    🔑 Reset
+                </button>
+                <button
+                    type="button"
+                    className="adm-btn-action"
+                    style={{
+                        color: u.status === 'active' ? '#b91c1c' : '#047857',
+                        opacity: isSystemSuperRow ? 0.45 : 1,
+                    }}
+                    disabled={isSystemSuperRow}
+                    title={isSystemSuperRow ? 'The system Super Admin account cannot be activated or deactivated here.' : undefined}
+                    onClick={() => !isSystemSuperRow && onToggleStatus(u)}
+                >
+                    {u.status === 'active' ? 'Disable' : 'Enable'}
+                </button>
+            </div>
+        </div>
+    )
+}
+
+/**
+ * Admin User Table — displays users with search, filter, and inline actions.
+ */
 function AdminUserTable({
     userList,
     role,
@@ -406,51 +656,30 @@ function AdminUserTable({
     const [search, setSearch] = useState('')
     const [filter, setFilter] = useState('all')
     const cfg = ROLE_CFG[role]
-    const roleClass =
-        role === 'clinician' ? 'clinicians'
-        : role === 'scribe' ? 'scribes'
-        : role === 'qps' ? 'qps'
-        : role === 'admin' || role === 'elevated' ? 'admins'
-        : 'generic'
-    const matchesSearch = (u) => {
-        if (!search) return true
-        const q = search.toLowerCase()
-        const name = (u.name || '').toLowerCase()
-        const email = (u.email || '').toLowerCase()
-        return name.includes(q) || email.includes(q)
+    const roleClass = getAdminTableRoleClass(role)
+    const filtered = filterAdminUsers(userList, search, filter)
+
+    const openAddUser = () => {
+        const defaults = buildNewUserDefaults(role)
+        setAddRole(defaults.addRole)
+        setShowAdd(true)
+        setAddError('')
+        setNewUserPassword('')
+        setNewUser(defaults.newUser)
     }
-    const filtered = userList.filter((u) => matchesSearch(u) && (filter === 'all' || u.status === filter))
-    const isSystemSuperRow = (u) => u.role === 'super_admin'
+
     return (
         <div>
-            <div className="adm-toolbar">
-                <input
-                    className="adm-input adm-input--narrow"
-                    placeholder={`Search ${cfg.label}s…`}
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                />
-                <select className="adm-input adm-input--select-compact" value={filter} onChange={(e) => setFilter(e.target.value)}>
-                    <option value="all">All Status</option>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                </select>
-                <div className="adm-toolbar__actions" style={{ marginLeft: 'auto' }}>
-                    <span className="adm-toolbar__meta">
-                        {filtered.length} {cfg.label}{filtered.length !== 1 ? 's' : ''}
-                        {refreshing ? ' · Syncing…' : ''}
-                    </span>
-                    <button type="button" className="adm-btn-primary" onClick={() => {
-                        setAddRole(role === 'elevated' ? 'admin' : role)
-                        setShowAdd(true)
-                        setAddError('')
-                        setNewUserPassword('')
-                        setNewUser({ name: '', email: '', specialty: '', phone: '', npi: '', license: '' })
-                    }}>
-                        + Add {cfg.label}
-                    </button>
-                </div>
-            </div>
+            <AdminTableToolbar
+                cfg={cfg}
+                search={search}
+                filter={filter}
+                filteredCount={filtered.length}
+                refreshing={refreshing}
+                onSearchChange={setSearch}
+                onFilterChange={setFilter}
+                onAddUser={openAddUser}
+            />
             {loading ? (
                 <LoadingBox variant="table" />
             ) : filtered.length === 0 ? (
@@ -459,13 +688,7 @@ function AdminUserTable({
                     title={`No ${cfg.label}s yet`}
                     hint={`Add your first ${cfg.label.toLowerCase()} or adjust search and status filters.`}
                     actionLabel={`Add ${cfg.label}`}
-                        onAction={() => {
-                            setAddRole(role === 'elevated' ? 'admin' : role)
-                            setShowAdd(true)
-                            setAddError('')
-                            setNewUserPassword('')
-                            setNewUser({ name: '', email: '', specialty: '', phone: '', npi: '', license: '' })
-                        }}
+                    onAction={openAddUser}
                 />
             ) : (
                 <div className={`adm-table-scroll adm-table-scroll--${roleClass}`}>
@@ -478,91 +701,21 @@ function AdminUserTable({
                         <div style={{ flex: 1 }}>Status</div>
                         <div className="adm-th-actions">Actions</div>
                     </div>
-                    {filtered.map((u) => {
-                        const semantic = getRoleSemantic(u, u.role || role)
-                        const isNew = highlightUserId != null && String(u.id) === String(highlightUserId)
-                        return (
-                        <div key={u.id} className={`adm-table__row adm-table__row--${roleClass}${isNew ? ' adm-table__row--new' : ''}`}>
-                            <div className="adm-td" data-label="Name" style={{ flex: 2 }}>
-                                <div className="adm-usercell">
-                                    <div className={`adm-usercell__avatar adm-usercell__avatar--${roleClass}`} aria-hidden>{initials(u.name)}</div>
-                                    <div className="adm-usercell__meta">
-                                        <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>{u.name}</div>
-                                        <div className="adm-usercell__sub">
-                                            {role === 'clinician' && (u.npi ? `NPI ${u.npi}` : 'Clinician profile')}
-                                            {role === 'scribe' && 'Documentation specialist'}
-                                            {role === 'qps' && 'Quality review specialist'}
-                                            {(role === 'admin' || role === 'elevated') && (u.role === 'super_admin' ? 'Super Admin' : 'Platform administration')}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="adm-td" data-label="Email" style={{ flex: 2, fontSize: 12, color: 'var(--text-muted)' }}>{displayEmail(u.email)}</div>
-                            <div className="adm-td" data-label={semantic.label} style={{ flex: 2 }}>
-                                {role === 'clinician' ? (
-                                    <span className="adm-specialty-chip">{semantic.value}</span>
-                                ) : (
-                                    <span className={`adm-role-chip adm-role-chip--${semantic.tone}`}>{semantic.value}</span>
-                                )}
-                            </div>
-                            <div className="adm-td" data-label="Phone" style={{ flex: 1, fontSize: 12, color: 'var(--text-muted)' }}>
-                                {u.phone || (
-                                    <span className="adm-usercell__sub adm-usercell__sub--muted">Not set</span>
-                                )}
-                            </div>
-                            <div className="adm-td" data-label="Status" style={{ flex: 1 }}>
-                                <span
-                                    className="adm-badge"
-                                    style={{
-                                        background: u.status === 'active' ? '#d1fae5' : '#eef2ff',
-                                        color: u.status === 'active' ? '#065f46' : '#64748b',
-                                    }}
-                                >
-                                    {u.status === 'active' ? '● Active' : '○ Inactive'}
-                                </span>
-                            </div>
-                            <div className="adm-td adm-td--actions" data-label="Actions">
-                                <button type="button" className="adm-btn-action" onClick={() => setEditUser({ ...u })}>
-                                    Edit
-                                </button>
-                                {role === 'elevated' && u.role === 'admin' && isSuperAdminViewer && (
-                                    <button
-                                        type="button"
-                                        className="adm-btn-action adm-btn-action--modules"
-                                        title="Configure which admin portal sections this administrator can open"
-                                        onClick={() => onOpenModulePermissions({ ...u })}
-                                    >
-                                        Module permissions
-                                    </button>
-                                )}
-                                <button
-                                    type="button"
-                                    className="adm-btn-action"
-                                    style={{ color: '#92400e' }}
-                                    onClick={() => {
-                                        setResetUser(u)
-                                        setResetError('')
-                                    }}
-                                >
-                                    🔑 Reset
-                                </button>
-                                <button
-                                    type="button"
-                                    className="adm-btn-action"
-                                    style={{
-                                        color: u.status === 'active' ? '#b91c1c' : '#047857',
-                                        opacity: isSystemSuperRow(u) ? 0.45 : 1,
-                                    }}
-                                    disabled={isSystemSuperRow(u)}
-                                    title={isSystemSuperRow(u) ? 'The system Super Admin account cannot be activated or deactivated here.' : undefined}
-                                    onClick={() => !isSystemSuperRow(u) && toggleStatus(u)}
-                                >
-                                    {u.status === 'active' ? 'Disable' : 'Enable'}
-                                </button>
-                            </div>
-                        </div>
-                        )
-                    })}
+                    {filtered.map((u) => (
+                        <AdminUserTableRow
+                            key={u.id}
+                            u={u}
+                            role={role}
+                            roleClass={roleClass}
+                            isNew={highlightUserId != null && String(u.id) === String(highlightUserId)}
+                            isSuperAdminViewer={isSuperAdminViewer}
+                            semantic={getRoleSemantic(u, u.role || role)}
+                            onEdit={(user) => setEditUser({ ...user })}
+                            onOpenModulePermissions={(user) => onOpenModulePermissions({ ...user })}
+                            onReset={(user) => { setResetUser(user); setResetError('') }}
+                            onToggleStatus={toggleStatus}
+                        />
+                    ))}
                 </div>
                 </div>
             )}
@@ -873,25 +1026,7 @@ function Admin() {
         }
     }
 
-    const validateSettings = () => {
-        if (!settingsForm.system_name.trim()) return 'System name is required.'
-        if (settingsForm.system_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(settingsForm.system_email)) {
-            return 'Enter a valid system email.'
-        }
-        const urls = ['website_url', 'facebook_url', 'linkedin_url', 'instagram_url', 'x_url']
-        for (const key of urls) {
-            const value = settingsForm[key]?.trim()
-            if (!value) continue
-            if (!/^https?:\/\/.+/i.test(value)) return `Enter a valid URL for ${key.replace('_url', '').replace('_', ' ')}.`
-        }
-        if (settingsForm.deepgram_enabled && !settingsForm.deepgram_api_key_set && !settingsForm.deepgram_api_key?.trim()) {
-            return 'Deepgram is enabled but no API key is saved. Enter a key or turn Deepgram off.'
-        }
-        if (settingsForm.anthropic_enabled && !settingsForm.anthropic_api_key_set && !settingsForm.anthropic_api_key?.trim()) {
-            return 'AI note generation is enabled but no Anthropic API key is saved. Enter a key or turn it off.'
-        }
-        return ''
-    }
+    const validateSettings = () => validateSettingsForm(settingsForm)
 
     const saveSettings = async () => {
         const validationError = validateSettings()
@@ -901,52 +1036,7 @@ function Admin() {
         }
         try {
             setSettingsSaving(true)
-            const payload = {
-                system_name: settingsForm.system_name.trim(),
-                system_email: settingsForm.system_email.trim(),
-                phone: settingsForm.phone.trim(),
-                address: settingsForm.address.trim(),
-                company_info: settingsForm.company_info.trim(),
-                footer_text: settingsForm.footer_text.trim(),
-                support_contact: settingsForm.support_contact.trim(),
-                logo_data_url: settingsForm.logo_data_url || '',
-                favicon_data_url: settingsForm.favicon_data_url || '',
-                primary_color: settingsForm.primary_color,
-                secondary_color: settingsForm.secondary_color,
-                system_description: settingsForm.system_description.trim(),
-                social_links: {
-                    website_url: settingsForm.website_url.trim(),
-                    facebook_url: settingsForm.facebook_url.trim(),
-                    linkedin_url: settingsForm.linkedin_url.trim(),
-                    instagram_url: settingsForm.instagram_url.trim(),
-                    x_url: settingsForm.x_url.trim(),
-                },
-                audit_retention_days: Math.max(30, Math.min(Number(settingsForm.audit_retention_days) || 365, 3650)),
-                deepgram_enabled: !!settingsForm.deepgram_enabled,
-                deepgram_model: settingsForm.deepgram_model?.trim() || 'nova-2',
-                deepgram_language: settingsForm.deepgram_language?.trim() || 'en-US',
-                deepgram_webhook_url: settingsForm.deepgram_webhook_url?.trim() || '',
-                deepgram_auto_transcribe_on_upload: !!settingsForm.deepgram_auto_transcribe_on_upload,
-                anthropic_enabled: !!settingsForm.anthropic_enabled,
-                anthropic_model: settingsForm.anthropic_model || 'claude-haiku-4-5',
-                ffmpeg_enabled: !!settingsForm.ffmpeg_enabled,
-                ffmpeg_target_format: settingsForm.ffmpeg_target_format,
-                ffmpeg_compression: Math.max(0, Math.min(9, Number(settingsForm.ffmpeg_compression) || 5)),
-                ffmpeg_max_upload_mb: Math.max(1, Math.min(500, Number(settingsForm.ffmpeg_max_upload_mb) || 100)),
-                ffmpeg_preprocess_before_transcribe: !!settingsForm.ffmpeg_preprocess_before_transcribe,
-            }
-            if (settingsForm.deepgram_api_key?.trim()) {
-                payload.deepgram_api_key = settingsForm.deepgram_api_key.trim()
-            }
-            if (settingsForm.deepgram_clear_api_key) {
-                payload.deepgram_clear_api_key = true
-            }
-            if (settingsForm.anthropic_api_key?.trim()) {
-                payload.anthropic_api_key = settingsForm.anthropic_api_key.trim()
-            }
-            if (settingsForm.anthropic_clear_api_key) {
-                payload.anthropic_clear_api_key = true
-            }
+            const payload = buildSettingsPayload(settingsForm)
             const data = await settingsAPI.update(payload)
             const saved = data.settings || payload
             hydrateSettingsForm(saved)
@@ -973,53 +1063,26 @@ function Admin() {
     // ── Register user ─────────────────────────────────
     const registerUser = async () => {
         setAddError('')
-        const cleanName = newUser.name.trim()
-        const cleanEmail = newUser.email.toLowerCase().trim()
-        const cleanPhone = (newUser.phone || '').trim()
-        const cleanSpecialty = (newUser.specialty || '').trim()
-        const cleanNpi = (newUser.npi || '').trim()
-        const cleanLicense = (newUser.license || '').trim()
-
-        if (!cleanName)  { setAddError('Name is required.'); return }
-        if (!cleanEmail) { setAddError('Email is required.'); return }
-        if (!cleanEmail.includes('@')) { setAddError('Enter a valid email.'); return }
-        // Password is optional: blank means the server generates a secure temp
-        // password. Only validate a password the admin actually typed.
-        if (newUserPassword) {
-            const pwCheck = validatePassword(newUserPassword)
-            if (!pwCheck.valid) { setAddError(pwCheck.message); return }
+        const validated = validateRegisterUserInput(newUser, newUserPassword, addRole)
+        if (validated.error) {
+            setAddError(validated.error)
+            return
         }
         try {
             setAddLoading(true)
-            const payload = {
-                name: cleanName,
-                email: cleanEmail,
-                password: newUserPassword || undefined,
-                role: addRole,
-                phone: cleanPhone || undefined,
-                specialty: addRole === 'clinician' ? (cleanSpecialty || undefined) : undefined,
-                npi: addRole === 'clinician' ? (cleanNpi || undefined) : undefined,
-                license: addRole === 'clinician' ? (cleanLicense || undefined) : undefined,
-            }
-            const data = await usersAPI.register(payload)
-            // Log the API response for debugging (never the temp password itself).
+            const data = await usersAPI.register(validated.payload)
             console.log('[Admin] register response:', {
                 ok: true,
                 userId: data?.user?.id,
                 generatedPassword: !!data?.temporaryPassword,
             })
-            // Optimistic upsert for instant feedback.
-            setUsers((prev) => {
-                const next = [data.user, ...prev.filter((u) => u.id !== data.user.id)]
-                return next
-            })
+            setUsers((prev) => [data.user, ...prev.filter((u) => u.id !== data.user.id)])
             setRecentlyAddedUserId(data.user.id)
             void refreshUsers(true)
             setNewUser({ name: '', email: '', specialty: '', phone: '', npi: '', license: '' })
             setNewUserPassword('')
             setShowAdd(false)
             if (data.temporaryPassword) {
-                // Reveal the server-generated credential exactly once.
                 setCredentialCopied(false)
                 setCredential({
                     title: 'Account created',
@@ -1033,13 +1096,10 @@ function Admin() {
             }
         } catch (err) {
             console.error('[Admin] register failed:', { status: err?.status, message: err?.message, payload: err?.payload })
-            if (err?.status === 403) {
-                setAddError('You do not have permission to register users. Please sign in as an admin.')
-            } else {
-                setAddError(err.message || 'Registration failed. Please try again.')
-            }
+            setAddError(getRegisterUserErrorMessage(err))
+        } finally {
+            setAddLoading(false)
         }
-        finally { setAddLoading(false) }
     }
 
     const requestRegisterUser = () => {

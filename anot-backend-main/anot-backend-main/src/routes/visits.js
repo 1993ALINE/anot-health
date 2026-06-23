@@ -64,37 +64,85 @@ function parseTranscriptionSegments(transcription) {
 const AI_DRAFT_UNAVAILABLE =
   '[AI draft unavailable — add an Anthropic API key in Admin → Settings or ANTHROPIC_API_KEY to the server .env file, then click Transcribe audio or Refresh.]'
 
+/**
+ * Load visit detail for draft generation
+ */
+async function loadVisitDetailForDraft(visitId) {
+  const detail = await pool.query(
+    `
+      SELECT v.visit_type, v.visit_date, p.name AS patient_name, p.mrn
+      FROM visits v
+      JOIN patients p ON p.id = v.patient_id
+      WHERE v.id = $1
+    `,
+    [visitId],
+  )
+  return detail.rows[0] || null
+}
+
+/**
+ * Load note transcription segments for draft generation
+ */
+async function loadNoteForDraft(visitId) {
+  const noteRow = await pool.query('SELECT id, transcription, status FROM notes WHERE visit_id = $1', [visitId])
+  const note = noteRow.rows[0]
+  const segments = parseTranscriptionSegments(note?.transcription)
+  return { note, segments }
+}
+
+/**
+ * Validate note is editable for draft generation
+ */
+function validateNoteEditableForDraft(note) {
+  if (note && !['pending', 'draft'].includes(note.status)) {
+    throw Object.assign(new Error('Note is locked.'), { status: 409 })
+  }
+}
+
+/**
+ * Persist AI draft to notes table
+ */
+async function saveAiDraftToNote(visitId, aiDraft, segments, existingNote) {
+  if (existingNote) {
+    await pool.query(
+      `UPDATE notes SET ai_draft = $1, updated_at = NOW() WHERE visit_id = $2`,
+      [aiDraft, visitId],
+    )
+  } else {
+    await pool.query(
+      `INSERT INTO notes (visit_id, transcription, ai_draft, status) VALUES ($1, $2, $3, 'pending')`,
+      [visitId, JSON.stringify(segments), aiDraft],
+    )
+  }
+}
+
+/**
+ * Handle generate draft errors
+ */
+function handleGenerateDraftError(res, err) {
+  console.error('Generate draft error:', err.message)
+  const status = err.status || 500
+  res.status(status).json({ error: err.status ? err.message : 'Failed to generate AI draft.' })
+}
+
+/**
+ * Generate AI draft route handler
+ */
 async function generateDraft(req, res) {
   try {
     const { id } = req.params
     const visit = await getVisitForUser(id, req.user)
-    if (!visit) {
-      return res.status(404).json({ error: 'Visit not found.' })
-    }
+    if (!visit) return res.status(404).json({ error: 'Visit not found.' })
 
-    const detail = await pool.query(
-      `
-        SELECT v.visit_type, v.visit_date, p.name AS patient_name, p.mrn
-        FROM visits v
-        JOIN patients p ON p.id = v.patient_id
-        WHERE v.id = $1
-      `,
-      [id],
-    )
-    const row = detail.rows[0]
-    if (!row) {
-      return res.status(404).json({ error: 'Visit not found.' })
-    }
+    const row = await loadVisitDetailForDraft(id)
+    if (!row) return res.status(404).json({ error: 'Visit not found.' })
 
-    const noteRow = await pool.query('SELECT id, transcription, status FROM notes WHERE visit_id = $1', [id])
-    const segments = parseTranscriptionSegments(noteRow.rows[0]?.transcription)
+    const { note, segments } = await loadNoteForDraft(id)
     if (!segments.length) {
       return res.status(400).json({ error: 'No transcription available for this visit.' })
     }
 
-    if (noteRow.rows.length > 0 && !['pending', 'draft'].includes(noteRow.rows[0].status)) {
-      return res.status(409).json({ error: 'Note is locked.' })
-    }
+    validateNoteEditableForDraft(note)
 
     let aiDraft = await generateAINote(segments, {
       patient_name: row.patient_name,
@@ -102,33 +150,12 @@ async function generateDraft(req, res) {
       visit_type: row.visit_type,
       visit_date: row.visit_date,
     })
-    if (!aiDraft) {
-      aiDraft = AI_DRAFT_UNAVAILABLE
-    }
+    if (!aiDraft) aiDraft = AI_DRAFT_UNAVAILABLE
 
-    if (noteRow.rows.length > 0) {
-      await pool.query(
-        `
-          UPDATE notes
-          SET ai_draft = $1, updated_at = NOW()
-          WHERE visit_id = $2
-        `,
-        [aiDraft, id],
-      )
-    } else {
-      await pool.query(
-        `
-          INSERT INTO notes (visit_id, transcription, ai_draft, status)
-          VALUES ($1, $2, $3, 'pending')
-        `,
-        [id, JSON.stringify(segments), aiDraft],
-      )
-    }
-
+    await saveAiDraftToNote(id, aiDraft, segments, note)
     return res.status(200).json({ ai_draft: aiDraft })
   } catch (err) {
-    console.error('Generate draft error:', err.message)
-    return res.status(500).json({ error: 'Failed to generate AI draft.' })
+    handleGenerateDraftError(res, err)
   }
 }
 

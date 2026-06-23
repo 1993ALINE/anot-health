@@ -64,99 +64,19 @@ function formatCountdown(ms) {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-export function useSessionTimeout(enabled = true, options = {}) {
-  const [showWarning, setShowWarning] = useState(false)
-  const [expiresAt, setExpiresAt] = useState(null)
-  const [remaining, setRemaining] = useState(WARNING_MS)
-  const resetTimerRef = useRef(() => {})
-  const isBusyRef = useRef(options.isBusy)
-  isBusyRef.current = options.isBusy
+/**
+ * Clear session timeout timers.
+ */
+function clearSessionTimers(timeoutId, warningId, heartbeatId) {
+  if (timeoutId) clearTimeout(timeoutId)
+  if (warningId) clearTimeout(warningId)
+  if (heartbeatId) clearInterval(heartbeatId)
+}
 
-  useEffect(() => {
-    if (DEBUG) console.log('[SessionTimeout] hook running. enabled =', enabled)
-    if (!enabled) {
-      setShowWarning(false)
-      return undefined
-    }
-
-    let timeoutId
-    let warningId
-    let heartbeatId
-    let loggedOut = false
-    let warningAt = 0
-
-    const resetTimer = () => {
-      if (loggedOut) return
-      clearTimeout(timeoutId)
-      clearTimeout(warningId)
-      setShowWarning((prev) => (prev ? false : prev))
-      setExpiresAt(null)
-      warningAt = Date.now() + IDLE_BEFORE_WARNING_MS
-      if (DEBUG) console.log('[SessionTimeout] timer reset at', new Date().toLocaleTimeString())
-
-      warningId = setTimeout(() => {
-        if (isBusyRef.current?.()) {
-          if (DEBUG) console.log('[SessionTimeout] busy (e.g. recording) — timer reset instead of warning')
-          resetTimer()
-          return
-        }
-        if (DEBUG) console.log('[SessionTimeout] ⚠️ WARNING modal shown')
-        setExpiresAt(Date.now() + WARNING_MS)
-        setRemaining(WARNING_MS)
-        setShowWarning(true)
-      }, IDLE_BEFORE_WARNING_MS)
-
-      timeoutId = setTimeout(() => {
-        // Never destroy in-flight work (an active recording holds unsaved
-        // audio in memory; a hard navigation would lose the whole encounter).
-        if (isBusyRef.current?.()) {
-          if (DEBUG) console.log('[SessionTimeout] busy — logout deferred, timer reset')
-          resetTimer()
-          return
-        }
-        loggedOut = true
-        if (DEBUG) console.log('[SessionTimeout] 🚪 LOGOUT triggered (inactivity)')
-        handleLogout()
-      }, TOTAL_MS)
-    }
-
-    resetTimerRef.current = resetTimer
-    events.forEach((e) => window.addEventListener(e, resetTimer, { passive: true }))
-    resetTimer()
-
-    // Heartbeat: confirms the timer is counting down while idle.
-    if (DEBUG) {
-      heartbeatId = setInterval(() => {
-        if (loggedOut) return
-        const secsToWarning = Math.max(0, Math.round((warningAt - Date.now()) / 1000))
-        console.log(`[SessionTimeout] counting… ${secsToWarning}s until warning`)
-      }, 1000)
-    }
-
-    return () => {
-      clearTimeout(timeoutId)
-      clearTimeout(warningId)
-      clearInterval(heartbeatId)
-      events.forEach((e) => window.removeEventListener(e, resetTimer, { passive: true }))
-    }
-  }, [enabled])
-
-  // Live countdown while the warning modal is visible.
-  useEffect(() => {
-    if (!showWarning || !expiresAt) return undefined
-    const tick = () => setRemaining(expiresAt - Date.now())
-    tick()
-    const id = setInterval(tick, 1000)
-    return () => clearInterval(id)
-  }, [showWarning, expiresAt])
-
-  const stayLoggedIn = useCallback(() => {
-    setShowWarning(false)
-    resetTimerRef.current()
-  }, [])
-
-  if (!enabled || !showWarning) return null
-
+/**
+ * Session expiry warning modal (portaled to document.body).
+ */
+function SessionWarningModal({ remaining, expiresAt, onStayLoggedIn }) {
   const overlay = createElement('div', {
     style: {
       position: 'fixed',
@@ -229,7 +149,7 @@ export function useSessionTimeout(enabled = true, options = {}) {
     'button',
     {
       type: 'button',
-      onClick: stayLoggedIn,
+      onClick: onStayLoggedIn,
       style: {
         width: '100%',
         background: '#4F46E5',
@@ -275,6 +195,104 @@ export function useSessionTimeout(enabled = true, options = {}) {
   )
 
   return createPortal(createElement('div', null, overlay, modal), document.body)
+}
+
+export function useSessionTimeout(enabled = true, options = {}) {
+  const [showWarning, setShowWarning] = useState(false)
+  const [expiresAt, setExpiresAt] = useState(null)
+  const [remaining, setRemaining] = useState(WARNING_MS)
+  const resetTimerRef = useRef(() => {})
+  const isBusyRef = useRef(options.isBusy)
+  isBusyRef.current = options.isBusy
+
+  useEffect(() => {
+    if (DEBUG) console.log('[SessionTimeout] hook running. enabled =', enabled)
+    if (!enabled) {
+      setShowWarning(false)
+      return undefined
+    }
+
+    let timeoutId
+    let warningId
+    let heartbeatId
+    let loggedOut = false
+    let warningAt = 0
+
+    const resetTimer = () => {
+      if (loggedOut) return
+      clearTimeout(timeoutId)
+      clearTimeout(warningId)
+      setShowWarning((prev) => (prev ? false : prev))
+      setExpiresAt(null)
+      warningAt = Date.now() + IDLE_BEFORE_WARNING_MS
+      if (DEBUG) console.log('[SessionTimeout] timer reset at', new Date().toLocaleTimeString())
+
+      warningId = setTimeout(() => {
+        if (isBusyRef.current?.()) {
+          if (DEBUG) console.log('[SessionTimeout] busy (e.g. recording) — timer reset instead of warning')
+          resetTimer()
+          return
+        }
+        if (DEBUG) console.log('[SessionTimeout] ⚠️ WARNING modal shown')
+        setExpiresAt(Date.now() + WARNING_MS)
+        setRemaining(WARNING_MS)
+        setShowWarning(true)
+      }, IDLE_BEFORE_WARNING_MS)
+
+      timeoutId = setTimeout(() => {
+        // Never destroy in-flight work (an active recording holds unsaved
+        // audio in memory; a hard navigation would lose the whole encounter).
+        if (isBusyRef.current?.()) {
+          if (DEBUG) console.log('[SessionTimeout] busy — logout deferred, timer reset')
+          resetTimer()
+          return
+        }
+        loggedOut = true
+        if (DEBUG) console.log('[SessionTimeout] 🚪 LOGOUT triggered (inactivity)')
+        handleLogout()
+      }, TOTAL_MS)
+    }
+
+    resetTimerRef.current = resetTimer
+    events.forEach((e) => window.addEventListener(e, resetTimer, { passive: true }))
+    resetTimer()
+
+    // Heartbeat: confirms the timer is counting down while idle.
+    if (DEBUG) {
+      heartbeatId = setInterval(() => {
+        if (loggedOut) return
+        const secsToWarning = Math.max(0, Math.round((warningAt - Date.now()) / 1000))
+        console.log(`[SessionTimeout] counting… ${secsToWarning}s until warning`)
+      }, 1000)
+    }
+
+    return () => {
+      clearSessionTimers(timeoutId, warningId, heartbeatId)
+      events.forEach((e) => window.removeEventListener(e, resetTimer, { passive: true }))
+    }
+  }, [enabled])
+
+  // Live countdown while the warning modal is visible.
+  useEffect(() => {
+    if (!showWarning || !expiresAt) return undefined
+    const tick = () => setRemaining(expiresAt - Date.now())
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [showWarning, expiresAt])
+
+  const stayLoggedIn = useCallback(() => {
+    setShowWarning(false)
+    resetTimerRef.current()
+  }, [])
+
+  if (!enabled || !showWarning) return null
+
+  return createElement(SessionWarningModal, {
+    remaining,
+    expiresAt,
+    onStayLoggedIn: stayLoggedIn,
+  })
 }
 
 export default useSessionTimeout

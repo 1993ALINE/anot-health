@@ -400,6 +400,89 @@ function ScheduleDayPreview({ dayOff, breakdown, scheduleDayCounts }) {
   }
 }
 
+const CALENDAR_WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
+
+/**
+ * Build calendar grid cells for a month (null = padding, number = day of month).
+ */
+function buildCalendarCells(viewYear, viewMonth) {
+  const startPad = new Date(viewYear, viewMonth, 1).getDay()
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate()
+  const cells = []
+  for (let i = 0; i < startPad; i++) cells.push(null)
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d)
+  return cells
+}
+
+/**
+ * Format month label for calendar header.
+ */
+function formatCalendarMonthLabel(viewYear, viewMonth) {
+  return new Date(viewYear, viewMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+}
+
+/**
+ * Shift calendar view by one month.
+ */
+function shiftCalendarMonth(viewYear, viewMonth, delta) {
+  const d = new Date(viewYear, viewMonth + delta, 1)
+  return { year: d.getFullYear(), month: d.getMonth() }
+}
+
+/**
+ * Close calendar popup when clicking outside anchor/popup.
+ */
+function useCalendarOutsideDismiss(popupRef, anchorRef, onClose) {
+  useEffect(() => {
+    const onDocClick = (e) => {
+      if (popupRef.current?.contains(e.target)) return
+      if (anchorRef?.current?.contains(e.target)) return
+      onClose()
+    }
+    const t = setTimeout(() => document.addEventListener('mousedown', onDocClick), 0)
+    return () => {
+      clearTimeout(t)
+      document.removeEventListener('mousedown', onDocClick)
+    }
+  }, [onClose, anchorRef, popupRef])
+}
+
+function CalendarPopupHeader({ monthLabel, onPrev, onNext }) {
+  return (
+    <div className="cl-calendar-popup__head">
+      <button type="button" className="cl-calendar-popup__nav" onClick={onPrev} aria-label="Previous month">
+        ‹
+      </button>
+      <span className="cl-calendar-popup__month">{monthLabel}</span>
+      <button type="button" className="cl-calendar-popup__nav" onClick={onNext} aria-label="Next month">
+        ›
+      </button>
+    </div>
+  )
+}
+
+function CalendarDayCell({ day, index, viewYear, viewMonth, selectedOff, onSelectDate }) {
+  if (day === null) {
+    return <span key={`empty-${index}`} className="cl-calendar-popup__cell cl-calendar-popup__cell--empty" aria-hidden />
+  }
+  const dayOff = daysOffsetFromToday(viewYear, viewMonth, day)
+  const isToday = dayOff === 0
+  const isSelected = dayOff === selectedOff
+  return (
+    <button
+      key={day}
+      type="button"
+      className={`cl-calendar-popup__day${isToday ? ' cl-calendar-popup__day--today' : ''}${isSelected ? ' cl-calendar-popup__day--selected' : ''}`}
+      onClick={() => onSelectDate(dayOff)}
+    >
+      {day}
+    </button>
+  )
+}
+
+/**
+ * Schedule Date Picker — calendar popup for choosing a schedule day offset.
+ */
 function ScheduleDatePicker({ off, onSelectDate, onClose, anchorRef }) {
   const selectedDate = useMemo(() => {
     const d = new Date()
@@ -417,81 +500,43 @@ function ScheduleDatePicker({ off, onSelectDate, onClose, anchorRef }) {
     setViewMonth(selectedDate.getMonth())
   }, [selectedDate])
 
-  useEffect(() => {
-    const onDocClick = (e) => {
-      if (popupRef.current?.contains(e.target)) return
-      if (anchorRef?.current?.contains(e.target)) return
-      onClose()
-    }
-    const t = setTimeout(() => document.addEventListener('mousedown', onDocClick), 0)
-    return () => {
-      clearTimeout(t)
-      document.removeEventListener('mousedown', onDocClick)
-    }
-  }, [onClose, anchorRef])
+  useCalendarOutsideDismiss(popupRef, anchorRef, onClose)
 
-  const firstDay = new Date(viewYear, viewMonth, 1)
-  const startPad = firstDay.getDay()
-  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate()
-  const cells = []
-  for (let i = 0; i < startPad; i++) cells.push(null)
-  for (let d = 1; d <= daysInMonth; d++) cells.push(d)
-
-  const monthLabel = new Date(viewYear, viewMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  const cells = buildCalendarCells(viewYear, viewMonth)
+  const monthLabel = formatCalendarMonthLabel(viewYear, viewMonth)
 
   const prevMonth = () => {
-    if (viewMonth === 0) {
-      setViewMonth(11)
-      setViewYear((y) => y - 1)
-    } else {
-      setViewMonth((m) => m - 1)
-    }
+    const next = shiftCalendarMonth(viewYear, viewMonth, -1)
+    setViewYear(next.year)
+    setViewMonth(next.month)
   }
 
   const nextMonth = () => {
-    if (viewMonth === 11) {
-      setViewMonth(0)
-      setViewYear((y) => y + 1)
-    } else {
-      setViewMonth((m) => m + 1)
-    }
+    const next = shiftCalendarMonth(viewYear, viewMonth, 1)
+    setViewYear(next.year)
+    setViewMonth(next.month)
   }
 
   return (
     <div className="cl-calendar-popup" ref={popupRef} role="dialog" aria-label="Choose date">
-      <div className="cl-calendar-popup__head">
-        <button type="button" className="cl-calendar-popup__nav" onClick={prevMonth} aria-label="Previous month">
-          ‹
-        </button>
-        <span className="cl-calendar-popup__month">{monthLabel}</span>
-        <button type="button" className="cl-calendar-popup__nav" onClick={nextMonth} aria-label="Next month">
-          ›
-        </button>
-      </div>
+      <CalendarPopupHeader monthLabel={monthLabel} onPrev={prevMonth} onNext={nextMonth} />
       <div className="cl-calendar-popup__weekdays" aria-hidden>
-        {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((d) => (
+        {CALENDAR_WEEKDAYS.map((d) => (
           <span key={d}>{d}</span>
         ))}
       </div>
       <div className="cl-calendar-popup__grid">
-        {cells.map((day, i) => {
-          if (day === null) {
-            return <span key={`empty-${i}`} className="cl-calendar-popup__cell cl-calendar-popup__cell--empty" aria-hidden />
-          }
-          const dayOff = daysOffsetFromToday(viewYear, viewMonth, day)
-          const isToday = dayOff === 0
-          const isSelected = dayOff === off
-          return (
-            <button
-              key={day}
-              type="button"
-              className={`cl-calendar-popup__day${isToday ? ' cl-calendar-popup__day--today' : ''}${isSelected ? ' cl-calendar-popup__day--selected' : ''}`}
-              onClick={() => onSelectDate(dayOff)}
-            >
-              {day}
-            </button>
-          )
-        })}
+        {cells.map((day, i) => (
+          <CalendarDayCell
+            key={day ?? `empty-${i}`}
+            day={day}
+            index={i}
+            viewYear={viewYear}
+            viewMonth={viewMonth}
+            selectedOff={off}
+            onSelectDate={onSelectDate}
+          />
+        ))}
       </div>
     </div>
   )
@@ -820,6 +865,121 @@ function saveTemplates(t) {
 
 // ─── AUDIO PLAYER ─────────────────────────────────────────────────────────────
 
+function getAuthHeaders() {
+  const token = localStorage.getItem('token')
+  return { Authorization: `Bearer ${token}` }
+}
+
+/**
+ * Fetch recording count for a visit.
+ */
+async function fetchVisitAudioCount(visitId) {
+  try {
+    const response = await fetch(`${API_BASE}/audio/${visitId}/count`, { headers: getAuthHeaders() })
+    const data = await response.json()
+    return data.count > 0 ? data.count : 1
+  } catch {
+    return 1
+  }
+}
+
+/**
+ * Load audio blob for playback index.
+ */
+async function loadVisitAudioBlob(visitId, idx) {
+  const response = await fetch(`${API_BASE}/audio/${visitId}?index=${idx}`, { headers: getAuthHeaders() })
+  if (!response.ok) throw new Error('Failed to load audio')
+  return response.blob()
+}
+
+function attachAudioElementHandlers(a, durSet, setDur, setCur, setPlay) {
+  a.onloadedmetadata = () => {
+    if (a.duration && isFinite(a.duration)) {
+      setDur(Math.ceil(a.duration))
+      durSet.current = true
+    } else {
+      a.currentTime = 1e101
+    }
+  }
+  a.onseeked = () => {
+    if (!durSet.current && a.duration && isFinite(a.duration)) {
+      durSet.current = true
+      setDur(Math.ceil(a.duration))
+      a.currentTime = 0
+    }
+  }
+  a.ontimeupdate = () => setCur(Math.floor(a.currentTime))
+  a.onended = () => { setPlay(false); setCur(0) }
+}
+
+function getTranscriptionStatusLabel(txSt) {
+  if (txSt === 'processing') return 'Status: With Scribe'
+  if (txSt === 'completed') return 'Status: Scribe draft ready'
+  if (txSt === 'failed') return 'Status: failed'
+  return null
+}
+
+function AudioModalHeader({ count, onClose }) {
+  return (
+    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20 }}>
+      <div>
+        <div style={{ fontSize:17, fontWeight:700, color:'#1E293B' }}>🎙 Encounter Recording</div>
+        <div style={{ fontSize:13, color:'#94A3B8', marginTop:3 }}>{count} recording{count > 1 ? 's' : ''}</div>
+      </div>
+      <button onClick={onClose} style={{ background:'#E2E8F0', border:'none', borderRadius:10, padding:'8px 16px', cursor:'pointer', fontSize:13, fontWeight:600, color:'#64748B' }}>✕ Close</button>
+    </div>
+  )
+}
+
+function AudioRecordingTabs({ count, idx, onSelect }) {
+  if (count <= 1) return null
+  return (
+    <div style={{ display:'flex', gap:8, marginBottom:20 }}>
+      {Array.from({ length: count }, (_, i) => (
+        <button key={i} onClick={() => onSelect(i)} style={{ padding:'6px 16px', borderRadius:10, fontSize:13, fontWeight:600, cursor:'pointer', border:'2px solid', background: idx===i ? 'linear-gradient(135deg,#4260E9,#7B61FF)' : '#fff', color: idx===i ? '#fff' : '#64748B', borderColor: idx===i ? '#4260E9' : '#E2E8F0' }}>
+          Rec {i+1}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function AudioPlaybackControls({ status, playing, cur, dur, onToggle, onSkip, onSeek }) {
+  const prog = dur > 0 ? Math.min(100, (cur / dur) * 100) : 0
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+      <button onClick={() => onSkip(-10)} style={{ padding:'8px 14px', borderRadius:10, background:'#E2E8F0', border:'none', fontSize:13, fontWeight:700, cursor:'pointer', color:'#475569' }}>−10s</button>
+      <button className="cl-audio-modal__play" onClick={onToggle} style={{ width:52, height:52, borderRadius:'50%', background:'linear-gradient(135deg,#4260E9,#7B61FF)', color:'#fff', border:'none', fontSize:20, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+        {status === 'loading' ? '⏳' : playing ? '⏸' : '▶'}
+      </button>
+      <button onClick={() => onSkip(10)} style={{ padding:'8px 14px', borderRadius:10, background:'#E2E8F0', border:'none', fontSize:13, fontWeight:700, cursor:'pointer', color:'#475569' }}>+10s</button>
+      <div style={{ flex:1 }}>
+        <div onClick={onSeek} style={{ height:6, background:'#E2E8F0', borderRadius:4, cursor:'pointer', overflow:'hidden' }}>
+          <div style={{ height:'100%', background:'linear-gradient(90deg,#4260E9,#7B61FF)', width:`${prog}%`, transition:'width 0.3s linear', borderRadius:4 }} />
+        </div>
+        <div style={{ display:'flex', justifyContent:'space-between', marginTop:4, fontSize:11, color:'#94A3B8', fontWeight:500 }}>
+          <span>{audiofmt(cur)}</span>
+          <span>{dur > 0 ? audiofmt(dur) : '--:--'}</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AudioTranscriptionFooter({ txSt, txLabel, txBusy, onSendToScribe }) {
+  return (
+    <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #E2E8F0', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, justifyContent: 'space-between' }}>
+      {txLabel ? <StatusBadge label={txLabel} className={transcriptionStatusBadgeClass(txSt)} /> : <span />}
+      <button type="button" disabled={txBusy} onClick={onSendToScribe} style={{ marginLeft: 'auto', padding: '10px 16px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#4260E9,#7B61FF)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: txBusy ? 'wait' : 'pointer', opacity: txBusy ? 0.7 : 1, fontFamily: 'inherit' }}>
+        {txBusy ? 'Sending…' : 'Send to scribe'}
+      </button>
+    </div>
+  )
+}
+
+/**
+ * Audio Modal — playback UI for encounter recordings, send-to-scribe action.
+ */
 function AudioModal({ visitId, visit, onClose, showToast }) {
   const [count, setCount]   = useState(1)
   const [idx, setIdx]       = useState(0)
@@ -827,74 +987,61 @@ function AudioModal({ visitId, visit, onClose, showToast }) {
   const [playing, setPlay]  = useState(false)
   const [cur, setCur]       = useState(0)
   const [dur, setDur]       = useState(0)
+  const [txBusy, setTxBusy] = useState(false)
   const aRef = useRef(null)
   const blobUrl = useRef(null)
   const durSet = useRef(false)
 
   useEffect(() => {
-    const token = localStorage.getItem('token')
-    fetch(`${API_BASE}/audio/${visitId}/count`, {
-      headers: { Authorization: `Bearer ${token}` }
-    }).then(r => r.json()).then(d => { if (d.count > 0) setCount(d.count) }).catch(() => {})
+    fetchVisitAudioCount(visitId).then(setCount)
   }, [visitId])
 
   useEffect(() => {
     setStatus('loading'); setPlay(false); setCur(0); setDur(0)
     durSet.current = false
     if (blobUrl.current) { URL.revokeObjectURL(blobUrl.current); blobUrl.current = null }
-    const a = aRef.current; if (!a) return
-    const token = localStorage.getItem('token')
-    fetch(`${API_BASE}/audio/${visitId}?index=${idx}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    }).then(r => r.blob()).then(blob => {
-      blobUrl.current = URL.createObjectURL(blob)
-      a.src = blobUrl.current
-      a.onloadedmetadata = () => {
-        if (a.duration && isFinite(a.duration)) {
-          setDur(Math.ceil(a.duration))
-          durSet.current = true
-        } else {
-          a.currentTime = 1e101
-        }
-      }
-      a.onseeked = () => {
-        if (!durSet.current && a.duration && isFinite(a.duration)) {
-          durSet.current = true
-          setDur(Math.ceil(a.duration))
-          a.currentTime = 0
-        }
-      }
-      a.ontimeupdate = () => setCur(Math.floor(a.currentTime))
-      a.onended = () => { setPlay(false); setCur(0) }
-      a.load()
-      setStatus('ready')
-    }).catch(() => setStatus('error'))
+    const a = aRef.current
+    if (!a) return
+
+    let cancelled = false
+    loadVisitAudioBlob(visitId, idx)
+      .then((blob) => {
+        if (cancelled) return
+        blobUrl.current = URL.createObjectURL(blob)
+        a.src = blobUrl.current
+        attachAudioElementHandlers(a, durSet, setDur, setCur, setPlay)
+        a.load()
+        setStatus('ready')
+      })
+      .catch(() => { if (!cancelled) setStatus('error') })
+
     return () => {
+      cancelled = true
       if (a) { a.pause(); a.src = '' }
       if (blobUrl.current) { URL.revokeObjectURL(blobUrl.current); blobUrl.current = null }
     }
   }, [visitId, idx])
 
   const toggle = () => {
-    const a = aRef.current; if (!a || status !== 'ready') return
+    const a = aRef.current
+    if (!a || status !== 'ready') return
     if (playing) { a.pause(); setPlay(false) }
     else a.play().then(() => setPlay(true)).catch(() => {})
   }
 
   const skip = (s) => {
-    const a = aRef.current; if (!a || status !== 'ready') return
+    const a = aRef.current
+    if (!a || status !== 'ready') return
     a.currentTime = Math.max(0, Math.min(dur, a.currentTime + s))
   }
 
   const seek = (e) => {
-    const a = aRef.current; if (!a || status !== 'ready' || !dur) return
+    const a = aRef.current
+    if (!a || status !== 'ready' || !dur) return
     const rect = e.currentTarget.getBoundingClientRect()
     a.currentTime = Math.round(((e.clientX - rect.left) / rect.width) * dur)
   }
 
-  const prog = dur > 0 ? Math.min(100, (cur / dur) * 100) : 0
-
-  const [txBusy, setTxBusy] = useState(false)
   const runTx = async () => {
     try {
       setTxBusy(true)
@@ -906,55 +1053,18 @@ function AudioModal({ visitId, visit, onClose, showToast }) {
       setTxBusy(false)
     }
   }
+
   const txSt = visit?.transcription_status
-  const txLabel =
-    txSt === 'processing' ? 'Status: With Scribe'
-      : txSt === 'completed' ? 'Status: Scribe draft ready'
-        : txSt === 'failed' ? 'Status: failed'
-          : null
+  const txLabel = getTranscriptionStatusLabel(txSt)
 
   return (
     <div className="cl-audio-modal-overlay" style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:900, display:'flex', alignItems:'flex-end', justifyContent:'center', padding:'0 0 32px' }}>
       <div className="cl-audio-modal" style={{ background:'#fff', borderRadius:24, padding:28, width:'100%', maxWidth:500, margin:'0 16px', boxShadow:'0 24px 64px rgba(0,0,0,0.25)' }}>
         <audio ref={aRef} preload="metadata" style={{ display:'none' }} />
-        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:20 }}>
-          <div>
-            <div style={{ fontSize:17, fontWeight:700, color:'#1E293B' }}>🎙 Encounter Recording</div>
-            <div style={{ fontSize:13, color:'#94A3B8', marginTop:3 }}>{count} recording{count > 1 ? 's' : ''}</div>
-          </div>
-          <button onClick={onClose} style={{ background:'#E2E8F0', border:'none', borderRadius:10, padding:'8px 16px', cursor:'pointer', fontSize:13, fontWeight:600, color:'#64748B' }}>✕ Close</button>
-        </div>
-        {count > 1 && (
-          <div style={{ display:'flex', gap:8, marginBottom:20 }}>
-            {Array.from({ length: count }, (_, i) => (
-              <button key={i} onClick={() => setIdx(i)} style={{ padding:'6px 16px', borderRadius:10, fontSize:13, fontWeight:600, cursor:'pointer', border:'2px solid', background: idx===i ? 'linear-gradient(135deg,#4260E9,#7B61FF)' : '#fff', color: idx===i ? '#fff' : '#64748B', borderColor: idx===i ? '#4260E9' : '#E2E8F0' }}>
-                Rec {i+1}
-              </button>
-            ))}
-          </div>
-        )}
-        <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-          <button onClick={() => skip(-10)} style={{ padding:'8px 14px', borderRadius:10, background:'#E2E8F0', border:'none', fontSize:13, fontWeight:700, cursor:'pointer', color:'#475569' }}>−10s</button>
-          <button className="cl-audio-modal__play" onClick={toggle} style={{ width:52, height:52, borderRadius:'50%', background:'linear-gradient(135deg,#4260E9,#7B61FF)', color:'#fff', border:'none', fontSize:20, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-            {status === 'loading' ? '⏳' : playing ? '⏸' : '▶'}
-          </button>
-          <button onClick={() => skip(10)} style={{ padding:'8px 14px', borderRadius:10, background:'#E2E8F0', border:'none', fontSize:13, fontWeight:700, cursor:'pointer', color:'#475569' }}>+10s</button>
-          <div style={{ flex:1 }}>
-            <div onClick={seek} style={{ height:6, background:'#E2E8F0', borderRadius:4, cursor:'pointer', overflow:'hidden' }}>
-              <div style={{ height:'100%', background:'linear-gradient(90deg,#4260E9,#7B61FF)', width:`${prog}%`, transition:'width 0.3s linear', borderRadius:4 }} />
-            </div>
-            <div style={{ display:'flex', justifyContent:'space-between', marginTop:4, fontSize:11, color:'#94A3B8', fontWeight:500 }}>
-              <span>{audiofmt(cur)}</span>
-              <span>{dur > 0 ? audiofmt(dur) : '--:--'}</span>
-            </div>
-          </div>
-        </div>
-        <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #E2E8F0', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, justifyContent: 'space-between' }}>
-          {txLabel ? <StatusBadge label={txLabel} className={transcriptionStatusBadgeClass(txSt)} /> : <span />}
-          <button type="button" disabled={txBusy} onClick={runTx} style={{ marginLeft: 'auto', padding: '10px 16px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#4260E9,#7B61FF)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: txBusy ? 'wait' : 'pointer', opacity: txBusy ? 0.7 : 1, fontFamily: 'inherit' }}>
-            {txBusy ? 'Sending…' : 'Send to scribe'}
-          </button>
-        </div>
+        <AudioModalHeader count={count} onClose={onClose} />
+        <AudioRecordingTabs count={count} idx={idx} onSelect={setIdx} />
+        <AudioPlaybackControls status={status} playing={playing} cur={cur} dur={dur} onToggle={toggle} onSkip={skip} onSeek={seek} />
+        <AudioTranscriptionFooter txSt={txSt} txLabel={txLabel} txBusy={txBusy} onSendToScribe={runTx} />
       </div>
     </div>
   )
@@ -962,6 +1072,140 @@ function AudioModal({ visitId, visit, onClose, showToast }) {
 
 // ─── NOTE PREVIEW MODAL ───────────────────────────────────────────────────────
 
+const NOTE_DRAFT_SECTIONS = [
+  { k:'cc',      l:'Chief Complaint',            icon:'🩺' },
+  { k:'hpi',     l:'History of Present Illness', icon:'📋' },
+  { k:'pe',      l:'Physical Examination',       icon:'🔬' },
+  { k:'imaging', l:'Imaging & Labs',             icon:'🖥'  },
+  { k:'ap',      l:'Assessment & Plan',          icon:'📝' },
+]
+
+/**
+ * Fetch note data for a visit.
+ */
+async function fetchVisitNote(visitId, { silent = false } = {}) {
+  const token = localStorage.getItem('token')
+  const r = await fetch(`${API_BASE}/notes/visit/${visitId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  const d = await r.json().catch(() => ({}))
+  if (r.ok) return d.note
+  if (!silent) return null
+  return undefined
+}
+
+/**
+ * Parse AI draft text into structured sections.
+ */
+function parseNoteDraftSections(txt) {
+  if (!txt) return null
+  const m = (r) => { const x = txt.match(r); return x ? x[1].trim() : '' }
+  return {
+    cc:      m(/CHIEF COMPLAINT[:\s]*([\s\S]*?)(?=HISTORY|HPI|$)/i),
+    hpi:     m(/(?:HISTORY OF PRESENT ILLNESS|HPI)[:\s]*([\s\S]*?)(?=PHYSICAL|PE[:\s]|$)/i),
+    pe:      m(/PHYSICAL EXAMINATION[:\s]*([\s\S]*?)(?=IMAGING|$)/i),
+    imaging: m(/IMAGING[:\s]*([\s\S]*?)(?=ASSESSMENT|A&P|$)/i),
+    ap:      m(/(?:ASSESSMENT & PLAN|A&P)[:\s]*([\s\S]*?)$/i),
+  }
+}
+
+/**
+ * Parse transcription field into array of segments.
+ */
+function parseNoteTranscriptions(note) {
+  if (!note?.transcription) return []
+  try {
+    const p = JSON.parse(note.transcription)
+    return Array.isArray(p) ? p : [p]
+  } catch {
+    return [note.transcription]
+  }
+}
+
+function getTranscriptionBadgeText(txSt, prefix = 'Transcription') {
+  if (txSt === 'processing') return `${prefix}: With Scribe`
+  if (txSt === 'completed') return `${prefix}: Scribe draft ready`
+  if (txSt === 'failed') return `${prefix}: failed`
+  return null
+}
+
+function AIModalHeader({ visit, hideAudioControls, txBadge, txSt, txBusy, loading, onRunTx, onClose }) {
+  return (
+    <div style={{ padding:'20px 24px', borderBottom:'1px solid #E2E8F0', display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap: 12 }}>
+      <div>
+        <div style={{ fontSize:17, fontWeight:700, color:'#1E293B' }}>📋 Note Preview</div>
+        <div style={{ fontSize:13, color:'#94A3B8', marginTop:3 }}>{visit.patient_name} · {visit.visit_type}</div>
+      </div>
+      <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap: 10 }}>
+        <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap: 8, justifyContent:'flex-end' }}>
+          {!hideAudioControls && txBadge ? (
+            <StatusBadge label={txBadge} className={transcriptionStatusBadgeClass(txSt)} />
+          ) : null}
+          {!hideAudioControls && visit.audio_file ? (
+            <button type="button" disabled={txBusy || loading} onClick={onRunTx} style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#4260E9,#7B61FF)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: txBusy ? 'wait' : 'pointer', opacity: txBusy ? 0.75 : 1, fontFamily: 'inherit' }}>
+              {txBusy ? 'Sending…' : 'Send to scribe'}
+            </button>
+          ) : null}
+          <button type="button" onClick={onClose} style={{ background:'#E2E8F0', border:'none', borderRadius:10, padding:'8px 16px', cursor:'pointer', fontSize:13, fontWeight:600, color:'#64748B', fontFamily: 'inherit' }}>✕</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function AIModalTabBar({ tab, onTabChange, hideAudioControls }) {
+  if (hideAudioControls) return null
+  return (
+    <div style={{ display:'flex', borderBottom:'1px solid #E2E8F0', padding:'0 24px' }}>
+      {[['ai','Scribe draft'],['transcription','Transcript']].map(([k,l]) => (
+        <button key={k} onClick={() => onTabChange(k)} style={{ padding:'12px 0', marginRight:24, fontSize:14, fontWeight: tab===k ? 700 : 400, color: tab===k ? '#4260E9' : '#94A3B8', background:'none', border:'none', borderBottom: tab===k ? '2px solid #4260E9' : '2px solid transparent', cursor:'pointer', fontFamily:'inherit' }}>{l}</button>
+      ))}
+    </div>
+  )
+}
+
+function AIModalDraftContent({ secs }) {
+  if (!secs) {
+    return (
+      <div style={{ textAlign:'center', padding:60, color:'#94A3B8' }}>
+        <div style={{ fontSize:48, marginBottom:16 }}>⏳</div>
+        <div style={{ fontSize:16, fontWeight:600, color:'#475569', marginBottom:8 }}>Note still being prepared</div>
+        <div style={{ fontSize:14 }}>Usually ready within a few minutes.</div>
+      </div>
+    )
+  }
+  return NOTE_DRAFT_SECTIONS.map(({ k, l, icon }) => (
+    <div key={k} style={{ marginBottom:12, border:'1px solid #E2E8F0', borderRadius:14, overflow:'hidden' }}>
+      <div style={{ padding:'10px 16px', background:'#F4F7FF', display:'flex', alignItems:'center', gap:10 }}>
+        <span style={{ fontSize:18 }}>{icon}</span>
+        <span style={{ fontSize:12, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'.06em' }}>{l}</span>
+      </div>
+      <div style={{ padding:'12px 16px', fontSize:14, color: secs[k] ? '#1E293B' : '#CBD5E1', lineHeight:1.8 }}>{secs[k] || 'Not mentioned'}</div>
+    </div>
+  ))
+}
+
+function AIModalTranscriptContent({ txts, recIdx, onRecIdxChange }) {
+  if (txts.length === 0) {
+    return <div style={{ textAlign:'center', padding:60, color:'#94A3B8' }}>Your scribe team is preparing the transcript.</div>
+  }
+  return (
+    <>
+      {txts.length > 1 && (
+        <div style={{ display:'flex', gap:8, marginBottom:16 }}>
+          {txts.map((_, i) => (
+            <button key={i} onClick={() => onRecIdxChange(i)} style={{ padding:'6px 16px', borderRadius:10, fontSize:13, fontWeight:600, cursor:'pointer', border:'2px solid', background: recIdx===i ? 'linear-gradient(135deg,#4260E9,#7B61FF)' : '#fff', color: recIdx===i ? '#fff' : '#64748B', borderColor: recIdx===i ? '#4260E9' : '#E2E8F0' }}>Rec {i+1}</button>
+          ))}
+        </div>
+      )}
+      <div style={{ background:'#F4F7FF', borderRadius:14, padding:20, fontSize:14, color:'#334155', lineHeight:1.9, whiteSpace:'pre-wrap', border:'1px solid #E2E8F0' }}>{txts[recIdx]}</div>
+    </>
+  )
+}
+
+/**
+ * AI Modal — note preview with scribe draft and transcript tabs.
+ */
 function AIModal({ visit, onClose, showToast, hideAudioControls = false }) {
   const [note, setNote] = useState(null)
   const [loading, setLoad] = useState(true)
@@ -971,15 +1215,10 @@ function AIModal({ visit, onClose, showToast, hideAudioControls = false }) {
 
   const loadNoteData = useCallback(async (opts = {}) => {
     const silent = !!opts.silent
-    const token = localStorage.getItem('token')
     if (!silent) setLoad(true)
     try {
-      const r = await fetch(`${API_BASE}/notes/visit/${visit.id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      const d = await r.json().catch(() => ({}))
-      if (r.ok) setNote(d.note)
-      else if (!silent) setNote(null)
+      const loaded = await fetchVisitNote(visit.id, { silent })
+      if (loaded !== undefined) setNote(loaded)
     } catch {
       if (!silent) setNote(null)
     } finally {
@@ -993,9 +1232,7 @@ function AIModal({ visit, onClose, showToast, hideAudioControls = false }) {
 
   useEffect(() => {
     if (note?.transcription_status !== 'processing') return
-    const t = setInterval(() => {
-      void loadNoteData({ silent: true })
-    }, 4000)
+    const t = setInterval(() => { void loadNoteData({ silent: true }) }, 4000)
     return () => clearInterval(t)
   }, [note?.transcription_status, loadNoteData])
 
@@ -1013,38 +1250,9 @@ function AIModal({ visit, onClose, showToast, hideAudioControls = false }) {
   }
 
   const txSt = note?.transcription_status || visit?.transcription_status
-  const txBadge =
-    txSt === 'processing' ? 'Transcription: With Scribe'
-      : txSt === 'completed' ? 'Transcription: Scribe draft ready'
-        : txSt === 'failed' ? 'Transcription: failed'
-          : null
-
-  const txts = (() => {
-    if (!note?.transcription) return []
-    try { const p = JSON.parse(note.transcription); return Array.isArray(p) ? p : [p] }
-    catch { return [note.transcription] }
-  })()
-
-  const parseNote = (txt) => {
-    if (!txt) return null
-    const m = (r) => { const x = txt.match(r); return x ? x[1].trim() : '' }
-    return {
-      cc:      m(/CHIEF COMPLAINT[:\s]*([\s\S]*?)(?=HISTORY|HPI|$)/i),
-      hpi:     m(/(?:HISTORY OF PRESENT ILLNESS|HPI)[:\s]*([\s\S]*?)(?=PHYSICAL|PE[:\s]|$)/i),
-      pe:      m(/PHYSICAL EXAMINATION[:\s]*([\s\S]*?)(?=IMAGING|$)/i),
-      imaging: m(/IMAGING[:\s]*([\s\S]*?)(?=ASSESSMENT|A&P|$)/i),
-      ap:      m(/(?:ASSESSMENT & PLAN|A&P)[:\s]*([\s\S]*?)$/i),
-    }
-  }
-
-  const secs = parseNote(note?.ai_draft)
-  const SECS = [
-    { k:'cc',      l:'Chief Complaint',            icon:'🩺' },
-    { k:'hpi',     l:'History of Present Illness', icon:'📋' },
-    { k:'pe',      l:'Physical Examination',       icon:'🔬' },
-    { k:'imaging', l:'Imaging & Labs',             icon:'🖥'  },
-    { k:'ap',      l:'Assessment & Plan',          icon:'📝' },
-  ]
+  const txBadge = getTranscriptionBadgeText(txSt)
+  const txts = parseNoteTranscriptions(note)
+  const secs = parseNoteDraftSections(note?.ai_draft)
 
   return (
     <div
@@ -1058,66 +1266,15 @@ function AIModal({ visit, onClose, showToast, hideAudioControls = false }) {
         role="dialog"
         aria-modal="true"
       >
-        <div style={{ padding:'20px 24px', borderBottom:'1px solid #E2E8F0', display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap: 12 }}>
-          <div>
-            <div style={{ fontSize:17, fontWeight:700, color:'#1E293B' }}>📋 Note Preview</div>
-            <div style={{ fontSize:13, color:'#94A3B8', marginTop:3 }}>{visit.patient_name} · {visit.visit_type}</div>
-          </div>
-          <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap: 10 }}>
-            <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap: 8, justifyContent:'flex-end' }}>
-              {!hideAudioControls && txBadge ? (
-                <StatusBadge label={txBadge} className={transcriptionStatusBadgeClass(txSt)} />
-              ) : null}
-              {!hideAudioControls && visit.audio_file ? (
-                <button type="button" disabled={txBusy || loading} onClick={runTx} style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#4260E9,#7B61FF)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: txBusy ? 'wait' : 'pointer', opacity: txBusy ? 0.75 : 1, fontFamily: 'inherit' }}>
-                  {txBusy ? 'Sending…' : 'Send to scribe'}
-                </button>
-              ) : null}
-              <button type="button" onClick={onClose} style={{ background:'#E2E8F0', border:'none', borderRadius:10, padding:'8px 16px', cursor:'pointer', fontSize:13, fontWeight:600, color:'#64748B', fontFamily: 'inherit' }}>✕</button>
-            </div>
-          </div>
-        </div>
-        {!hideAudioControls ? (
-          <div style={{ display:'flex', borderBottom:'1px solid #E2E8F0', padding:'0 24px' }}>
-            {[['ai','Scribe draft'],['transcription','Transcript']].map(([k,l]) => (
-              <button key={k} onClick={() => setTab(k)} style={{ padding:'12px 0', marginRight:24, fontSize:14, fontWeight: tab===k ? 700 : 400, color: tab===k ? '#4260E9' : '#94A3B8', background:'none', border:'none', borderBottom: tab===k ? '2px solid #4260E9' : '2px solid transparent', cursor:'pointer', fontFamily:'inherit' }}>{l}</button>
-            ))}
-          </div>
-        ) : null}
+        <AIModalHeader visit={visit} hideAudioControls={hideAudioControls} txBadge={txBadge} txSt={txSt} txBusy={txBusy} loading={loading} onRunTx={runTx} onClose={onClose} />
+        <AIModalTabBar tab={tab} onTabChange={setTab} hideAudioControls={hideAudioControls} />
         <div style={{ flex:1, overflowY:'auto', padding:'20px 24px' }}>
           {loading ? (
             <div style={{ textAlign:'center', padding:60, color:'#94A3B8' }}>Loading note...</div>
           ) : tab === 'ai' || hideAudioControls ? (
-            secs ? SECS.map(({ k, l, icon }) => (
-              <div key={k} style={{ marginBottom:12, border:'1px solid #E2E8F0', borderRadius:14, overflow:'hidden' }}>
-                <div style={{ padding:'10px 16px', background:'#F4F7FF', display:'flex', alignItems:'center', gap:10 }}>
-                  <span style={{ fontSize:18 }}>{icon}</span>
-                  <span style={{ fontSize:12, fontWeight:700, color:'#475569', textTransform:'uppercase', letterSpacing:'.06em' }}>{l}</span>
-                </div>
-                <div style={{ padding:'12px 16px', fontSize:14, color: secs[k] ? '#1E293B' : '#CBD5E1', lineHeight:1.8 }}>{secs[k] || 'Not mentioned'}</div>
-              </div>
-            )) : (
-              <div style={{ textAlign:'center', padding:60, color:'#94A3B8' }}>
-                <div style={{ fontSize:48, marginBottom:16 }}>⏳</div>
-                <div style={{ fontSize:16, fontWeight:600, color:'#475569', marginBottom:8 }}>Note still being prepared</div>
-                <div style={{ fontSize:14 }}>Usually ready within a few minutes.</div>
-              </div>
-            )
+            <AIModalDraftContent secs={secs} />
           ) : (
-            txts.length === 0 ? (
-              <div style={{ textAlign:'center', padding:60, color:'#94A3B8' }}>Your scribe team is preparing the transcript.</div>
-            ) : (
-              <>
-                {txts.length > 1 && (
-                  <div style={{ display:'flex', gap:8, marginBottom:16 }}>
-                    {txts.map((_, i) => (
-                      <button key={i} onClick={() => setRecIdx(i)} style={{ padding:'6px 16px', borderRadius:10, fontSize:13, fontWeight:600, cursor:'pointer', border:'2px solid', background: recIdx===i ? 'linear-gradient(135deg,#4260E9,#7B61FF)' : '#fff', color: recIdx===i ? '#fff' : '#64748B', borderColor: recIdx===i ? '#4260E9' : '#E2E8F0' }}>Rec {i+1}</button>
-                    ))}
-                  </div>
-                )}
-                <div style={{ background:'#F4F7FF', borderRadius:14, padding:20, fontSize:14, color:'#334155', lineHeight:1.9, whiteSpace:'pre-wrap', border:'1px solid #E2E8F0' }}>{txts[recIdx]}</div>
-              </>
-            )
+            <AIModalTranscriptContent txts={txts} recIdx={recIdx} onRecIdxChange={setRecIdx} />
           )}
         </div>
       </div>
@@ -1126,6 +1283,14 @@ function AIModal({ visit, onClose, showToast, hideAudioControls = false }) {
 }
 
 // ─── TEMPLATES SCREEN ─────────────────────────────────────────────────────────
+
+function countTemplateSections(content) {
+  return content.split('\n').filter((l) => l.trim().endsWith(':')).length
+}
+
+function updateTemplateInList(templates, templateId, content) {
+  return templates.map((t) => (t.id === templateId ? { ...t, content } : t))
+}
 
 function TemplatesScreen({ showToast }) {
   const [templates, setTemplates] = useState(loadTemplates)
@@ -1136,7 +1301,7 @@ function TemplatesScreen({ showToast }) {
   const open = (t) => { setSelected(t); setDraft(t.content); setEditing(false) }
 
   const save = () => {
-    const updated = templates.map(t => t.id === selected.id ? { ...t, content: draft } : t)
+    const updated = updateTemplateInList(templates, selected.id, draft)
     setTemplates(updated); saveTemplates(updated)
     setSelected(prev => ({ ...prev, content: draft }))
     setEditing(false); showToast('Template saved')
@@ -1145,7 +1310,7 @@ function TemplatesScreen({ showToast }) {
   const reset = () => {
     const def = DEFAULT_TEMPLATES.find(t => t.id === selected.id)
     if (!def) return
-    const updated = templates.map(t => t.id === selected.id ? { ...t, content: def.content } : t)
+    const updated = updateTemplateInList(templates, selected.id, def.content)
     setTemplates(updated); saveTemplates(updated)
     setSelected(prev => ({ ...prev, content: def.content }))
     setDraft(def.content); setEditing(false)
@@ -1153,7 +1318,7 @@ function TemplatesScreen({ showToast }) {
   }
 
   const sectionCount = (content) =>
-    content.split('\n').filter((l) => l.trim().endsWith(':')).length
+    countTemplateSections(content)
 
   if (selected) {
     return (
@@ -1279,17 +1444,65 @@ function ReviewReminderToast({ count, oldestHours, onReview, onDismiss }) {
 
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
 
+const CLINICIAN_NAV_ITEMS = [
+  { key:'schedule', label:'Schedule', icon:'📅', badgeKey: 'schedule' },
+  { key:'notes',    label:'Notes',    icon:'📝', badgeKey: 'urgent' },
+  { key:'contact',  label:'Contact Us', icon:'💬' },
+]
+
+function ClinicianNavItem({ item, screen, badge, onNavigate }) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      className={`sf-nav-item sf-sidebar-rich__nav-item${screen === item.key ? ' active' : ''}`}
+      onClick={() => onNavigate(item.key)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onNavigate(item.key)
+        }
+      }}
+    >
+      <span className="sf-sidebar-rich__nav-ico">{item.icon}</span>
+      <span className="sf-sidebar-rich__nav-text">{item.label}</span>
+      {badge > 0 ? (
+        <span className={`sf-sidebar-rich__nav-badge sf-sidebar-rich__nav-badge--${item.badgeKey}`}>
+          {badge}
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
+function ClinicianSidebarNav({ screen, scheduleUpcomingBadge, readyForReviewCount, onNavigate }) {
+  const badges = { schedule: scheduleUpcomingBadge, urgent: readyForReviewCount }
+  return (
+    <nav className="sf-nav sf-sidebar-rich__nav" aria-label="Main">
+      {CLINICIAN_NAV_ITEMS.map((item) => (
+        <ClinicianNavItem
+          key={item.key}
+          item={item}
+          screen={screen}
+          badge={item.badgeKey ? badges[item.badgeKey] : 0}
+          onNavigate={onNavigate}
+        />
+      ))}
+    </nav>
+  )
+}
+
+/**
+ * Clinician portal sidebar — navigation, confirm dialog, logout footer.
+ */
 function Sidebar({ screen, setScreen, sidebar, currentUser, scheduleUpcomingBadge, readyForReviewCount, drawerMode, onRequestLogout, confirmDialog, confirmLoading, onDismissConfirm, onConfirmAction, branding }) {
   const offCanvasSidebar = useSidebarOffCanvasMode()
-  const NAV = [
-    { key:'schedule', label:'Schedule', icon:'📅', badge: scheduleUpcomingBadge, badgeVariant: 'schedule' },
-    { key:'notes',    label:'Notes',    icon:'📝', badge: readyForReviewCount, badgeVariant: 'urgent' },
-    { key:'contact',  label:'Contact Us', icon:'💬' },
-  ]
-  const go = (key) => {
+
+  const navigateToScreen = (key) => {
     setScreen(key)
     sidebar.close()
   }
+
   return (
     <>
       <ConfirmDialog
@@ -1316,31 +1529,12 @@ function Sidebar({ screen, setScreen, sidebar, currentUser, scheduleUpcomingBadg
         </div>
         <div className="cl-sidebar__body">
           <p className="sf-sidebar-rich__nav-label">Workspace</p>
-          <nav className="sf-nav sf-sidebar-rich__nav" aria-label="Main">
-            {NAV.map(({ key, label, icon, badge: navBadge, badgeVariant }) => (
-              <div
-                key={key}
-                role="button"
-                tabIndex={0}
-                className={`sf-nav-item sf-sidebar-rich__nav-item${screen === key ? ' active' : ''}`}
-                onClick={() => go(key)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault()
-                    go(key)
-                  }
-                }}
-              >
-                <span className="sf-sidebar-rich__nav-ico">{icon}</span>
-                <span className="sf-sidebar-rich__nav-text">{label}</span>
-                {navBadge > 0 ? (
-                  <span className={`sf-sidebar-rich__nav-badge sf-sidebar-rich__nav-badge--${badgeVariant}`}>
-                    {navBadge}
-                  </span>
-                ) : null}
-              </div>
-            ))}
-          </nav>
+          <ClinicianSidebarNav
+            screen={screen}
+            scheduleUpcomingBadge={scheduleUpcomingBadge}
+            readyForReviewCount={readyForReviewCount}
+            onNavigate={navigateToScreen}
+          />
         </div>
         <div className="cl-sidebar__fill" aria-hidden="true" />
         <div className="cl-sidebar__bottom">
@@ -1945,56 +2139,109 @@ function Clinician() {
     else { tRef.current = setInterval(() => setTimer(t => t+1), 1000); if (mRef.current?.state === 'paused') mRef.current.resume(); setPaused(false) }
   }
 
+  /**
+   * Validate visit can be ended
+   */
+  const validateVisitForEnding = (visit) => {
+    if (!visit) throw new Error('No active visit')
+  }
+
+  /**
+   * Stop recorder and upload remaining audio blob
+   */
+  const processRemainingAudio = (rec, visitId) => new Promise((resolve) => {
+    if (!rec || rec.state === 'inactive') {
+      resolve({ uploadQueued: false })
+      return
+    }
+    rec.onstop = async () => {
+      let uploadQueued = false
+      if (cRef.current.length > 0) {
+        try {
+          const b = new Blob(cRef.current, { type: rec.mimeType || 'audio/webm' })
+          await visitsAPI.uploadAudio(visitId, b)
+        } catch (err) {
+          console.error(err)
+          try {
+            const b = new Blob(cRef.current, { type: rec.mimeType || 'audio/webm' })
+            await queueAudioUpload({ visitId, blob: b, mode: 'primary', durationSeconds: timer })
+            uploadQueued = true
+          } catch (qErr) {
+            console.error(qErr)
+            showToast('Upload failed. Check your connection and try again.', 'error')
+          }
+        }
+      }
+      rec.stream.getTracks().forEach(t => t.stop())
+      resolve({ uploadQueued })
+    }
+    rec.stop()
+  })
+
+  /**
+   * Reset recording state after visit ends or upload queues
+   */
+  const resetRecordingState = () => {
+    setActive(null)
+    setTimer(0)
+    setPaused(false)
+    cRef.current = []
+    mRef.current = null
+  }
+
+  /**
+   * Update visit list after successful end
+   */
+  const applyEndedVisitToState = (visitId, endData, patientName, duration) => {
+    const vr = endData.visit
+    setVisits((p) =>
+      p.map((v) =>
+        v.id === visitId
+          ? { ...v, ...(vr || {}), patient_name: v.patient_name, duration_seconds: vr?.duration_seconds ?? duration }
+          : v
+      )
+    )
+    if (screen === 'notes') loadHistory()
+    showToast(`✓ Encounter ended — preparing note for ${patientName}`)
+  }
+
+  /**
+   * Handle end visit error
+   */
+  const handleVisitEndError = (err) => {
+    console.error('[Clinician.endVisit]', err.message)
+    showToast(err.message || 'Failed to end visit', 'error')
+  }
+
+  /**
+   * End Visit Handler — orchestrates audio processing, visit completion, state reset
+   */
   const endVisit = async () => {
     try {
-      clearInterval(tRef.current); setUploading(true)
-      const rec = mRef.current, vid = active.id, pn = active.patient_name
-      let uploadQueued = false
-      if (rec && rec.state !== 'inactive') {
-        await new Promise(res => {
-          rec.onstop = async () => {
-            if (cRef.current.length > 0) {
-              try {
-                const b = new Blob(cRef.current, { type: rec.mimeType || 'audio/webm' })
-                await visitsAPI.uploadAudio(vid, b)
-              } catch (err) {
-                console.error(err)
-                try {
-                  const b = new Blob(cRef.current, { type: rec.mimeType || 'audio/webm' })
-                  await queueAudioUpload({ visitId: vid, blob: b, mode: 'primary', durationSeconds: timer })
-                  uploadQueued = true
-                } catch (qErr) {
-                  console.error(qErr)
-                  showToast('Upload failed. Check your connection and try again.', 'error')
-                }
-              }
-            }
-            rec.stream.getTracks().forEach(t => t.stop()); res()
-          }
-          rec.stop()
-        })
-      }
+      validateVisitForEnding(active)
+      clearInterval(tRef.current)
+      setUploading(true)
+
+      const rec = mRef.current
+      const visitId = active.id
+      const patientName = active.patient_name
+
+      const { uploadQueued } = await processRemainingAudio(rec, visitId)
+
       if (uploadQueued) {
-        // Don't end the visit yet: ending without audio gives the scribe
-        // nothing to transcribe. The flush handler ends it once the queued
-        // upload succeeds (it retries every 45s and on reconnect).
         showToast('Upload failed — recording is saved in this tab and will retry automatically. Keep this tab open.', 'error')
-        setActive(null); setTimer(0); setPaused(false); cRef.current = []; mRef.current = null
+        resetRecordingState()
         return
       }
-      const endData = await visitsAPI.endVisit(vid, timer)
-      const vr = endData.visit
-      setVisits((p) =>
-        p.map((v) =>
-          v.id === vid
-            ? { ...v, ...(vr || {}), patient_name: v.patient_name, duration_seconds: vr?.duration_seconds ?? timer }
-            : v
-        )
-      )
-      if (screen === 'notes') loadHistory()
-      showToast(`✓ Encounter ended — preparing note for ${pn}`)
-      setActive(null); setTimer(0); setPaused(false); cRef.current = []; mRef.current = null
-    } catch(e) { showToast(e.message, 'error') } finally { setUploading(false) }
+
+      const endData = await visitsAPI.endVisit(visitId, timer)
+      applyEndedVisitToState(visitId, endData, patientName, timer)
+      resetRecordingState()
+    } catch (err) {
+      handleVisitEndError(err)
+    } finally {
+      setUploading(false)
+    }
   }
 
   const startAdd = async (v) => {

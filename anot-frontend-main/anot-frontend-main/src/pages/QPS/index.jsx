@@ -43,6 +43,146 @@ function qpsNoteListMeta(note) {
   return parts.filter(Boolean).join(' · ')
 }
 
+/**
+ * Validate grade submission input
+ */
+function validateGradeSubmission(selectedNote, comment) {
+  if (!selectedNote?.id) return { error: 'No note selected' }
+  if (!comment.trim()) return { error: 'Please write a comment before submitting.' }
+  return { ok: true }
+}
+
+/**
+ * Build grade API payload
+ */
+function buildGradePayload(selectedNote, scores, comment) {
+  return {
+    note_id: selectedNote.id,
+    accuracy: scores.accuracy,
+    completeness: scores.completeness,
+    terminology: scores.terminology,
+    formatting: scores.formatting,
+    comment,
+  }
+}
+
+/**
+ * Build local grade state after successful submission
+ */
+function buildLocalGradePayload(scores, comment) {
+  return {
+    accuracy: scores.accuracy,
+    completeness: scores.completeness,
+    terminology: scores.terminology,
+    formatting: scores.formatting,
+    comment,
+  }
+}
+
+const DEFAULT_QPS_SCORES = { accuracy: 88, completeness: 92, terminology: 85, formatting: 95 }
+
+const QPS_NAV_ITEMS = [
+  { key: 'notes', icon: '📋', label: 'Notes' },
+  { key: 'graded', icon: '⭐', label: 'Graded', badgeKey: 'graded' },
+  { key: 'performance', icon: '📈', label: 'Performance' },
+]
+
+function QPSNavItem({ item, activeTab, badge, onNavigate }) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      className={`sf-nav-item sf-sidebar-rich__nav-item${activeTab === item.key ? ' active' : ''}`}
+      onClick={() => onNavigate(item.key)}
+      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onNavigate(item.key)}
+    >
+      <span className="sf-sidebar-rich__nav-ico">{item.icon}</span>
+      <span className="sf-sidebar-rich__nav-text">{item.label}</span>
+      {badge > 0 ? (
+        <span className="sf-sidebar-rich__nav-badge sf-sidebar-rich__nav-badge--subtle">{badge}</span>
+      ) : null}
+    </div>
+  )
+}
+
+/**
+ * QPS portal sidebar — navigation, provider chip, logout footer.
+ */
+function QPSSidebar({
+  sidebar,
+  offCanvasSidebar,
+  branding,
+  activeTab,
+  gradedCount,
+  selectedProvider,
+  currentUser,
+  confirmDialog,
+  confirmLoading,
+  onDismissConfirm,
+  onConfirm,
+  onNavigate,
+  onChangeProvider,
+  onLogout,
+}) {
+  return (
+    <>
+      <ConfirmDialog
+        dialog={confirmDialog}
+        loading={confirmLoading}
+        onDismiss={onDismissConfirm}
+        onConfirm={onConfirm}
+      />
+      <aside
+        id="qps-sidebar"
+        className={`sf-sidebar sf-sidebar--rich adm-sidebar${sidebar.open ? ' open' : ''}`}
+        aria-hidden={portalSidebarAriaHidden(offCanvasSidebar, sidebar.open)}
+      >
+        <div className="sf-sidebar-top sf-sidebar-rich__top">
+          <button
+            type="button"
+            className="adm-sidebar__close"
+            onClick={sidebar.close}
+            aria-label="Close navigation menu"
+          >
+            ✕
+          </button>
+          <PortalSidebarBrand branding={branding} subtitle="QPS Portal" />
+        </div>
+        <p className="sf-sidebar-rich__nav-label">Workspace</p>
+        <nav className="sf-nav sf-sidebar-rich__nav" aria-label="Main">
+          {QPS_NAV_ITEMS.map((item) => (
+            <QPSNavItem
+              key={item.key}
+              item={item}
+              activeTab={activeTab}
+              badge={item.badgeKey === 'graded' ? gradedCount : 0}
+              onNavigate={onNavigate}
+            />
+          ))}
+        </nav>
+        <div className="qps-sidebar__fill" aria-hidden="true" />
+        <div className="qps-sidebar__bottom">
+          {selectedProvider && (
+            <div className="sf-provider-chip">
+              <div className="sf-chip-label">Current Provider</div>
+              <div className="sf-chip-name">{selectedProvider?.name ?? 'Unknown'}</div>
+              <div className="sf-chip-spec">{selectedProvider.specialty || 'Clinician'}</div>
+              <div className="sf-chip-change" onClick={onChangeProvider}>
+                Change provider
+              </div>
+            </div>
+          )}
+          <PortalSidebarFooter
+            userName={currentUser.name || 'QPS'}
+            role="qps"
+            onLogout={onLogout}
+          />
+        </div>
+      </aside>
+    </>
+  )
+}
+
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 export default function QPSWithErrorBoundary() {
@@ -174,25 +314,15 @@ function QPS() {
   }
 
   const handleSubmit = async () => {
-    if (!selectedNote?.id) return
-    if (!comment.trim()) { showNotif('Please write a comment before submitting.', 'error'); return }
+    const validation = validateGradeSubmission(selectedNote, comment)
+    if (validation.error) {
+      showNotif(validation.error, validation.error.includes('comment') ? 'error' : undefined)
+      return
+    }
     try {
       setSubmitting(true)
-      await notesAPI.submitGrade({
-        note_id:      selectedNote.id,
-        accuracy:     scores.accuracy,
-        completeness: scores.completeness,
-        terminology:  scores.terminology,
-        formatting:   scores.formatting,
-        comment,
-      })
-      const gradePayload = {
-        accuracy: scores.accuracy,
-        completeness: scores.completeness,
-        terminology: scores.terminology,
-        formatting: scores.formatting,
-        comment,
-      }
+      await notesAPI.submitGrade(buildGradePayload(selectedNote, scores, comment))
+      const gradePayload = buildLocalGradePayload(scores, comment)
       setNotes(prev => prev.filter(n => n.id !== selectedNote.id))
       setGradedNotes(prev => {
         const next = prev.filter(n => n.id !== selectedNote.id)
@@ -203,10 +333,13 @@ function QPS() {
       setTimeout(() => {
         setScreen('recordings')
         setComment('')
-        setScores({ accuracy: 88, completeness: 92, terminology: 85, formatting: 95 })
+        setScores({ ...DEFAULT_QPS_SCORES })
       }, 1500)
-    } catch (err) { showNotif(`Failed to submit: ${err.message}`, 'error') }
-    finally { setSubmitting(false) }
+    } catch (err) {
+      showNotif(`Failed to submit: ${err.message}`, 'error')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const handleNav = (tab) => {
@@ -222,77 +355,28 @@ function QPS() {
   // subtree on every state change (every keystroke in the grading comment).
 
   const sidebarMarkup = (
-    <>
-      <ConfirmDialog
-        dialog={confirmDialog}
-        loading={confirmLoading}
-        onDismiss={() => !confirmLoading && setConfirmDialog(null)}
-        onConfirm={runConfirm}
-      />
-      <aside
-        id="qps-sidebar"
-        className={`sf-sidebar sf-sidebar--rich adm-sidebar${sidebar.open ? ' open' : ''}`}
-        aria-hidden={portalSidebarAriaHidden(offCanvasSidebar, sidebar.open)}
-      >
-      <div className="sf-sidebar-top sf-sidebar-rich__top">
-        <button
-          type="button"
-          className="adm-sidebar__close"
-          onClick={sidebar.close}
-          aria-label="Close navigation menu"
-        >
-          ✕
-        </button>
-        <PortalSidebarBrand branding={branding} subtitle="QPS Portal" />
-      </div>
-      <p className="sf-sidebar-rich__nav-label">Workspace</p>
-      <nav className="sf-nav sf-sidebar-rich__nav" aria-label="Main">
-        {[['notes','📋','Notes'],['graded','⭐','Graded'],['performance','📈','Performance']].map(([k, icon, label]) => (
-          <div
-            key={k}
-            role="button"
-            tabIndex={0}
-            className={`sf-nav-item sf-sidebar-rich__nav-item${activeTab === k ? ' active' : ''}`}
-            onClick={() => handleNav(k)}
-            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handleNav(k)}
-          >
-            <span className="sf-sidebar-rich__nav-ico">{icon}</span>
-            <span className="sf-sidebar-rich__nav-text">{label}</span>
-            {k === 'graded' && gradedNotes.length > 0 ? (
-              <span className="sf-sidebar-rich__nav-badge sf-sidebar-rich__nav-badge--subtle">{gradedNotes.length}</span>
-            ) : null}
-          </div>
-        ))}
-      </nav>
-      <div className="qps-sidebar__fill" aria-hidden="true" />
-      <div className="qps-sidebar__bottom">
-        {selectedProvider && (
-          <div className="sf-provider-chip">
-            <div className="sf-chip-label">Current Provider</div>
-            <div className="sf-chip-name">{selectedProvider?.name ?? 'Unknown'}</div>
-            <div className="sf-chip-spec">{selectedProvider.specialty || 'Clinician'}</div>
-            <div
-              className="sf-chip-change"
-              onClick={() => {
-                setScreen('provider')
-                setSelectedProvider(null)
-                setSelectedNote(null)
-                setNotes([])
-                sidebar.close()
-              }}
-            >
-              Change provider
-            </div>
-          </div>
-        )}
-        <PortalSidebarFooter
-          userName={currentUser.name || 'QPS'}
-          role="qps"
-          onLogout={requestLogout}
-        />
-      </div>
-    </aside>
-    </>
+    <QPSSidebar
+      sidebar={sidebar}
+      offCanvasSidebar={offCanvasSidebar}
+      branding={branding}
+      activeTab={activeTab}
+      gradedCount={gradedNotes.length}
+      selectedProvider={selectedProvider}
+      currentUser={currentUser}
+      confirmDialog={confirmDialog}
+      confirmLoading={confirmLoading}
+      onDismissConfirm={() => !confirmLoading && setConfirmDialog(null)}
+      onConfirm={runConfirm}
+      onNavigate={handleNav}
+      onChangeProvider={() => {
+        setScreen('provider')
+        setSelectedProvider(null)
+        setSelectedNote(null)
+        setNotes([])
+        sidebar.close()
+      }}
+      onLogout={requestLogout}
+    />
   )
 
   const portalToast = notif ? <Notif notif={notif} /> : null

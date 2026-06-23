@@ -56,64 +56,94 @@ router.get('/', restrict('admin', 'super_admin'), requireAdminPortalModulesIfAdm
 
 // ─── CREATE ASSIGNMENT ────────────────────────────────────────────────────────
 
+/**
+ * Validate assignment creation input
+ */
+function validateAssignmentInput(body) {
+  const { clinician_id, scribe_id } = body
+  if (!clinician_id || !scribe_id) {
+    throw new Error('Clinician and scribe are required.')
+  }
+}
+
+/**
+ * Insert scribe assignment and reassign visits in a transaction
+ */
+async function createAssignmentInDb(clinicianId, scribeId, user, req) {
+  return withTransaction(async (client) => {
+    const result = await client.query(`
+      INSERT INTO scribe_assignments (clinician_id, scribe_id)
+      VALUES ($1, $2) RETURNING *
+    `, [clinicianId, scribeId])
+
+    const updated = await client.query(`
+      UPDATE visits
+      SET scribe_id = $1
+      WHERE clinician_id = $2
+        AND status NOT IN ('uploaded')
+      RETURNING id
+    `, [scribeId, clinicianId])
+
+    const assignment = await loadAssignmentWithUsers(client, result.rows[0].id)
+
+    await auditLog(
+      user,
+      'SCRIBE_ASSIGNED',
+      'assignment',
+      String(result.rows[0].id),
+      `${assignment.scribe_name} assigned to ${assignment.clinician_name} — ${updated.rowCount} visits updated`,
+      client,
+      { req, module_key: 'assignments', action_category: 'create', status: 'success' }
+    )
+
+    return { assignment, visitsUpdated: updated.rowCount }
+  })
+}
+
+/**
+ * Load assignment with clinician and scribe details
+ */
+async function loadAssignmentWithUsers(client, assignmentId) {
+  const full = await client.query(`
+    SELECT
+      sa.id, sa.clinician_id, sa.scribe_id, sa.assigned_at,
+      c.name     AS clinician_name,
+      c.specialty AS clinician_specialty,
+      s.name     AS scribe_name,
+      s.email    AS scribe_email
+    FROM scribe_assignments sa
+    JOIN users c ON c.id = sa.clinician_id
+    JOIN users s ON s.id = sa.scribe_id
+    WHERE sa.id = $1
+  `, [assignmentId])
+  return full.rows[0]
+}
+
+/**
+ * Handle assignment creation errors
+ */
+function handleCreateAssignmentError(res, err) {
+  if (err.code === '23505') {
+    return res.status(409).json({ error: 'This scribe is already assigned to this clinician.' })
+  }
+  if (err.message === 'Clinician and scribe are required.') {
+    return res.status(400).json({ error: err.message })
+  }
+  console.error('Create assignment error:', err.message)
+  return res.status(500).json({ error: 'Server error.' })
+}
+
 router.post('/', restrict('admin', 'super_admin'), requireAdminPortalModulesIfAdmin('assignments'), async (req, res) => {
   try {
+    validateAssignmentInput(req.body)
     const { clinician_id, scribe_id } = req.body
-    if (!clinician_id || !scribe_id) {
-      return res.status(400).json({ error: 'Clinician and scribe are required.' })
-    }
 
-    // Single transaction so an assignment is never created without the visit
-    // reassignment, and vice versa.
-    const out = await withTransaction(async (client) => {
-      const result = await client.query(`
-        INSERT INTO scribe_assignments (clinician_id, scribe_id)
-        VALUES ($1, $2) RETURNING *
-      `, [clinician_id, scribe_id])
+    const out = await createAssignmentInDb(clinician_id, scribe_id, req.user, req)
 
-      const updated = await client.query(`
-        UPDATE visits
-        SET scribe_id = $1
-        WHERE clinician_id = $2
-          AND status NOT IN ('uploaded')
-        RETURNING id
-      `, [scribe_id, clinician_id])
-
-      const full = await client.query(`
-        SELECT
-          sa.id, sa.clinician_id, sa.scribe_id, sa.assigned_at,
-          c.name     AS clinician_name,
-          c.specialty AS clinician_specialty,
-          s.name     AS scribe_name,
-          s.email    AS scribe_email
-        FROM scribe_assignments sa
-        JOIN users c ON c.id = sa.clinician_id
-        JOIN users s ON s.id = sa.scribe_id
-        WHERE sa.id = $1
-      `, [result.rows[0].id])
-
-      await auditLog(
-        req.user,
-        'SCRIBE_ASSIGNED',
-        'assignment',
-        String(result.rows[0].id),
-        `${full.rows[0].scribe_name} assigned to ${full.rows[0].clinician_name} — ${updated.rowCount} visits updated`,
-        client,
-        { req, module_key: 'assignments', action_category: 'create', status: 'success' }
-      )
-
-      return { assignment: full.rows[0], visits_updated: updated.rowCount }
-    })
-
-    console.log(`✅ Updated ${out.visits_updated} existing visits to new scribe`)
-
-    res.status(201).json(out)
+    console.log(`✅ Updated ${out.visitsUpdated} existing visits to new scribe`)
+    res.status(201).json({ assignment: out.assignment, visits_updated: out.visitsUpdated })
   } catch (err) {
-    if (err.code === '23505') {
-      return res.status(409).json({ error: 'This scribe is already assigned to this clinician.' })
-    }
-    console.error('Create assignment error:', err.message)
-    res.status(500).json({ error: 'Server error.' })
+    handleCreateAssignmentError(res, err)
   }
 })
 
