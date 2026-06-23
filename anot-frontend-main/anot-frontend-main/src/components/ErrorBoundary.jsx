@@ -22,8 +22,8 @@ export default class ErrorBoundary extends Component {
     return { error }
   }
 
-  componentDidCatch(error, info) {
-    console.error(`[${this.props.portalName || 'Portal'}]`, error, info)
+  componentDidCatch(error) {
+    console.error(`[${this.props.portalName || 'Portal'}] Render failed:`, error?.message || 'unknown')
   }
 
   handleRetry = () => {
@@ -44,7 +44,7 @@ export default class ErrorBoundary extends Component {
       <div className="portal-error-boundary" role="alert">
         <h2 className="portal-error-boundary__title">{name} encountered an error</h2>
         <p className="portal-error-boundary__msg">
-          {error?.message || 'Something went wrong while rendering this screen.'}
+          Failed to load this screen. Please try again.
         </p>
         <div className="portal-error-boundary__actions">
           <button type="button" className="btn btn-navy" onClick={this.handleRetry}>

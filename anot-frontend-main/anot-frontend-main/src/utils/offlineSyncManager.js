@@ -52,7 +52,7 @@ export function startOnlineListener(onOnline) {
       await uploadQueuedAudio()
       onOnline?.()
     } catch (error) {
-      console.error('Offline sync failed:', error)
+      console.error('[OfflineSync] Sync failed:', error?.message || 'unknown')
     }
   }
 
@@ -67,7 +67,7 @@ export function startOnlineListener(onOnline) {
   if ('serviceWorker' in navigator) {
     swMessageListener = (event) => {
       if (event.data?.type === 'SYNC_QUEUE' && event.data?.action === 'uploadQueuedAudio') {
-        uploadQueuedAudio().catch((err) => console.error('Background sync upload failed:', err))
+        uploadQueuedAudio().catch((err) => console.error('[OfflineSync] Background upload failed:', err?.message || 'unknown'))
       }
     }
     navigator.serviceWorker.addEventListener('message', swMessageListener)
@@ -115,7 +115,7 @@ export async function uploadQueuedAudio() {
         uploaded += 1
         onUploadSuccess?.(item)
       } catch (error) {
-        console.error(`Failed to upload queued audio ${item.id}:`, error)
+        console.error('[OfflineSync] Queued audio upload failed:', error?.message || 'unknown')
         const nextRetry = retryCount + 1
         if (nextRetry < MAX_RETRIES) {
           await offlineAudioQueue.updateQueueItem(item.id, {

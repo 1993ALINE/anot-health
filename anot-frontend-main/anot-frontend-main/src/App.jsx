@@ -60,8 +60,9 @@ function ProtectedRoute({ element, allowedRole }) {
       .then(() => {
         if (!cancelled) setVerified(true)
       })
-      .catch(() => {
+      .catch((err) => {
         if (!cancelled) {
+          console.error('[App] Session verification failed:', err?.message || 'unknown')
           authAPI.logout()
           setVerified(false)
         }
@@ -114,7 +115,7 @@ function App() {
   useEffect(() => {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/service-worker.js').catch((err) => {
-        console.warn('Service worker registration failed:', err)
+        console.warn('[App] Service worker registration failed:', err?.message || 'unknown')
       })
     }
 

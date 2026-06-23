@@ -856,11 +856,11 @@ const DEFAULT_TEMPLATES = [
 ]
 
 function loadTemplates() {
-  try { const s = localStorage.getItem('anot_cl_tpl'); if (s) return JSON.parse(s) } catch (err) { console.error(err) }
+  try { const s = localStorage.getItem('anot_cl_tpl'); if (s) return JSON.parse(s) } catch (err) { console.error('[Clinician] Template load failed:', err?.message) }
   return DEFAULT_TEMPLATES
 }
 function saveTemplates(t) {
-  try { localStorage.setItem('anot_cl_tpl', JSON.stringify(t)) } catch (err) { console.error(err) }
+  try { localStorage.setItem('anot_cl_tpl', JSON.stringify(t)) } catch (err) { console.error('[Clinician] Template save failed:', err?.message) }
 }
 
 // ─── AUDIO PLAYER ─────────────────────────────────────────────────────────────
@@ -876,9 +876,11 @@ function getAuthHeaders() {
 async function fetchVisitAudioCount(visitId) {
   try {
     const response = await fetch(`${API_BASE}/audio/${visitId}/count`, { headers: getAuthHeaders() })
+    if (!response.ok) throw new Error('Audio count unavailable')
     const data = await response.json()
     return data.count > 0 ? data.count : 1
-  } catch {
+  } catch (err) {
+    console.error('[Clinician] Audio count fetch failed:', err?.message)
     return 1
   }
 }
@@ -993,7 +995,9 @@ function AudioModal({ visitId, visit, onClose, showToast }) {
   const durSet = useRef(false)
 
   useEffect(() => {
-    fetchVisitAudioCount(visitId).then(setCount)
+    fetchVisitAudioCount(visitId).then(setCount).catch((err) => {
+      console.error('[Clinician] Audio count failed:', err?.message)
+    })
   }, [visitId])
 
   useEffect(() => {
@@ -1013,7 +1017,12 @@ function AudioModal({ visitId, visit, onClose, showToast }) {
         a.load()
         setStatus('ready')
       })
-      .catch(() => { if (!cancelled) setStatus('error') })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error('[Clinician] Audio load failed:', err?.message)
+          setStatus('error')
+        }
+      })
 
     return () => {
       cancelled = true
@@ -1959,7 +1968,7 @@ function Clinician() {
             try {
               await visitsAPI.endVisit(item.visitId, item.durationSeconds)
             } catch (err) {
-              console.error(err)
+              console.error('[Clinician.upload] Deferred endVisit failed:', err?.message)
             }
           }
           showToast('Queued recording uploaded successfully')
@@ -2161,13 +2170,13 @@ function Clinician() {
           const b = new Blob(cRef.current, { type: rec.mimeType || 'audio/webm' })
           await visitsAPI.uploadAudio(visitId, b)
         } catch (err) {
-          console.error(err)
+          console.error('[Clinician.upload] Primary audio upload failed:', err?.message)
           try {
             const b = new Blob(cRef.current, { type: rec.mimeType || 'audio/webm' })
             await queueAudioUpload({ visitId, blob: b, mode: 'primary', durationSeconds: timer })
             uploadQueued = true
           } catch (qErr) {
-            console.error(qErr)
+            console.error('[Clinician.upload] Queue fallback failed:', qErr?.message)
             showToast('Upload failed. Check your connection and try again.', 'error')
           }
         }
@@ -2273,7 +2282,7 @@ function Clinician() {
               await visitsAPI.appendAudio(vid, b)
               showToast('✓ Additional recording uploaded')
             } catch (err) {
-              console.error(err)
+              console.error('[Clinician.upload] Append audio failed:', err?.message)
               try {
                 const b = new Blob(acRef.current, { type: arRef.current.mimeType || 'audio/webm' })
                 await queueAudioUpload({ visitId: vid, blob: b, mode: 'append' })
@@ -2289,7 +2298,7 @@ function Clinician() {
       })
       setVisits(p => p.map(v => v.id === vid ? { ...v, duration_seconds:(v.duration_seconds||0)+extra, recording_count:(v.recording_count||1)+1 } : v))
       setAddRec(null); setAddTimer(0); acRef.current = []; arRef.current = null
-    } catch (err) { console.error(err) } finally { setUploading(false) }
+    } catch (err) { console.error('[Clinician.upload] Stop add recording failed:', err?.message) } finally { setUploading(false) }
   }
 
   const addPatient = async () => {

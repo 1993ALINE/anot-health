@@ -84,6 +84,7 @@ app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff')
   res.setHeader('X-Frame-Options', 'DENY')
   res.setHeader('X-XSS-Protection', '1; mode=block')
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(self), geolocation=()')
   next()
@@ -253,12 +254,17 @@ const startServer = async () => {
     process.exit(1)
   }
 
-  app.listen(PORT, HOST, () => {
-    console.log(`ðŸš€ Anot server running on http://127.0.0.1:${PORT} (bound ${HOST}:${PORT})`)
-    console.log(`ðŸ“‹ Environment: ${process.env.NODE_ENV || 'development'}`)
+  const server = app.listen(PORT, HOST, () => {
+    console.log(`[Server] Listening on port ${PORT}`)
+    console.log(`[Server] Bound ${HOST}:${PORT} — environment: ${process.env.NODE_ENV || 'development'}`)
     // Provision the CloudWatch log group/stream. No-ops safely when audit
     // shipping is disabled or AWS isn't configured (e.g. Railway).
-    initCloudWatch().catch((err) => console.error('CloudWatch init error:', err.message))
+    initCloudWatch().catch((err) => console.error('[CloudWatch] Init failed:', err.message))
+  })
+
+  server.on('error', (err) => {
+    console.error('[FATAL] Server listen error:', err.message)
+    process.exit(1)
   })
 }
 
@@ -269,5 +275,17 @@ const startServer = async () => {
 // supervisor (EB/PM2) restarts cleanly instead of serving a half-initialised app.
 bootstrap().catch((err) => {
   console.error('FATAL: bootstrap failed:', err && err.message ? err.message : err)
+  process.exit(1)
+})
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason) => {
+  const msg = reason instanceof Error ? reason.message : String(reason)
+  console.error('[FATAL] Unhandled Rejection:', msg)
+})
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('[FATAL] Uncaught Exception:', error.message)
   process.exit(1)
 })

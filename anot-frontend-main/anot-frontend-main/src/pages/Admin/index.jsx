@@ -1071,11 +1071,7 @@ function Admin() {
         try {
             setAddLoading(true)
             const data = await usersAPI.register(validated.payload)
-            console.log('[Admin] register response:', {
-                ok: true,
-                userId: data?.user?.id,
-                generatedPassword: !!data?.temporaryPassword,
-            })
+            console.log('[Admin] User registered')
             setUsers((prev) => [data.user, ...prev.filter((u) => u.id !== data.user.id)])
             setRecentlyAddedUserId(data.user.id)
             void refreshUsers(true)
@@ -1095,7 +1091,7 @@ function Admin() {
                 showToast(`${data.user.name} registered successfully`)
             }
         } catch (err) {
-            console.error('[Admin] register failed:', { status: err?.status, message: err?.message, payload: err?.payload })
+            console.error('[Admin] register failed:', err?.message || 'unknown')
             setAddError(getRegisterUserErrorMessage(err))
         } finally {
             setAddLoading(false)
@@ -1237,11 +1233,7 @@ function Admin() {
             // The server generates a secure temporary password and returns it once.
             const data = await usersAPI.resetPassword(target.id)
             // Log the API response for debugging (never the temp password itself).
-            console.log('[Admin] resetPassword response:', {
-                ok: true,
-                userId: data?.user?.id,
-                generatedPassword: !!data?.temporaryPassword,
-            })
+            console.log('[Admin] Password reset completed')
             setResetUser(null)
             if (data.temporaryPassword) {
                 setCredentialCopied(false)
@@ -1256,7 +1248,7 @@ function Admin() {
                 showToast(`Password reset for ${target.name}`)
             }
         } catch (err) {
-            console.error('[Admin] resetPassword failed:', { status: err?.status, message: err?.message, payload: err?.payload })
+            console.error('[Admin] resetPassword failed:', err?.message || 'unknown')
             setResetError(err.message)
         }
         finally { setResetLoading(false) }
