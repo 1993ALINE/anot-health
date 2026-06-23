@@ -608,7 +608,7 @@ if ($DryRun) {
     Write-Host "    scale-up policy: $ScaleUpPolicyName (+1)" -ForegroundColor DarkGray
     Write-Host "    scale-dn policy: $ScaleDownPolicyName (-1)" -ForegroundColor DarkGray
     Write-Host "    alarm (high)   : $CpuHighAlarmName  CPU > $ScaleUpThreshold% / $ScaleUpMinutes min" -ForegroundColor DarkGray
-    Write-Host "    alarm (low)    : $CpuLowAlarmName  CPU < $ScaleDownThreshold% / $ScaleDownMinutes min" -ForegroundColor DarkGray
+    Write-Host "    alarm (low)    : $CpuLowAlarmName  CPU `< $ScaleDownThreshold% / $ScaleDownMinutes min" -ForegroundColor DarkGray
     Write-Host ''
     return
 }
@@ -655,8 +655,8 @@ Write-Host ('=' * 78) -ForegroundColor Green
 Write-Host "  environment : $EbEnvName ($EbEnvId)" -ForegroundColor Green
 Write-Host "  asg         : $AsgName" -ForegroundColor Green
 Write-Host "  bounds      : min=$($finalAsg.MinSize)  max=$($finalAsg.MaxSize)  desired=$($finalAsg.DesiredCapacity)  cooldown=$($finalAsg.DefaultCooldown)s" -ForegroundColor Green
-Write-Host "  scale OUT   : CPU > $ScaleUpThreshold% for $ScaleUpMinutes min  -> +1 ($ScaleUpPolicyName)" -ForegroundColor Green
-Write-Host "  scale IN    : CPU < $ScaleDownThreshold% for $ScaleDownMinutes min  -> -1 ($ScaleDownPolicyName)" -ForegroundColor Green
+Write-Host "  scale OUT   : CPU `> $ScaleUpThreshold% for $ScaleUpMinutes min  -> +1 ($ScaleUpPolicyName)" -ForegroundColor Green
+Write-Host "  scale IN    : CPU `< $ScaleDownThreshold% for $ScaleDownMinutes min  -> -1 ($ScaleDownPolicyName)" -ForegroundColor Green
 Write-Host ''
 Write-Host '  Inspect the ASG and its scaling activity:' -ForegroundColor Yellow
 Write-Host "    aws autoscaling describe-auto-scaling-groups --auto-scaling-group-names $AsgName --region $Region" -ForegroundColor DarkGray

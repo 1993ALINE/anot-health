@@ -763,7 +763,7 @@ if ($DryRun) {
     Write-Host "    iam user        : $UserName (create if missing)" -ForegroundColor DarkGray
     Write-Host "    managed policy  : $ManagedPolicyName (create or new version) -> attach" -ForegroundColor DarkGray
     Write-Host "    access key      : create one (unless the user already has keys)" -ForegroundColor DarkGray
-    Write-Host "    encrypted file  : $SecretsDir\$UserName-credentials-<stamp>.xml" -ForegroundColor DarkGray
+    Write-Host "    encrypted file  : $SecretsDir\$UserName-credentials-`<stamp`>.xml" -ForegroundColor DarkGray
     Write-Host ''
     return
 }

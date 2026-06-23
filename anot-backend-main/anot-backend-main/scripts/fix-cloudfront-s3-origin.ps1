@@ -213,7 +213,7 @@ trap {
     Write-Host "  Backups (if created): $ArtifactDir\cloudfront-$DistributionId-*.json" -ForegroundColor Yellow
     Write-Host "  Manual rollback:" -ForegroundColor Yellow
     Write-Host "    aws cloudfront update-distribution --id $DistributionId \\" -ForegroundColor DarkGray
-    Write-Host "      --distribution-config file://<saved-config>.json --if-match <saved-ETag>" -ForegroundColor DarkGray
+    Write-Host "      --distribution-config file://`<saved-config`>.json --if-match `<saved-ETag`>" -ForegroundColor DarkGray
     Write-Host ''
     exit 1
 }

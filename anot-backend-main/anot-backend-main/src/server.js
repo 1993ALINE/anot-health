@@ -1,15 +1,15 @@
-// ─── SECRETS BOOTSTRAP (must run first) ─────────────────────────────────────
+﻿// â”€â”€â”€ SECRETS BOOTSTRAP (must run first) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // loadSecrets() hydrates process.env from SSM (prod) or .env (local) BEFORE any
 // module that reads process.env at require-time is loaded. instrument.js reads
 // SENTRY_DSN on require, and ./config/db builds the PG Pool on require, so both
-// are deferred into bootstrap() below — after secrets are in place. See
+// are deferred into bootstrap() below â€” after secrets are in place. See
 // src/config/loadSecrets.js for the full rationale.
 const loadSecrets = require('./config/loadSecrets')
 
 async function bootstrap() {
   await loadSecrets()
 
-  // Sentry init reads SENTRY_DSN — require only after secrets are loaded.
+  // Sentry init reads SENTRY_DSN â€” require only after secrets are loaded.
   require('../instrument.js')
 
   const Sentry       = require('@sentry/node')
@@ -53,7 +53,7 @@ if (_tp === 'false' || _tp === '0') {
   if (Number.isFinite(n) && n > 0) app.set('trust proxy', n)
 }
 
-// ─── SECURITY HEADERS ─────────────────────────────────────────────────────────
+// â”€â”€â”€ SECURITY HEADERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 app.use(helmet({
   contentSecurityPolicy: {
@@ -89,23 +89,21 @@ app.use((req, res, next) => {
   next()
 })
 
-// ─── CORS ─────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ CORS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Local dev origins are always allowed; CORS_ORIGINS adds extra entries (comma-separated).
 // The previous /\.vercel\.app$/ regex matched any attacker-deployed *.vercel.app, so it's gone.
 // CORS must run BEFORE rate limiting so that 429 responses (and preflight requests
-// throttled by the limiter) still carry Access-Control-Allow-Origin — otherwise the
+// throttled by the limiter) still carry Access-Control-Allow-Origin â€” otherwise the
 // browser reports those as CORS failures instead of the real status.
 
-const allowedOrigins = [
-  'http://localhost:5173',
-  'http://localhost:5174',
-  'http://127.0.0.1:5173',
-  'http://127.0.0.1:5174',
-  'http://localhost:3000',
-  'https://anot-frontend.vercel.app',
-  'https://anot-frontend-git-main-1993alines-projects.vercel.app',
-  'https://anot-frontend-5m4fm5c5p-1993alines-projects.vercel.app',
-]
+// CORS configuration - ISSUE-005 Fix
+const allowedOrigins = process.env.CORS_ORIGINS 
+  ? process.env.CORS_ORIGINS.split(',').map(origin => origin.trim())
+  : [
+      'http://localhost:3000',
+      'http://localhost:5173',
+      process.env.FRONTEND_URL
+    ].filter(Boolean)
 
 if (process.env.CORS_ORIGINS) {
   for (const origin of process.env.CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean)) {
@@ -128,7 +126,7 @@ const corsOptions = {
 // is needed (and a '*' path would crash under Express 5 / path-to-regexp).
 app.use(cors(corsOptions))
 
-// ─── RATE LIMITING ────────────────────────────────────────────────────────────
+// â”€â”€â”€ RATE LIMITING â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // General API limit + stricter limit on auth routes to slow brute-force attempts.
 
 const isProduction = process.env.NODE_ENV === 'production'
@@ -168,8 +166,8 @@ app.use(express.urlencoded({ extended: true, limit: '2mb' }))
 // SyntaxError with status 400; an oversized body throws status 413. Without this
 // handler those errors fall through to the generic 500 ("Internal server error"),
 // which is what made POST /api/visits, POST /api/patients and the audit routes
-// look "broken" / "return invalid JSON". We catch them here — before the Sentry
-// error handler — so the client gets an actionable 4xx and we don't log garbage
+// look "broken" / "return invalid JSON". We catch them here â€” before the Sentry
+// error handler â€” so the client gets an actionable 4xx and we don't log garbage
 // payloads as server errors.
 app.use((err, req, res, next) => {
   if (err && (err.type === 'entity.parse.failed' || (err.status === 400 && 'body' in err))) {
@@ -183,19 +181,19 @@ app.use((err, req, res, next) => {
 
 // Audio is served only via authorized GET /api/audio/:visitId (not a public /uploads URL).
 
-// ─── AUDIT LOGGING ──────────────────────────────────────────────────────────
-// Attaches req.clientIp (the trusted req.ip — not spoofable X-Forwarded-For) and
+// â”€â”€â”€ AUDIT LOGGING â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Attaches req.clientIp (the trusted req.ip â€” not spoofable X-Forwarded-For) and
 // ships error responses to CloudWatch for HIPAA audit. Placed after trust proxy
 // + body parsing so the IP is correct, and ahead of all routes.
 app.use(loggingMiddleware)
 
-// ─── HEALTH CHECK ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ HEALTH CHECK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 app.get('/', (req, res) => {
-  res.json({ message: '✅ Anot API is running', version: 'v40', status: 'healthy' })
+  res.json({ message: 'âœ… Anot API is running', version: 'v40', status: 'healthy' })
 })
 
-// ─── ROUTES ───────────────────────────────────────────────────────────────────
+// â”€â”€â”€ ROUTES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 app.use('/api/auth',        require('./routes/auth'))
 app.use('/api/webhooks',    require('./routes/webhooks'))
@@ -210,19 +208,19 @@ app.use('/api/settings',    require('./routes/settings'))
 app.use('/api/support',     require('./routes/support'))
 app.use('/api/admin',       require('./routes/health'))
 
-// ─── 404 HANDLER ─────────────────────────────────────────────────────────────
+// â”€â”€â”€ 404 HANDLER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 app.use((req, res) => {
   res.status(404).json({ error: `Route not found: ${req.method} ${req.originalUrl}` })
 })
 
-// ─── SENTRY ERROR HANDLER ─────────────────────────────────────────────────────
+// â”€â”€â”€ SENTRY ERROR HANDLER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // Must be registered after all routes/controllers and before our own error
 // handler. PHI scrubbing is configured in instrument.js (beforeSend).
 
 Sentry.setupExpressErrorHandler(app)
 
-// ─── ERROR HANDLER ────────────────────────────────────────────────────────────
+// â”€â”€â”€ ERROR HANDLER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 app.use((err, req, res, next) => {
   if (err.message && String(err.message).startsWith('CORS:')) {
@@ -235,7 +233,7 @@ app.use((err, req, res, next) => {
   })
 })
 
-// ─── START ────────────────────────────────────────────────────────────────────
+// â”€â”€â”€ START â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const PORT = process.env.PORT || 5000
 // Bind IPv4 explicitly so http://127.0.0.1:PORT always hits this process on Windows/WSL.
@@ -249,15 +247,15 @@ const startServer = async () => {
   try {
     console.log('[Startup] Ensuring user profile schema...')
     await ensureUserProfileSchema()
-    console.log('[Startup] ✅ Schema ready')
+    console.log('[Startup] âœ… Schema ready')
   } catch (err) {
     console.error('[Startup] Schema initialization failed:', err.message)
     process.exit(1)
   }
 
   app.listen(PORT, HOST, () => {
-    console.log(`🚀 Anot server running on http://127.0.0.1:${PORT} (bound ${HOST}:${PORT})`)
-    console.log(`📋 Environment: ${process.env.NODE_ENV || 'development'}`)
+    console.log(`ðŸš€ Anot server running on http://127.0.0.1:${PORT} (bound ${HOST}:${PORT})`)
+    console.log(`ðŸ“‹ Environment: ${process.env.NODE_ENV || 'development'}`)
     // Provision the CloudWatch log group/stream. No-ops safely when audit
     // shipping is disabled or AWS isn't configured (e.g. Railway).
     initCloudWatch().catch((err) => console.error('CloudWatch init error:', err.message))

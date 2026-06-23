@@ -526,8 +526,8 @@ trap {
         Write-Host '  The original ingress rules were snapshotted BEFORE any change to:' -ForegroundColor Yellow
         Write-Host "    $script:SgBackupFile" -ForegroundColor DarkGray
         Write-Host '  To restore the open rules (rollback), re-authorize from that snapshot, e.g.:' -ForegroundColor Yellow
-        Write-Host "    aws ec2 authorize-security-group-ingress --group-id <sg> \\" -ForegroundColor DarkGray
-        Write-Host "      --ip-permissions file://<saved-open-rules>.json --region $Region" -ForegroundColor DarkGray
+        Write-Host "    aws ec2 authorize-security-group-ingress --group-id `<sg`> \\" -ForegroundColor DarkGray
+        Write-Host "      --ip-permissions file://`<saved-open-rules`>.json --region $Region" -ForegroundColor DarkGray
     }
     Write-Host ''
     exit 1
