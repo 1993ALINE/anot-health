@@ -1,34 +1,9 @@
-# Environment and secrets
+﻿node_modules/
+dist/
+*.zip
+*.bak
+*.backup
+backups/
 .env
 .env.local
 .env.*.local
-backend/.env
-frontend/.env
-anot-backend-main/**/.env
-anot-frontend-main/**/.env
-anot-frontend-main/**/.env.local
-playwright/.env
-
-# Dependencies and build
-node_modules/
-
-dist/
-build/
-.next/
-*.pyc
-__pycache__/
-.venv/
-venv/
-
-# IDE and OS
-.idea/
-.vscode/
-.DS_Store
-Thumbs.db
-anot-backend-main/anot-backend-main/logs/
-
-# Playwright E2E artifacts
-/test-results/
-/playwright-report/
-/blob-report/
-/playwright/.cache/
