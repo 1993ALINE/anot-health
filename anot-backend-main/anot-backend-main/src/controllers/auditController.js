@@ -289,29 +289,51 @@ const exportAuditLogs = async (req, res) => {
         }
 
         if (format === 'xlsx') {
-            const XLSX = require('xlsx')
-            const flat = rows.map((r) => ({
-                id: r.id,
-                created_at: r.created_at,
-                user_id: r.user_id,
-                user_name: r.user_name,
-                user_role: r.user_role,
-                action: r.action,
-                action_category: r.action_category,
-                entity_type: r.entity_type,
-                entity_id: r.entity_id,
-                status: r.status,
-                module_key: r.module_key,
-                ip_address: r.ip_address,
-                user_agent: r.user_agent,
-                details: r.details,
-                request_path: r.request_path,
-                event_metadata: r.event_metadata != null ? JSON.stringify(r.event_metadata) : '',
-            }))
-            const ws = XLSX.utils.json_to_sheet(flat)
-            const wb = XLSX.utils.book_new()
-            XLSX.utils.book_append_sheet(wb, ws, 'Audit')
-            const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })
+            const ExcelJS = require('exceljs')
+            const workbook = new ExcelJS.Workbook()
+            const worksheet = workbook.addWorksheet('Audit')
+            
+            worksheet.columns = [
+                { header: 'ID', key: 'id', width: 10 },
+                { header: 'Created At', key: 'created_at', width: 20 },
+                { header: 'User ID', key: 'user_id', width: 10 },
+                { header: 'User Name', key: 'user_name', width: 20 },
+                { header: 'User Role', key: 'user_role', width: 15 },
+                { header: 'Action', key: 'action', width: 30 },
+                { header: 'Action Category', key: 'action_category', width: 20 },
+                { header: 'Entity Type', key: 'entity_type', width: 15 },
+                { header: 'Entity ID', key: 'entity_id', width: 10 },
+                { header: 'Status', key: 'status', width: 10 },
+                { header: 'Module Key', key: 'module_key', width: 15 },
+                { header: 'IP Address', key: 'ip_address', width: 15 },
+                { header: 'User Agent', key: 'user_agent', width: 30 },
+                { header: 'Details', key: 'details', width: 30 },
+                { header: 'Request Path', key: 'request_path', width: 30 },
+                { header: 'Event Metadata', key: 'event_metadata', width: 30 },
+            ]
+            
+            rows.forEach((r) => {
+                worksheet.addRow({
+                    id: r.id,
+                    created_at: r.created_at,
+                    user_id: r.user_id,
+                    user_name: r.user_name,
+                    user_role: r.user_role,
+                    action: r.action,
+                    action_category: r.action_category,
+                    entity_type: r.entity_type,
+                    entity_id: r.entity_id,
+                    status: r.status,
+                    module_key: r.module_key,
+                    ip_address: r.ip_address,
+                    user_agent: r.user_agent,
+                    details: r.details,
+                    request_path: r.request_path,
+                    event_metadata: r.event_metadata != null ? JSON.stringify(r.event_metadata) : '',
+                })
+            })
+            
+            const buf = await workbook.xlsx.writeBuffer()
             res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
             res.setHeader('Content-Disposition', `attachment; filename="audit-export-${stamp}.xlsx"`)
             return res.send(buf)
