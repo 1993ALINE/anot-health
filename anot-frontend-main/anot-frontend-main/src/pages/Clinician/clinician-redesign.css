@@ -1692,21 +1692,65 @@
   }
 
   .cl-portal.cl-clinician-shell .sidebar-wrapper.sf-sidebar {
+    position: fixed;
     width: 280px !important;
     max-width: 280px !important;
     transform: none !important;
     left: -280px;
     top: 0;
-    height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
     z-index: 1000;
+    background: #4f46e5;
     box-shadow: 2px 0 8px rgba(0, 0, 0, 0.2);
     transition: left 0.3s ease-in-out;
-    overflow-y: auto;
+    overflow-y: auto !important;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    display: flex;
+    flex-direction: column;
+    padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
   }
 
   .cl-portal.cl-clinician-shell .sidebar-wrapper.sf-sidebar.open {
     left: 0;
     transform: none !important;
+  }
+
+  .cl-portal.cl-clinician-shell .sidebar-wrapper.sf-sidebar > * {
+    flex-shrink: 0;
+  }
+
+  .cl-portal.cl-clinician-shell .sidebar-wrapper.sf-sidebar .cl-sidebar__fill {
+    display: none;
+  }
+
+  .cl-portal.cl-clinician-shell .sidebar-wrapper.sf-sidebar .cl-sidebar__bottom {
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.14);
+  }
+
+  .cl-portal.cl-clinician-shell .sidebar-wrapper.sf-sidebar .cl-sidebar__body .sf-nav.sf-sidebar-rich__nav {
+    flex: 0 0 auto;
+    overflow: visible;
+    padding: 12px 0;
+  }
+
+  .cl-portal.cl-clinician-shell .sidebar-wrapper.sf-sidebar .adm-sidebar-footer__btn--signout {
+    min-height: 44px;
+  }
+
+  /* Date picker dropdowns — keep visible and scrollable on small screens */
+  .cl-portal.cl-clinician-shell .date-picker-dropdown,
+  .cl-portal.cl-clinician-shell .calendar-picker,
+  .cl-portal.cl-clinician-shell .react-datepicker__popper {
+    position: fixed !important;
+    z-index: 2000 !important;
+    max-height: calc(100dvh - 120px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .cl-portal.cl-clinician-shell .sidebar-overlay.sf-overlay.open {
