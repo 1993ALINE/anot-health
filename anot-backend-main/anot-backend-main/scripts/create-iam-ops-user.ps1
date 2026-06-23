@@ -35,7 +35,8 @@
    * CloudWatch       : read-only (alarms, metrics) - no resource-level support.
    * EC2 / AutoScaling: describe-only (account-wide; Describe* has no ARN scope).
    * S3               : list/read/write scoped to the anot-audio + anot-frontend
-                        buckets only.
+                        buckets only. CreateBucket / bucket versioning scoped to
+                        elasticbeanstalk-* buckets (required for EB deployments).
    * IAM              : read-only (list/get roles + policies) for safety.
    * SSM              : Get*/GetParametersByPath scoped to /anot/prod/*.
    * CloudFormation   : describe stacks (read-only).
@@ -466,6 +467,18 @@ $opsPolicy = [ordered]@{
             Effect   = 'Allow'
             Action   = @('s3:GetObject', 's3:PutObject', 's3:DeleteObject')
             Resource = @("$AudioBktArn/*", "$FrontBktArn/*")
+        },
+        [ordered]@{
+            Sid      = 'S3ElasticBeanstalkBuckets'
+            Effect   = 'Allow'
+            Action   = @(
+                's3:CreateBucket',
+                's3:ListBucket',
+                's3:GetBucketLocation',
+                's3:GetBucketVersioning',
+                's3:PutBucketVersioning'
+            )
+            Resource = 'arn:aws:s3:::elasticbeanstalk-*'
         },
         [ordered]@{
             Sid      = 'IamReadOnly'
