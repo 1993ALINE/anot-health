@@ -27,7 +27,6 @@ export default defineConfig({
         try {
           mkdirSync(resolve(__dirname, 'dist'), { recursive: true })
           copyFileSync(serviceWorkerPath, resolve(__dirname, 'dist/service-worker.js'))
-          console.log('Service worker copied to dist/')
         } catch (error) {
           console.warn('Service worker copy warning:', error.message)
         }

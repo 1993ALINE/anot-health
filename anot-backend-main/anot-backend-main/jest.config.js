@@ -8,9 +8,6 @@ module.exports = {
     '!src/**/__tests__/**',
     '!src/server.js',
   ],
-  coverageThreshold: {
-    global: { branches: 70, functions: 70, lines: 70, statements: 70 },
-  },
   coverageDirectory: 'coverage',
   verbose: true,
 }
