@@ -17,7 +17,7 @@ async function bootstrap() {
   const cors         = require('cors')
   const helmet       = require('helmet')
   const cookieParser = require('cookie-parser')
-  const rateLimit    = require('express-rate-limit')
+  const { apiLimiter, getRateLimitConfig } = require('./middleware/rateLimit')
 
   const jwtSecret = process.env.JWT_SECRET?.trim()
   if (!jwtSecret) {
@@ -138,29 +138,13 @@ app.use(cors(corsOptions))
 // â”€â”€â”€ RATE LIMITING â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // General API limit + stricter limit on auth routes to slow brute-force attempts.
 
-const isProduction = process.env.NODE_ENV === 'production'
-
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  // Strict in production; relaxed locally so dev testing isn't throttled.
-  max:      isProduction ? 100 : 1000,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many requests. Please try again later.' },
-})
-
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  // 20 per 15min in production: strict enough to slow brute-force, loose enough
-  // that legitimate users (e.g. shared office IPs) aren't locked out.
-  max:      isProduction ? 20 : 100,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many login attempts. Please try again in 15 minutes.' },
-})
+const rateLimitConfig = getRateLimitConfig()
+console.log(
+  `[rate-limit] API ${rateLimitConfig.api.max} req / ${Math.round(rateLimitConfig.api.windowMs / 1000)}s, ` +
+    `login ${rateLimitConfig.login.max} attempts / ${Math.round(rateLimitConfig.login.windowMs / 60000)} min`,
+)
 
 app.use('/api', apiLimiter)
-app.use('/api/auth', authLimiter)
 
 const jsonSmall = express.json({ limit: '2mb' })
 const jsonLarge = express.json({ limit: '15mb' })
