@@ -18,9 +18,9 @@ function stripPatientHeaderBlock(text) {
 
 /** Strip markdown and patient header block from AI draft text for display. */
 export function cleanAiDraftForDisplay(raw) {
-  if (!raw) return ''
+  if (!raw) {return ''}
   const text = String(raw).trim()
-  if (text.startsWith('[AI draft unavailable')) return text
+  if (text.startsWith('[AI draft unavailable')) {return text}
 
   let cleaned = stripMarkdownFormatting(text)
   cleaned = stripPatientHeaderBlock(cleaned)

@@ -38,14 +38,14 @@ export default function SystemProfileManager({
     let mounted = true
     const cached = authAPI.getCurrentUser() || {}
     queueMicrotask(() => {
-      if (!mounted) return
+      if (!mounted) {return}
       setForm((prev) => ({ ...prev, name: cached.name || '', email: cached.email || '', phone: cached.phone || '' }))
       setLoading(true)
     })
     authAPI
       .getMe()
       .then((data) => {
-        if (!mounted) return
+        if (!mounted) {return}
         const u = data.user || {}
         setMeta({ role: u.role || roleLabel, status: u.status || 'active' })
         setForm((prev) => ({
@@ -59,7 +59,7 @@ export default function SystemProfileManager({
       })
       .catch(() => {})
       .finally(() => {
-        if (!mounted) return
+        if (!mounted) {return}
         setLoading(false)
       })
     return () => {
@@ -80,7 +80,7 @@ export default function SystemProfileManager({
   const fileToObjectUrl = (file) => URL.createObjectURL(file)
 
   const optimizeAvatarImage = async (file) => {
-    if (!file) return ''
+    if (!file) {return ''}
     const blobUrl = fileToObjectUrl(file)
     try {
       const image = await new Promise((resolve, reject) => {
@@ -95,7 +95,7 @@ export default function SystemProfileManager({
       canvas.width = size
       canvas.height = size
       const ctx = canvas.getContext('2d')
-      if (!ctx) throw new Error('Image processing is unavailable.')
+      if (!ctx) {throw new Error('Image processing is unavailable.')}
 
       const srcW = image.naturalWidth || image.width
       const srcH = image.naturalHeight || image.height
@@ -112,9 +112,9 @@ export default function SystemProfileManager({
         canvas.toDataURL('image/jpeg', quality)
 
       let dataUrl = toJpeg(0.9)
-      if (dataUrl.length > 700_000) dataUrl = toJpeg(0.8)
-      if (dataUrl.length > 700_000) dataUrl = toJpeg(0.7)
-      if (dataUrl.length > 1_600_000) throw new Error('Image is still too large after optimization.')
+      if (dataUrl.length > 700_000) {dataUrl = toJpeg(0.8)}
+      if (dataUrl.length > 700_000) {dataUrl = toJpeg(0.7)}
+      if (dataUrl.length > 1_600_000) {throw new Error('Image is still too large after optimization.')}
       return dataUrl
     } finally {
       URL.revokeObjectURL(blobUrl)
@@ -124,7 +124,7 @@ export default function SystemProfileManager({
   const onAvatarPick = async (event) => {
     try {
       const file = event.target.files?.[0]
-      if (!file) return
+      if (!file) {return}
       if (!file.type.startsWith('image/')) {
         showToast('Please choose an image file.', 'error')
         return
@@ -147,13 +147,13 @@ export default function SystemProfileManager({
     const phone = form.phone.trim()
     const wantsPassword = !!form.currentPassword || !!form.newPassword || !!form.confirmPassword
 
-    if (!name) return showToast('Name is required.', 'error')
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showToast('Enter a valid email.', 'error')
+    if (!name) {return showToast('Name is required.', 'error')}
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {return showToast('Enter a valid email.', 'error')}
     if (wantsPassword) {
-      if (!form.currentPassword || !form.newPassword) return showToast('Enter current and new password.', 'error')
+      if (!form.currentPassword || !form.newPassword) {return showToast('Enter current and new password.', 'error')}
       const pwCheck = validatePassword(form.newPassword)
-      if (!pwCheck.valid) return showToast(pwCheck.message, 'error')
-      if (form.newPassword !== form.confirmPassword) return showToast('Passwords do not match.', 'error')
+      if (!pwCheck.valid) {return showToast(pwCheck.message, 'error')}
+      if (form.newPassword !== form.confirmPassword) {return showToast('Passwords do not match.', 'error')}
     }
 
     try {

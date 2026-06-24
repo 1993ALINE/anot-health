@@ -18,17 +18,17 @@ import '../portalErrorBoundary.css'
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
 function fmtTime(t) {
-  if (!t) return ''
+  if (!t) {return ''}
   const [h, m] = t.split(':')
   const hour = parseInt(h)
   return `${hour > 12 ? hour - 12 : hour === 0 ? 12 : hour}:${m} ${hour >= 12 ? 'PM' : 'AM'}`
 }
 
 function fmtQpsDate(d) {
-  if (!d) return '—'
+  if (!d) {return '—'}
   const raw = String(d).trim()
   const date = new Date(/^\d{4}-\d{2}-\d{2}$/.test(raw) ? `${raw}T12:00:00` : raw)
-  if (Number.isNaN(date.getTime())) return raw
+  if (Number.isNaN(date.getTime())) {return raw}
   return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 }
 
@@ -39,7 +39,7 @@ function isGradedNote(note) {
 
 function qpsNoteListMeta(note) {
   const parts = [note.mrn, note.visit_type, fmtQpsDate(note.visit_date)]
-  if (note.visit_time) parts.push(fmtTime(note.visit_time))
+  if (note.visit_time) {parts.push(fmtTime(note.visit_time))}
   return parts.filter(Boolean).join(' · ')
 }
 
@@ -47,8 +47,8 @@ function qpsNoteListMeta(note) {
  * Validate grade submission input
  */
 function validateGradeSubmission(selectedNote, comment) {
-  if (!selectedNote?.id) return { error: 'No note selected' }
-  if (!comment.trim()) return { error: 'Please write a comment before submitting.' }
+  if (!selectedNote?.id) {return { error: 'No note selected' }}
+  if (!comment.trim()) {return { error: 'Please write a comment before submitting.' }}
   return { ok: true }
 }
 
@@ -235,7 +235,7 @@ function QPS() {
   }
 
   const runConfirm = async () => {
-    if (!confirmDialog?.onConfirm) return
+    if (!confirmDialog?.onConfirm) {return}
     setConfirmLoading(true)
     try {
       await Promise.resolve(confirmDialog.onConfirm())
@@ -293,8 +293,8 @@ function QPS() {
 
   useEffect(() => { loadProviders() }, [loadProviders])
   useEffect(() => { loadGradedNotes() }, [loadGradedNotes])
-  useEffect(() => { if (activeTab === 'graded') loadGradedNotes() }, [activeTab, loadGradedNotes])
-  useEffect(() => { if (activeTab === 'performance') loadPerformance() }, [activeTab]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (activeTab === 'graded') {loadGradedNotes()} }, [activeTab, loadGradedNotes])
+  useEffect(() => { if (activeTab === 'performance') {loadPerformance()} }, [activeTab]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const openNote = (note) => {
     setSelectedNote(note)
@@ -345,8 +345,8 @@ function QPS() {
   const handleNav = (tab) => {
     sidebar.close()
     setActiveTab(tab)
-    if (tab === 'notes') selectedProvider ? setScreen('recordings') : setScreen('provider')
-    else setScreen(tab)
+    if (tab === 'notes') {selectedProvider ? setScreen('recordings') : setScreen('provider')}
+    else {setScreen(tab)}
   }
 
   // ─── SIDEBAR ──────────────────────────────────────

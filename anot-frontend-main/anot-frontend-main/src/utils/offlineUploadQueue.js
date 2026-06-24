@@ -16,7 +16,7 @@ const RETRY_INTERVAL_MS = 45 * 1000
  * end-visit call once the audio finally lands.
  */
 export async function queueAudioUpload({ visitId, blob, mode = 'primary', durationSeconds = null }) {
-  if (!visitId || !blob?.size) return
+  if (!visitId || !blob?.size) {return}
   queue.push({
     id: `${visitId}-${mode}-${Date.now()}`,
     visitId,
@@ -31,7 +31,7 @@ let flushing = false
 
 /** Retry queued uploads (called periodically, on `online`, and on mount). */
 export async function flushPendingAudioUploads({ uploadPrimary, uploadAppend, onSuccess, onError }) {
-  if (flushing || !navigator.onLine) return { flushed: 0, remaining: queue.length }
+  if (flushing || !navigator.onLine) {return { flushed: 0, remaining: queue.length }}
   flushing = true
   let flushed = 0
   try {
@@ -77,7 +77,7 @@ export function installOfflineUploadFlush(flushFn) {
   window.addEventListener('online', run)
   window.addEventListener('beforeunload', warnBeforeUnload)
   const intervalId = setInterval(() => {
-    if (queue.length > 0) run()
+    if (queue.length > 0) {run()}
   }, RETRY_INTERVAL_MS)
   run()
   return () => {

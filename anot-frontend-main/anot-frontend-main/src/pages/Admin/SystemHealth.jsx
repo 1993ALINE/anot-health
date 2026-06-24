@@ -18,7 +18,7 @@ const STATUS_LABEL = {
 }
 
 function fmtTimestamp(iso) {
-  if (!iso) return '—'
+  if (!iso) {return '—'}
   try {
     return new Date(iso).toLocaleString('en-US', {
       month: 'short',
@@ -33,7 +33,7 @@ function fmtTimestamp(iso) {
 }
 
 function fmtNumber(n) {
-  if (n == null) return '—'
+  if (n === null || n === undefined) {return '—'}
   return Number(n).toLocaleString('en-US')
 }
 
@@ -49,7 +49,7 @@ function ComponentCard({ label, data }) {
         {ok ? 'Operational' : 'Error'}
       </span>
       <div className="sysh-comp-latency">
-        <b>{data?.latency_ms != null ? data.latency_ms : '—'}</b>
+        <b>{data?.latency_ms !== null && data?.latency_ms !== undefined ? data.latency_ms : '—'}</b>
         <span>ms latency</span>
       </div>
       <div className="sysh-comp-msg">{data?.message || '—'}</div>
@@ -83,27 +83,27 @@ export default function SystemHealth({ showToast }) {
   }, [])
 
   const fetchHealth = useCallback(async (manual = false) => {
-    if (inFlight.current) return
+    if (inFlight.current) {return}
     inFlight.current = true
     if (mounted.current) {
       setLoading(true)
-      if (manual) setError(null)
+      if (manual) {setError(null)}
     }
     try {
       const data = await adminAPI.getSystemHealth()
-      if (!mounted.current) return
+      if (!mounted.current) {return}
       setHealth(data)
       setError(null)
       setLastFetched(Date.now())
     } catch (err) {
-      if (!mounted.current) return
+      if (!mounted.current) {return}
       setError(err.message || 'Failed to load system health')
       if (manual && typeof showToast === 'function') {
         showToast(`Failed to refresh system health: ${err.message}`, 'error')
       }
     } finally {
       inFlight.current = false
-      if (mounted.current) setLoading(false)
+      if (mounted.current) {setLoading(false)}
     }
   }, [showToast])
 

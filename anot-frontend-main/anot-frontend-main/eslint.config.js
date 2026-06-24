@@ -1,11 +1,11 @@
-import js from '@eslint/js'
+﻿import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', 'coverage']),
   {
     files: ['**/*.{js,jsx}'],
     extends: [
@@ -14,16 +14,21 @@ export default defineConfig([
       reactRefresh.configs.vite,
     ],
     languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
       globals: globals.browser,
       parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+    rules: {
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'no-console': ['warn', { allow: ['warn', 'error'] }],
+      'eqeqeq': ['error', 'always'],
+      'curly': ['error', 'all'],
     },
   },
   {
     files: ['src/pages/shared.jsx'],
-    rules: {
-      // Shared module exports hooks + small components (not a refresh boundary).
-      'react-refresh/only-export-components': 'off',
-    },
+    rules: { 'react-refresh/only-export-components': 'off' },
   },
   {
     files: [
@@ -32,10 +37,25 @@ export default defineConfig([
       'src/pages/Scribe/index.jsx',
     ],
     rules: {
-      // Large legacy dashboards: inner layout helpers + data-loading effects predate stricter React Compiler-style hooks.
       'react-hooks/static-components': 'off',
       'react-hooks/set-state-in-effect': 'off',
       'react-hooks/immutability': 'off',
+      'react-hooks/refs': 'off',
+      'react-hooks/preserve-manual-memoization': 'off',
+      'react-hooks/error-boundaries': 'off',
+    },
+  },
+  {
+    files: [
+      'src/pages/Admin/**/*.jsx',
+      'src/pages/Clinician/AudioQueuePanel.jsx',
+      'src/pages/Clinician/OfflineIndicator.jsx',
+      'src/components/PortalAudioPlayer.jsx',
+      'src/utils/useSessionTimeout.js',
+    ],
+    rules: {
+      'react-hooks/set-state-in-effect': 'off',
+      'react-hooks/refs': 'off',
     },
   },
 ])

@@ -16,6 +16,7 @@ async function bootstrap() {
   const express      = require('express')
   const cors         = require('cors')
   const helmet       = require('helmet')
+  const cookieParser = require('cookie-parser')
   const rateLimit    = require('express-rate-limit')
 
   const jwtSecret = process.env.JWT_SECRET?.trim()
@@ -35,8 +36,12 @@ async function bootstrap() {
   const loggingMiddleware = require('./middleware/logging')
   const { initCloudWatch } = require('./utils/logger')
   const { ensureUserProfileSchema } = require('./utils/ensureUserProfileSchema')
+  const { loadAiSettings } = require('./services/aiSettings')
+  const { cleanCorruptedSettings } = require('./startup/cleanCorruptedSettings')
 
   const app = express()
+const { correlationIdMiddleware } = require('./middleware/correlationId')
+app.use(correlationIdMiddleware)
 
 // Don't advertise the framework.
 app.disable('x-powered-by')
@@ -67,6 +72,8 @@ app.use(helmet({
       objectSrc: ["'none'"],
       mediaSrc: ["'self'", "blob:"],
       frameSrc: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
     },
   },
   crossOriginEmbedderPolicy: false,
@@ -125,6 +132,7 @@ const corsOptions = {
 
 // cors() handles OPTIONS preflight automatically, so no explicit app.options() route
 // is needed (and a '*' path would crash under Express 5 / path-to-regexp).
+app.use(cookieParser())
 app.use(cors(corsOptions))
 
 // â”€â”€â”€ RATE LIMITING â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -187,14 +195,18 @@ app.use((err, req, res, next) => {
 // ships error responses to CloudWatch for HIPAA audit. Placed after trust proxy
 // + body parsing so the IP is correct, and ahead of all routes.
 app.use(loggingMiddleware)
+const { csrfProtection, csrfTokenRoute } = require('./middleware/csrf')
+app.get('/api/csrf-token', csrfTokenRoute)
+app.use('/api', csrfProtection)
 
 // â”€â”€â”€ HEALTH CHECK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 app.get('/', (req, res) => {
-  res.json({ message: 'âœ… Anot API is running', version: 'v40', status: 'healthy' })
+  res.json({ message: 'Anot API is running', version: 'v42', status: 'healthy' })
 })
 
-// â”€â”€â”€ ROUTES â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€â”€ ROUTES
+app.use('/api', require('./routes/openapi')) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 app.use('/api/auth',        require('./routes/auth'))
 app.use('/api/webhooks',    require('./routes/webhooks'))
@@ -207,6 +219,10 @@ app.use('/api/audio',       require('./routes/audio'))
 app.use('/api/audit',       require('./routes/audit'))
 app.use('/api/settings',    require('./routes/settings'))
 app.use('/api/support',     require('./routes/support'))
+app.use('/api/mfa',         require('./routes/mfa'))
+const { enforceAdminMfa } = require('./middleware/enforceAdminMfa')
+app.use('/api/admin', enforceAdminMfa)
+app.use('/api/consent',     require('./routes/consent'))
 app.use('/api/admin',       require('./routes/health'))
 
 // â”€â”€â”€ 404 HANDLER â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -248,10 +264,23 @@ const startServer = async () => {
   try {
     console.log('[Startup] Ensuring user profile schema...')
     await ensureUserProfileSchema()
-    console.log('[Startup] âœ… Schema ready')
+    console.log('[Startup] Schema ready')
   } catch (err) {
     console.error('[Startup] Schema initialization failed:', err.message)
     process.exit(1)
+  }
+
+  try {
+    await cleanCorruptedSettings()
+  } catch (err) {
+    console.warn('[Startup] Settings cleanup skipped:', err.message)
+  }
+
+  try {
+    await loadAiSettings()
+    console.log('[Startup] AI settings loaded (decryption failures are non-fatal)')
+  } catch (err) {
+    console.warn('[Startup] AI settings preload skipped:', err.message)
   }
 
   const server = app.listen(PORT, HOST, () => {

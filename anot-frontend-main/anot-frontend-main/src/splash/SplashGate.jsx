@@ -1,11 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { needsAuthSplashHold, releaseSplash } from './releaseSplash'
-
-const SplashReleaseContext = createContext(() => {})
-
-export function useReleaseSplash() {
-  return useContext(SplashReleaseContext)
-}
+import { SplashReleaseContext } from './SplashReleaseContext'
 
 /**
  * Coordinates a single boot splash: dismiss after paint when no JWT bootstrap
@@ -19,11 +14,11 @@ export function SplashGate({ children }) {
   const value = useMemo(() => release, [release])
 
   useEffect(() => {
-    if (needsAuthSplashHold()) return
+    if (needsAuthSplashHold()) {return}
     let cancelled = false
     const id = requestAnimationFrame(() => {
       requestAnimationFrame(() => {
-        if (!cancelled) release()
+        if (!cancelled) {release()}
       })
     })
     return () => {

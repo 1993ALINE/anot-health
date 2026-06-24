@@ -67,20 +67,20 @@ const ROLE_FILTER = [
 ]
 
 function shortDevice(ua) {
-    if (!ua) return '—'
+    if (!ua) {return '—'}
     const s = String(ua)
-    if (/Mobile/i.test(s)) return 'Mobile browser'
-    if (/Tablet|iPad/i.test(s)) return 'Tablet'
-    if (/Windows/i.test(s)) return 'Windows · desktop'
-    if (/Mac OS X/i.test(s)) return 'macOS · desktop'
-    if (/Linux/i.test(s)) return 'Linux · desktop'
-    if (/Android/i.test(s)) return 'Android'
-    if (/iPhone|iOS/i.test(s)) return 'iOS'
+    if (/Mobile/i.test(s)) {return 'Mobile browser'}
+    if (/Tablet|iPad/i.test(s)) {return 'Tablet'}
+    if (/Windows/i.test(s)) {return 'Windows · desktop'}
+    if (/Mac OS X/i.test(s)) {return 'macOS · desktop'}
+    if (/Linux/i.test(s)) {return 'Linux · desktop'}
+    if (/Android/i.test(s)) {return 'Android'}
+    if (/iPhone|iOS/i.test(s)) {return 'iOS'}
     return 'Desktop / other'
 }
 
 function formatActionLabel(action) {
-    if (!action) return '—'
+    if (!action) {return '—'}
     return String(action)
         .split('_')
         .map((w) => w.charAt(0) + w.slice(1).toLowerCase())
@@ -88,8 +88,8 @@ function formatActionLabel(action) {
 }
 
 function isRiskRow(log) {
-    if (log.status === 'critical' || log.status === 'failed') return true
-    if (log.action === 'LOGIN_FAILED' || log.action === 'USER_DELETED') return true
+    if (log.status === 'critical' || log.status === 'failed') {return true}
+    if (log.action === 'LOGIN_FAILED' || log.action === 'USER_DELETED') {return true}
     return false
 }
 
@@ -102,13 +102,6 @@ function downloadBlob(blob, filename) {
     URL.revokeObjectURL(url)
 }
 
-function buildQueryParams(filters, extra = {}) {
-    const p = new URLSearchParams()
-    Object.entries({ ...filters, ...extra }).forEach(([k, v]) => {
-        if (v !== '' && v != null) p.set(k, String(v))
-    })
-    return p
-}
 
 export default function AdminAuditDashboard({ showToast, currentUser, onMeta }) {
     const [summary, setSummary] = useState(null)
@@ -193,12 +186,12 @@ export default function AdminAuditDashboard({ showToast, currentUser, onMeta }) 
     }, [listFilters, page, pageSize, live, showToast])
 
     const loadRetention = useCallback(async () => {
-        if (!isSuperAdmin(currentUser)) return
+        if (!isSuperAdmin(currentUser)) {return}
         try {
             const data = await settingsAPI.getInternal()
             const s = data.settings || {}
             setSettingsSnapshot(s)
-            if (s.audit_retention_days != null) setRetentionDays(Number(s.audit_retention_days))
+            if (s.audit_retention_days !== null && s.audit_retention_days !== undefined) {setRetentionDays(Number(s.audit_retention_days))}
         } catch {
             /* optional */
         }
@@ -226,10 +219,10 @@ export default function AdminAuditDashboard({ showToast, currentUser, onMeta }) 
     }, [onMeta, total, page, summary])
 
     useEffect(() => {
-        if (!live) return undefined
+        if (!live) {return undefined}
         const id = setInterval(() => {
             void loadSummary()
-            if (page === 1) void loadLogs()
+            if (page === 1) {void loadLogs()}
         }, 14000)
         return () => clearInterval(id)
     }, [live, loadSummary, loadLogs, page])
@@ -267,7 +260,7 @@ export default function AdminAuditDashboard({ showToast, currentUser, onMeta }) 
     }
 
     const onApplyRetention = async () => {
-        if (!isSuperAdmin(currentUser)) return
+        if (!isSuperAdmin(currentUser)) {return}
         setPurgeLoading(true)
         try {
             const data = await adminAPI.applyAuditRetention()
@@ -643,7 +636,7 @@ export default function AdminAuditDashboard({ showToast, currentUser, onMeta }) 
                                         <dd>
                                             {(() => {
                                                 const d = parseAuditInstant(selected.created_at)
-                                                if (!d) return '—'
+                                                if (!d) {return '—'}
                                                 return (
                                                     <>
                                                         <div>{formatAuditDateTime(d)}</div>

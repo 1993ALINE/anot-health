@@ -5,7 +5,7 @@ const pool = require('../config/db')
 const { protect, restrict } = require('../middleware/auth')
 const { runAIPipeline } = require('../utils/aiPipeline')
 const { getVisitForUser } = require('../utils/visitAccess')
-const { loadAiSettings } = require('../services/aiSettings')
+const { loadAiSettings, defaultRuntimeSettings } = require('../services/aiSettings')
 const { uploadAudio, getSignedAudioUrl, dbPathToKey } = require('../services/s3Storage')
 const cloudWatchAudit = require('../utils/logger')
 
@@ -52,7 +52,13 @@ async function validateAudioUpload(req, visitId) {
   if (!req.file) throw Object.assign(new Error('No audio file uploaded.'), { status: 400 })
   const visit = await getVisitForUser(visitId, req.user)
   if (!visit) throw Object.assign(new Error('Visit not found or not yours.'), { status: 404 })
-  const settings = await loadAiSettings()
+  let settings
+  try {
+    settings = await loadAiSettings()
+  } catch (err) {
+    console.warn('[audio] loadAiSettings failed, using defaults:', err.message)
+    settings = defaultRuntimeSettings()
+  }
   const maxBytes = (settings.ffmpeg_max_upload_mb || 100) * 1024 * 1024
   if (req.file.size > maxBytes) {
     throw Object.assign(

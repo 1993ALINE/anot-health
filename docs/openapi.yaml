@@ -1,0 +1,92 @@
+﻿openapi: 3.0.3
+info:
+  title: Anot Health API
+  version: 1.42.0
+  description: Clinical documentation platform API
+servers:
+  - url: https://api.anot.health/api
+    description: Production
+  - url: http://127.0.0.1:5000/api
+    description: Local development
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+paths:
+  /auth/login:
+    post:
+      summary: Authenticate user
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, role]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+                role: { type: string }
+      responses:
+        '200': { description: JWT token returned }
+        '401': { description: Invalid credentials }
+  /auth/me:
+    get:
+      summary: Current user profile
+      tags: [Auth]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: User object }
+  /patients:
+    get:
+      summary: List patients
+      tags: [Patients]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Patient list }
+    post:
+      summary: Create patient
+      tags: [Patients]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '201': { description: Patient created }
+  /visits:
+    get:
+      summary: List visits
+      tags: [Visits]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Visit list }
+  /visits/{id}/transcribe:
+    post:
+      summary: Trigger transcription
+      tags: [Visits]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '202': { description: Transcription queued }
+  /notes/{id}:
+    get:
+      summary: Get note by ID
+      tags: [Notes]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        '200': { description: Note with transcription }
+  /csrf-token:
+    get:
+      summary: Obtain CSRF token
+      tags: [Security]
+      responses:
+        '200': { description: CSRF token }

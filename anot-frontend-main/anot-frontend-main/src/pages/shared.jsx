@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useLayoutEffect, useSyncExternalStore, useMemo } from 'react'
+﻿import { useState, useEffect, useRef, useCallback, useLayoutEffect, useSyncExternalStore, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { DEFAULT_BRAND_LOGO_SRC } from '../services/branding'
 
@@ -27,29 +27,29 @@ export function PortalSidebarBrand({ branding, subtitle }) {
     )
 }
 
-/** Normalizes note.transcription: JSON array of segments, or plain string → display blocks */
+/** Normalizes note.transcription: JSON array of segments, or plain string â†’ display blocks */
 export function parseTranscriptionBlocks(raw) {
-    if (!raw) return []
+    if (!raw) {return []}
     try {
         const parsed = JSON.parse(raw)
-        if (Array.isArray(parsed)) return parsed.map((x) => (x == null ? '' : String(x))).filter((s) => s.length > 0)
+        if (Array.isArray(parsed)) {return parsed.map((x) => ((x === null || x === undefined) ? '' : String(x))).filter((s) => s.length > 0)}
         return [String(parsed)]
     } catch {
         const s = String(raw)
-        if (s.includes('\n\n')) return s.split('\n\n').filter(Boolean)
+        if (s.includes('\n\n')) {return s.split('\n\n').filter(Boolean)}
         return s ? [s] : []
     }
 }
 
-/* ── Responsive sidebar toggle ─────────────────────────── */
+/* â”€â”€ Responsive sidebar toggle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 export function useSidebar() {
     const [open, setOpen] = useState(false)
     const toggle = useCallback(() => setOpen((o) => !o), [])
     const close = useCallback(() => setOpen(false), [])
 
     useEffect(() => {
-        if (open) document.body.style.overflow = 'hidden'
-        else      document.body.style.overflow = ''
+        if (open) {document.body.style.overflow = 'hidden'}
+        else      {document.body.style.overflow = ''}
         return () => { document.body.style.overflow = '' }
     }, [open])
 
@@ -81,14 +81,14 @@ function getSidebarOffCanvasMqSnapshot() {
     return window.matchMedia('(max-width: 768px)').matches
 }
 
-/** True when sidebar is off-canvas until `.open` (matches global.css drawer at ≤768px). */
+/** True when sidebar is off-canvas until `.open` (matches global.css drawer at â‰¤768px). */
 export function useSidebarOffCanvasMode() {
     return useSyncExternalStore(subscribeSidebarOffCanvasMq, getSidebarOffCanvasMqSnapshot, () => false)
 }
 
 /** aria-hidden only when an off-canvas drawer is closed; omit when the rail is visible. */
 export function portalSidebarAriaHidden(isOffCanvas, isOpen) {
-    if (!isOffCanvas) return undefined
+    if (!isOffCanvas) {return undefined}
     return !isOpen
 }
 
@@ -155,7 +155,7 @@ export function PortalTopbar({
     )
 }
 
-/* ── Hamburger button ──────────────────────────────────── */
+/* â”€â”€ Hamburger button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 export function Hamburger({ onClick }) {
     return (
         <button className="sf-hamburger" onClick={onClick} aria-label="Open menu">
@@ -164,7 +164,7 @@ export function Hamburger({ onClick }) {
     )
 }
 
-/* ── Overlay ───────────────────────────────────────────── */
+/* â”€â”€ Overlay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 export function Overlay({ open, onClick, className = '' }) {
     return (
         <div
@@ -178,8 +178,8 @@ export function Overlay({ open, onClick, className = '' }) {
 /** Data URL from `users.avatar_data_url` when present and valid. */
 export function userProfileImageUrl(user) {
     const u = user?.avatar_data_url
-    if (!u || typeof u !== 'string') return null
-    if (!/^data:image\/(png|jpeg|jpg|webp|gif|svg\+xml);base64,/i.test(u.trim())) return null
+    if (!u || typeof u !== 'string') {return null}
+    if (!/^data:image\/(png|jpeg|jpg|webp|gif|svg\+xml);base64,/i.test(u.trim())) {return null}
     return u.trim()
 }
 
@@ -236,7 +236,7 @@ export function SfAccountMenu({
     const updatePanelPosition = useCallback(() => {
         const tr = triggerRef.current
         const panel = panelRef.current
-        if (!tr) return
+        if (!tr) {return}
 
         const rect = tr.getBoundingClientRect()
         const vw = window.innerWidth
@@ -262,34 +262,34 @@ export function SfAccountMenu({
     }, [])
 
     useLayoutEffect(() => {
-        if (!open) return
+        if (!open) {return}
         let raf2
         const raf1 = requestAnimationFrame(() => {
             updatePanelPosition()
             raf2 = requestAnimationFrame(() => updatePanelPosition())
         })
         const onScroll = () => {
-            if (Date.now() - openedAtRef.current < 450) return
+            if (Date.now() - openedAtRef.current < 450) {return}
             updatePanelPosition()
         }
         window.addEventListener('resize', updatePanelPosition)
         document.addEventListener('scroll', onScroll, true)
         return () => {
             cancelAnimationFrame(raf1)
-            if (raf2) cancelAnimationFrame(raf2)
+            if (raf2) {cancelAnimationFrame(raf2)}
             window.removeEventListener('resize', updatePanelPosition)
             document.removeEventListener('scroll', onScroll, true)
         }
     }, [open, updatePanelPosition])
 
     useEffect(() => {
-        if (!open) return
+        if (!open) {return}
         const onDoc = (e) => {
             if (ignoreOutsideRef.current) {
                 ignoreOutsideRef.current = false
                 return
             }
-            if (Date.now() - openedAtRef.current < 300) return
+            if (Date.now() - openedAtRef.current < 300) {return}
             if (
                 !triggerRef.current?.contains(e.target) &&
                 !panelRef.current?.contains(e.target)
@@ -307,9 +307,9 @@ export function SfAccountMenu({
     }, [open, close])
 
     useEffect(() => {
-        if (!open) return
+        if (!open) {return}
         const onKey = (e) => {
-            if (e.key === 'Escape') close()
+            if (e.key === 'Escape') {close()}
         }
         document.addEventListener('keydown', onKey)
         return () => document.removeEventListener('keydown', onKey)
@@ -357,25 +357,25 @@ export function SfAccountMenu({
             <div className="sf-account-menu__items">
                 {typeof onViewProfile === 'function' ? (
                     <button type="button" className="sf-account-menu__item" role="menuitem" onClick={() => run(onViewProfile)}>
-                        <span className="sf-account-menu__ico" aria-hidden>👤</span>
+                        <span className="sf-account-menu__ico" aria-hidden>ðŸ‘¤</span>
                         <span>{variant === 'clinician' ? 'Profile' : 'View profile'}</span>
                     </button>
                 ) : null}
                 {typeof onSettings === 'function' ? (
                     <button type="button" className="sf-account-menu__item" role="menuitem" onClick={() => run(onSettings)}>
-                        <span className="sf-account-menu__ico" aria-hidden>⚙️</span>
+                        <span className="sf-account-menu__ico" aria-hidden>âš™ï¸</span>
                         <span>Settings</span>
                     </button>
                 ) : null}
                 {typeof onProfilePreview === 'function' ? (
                     <button type="button" className="sf-account-menu__item" role="menuitem" onClick={() => run(onProfilePreview)}>
-                        <span className="sf-account-menu__ico" aria-hidden>📋</span>
+                        <span className="sf-account-menu__ico" aria-hidden>ðŸ“‹</span>
                         <span>Profile preview</span>
                     </button>
                 ) : null}
                 {typeof onChangePhoto === 'function' ? (
                     <button type="button" className="sf-account-menu__item" role="menuitem" onClick={() => run(onChangePhoto)}>
-                        <span className="sf-account-menu__ico" aria-hidden>📷</span>
+                        <span className="sf-account-menu__ico" aria-hidden>ðŸ“·</span>
                         <span>Change photo</span>
                     </button>
                 ) : null}
@@ -383,7 +383,7 @@ export function SfAccountMenu({
                     <>
                         <div className="sf-account-menu__sep" role="separator" />
                         <button type="button" className="sf-account-menu__item sf-account-menu__item--danger" role="menuitem" onClick={() => run(onLogout)}>
-                            <span className="sf-account-menu__ico" aria-hidden>🚪</span>
+                            <span className="sf-account-menu__ico" aria-hidden>ðŸšª</span>
                             <span>{variant === 'clinician' ? 'Sign Out' : 'Log out'}</span>
                         </button>
                     </>
@@ -434,15 +434,15 @@ const SF_CONFIRM_PORTAL_Z = 1250
  */
 export function ConfirmDialog({ dialog, loading = false, onDismiss, onConfirm }) {
     useEffect(() => {
-        if (!dialog) return
+        if (!dialog) {return}
         const onKey = (e) => {
-            if (e.key === 'Escape' && !loading) onDismiss()
+            if (e.key === 'Escape' && !loading) {onDismiss()}
         }
         document.addEventListener('keydown', onKey)
         return () => document.removeEventListener('keydown', onKey)
     }, [dialog, loading, onDismiss])
 
-    if (!dialog) return null
+    if (!dialog) {return null}
 
     const tone = dialog.tone === 'danger' ? 'danger' : 'primary'
     const modal = (
@@ -461,7 +461,7 @@ export function ConfirmDialog({ dialog, loading = false, onDismiss, onConfirm })
             >
                 <div className="adm-confirm-head">
                     <div className={`adm-confirm-head__icon ${tone === 'danger' ? 'is-danger' : 'is-primary'}`} aria-hidden>
-                        {tone === 'danger' ? '⚠' : '✓'}
+                        {tone === 'danger' ? 'âš ' : 'âœ“'}
                     </div>
                     <div>
                         <div id="sf-confirm-title" className="adm-modal__title adm-modal__title--confirm">
@@ -478,7 +478,7 @@ export function ConfirmDialog({ dialog, loading = false, onDismiss, onConfirm })
                         onClick={onConfirm}
                         disabled={loading}
                     >
-                        {loading ? 'Please wait…' : dialog.confirmText || 'Confirm'}
+                        {loading ? 'Please waitâ€¦' : dialog.confirmText || 'Confirm'}
                     </button>
                     <button type="button" className="adm-btn-ghost adm-btn-ghost--modal-action" onClick={onDismiss} disabled={loading}>
                         {dialog.cancelText || 'Cancel'}
@@ -490,3 +490,5 @@ export function ConfirmDialog({ dialog, loading = false, onDismiss, onConfirm })
 
     return typeof document !== 'undefined' ? createPortal(modal, document.body) : null
 }
+
+export { ConfidenceBadge } from '../components/ConfidenceBadge'

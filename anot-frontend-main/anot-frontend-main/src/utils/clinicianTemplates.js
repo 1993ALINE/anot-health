@@ -16,7 +16,7 @@ export function getClinicianTemplateForVisit(visitType) {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
     const list = raw ? JSON.parse(raw) : []
-    if (!Array.isArray(list) || list.length === 0) return { ...FALLBACK, visitType }
+    if (!Array.isArray(list) || list.length === 0) {return { ...FALLBACK, visitType }}
     const id = DEFAULT_BY_TYPE[visitType]
     const match = (id && list.find((t) => t.id === id)) || list.find((t) => t.name === visitType) || list[0]
     return {

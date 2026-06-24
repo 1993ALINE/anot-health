@@ -1,0 +1,43 @@
+﻿name: Security Scan
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  npm-audit:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        project: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Backend audit
+        if: matrix.project == 'backend'
+        working-directory: anot-backend-main/anot-backend-main
+        run: |
+          npm ci
+          npm audit --audit-level=high
+      - name: Frontend audit
+        if: matrix.project == 'frontend'
+        working-directory: anot-frontend-main/anot-frontend-main
+        run: |
+          npm ci
+          npm audit --audit-level=high
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Gitleaks scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

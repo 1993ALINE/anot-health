@@ -24,7 +24,7 @@ async function uploadQueueItem(item) {
   }
 
   await visitsAPI.uploadAudio(item.visitId, item.audioBlob)
-  if (item.durationSeconds != null) {
+  if (item.durationSeconds !== null && item.durationSeconds !== undefined) {
     await visitsAPI.endVisit(item.visitId, item.durationSeconds)
   }
 }
@@ -34,7 +34,7 @@ export function setOfflineUploadSuccessHandler(handler) {
 }
 
 export async function requestBackgroundSync() {
-  if (!('serviceWorker' in navigator)) return
+  if (!('serviceWorker' in navigator)) {return}
   try {
     const reg = await navigator.serviceWorker.ready
     if ('sync' in reg) {
@@ -88,7 +88,7 @@ export function stopOnlineListener() {
 }
 
 export async function uploadQueuedAudio() {
-  if (!navigator.onLine || syncing) return { uploaded: 0, failed: 0 }
+  if (!navigator.onLine || syncing) {return { uploaded: 0, failed: 0 }}
 
   syncing = true
   window.dispatchEvent(new CustomEvent('offline-sync-started'))

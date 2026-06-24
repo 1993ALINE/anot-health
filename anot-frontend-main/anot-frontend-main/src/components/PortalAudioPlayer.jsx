@@ -15,7 +15,7 @@ function waitForAudioDuration(audio) {
   return new Promise((resolve) => {
     let settled = false
     const finish = (dur) => {
-      if (settled) return
+      if (settled) {return}
       settled = true
       cleanup()
       resolve(dur > 0 ? dur : 0)
@@ -31,7 +31,7 @@ function waitForAudioDuration(audio) {
     }
 
     const onMeta = () => {
-      if (tryRead()) return
+      if (tryRead()) {return}
       try {
         audio.currentTime = 1e101
       } catch {
@@ -60,7 +60,7 @@ function waitForAudioDuration(audio) {
       audio.removeEventListener('error', onError)
     }
 
-    if (tryRead()) return
+    if (tryRead()) {return}
 
     audio.addEventListener('loadedmetadata', onMeta)
     audio.addEventListener('durationchange', onMeta)
@@ -83,7 +83,7 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
   const [duration, setDuration] = useState(0)
   const [progress, setProgress] = useState(0)
   const [playbackRate, setPlaybackRate] = useState(1)
-  const [durations, setDurations] = useState({})
+  const [, setDurations] = useState({})
   const [scrubHover, setScrubHover] = useState(null)
 
   const audioRef = useRef(null)
@@ -94,25 +94,29 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
   const lastProgressUiRef = useRef(0)
   const lastProgressSecRef = useRef(-1)
 
-  visitIdRef.current = visitId
+  useEffect(() => {
+    visitIdRef.current = visitId
+  }, [visitId])
 
   const storeDuration = useCallback((idx, rawDuration) => {
-    if (!rawDuration || !Number.isFinite(rawDuration) || rawDuration <= 0) return
+    if (!rawDuration || !Number.isFinite(rawDuration) || rawDuration <= 0) {return}
     const secs = Math.floor(rawDuration)
     durationsRef.current[idx] = secs
     setDurations((prev) => ({ ...prev, [idx]: secs }))
   }, [])
 
+  const resolvedStatus = visitId ? status : 'error'
+
   const fetchBlobUrl = useCallback(async (idx) => {
-    if (blobUrlsRef.current[idx]) return blobUrlsRef.current[idx]
+    if (blobUrlsRef.current[idx]) {return blobUrlsRef.current[idx]}
 
     const token = localStorage.getItem('token')
     const res = await fetch(`${API_BASE}/audio/${visitIdRef.current}?index=${idx}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-    if (!res.ok) throw new Error('no audio')
+    if (!res.ok) {throw new Error('no audio')}
     const blob = await res.blob()
-    if (!blob?.size) throw new Error('empty')
+    if (!blob?.size) {throw new Error('empty')}
 
     const url = URL.createObjectURL(blob)
     blobUrlsRef.current[idx] = url
@@ -122,7 +126,6 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
   // Recording count only on visit change.
   useEffect(() => {
     if (!visitId) {
-      setStatus('error')
       return
     }
 
@@ -147,7 +150,7 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
     })
       .then((r) => r.json())
       .then((d) => {
-        if (!cancelled && d.count > 0) setCount(d.count)
+        if (!cancelled && d.count > 0) {setCount(d.count)}
       })
       .catch(() => {})
 
@@ -161,7 +164,7 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
   // Load active recording on tab switch: fetch blob, wait for metadata, then ready.
   useEffect(() => {
     const audio = audioRef.current
-    if (!audio || !visitId) return
+    if (!audio || !visitId) {return}
 
     let cancelled = false
 
@@ -176,7 +179,7 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
     ;(async () => {
       try {
         const url = await fetchBlobUrl(activeIdx)
-        if (cancelled) return
+        if (cancelled) {return}
 
         audio.pause()
         audio.currentTime = 0
@@ -186,7 +189,7 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
         audio.src = url
 
         let dur = await waitForAudioDuration(audio)
-        if (cancelled) return
+        if (cancelled) {return}
 
         if (dur <= 0 && activeIdx === 0 && durationSecs > 0) {
           dur = durationSecs
@@ -202,7 +205,7 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
         setCurrentTime(0)
         setStatus('ready')
       } catch {
-        if (!cancelled) setStatus('error')
+        if (!cancelled) {setStatus('error')}
       }
     })()
 
@@ -215,11 +218,11 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
   // Playback events on the single main audio element.
   useEffect(() => {
     const audio = audioRef.current
-    if (!audio) return
+    if (!audio) {return}
 
     const onTimeUpdate = () => {
       const dur = audio.duration
-      if (!dur || !Number.isFinite(dur) || dur <= 0) return
+      if (!dur || !Number.isFinite(dur) || dur <= 0) {return}
       const ct = audio.currentTime
       const now = performance.now()
       const sec = Math.floor(ct)
@@ -254,13 +257,13 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
 
   useEffect(() => {
     playbackRateRef.current = playbackRate
-    if (audioRef.current) audioRef.current.playbackRate = playbackRate
+    if (audioRef.current) {audioRef.current.playbackRate = playbackRate}
   }, [playbackRate])
 
   const handleTabChange = (i) => {
-    if (i === activeIdx) return
+    if (i === activeIdx) {return}
     const audio = audioRef.current
-    if (audio) audio.pause()
+    if (audio) {audio.pause()}
     setPlaying(false)
     setActiveIdx(i)
     onTabChange?.(i)
@@ -268,7 +271,7 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
 
   const toggle = () => {
     const audio = audioRef.current
-    if (!audio || status !== 'ready') return
+    if (!audio || resolvedStatus !== 'ready') {return}
     if (isPlaying) {
       audio.pause()
       setPlaying(false)
@@ -279,9 +282,9 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
 
   const skip = (secs) => {
     const audio = audioRef.current
-    if (!audio || status !== 'ready') return
+    if (!audio || resolvedStatus !== 'ready') {return}
     const dur = audio.duration
-    if (!dur || !Number.isFinite(dur) || dur <= 0) return
+    if (!dur || !Number.isFinite(dur) || dur <= 0) {return}
     const t = Math.max(0, Math.min(dur, audio.currentTime + secs))
     audio.currentTime = t
     setProgress((t / dur) * 100)
@@ -290,9 +293,9 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
 
   const timeAtProgressX = (trackEl, clientX) => {
     const audio = audioRef.current
-    if (!audio || !trackEl) return null
+    if (!audio || !trackEl) {return null}
     const dur = audio.duration
-    if (!dur || !Number.isFinite(dur) || dur <= 0) return null
+    if (!dur || !Number.isFinite(dur) || dur <= 0) {return null}
     const rect = trackEl.getBoundingClientRect()
     const width = rect.width || 1
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / width))
@@ -301,18 +304,18 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
 
   const seek = (e) => {
     const audio = audioRef.current
-    if (!audio || status !== 'ready') return
+    if (!audio || resolvedStatus !== 'ready') {return}
     const hit = timeAtProgressX(e.currentTarget, e.clientX)
-    if (!hit) return
+    if (!hit) {return}
     audio.currentTime = hit.time
     setProgress(hit.pct)
     setCurrentTime(hit.time)
   }
 
   const handleProgressMouseMove = (e) => {
-    if (status !== 'ready') return
+    if (resolvedStatus !== 'ready') {return}
     const hit = timeAtProgressX(e.currentTarget, e.clientX)
-    if (!hit) return
+    if (!hit) {return}
     setScrubHover({ time: hit.time, pct: hit.pct })
   }
 
@@ -321,10 +324,10 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
   const onSpeedChange = (e) => {
     const rate = parseFloat(e.target.value, 10)
     setPlaybackRate(rate)
-    if (audioRef.current) audioRef.current.playbackRate = rate
+    if (audioRef.current) {audioRef.current.playbackRate = rate}
   }
 
-  const canPlay = status === 'ready'
+  const canPlay = resolvedStatus === 'ready'
   const displayCurrent = fmtSecsAudio(Math.floor(currentTime))
   const displayTotal = duration > 0 ? fmtSecsAudio(duration) : '--:--'
 
@@ -350,9 +353,9 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
           🎙 Recording {activeIdx + 1}
           {count > 1 ? ` of ${count}` : ''}
         </span>
-        {status === 'loading' ? <span className="sf-audio-bar__pill">Loading…</span> : null}
-        {status === 'ready' ? <span className="sf-audio-bar__pill sf-audio-bar__pill--ok">Ready</span> : null}
-        {status === 'error' ? <span className="sf-audio-bar__pill">No audio</span> : null}
+        {resolvedStatus === 'loading' ? <span className="sf-audio-bar__pill">Loading…</span> : null}
+        {resolvedStatus === 'ready' ? <span className="sf-audio-bar__pill sf-audio-bar__pill--ok">Ready</span> : null}
+        {resolvedStatus === 'error' ? <span className="sf-audio-bar__pill">No audio</span> : null}
         <span className="sf-audio-timer" aria-live="polite">
           <span>{displayCurrent} / {displayTotal}</span>
         </span>
@@ -363,7 +366,7 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
             −5s
           </button>
           <button type="button" className="sf-play-btn" onClick={toggle} disabled={!canPlay} aria-label={isPlaying ? 'Pause' : 'Play'}>
-            {status === 'loading' ? '⏳' : isPlaying ? '⏸' : '▶'}
+            {resolvedStatus === 'loading' ? '⏳' : isPlaying ? '⏸' : '▶'}
           </button>
           <button type="button" className="sf-skip-btn sf-skip-btn--fwd" onClick={() => skip(5)} disabled={!canPlay}>
             +5s
@@ -391,7 +394,7 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
             aria-valuenow={Math.floor(currentTime)}
           >
             <div className="sf-progress-fill sf-progress-fill--live" style={{ width: `${progress}%` }} />
-            {scrubHover != null ? (
+            {scrubHover !== null ? (
               <span className="sf-progress-scrub-label" style={{ left: `${scrubHover.pct}%` }}>
                 {fmtSecsAudio(scrubHover.time)}
               </span>

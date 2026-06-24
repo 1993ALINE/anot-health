@@ -10,14 +10,14 @@ import {
 } from 'recharts'
 
 function trunc(s, max) {
-    if (!s) return ''
+    if (!s) {return ''}
     const t = String(s).trim()
     return t.length > max ? `${t.slice(0, max - 1)}…` : t
 }
 
 export function PayrollMiniChart({ payroll }) {
     const data = useMemo(() => {
-        if (!Array.isArray(payroll) || payroll.length === 0) return []
+        if (!Array.isArray(payroll) || payroll.length === 0) {return []}
         return [...payroll]
             .map((p) => ({
                 name: trunc(p.name, 16),
@@ -27,7 +27,7 @@ export function PayrollMiniChart({ payroll }) {
             .slice(0, 8)
     }, [payroll])
 
-    if (data.length === 0) return null
+    if (data.length === 0) {return null}
 
     const h = Math.min(300, 72 + data.length * 34)
 
@@ -79,7 +79,7 @@ export function PayrollMiniChart({ payroll }) {
 
 export function PerformanceMiniChart({ performance }) {
     const data = useMemo(() => {
-        if (!Array.isArray(performance) || performance.length === 0) return []
+        if (!Array.isArray(performance) || performance.length === 0) {return []}
         return [...performance]
             .map((p) => ({
                 name: trunc(p.name, 14),
@@ -90,7 +90,7 @@ export function PerformanceMiniChart({ performance }) {
             .slice(0, 10)
     }, [performance])
 
-    if (data.length === 0) return null
+    if (data.length === 0) {return null}
 
     const h = Math.min(320, 72 + data.length * 32)
 

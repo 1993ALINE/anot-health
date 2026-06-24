@@ -37,11 +37,11 @@ export default function PortalGuide({ role = 'clinician', className = '' }) {
   const close = () => setOpen(false)
 
   useEffect(() => {
-    if (!open) return undefined
+    if (!open) {return undefined}
     const prevOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     const onKey = (e) => {
-      if (e.key === 'Escape') close()
+      if (e.key === 'Escape') {close()}
     }
     document.addEventListener('keydown', onKey)
     return () => {

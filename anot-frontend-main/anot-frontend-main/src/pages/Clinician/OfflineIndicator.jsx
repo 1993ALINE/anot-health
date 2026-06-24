@@ -25,7 +25,7 @@ export default function OfflineIndicator({ showToast }) {
     refreshCounts()
 
     const onStatus = (e) => {
-      if (typeof e.detail?.online === 'boolean') setOnline(e.detail.online)
+      if (typeof e.detail?.online === 'boolean') {setOnline(e.detail.online)}
     }
     const onQueue = () => refreshCounts()
     const onSyncStart = () => setSyncing(true)
@@ -56,9 +56,9 @@ export default function OfflineIndicator({ showToast }) {
   const pendingLabel = counts.pending === 1 ? '1 recording pending' : `${counts.pending} recordings pending`
 
   let label = 'Connected'
-  if (syncing) label = 'Syncing…'
-  else if (!online) label = counts.pending > 0 ? `Offline (${pendingLabel})` : 'Offline'
-  else if (counts.pending > 0) label = `Sync pending (${counts.pending})`
+  if (syncing) {label = 'Syncing…'}
+  else if (!online) {label = counts.pending > 0 ? `Offline (${pendingLabel})` : 'Offline'}
+  else if (counts.pending > 0) {label = `Sync pending (${counts.pending})`}
 
   return (
     <>

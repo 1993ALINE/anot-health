@@ -39,7 +39,7 @@ export default function PhiTrainingModal({ temporaryToken, onAcknowledged }) {
   }, [])
 
   const handleAcknowledge = async () => {
-    if (!checked || submitting) return
+    if (!checked || submitting) {return}
     setSubmitting(true)
     setError('')
     try {

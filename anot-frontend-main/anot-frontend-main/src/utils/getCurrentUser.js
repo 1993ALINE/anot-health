@@ -2,7 +2,7 @@
 export function getCurrentUser() {
   try {
     const raw = localStorage.getItem('user')
-    if (!raw) return {}
+    if (!raw) {return {}}
     const parsed = JSON.parse(raw)
     return parsed && typeof parsed === 'object' ? parsed : {}
   } catch {

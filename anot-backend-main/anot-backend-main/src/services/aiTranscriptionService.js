@@ -1,6 +1,6 @@
 ﻿const fs = require('fs')
 const path = require('path')
-const { loadAiSettings, useDeepgram } = require('./aiSettings')
+const { loadAiSettings, useDeepgram, defaultRuntimeSettings } = require('./aiSettings')
 const { isReachableWebhookUrl } = require('../utils/webhookReachability')
 
 // Bound every Deepgram HTTP call so a stalled connection can't hang the
@@ -263,7 +263,15 @@ async function transcribeWithDeepgram(absPath, settings, visitId) {
  * @returns {Promise<string|null>} transcript text, '__DEFERRED__' for webhook mode, or null
  */
 async function transcribeFile(absPath, settingsOverride, visitId) {
-  const settings = settingsOverride || (await loadAiSettings())
+  let settings = settingsOverride
+  if (!settings) {
+    try {
+      settings = await loadAiSettings()
+    } catch (err) {
+      console.warn('[aiTranscription] loadAiSettings failed:', err.message)
+      settings = defaultRuntimeSettings()
+    }
+  }
 
   // ONLY PATH: Deepgram (primary and only service)
   if (useDeepgram(settings)) {

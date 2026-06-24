@@ -25,8 +25,8 @@ export const API_BASE = (() => {
   if (isBrowserLocal && !forceRemoteApi) {
     return LOCAL_API_BASE
   }
-  if (envApiUrl) return envApiUrl
-  if (import.meta.env.DEV) return LOCAL_API_BASE
+  if (envApiUrl) {return envApiUrl}
+  if (import.meta.env.DEV) {return LOCAL_API_BASE}
   return DEFAULT_PROD_API
 })()
 
@@ -37,9 +37,9 @@ export function isAbortError(err) {
 
 /** True when `fetch` did not get a normal HTTP response (backend down, DNS, CORS, blocked port, etc.). */
 export function isLikelyNetworkFailure(err) {
-  if (!err) return false
-  if (err.name === 'TypeError') return true
-  if (err.name === 'AbortError') return true
+  if (!err) {return false}
+  if (err.name === 'TypeError') {return true}
+  if (err.name === 'AbortError') {return true}
   const m = String(err.message || '').toLowerCase()
   return (
     m === 'failed to fetch' ||
@@ -64,7 +64,7 @@ function buildRequestHeaders(includeAuth = true, extraHeaders = {}) {
   const h = { 'Content-Type': 'application/json', ...extraHeaders }
   if (includeAuth) {
     const token = getToken()
-    if (token) h['Authorization'] = `Bearer ${token}`
+    if (token) {h['Authorization'] = `Bearer ${token}`}
   }
   return h
 }
@@ -76,7 +76,7 @@ const headers = buildRequestHeaders
  * Parse response body text as JSON with fallback error payload.
  */
 function parseResponseBody(text, res) {
-  if (!text) return {}
+  if (!text) {return {}}
   try {
     return JSON.parse(text)
   } catch {
@@ -100,7 +100,7 @@ function createApiError(data, res) {
 const handleResponse = async (res) => {
   const text = await res.text()
   const data = parseResponseBody(text, res)
-  if (!res.ok) throw createApiError(data, res)
+  if (!res.ok) {throw createApiError(data, res)}
   return data
 }
 
@@ -112,7 +112,7 @@ function buildFetchOptions(method, body, includeAuth = true, extraHeaders = {}) 
     method,
     headers: buildRequestHeaders(includeAuth, extraHeaders),
   }
-  if (body != null && method !== 'GET') {
+  if (body !== null && body !== undefined && method !== 'GET') {
     options.body = JSON.stringify(body)
   }
   return options
@@ -121,10 +121,10 @@ function buildFetchOptions(method, body, includeAuth = true, extraHeaders = {}) 
 /**
  * Main API request orchestrator (method, path suffix, body, options).
  */
-async function apiRequest(method, path, data = null, options = {}) {
+async function _apiRequest(method, path, data = null, options = {}) {
   const url = path.startsWith('http') ? path : `${BASE_URL}${path}`
   const fetchOptions = buildFetchOptions(method, data, options.includeAuth !== false, options.headers)
-  if (options.signal) fetchOptions.signal = options.signal
+  if (options.signal) {fetchOptions.signal = options.signal}
   const res = await fetch(url, fetchOptions)
   return handleResponse(res)
 }
@@ -193,7 +193,7 @@ export const authAPI = {
     // Don't re-persist the user if a logout cleared the session while this
     // request was in flight — that would leave PHI-adjacent profile data in
     // localStorage on a shared workstation after sign-out.
-    if (data.user && getToken()) localStorage.setItem('user', JSON.stringify(data.user))
+    if (data.user && getToken()) {localStorage.setItem('user', JSON.stringify(data.user))}
     return data
   },
   updateMe: async ({ name, email, phone, avatar_data_url, personal_info }) => {
@@ -203,7 +203,7 @@ export const authAPI = {
       body: JSON.stringify({ name, email, phone, avatar_data_url, personal_info }),
     })
     const data = await handleResponse(res)
-    if (data.user) localStorage.setItem('user', JSON.stringify(data.user))
+    if (data.user) {localStorage.setItem('user', JSON.stringify(data.user))}
     return data
   },
   changePassword: async (currentPassword, newPassword) => {
@@ -334,8 +334,8 @@ export const visitsAPI = {
   },
   getAll: async (providerId, date, signal) => {
     const params = new URLSearchParams()
-    if (providerId) params.append('provider_id', providerId)
-    if (date)       params.append('date', date)
+    if (providerId) {params.append('provider_id', providerId)}
+    if (date)       {params.append('date', date)}
     const res = await fetch(`${BASE_URL}/visits?${params.toString()}`, { headers: headers(), signal })
     return handleResponse(res)
   },
@@ -452,8 +452,8 @@ export const notesAPI = {
   },
   getAllNotes: async (providerId, status) => {
     const params = new URLSearchParams()
-    if (providerId) params.append('provider_id', providerId)
-    if (status)     params.append('status', status)
+    if (providerId) {params.append('provider_id', providerId)}
+    if (status)     {params.append('status', status)}
     const res = await fetch(`${BASE_URL}/notes?${params.toString()}`, { headers: headers() })
     return handleResponse(res)
   },

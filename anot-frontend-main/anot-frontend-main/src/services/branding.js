@@ -81,7 +81,7 @@ export function useBranding() {
   useEffect(() => {
     let alive = true
     refreshBranding()
-      .then((value) => { if (alive) setBrandingState(value) })
+      .then((value) => { if (alive) {setBrandingState(value)} })
       .catch(() => {})
     const onUpdate = (event) => setBrandingState(normalizeBranding(event.detail))
     window.addEventListener(EVENT_NAME, onUpdate)

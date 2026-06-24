@@ -37,12 +37,12 @@ export function isAdminPortalUser(user) {
 
 /** Resolved module keys an Admin user may open; Super Admin always gets every module. */
 export function resolvedAdminModuleKeys(user) {
-    if (!user) return []
+    if (!user) {return []}
     if (isSuperAdmin(user)) {
         return [...ADMIN_GRANTABLE_MODULE_KEYS]
     }
     const raw = user.admin_modules
-    if (raw == null) {
+    if (raw === null || raw === undefined) {
         return [...ADMIN_DEFAULT_MODULE_KEYS_FOR_ADMIN]
     }
     if (!Array.isArray(raw)) {
@@ -53,7 +53,7 @@ export function resolvedAdminModuleKeys(user) {
 }
 
 export function adminMayOpenTab(user, tabKey) {
-    if (!user) return false
-    if (isSuperAdmin(user)) return true
+    if (!user) {return false}
+    if (isSuperAdmin(user)) {return true}
     return resolvedAdminModuleKeys(user).includes(tabKey)
 }

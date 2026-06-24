@@ -9,7 +9,6 @@ import { queueAudioUpload, flushPendingAudioUploads, installOfflineUploadFlush }
 import './clinician.css'
 import './clinician-redesign.css'
 import '../portalErrorBoundary.css'
-import PortalCalendarDayPreview from '../../components/PortalCalendarDayPreview'
 import ErrorBoundary, { PortalCrashFallback } from '../../components/ErrorBoundary'
 import ContactScreen from './ContactScreen'
 import { getPatientAvatarColor } from '../../utils/avatarColor'
@@ -24,9 +23,9 @@ const BADGE_WITH_SCRIBE_CLASS = 'badge-processing badge-with-scribe'
 function getGreeting() {
   const now = new Date()
   const mins = now.getHours() * 60 + now.getMinutes()
-  if (mins < 5 * 60) return 'Good evening'
-  if (mins < 12 * 60) return 'Good morning'
-  if (mins < 18 * 60) return 'Good afternoon'
+  if (mins < 5 * 60) {return 'Good evening'}
+  if (mins < 12 * 60) {return 'Good morning'}
+  if (mins < 18 * 60) {return 'Good afternoon'}
   return 'Good evening'
 }
 
@@ -35,7 +34,7 @@ function isScheduleToday(off = 0) {
 }
 
 function visitsSectionTitle(off = 0) {
-  if (isScheduleToday(off)) return "TODAY'S VISITS"
+  if (isScheduleToday(off)) {return "TODAY'S VISITS"}
   const d = new Date()
   d.setDate(d.getDate() + off)
   const day = d.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase()
@@ -48,46 +47,46 @@ function isScribePipelineVisit(v) {
 }
 
 function showScribeTurnaroundOnSchedule(v) {
-  if (!isScribePipelineVisit(v)) return false
+  if (!isScribePipelineVisit(v)) {return false}
   return v.status === 'recording-uploaded' || v.status === 'in-progress'
 }
 
 /** Duration only (e.g. "19h", "45m") when audio is with the scribe pipeline. */
 function scribeTurnaroundDuration(v) {
-  if (!isScribePipelineVisit(v)) return null
+  if (!isScribePipelineVisit(v)) {return null}
   const raw = v.note_updated_at || v.updated_at
-  if (!raw) return null
+  if (!raw) {return null}
   const ms = Date.now() - new Date(raw).getTime()
-  if (Number.isNaN(ms) || ms < 0) return null
+  if (Number.isNaN(ms) || ms < 0) {return null}
   const mins = Math.max(1, Math.floor(ms / 60000))
-  if (mins < 60) return `${mins}m`
+  if (mins < 60) {return `${mins}m`}
   const hours = Math.floor(mins / 60)
   return `${hours}h`
 }
 
 function scribeWaitingTier(v) {
-  if (!['recording-uploaded', 'submitted'].includes(v?.status)) return 'fresh'
+  if (!['recording-uploaded', 'submitted'].includes(v?.status)) {return 'fresh'}
   const raw = v.note_updated_at || v.updated_at
-  if (!raw) return 'fresh'
+  if (!raw) {return 'fresh'}
   const ms = Date.now() - new Date(raw).getTime()
-  if (Number.isNaN(ms) || ms < 0) return 'fresh'
+  if (Number.isNaN(ms) || ms < 0) {return 'fresh'}
   const hours = ms / 3600000
-  if (hours < 24) return 'fresh'
-  if (hours < 72) return 'warn'
+  if (hours < 24) {return 'fresh'}
+  if (hours < 72) {return 'warn'}
   return 'urgent'
 }
 
 function withScribeBadgeClassName(v) {
   const tier = scribeWaitingTier(v)
-  if (tier === 'warn') return `${BADGE_WITH_SCRIBE_CLASS} badge-processing--warn`
-  if (tier === 'urgent') return `${BADGE_WITH_SCRIBE_CLASS} badge-processing--urgent`
+  if (tier === 'warn') {return `${BADGE_WITH_SCRIBE_CLASS} badge-processing--warn`}
+  if (tier === 'urgent') {return `${BADGE_WITH_SCRIBE_CLASS} badge-processing--urgent`}
   return BADGE_WITH_SCRIBE_CLASS
 }
 
 function withScribeBadgeLabel(item, { schedule = false } = {}) {
   let duration = scribeTurnaroundDuration(item)
-  if (schedule && !showScribeTurnaroundOnSchedule(item)) duration = null
-  if (!duration) return WITH_SCRIBE_LABEL
+  if (schedule && !showScribeTurnaroundOnSchedule(item)) {duration = null}
+  if (!duration) {return WITH_SCRIBE_LABEL}
   const tier = scribeWaitingTier(item)
   const timeIcon = tier === 'warn' ? '⚠️' : tier === 'urgent' ? '!' : '🕐'
   const iconClass =
@@ -104,43 +103,43 @@ function withScribeBadgeLabel(item, { schedule = false } = {}) {
 }
 
 function notesMatchesDateRange(h, from, to) {
-  if (!from && !to) return true
+  if (!from && !to) {return true}
   const visitDate = h?.visit_date ? String(h.visit_date).slice(0, 10) : ''
-  if (!visitDate) return false
-  if (from && visitDate < from) return false
-  if (to && visitDate > to) return false
+  if (!visitDate) {return false}
+  if (from && visitDate < from) {return false}
+  if (to && visitDate > to) {return false}
   return true
 }
 
 function visitMinutesFromMidnight(timeStr) {
-  if (!timeStr) return 0
+  if (!timeStr) {return 0}
   const [h, m] = timeStr.split(':').map((x) => parseInt(x, 10) || 0)
   return h * 60 + m
 }
 
 function shouldInsertNowBefore(visits, index, off, now) {
-  if (off !== 0 || !visits.length) return false
+  if (off !== 0 || !visits.length) {return false}
   const nowMins = now.getHours() * 60 + now.getMinutes()
   const curMins = visitMinutesFromMidnight(visits[index]?.visit_time)
-  if (index === 0) return nowMins < curMins
+  if (index === 0) {return nowMins < curMins}
   const prevMins = visitMinutesFromMidnight(visits[index - 1]?.visit_time)
   return prevMins <= nowMins && curMins > nowMins
 }
 
 function shouldInsertNowAfterAll(visits, off, now) {
-  if (off !== 0 || !visits.length) return false
+  if (off !== 0 || !visits.length) {return false}
   const nowMins = now.getHours() * 60 + now.getMinutes()
   const lastMins = visitMinutesFromMidnight(visits[visits.length - 1]?.visit_time)
   return lastMins <= nowMins
 }
 
 function isScheduleVisitOverdue(v, off) {
-  if (v.status !== 'upcoming') return false
+  if (v.status !== 'upcoming') {return false}
   return isScheduleVisitOverdueForDay(v, off)
 }
 
 function schedulePatientCardAccentClass(v, off) {
-  if (isScheduleVisitOverdue(v, off)) return 'cl-patient-card--overdue'
+  if (isScheduleVisitOverdue(v, off)) {return 'cl-patient-card--overdue'}
   switch (v.status) {
     case 'upcoming':
       return 'cl-patient-card--upcoming'
@@ -160,35 +159,35 @@ function schedulePatientCardAccentClass(v, off) {
 
 function notesWaitingTier(h) {
   const raw = h?.updated_at || h?.created_at || h?.visit_date
-  if (!raw) return 'fresh'
+  if (!raw) {return 'fresh'}
   const ms = Date.now() - new Date(raw).getTime()
-  if (Number.isNaN(ms) || ms < 0) return 'fresh'
+  if (Number.isNaN(ms) || ms < 0) {return 'fresh'}
   const hours = ms / 3600000
-  if (hours < 24) return 'fresh'
-  if (hours < 72) return 'warn'
+  if (hours < 24) {return 'fresh'}
+  if (hours < 72) {return 'warn'}
   return 'urgent'
 }
 
 function notesWaitingLabel(h) {
   const raw = h?.updated_at || h?.created_at || h?.visit_date
-  if (!raw) return 'Waiting'
+  if (!raw) {return 'Waiting'}
   const ms = Date.now() - new Date(raw).getTime()
-  if (Number.isNaN(ms) || ms < 0) return 'Waiting'
+  if (Number.isNaN(ms) || ms < 0) {return 'Waiting'}
   const hours = Math.floor(ms / 3600000)
-  if (hours < 24) return hours < 1 ? 'Waiting < 1h' : `Waiting ${hours}h`
+  if (hours < 24) {return hours < 1 ? 'Waiting < 1h' : `Waiting ${hours}h`}
   const days = Math.floor(hours / 24)
   return `Waiting ${days}d`
 }
 
 /** Relative "Xh ago" (same day) / "X days ago" — returns null when the timestamp is missing/invalid. */
 function notesRelativeAgo(raw) {
-  if (!raw) return null
+  if (!raw) {return null}
   const t = new Date(raw).getTime()
-  if (Number.isNaN(t)) return null
+  if (Number.isNaN(t)) {return null}
   const ms = Date.now() - t
-  if (ms < 0) return null
+  if (ms < 0) {return null}
   const hours = Math.floor(ms / 3600000)
-  if (hours < 24) return hours < 1 ? '<1h ago' : `${hours}h ago`
+  if (hours < 24) {return hours < 1 ? '<1h ago' : `${hours}h ago`}
   const days = Math.floor(hours / 24)
   return days === 1 ? '1 day ago' : `${days} days ago`
 }
@@ -196,40 +195,40 @@ function notesRelativeAgo(raw) {
 function localDate(off = 0, fmt = 'input') {
   const d = new Date(); d.setDate(d.getDate() + off)
   const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0')
-  if (fmt === 'input') return `${y}-${m}-${day}`
-  if (fmt === 'long')  return d.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})
-  if (fmt === 'day')   return d.toLocaleDateString('en-US',{weekday:'short'}).toUpperCase()
-  if (fmt === 'date')  return d.getDate()
+  if (fmt === 'input') {return `${y}-${m}-${day}`}
+  if (fmt === 'long')  {return d.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}
+  if (fmt === 'day')   {return d.toLocaleDateString('en-US',{weekday:'short'}).toUpperCase()}
+  if (fmt === 'date')  {return d.getDate()}
   return `${y}-${m}-${day}`
 }
 
 function fmtTime(t) {
-  if (!t) return ''
+  if (!t) {return ''}
   const [h, m] = t.split(':'); const hour = parseInt(h)
   return `${hour > 12 ? hour-12 : hour === 0 ? 12 : hour}:${m} ${hour >= 12 ? 'PM' : 'AM'}`
 }
 
 function fmtSecs(s) {
-  if (!s || s <= 0) return '0:00'
+  if (!s || s <= 0) {return '0:00'}
   return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`
 }
 
 function fmtDate(d) {
-  if (!d) return ''
+  if (!d) {return ''}
   try { return new Date(d).toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'}) }
   catch { return String(d).slice(0,10) }
 }
 
 function initials(n) {
-  if (!n) return '?'
+  if (!n) {return '?'}
   const parts = String(n).trim().split(/\s+/).filter(Boolean)
-  if (!parts.length) return '?'
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  if (!parts.length) {return '?'}
+  if (parts.length === 1) {return parts[0].slice(0, 2).toUpperCase()}
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
 function audiofmt(s) {
-  if (!s || isNaN(s)) return '0:00'
+  if (!s || isNaN(s)) {return '0:00'}
   return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(Math.floor(s%60)).padStart(2,'0')}`
 }
 
@@ -269,7 +268,7 @@ function IconCalendar() {
  */
 function normalizeDob(text) {
   const t = String(text || '').trim()
-  if (!t) return ''
+  if (!t) {return ''}
   if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(t)) {
     const [y, m, d] = t.split('-').map(Number)
     const iso = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
@@ -300,7 +299,7 @@ function IconMic() {
 }
 
 function ClinicianTooltip({ tip, placement = 'above', compact = false, icon = false, filterTip = false, children }) {
-  if (!tip) return children
+  if (!tip) {return children}
   return (
     <span
       className={`cl-schedule-tooltip-wrap cl-schedule-tooltip-wrap--${placement}${compact ? ' cl-schedule-tooltip-wrap--compact' : ''}${icon ? ' cl-schedule-tooltip-wrap--icon' : ''}${filterTip ? ' cl-schedule-tooltip-wrap--filter' : ''}`}
@@ -317,7 +316,7 @@ function ClinicianTooltip({ tip, placement = 'above', compact = false, icon = fa
 }
 
 function isScheduleVisitOverdueForDay(v, dayOff) {
-  if (v.status !== 'upcoming') return false
+  if (v.status !== 'upcoming') {return false}
   const timePart = v.visit_time || '23:59:59'
   const normalized = timePart.length === 5 ? `${timePart}:00` : timePart
   const appt = new Date(`${localDate(dayOff)}T${normalized}`)
@@ -328,8 +327,8 @@ function scheduleDayStatusBreakdown(visitList, dayOff) {
   const counts = { upcoming: 0, withScribe: 0, overdue: 0, ready: 0, completed: 0 }
   for (const v of visitList) {
     if (v.status === 'upcoming') {
-      if (isScheduleVisitOverdueForDay(v, dayOff)) counts.overdue += 1
-      else counts.upcoming += 1
+      if (isScheduleVisitOverdueForDay(v, dayOff)) {counts.overdue += 1}
+      else {counts.upcoming += 1}
     } else if (['recording-uploaded', 'in-progress', 'submitted'].includes(v.status)) {
       counts.withScribe += 1
     } else if (v.status === 'note-ready') {
@@ -344,18 +343,18 @@ function scheduleDayStatusBreakdown(visitList, dayOff) {
 // Always-visible status dots for a day pill (mobile/tablet have no hover).
 // Priority + max 3: purple (overdue), red (ready), blue (upcoming), green (completed).
 function scheduleDayDots(breakdown) {
-  if (!breakdown || typeof breakdown !== 'object') return []
+  if (!breakdown || typeof breakdown !== 'object') {return []}
   const dots = []
-  if ((breakdown.overdue || 0) > 0) dots.push('#D97706')
-  if ((breakdown.ready || 0) > 0) dots.push('#DC2626')
-  if ((breakdown.upcoming || 0) > 0) dots.push('#2563EB')
-  if ((breakdown.completed || 0) > 0) dots.push('#16A34A')
+  if ((breakdown.overdue || 0) > 0) {dots.push('#D97706')}
+  if ((breakdown.ready || 0) > 0) {dots.push('#DC2626')}
+  if ((breakdown.upcoming || 0) > 0) {dots.push('#2563EB')}
+  if ((breakdown.completed || 0) > 0) {dots.push('#16A34A')}
   return dots.slice(0, 3)
 }
 
 function scheduleDayBreakdownFor(dayOff, selectedOff, currentVisits, scheduleDayBreakdown) {
   const key = localDate(dayOff)
-  if (dayOff === selectedOff) return scheduleDayStatusBreakdown(currentVisits, dayOff)
+  if (dayOff === selectedOff) {return scheduleDayStatusBreakdown(currentVisits, dayOff)}
   if (scheduleDayBreakdown && Object.prototype.hasOwnProperty.call(scheduleDayBreakdown, key)) {
     return scheduleDayBreakdown[key]
   }
@@ -380,24 +379,26 @@ function scheduleDayPatientTotal(dayOff, breakdown, scheduleDayCounts) {
 }
 
 function scheduleDayPreviewLabel(dayOff, total) {
-  if (total === 0) return 'No patients'
+  if (total === 0) {return 'No patients'}
   const word = total === 1 ? 'patient' : 'patients'
-  if (dayOff === 0) return `${total} ${word} today`
+  if (dayOff === 0) {return `${total} ${word} today`}
   return `${total} ${word}`
 }
 
 function ScheduleDayPreview({ dayOff, breakdown, scheduleDayCounts }) {
-  if (dayOff === undefined || dayOff === null) return null
+  if (dayOff === undefined || dayOff === null) {return null}
+  let label
   try {
     const total = scheduleDayPatientTotal(dayOff, breakdown, scheduleDayCounts)
-    return (
-      <span className="portal-cal-strip__day-preview cl-date-nav__day-preview" role="tooltip">
-        {scheduleDayPreviewLabel(dayOff, total)}
-      </span>
-    )
-  } catch (e) {
+    label = scheduleDayPreviewLabel(dayOff, total)
+  } catch {
     return null
   }
+  return (
+    <span className="portal-cal-strip__day-preview cl-date-nav__day-preview" role="tooltip">
+      {label}
+    </span>
+  )
 }
 
 const CALENDAR_WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
@@ -409,8 +410,8 @@ function buildCalendarCells(viewYear, viewMonth) {
   const startPad = new Date(viewYear, viewMonth, 1).getDay()
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate()
   const cells = []
-  for (let i = 0; i < startPad; i++) cells.push(null)
-  for (let d = 1; d <= daysInMonth; d++) cells.push(d)
+  for (let i = 0; i < startPad; i++) {cells.push(null)}
+  for (let d = 1; d <= daysInMonth; d++) {cells.push(d)}
   return cells
 }
 
@@ -435,8 +436,8 @@ function shiftCalendarMonth(viewYear, viewMonth, delta) {
 function useCalendarOutsideDismiss(popupRef, anchorRef, onClose) {
   useEffect(() => {
     const onDocClick = (e) => {
-      if (popupRef.current?.contains(e.target)) return
-      if (anchorRef?.current?.contains(e.target)) return
+      if (popupRef.current?.contains(e.target)) {return}
+      if (anchorRef?.current?.contains(e.target)) {return}
       onClose()
     }
     const t = setTimeout(() => document.addEventListener('mousedown', onDocClick), 0)
@@ -542,7 +543,7 @@ function ScheduleDatePicker({ off, onSelectDate, onClose, anchorRef }) {
   )
 }
 
-const CLINICIAN_TIPS = [
+const _CLINICIAN_TIPS = [
   'Start recording as soon as you enter the room — you can pause anytime.',
   'Pending notes appear under Notes when audio is still with the scribe.',
   'Use Templates to match your preferred note structure for each visit type.',
@@ -550,7 +551,7 @@ const CLINICIAN_TIPS = [
 ]
 
 function formatSyncedLabel(iso) {
-  if (!iso) return ''
+  if (!iso) {return ''}
   try {
     return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
   } catch {
@@ -576,19 +577,19 @@ const ST = {
 /** Schedule/Notes chip text only — never show legacy "Processing" or standalone "Review". */
 function scheduleStatusDisplayLabel(status) {
   const label = ST[status]?.label
-  if (label === 'Processing') return WITH_SCRIBE_LABEL
-  if (label === 'Review') return READY_FOR_REVIEW_LABEL
+  if (label === 'Processing') {return WITH_SCRIBE_LABEL}
+  if (label === 'Review') {return READY_FOR_REVIEW_LABEL}
   return label || ST.upcoming.label
 }
 
 function normalizeStatusBadgeLabel(label) {
-  if (label === 'Review' || label === 'Ready for review') return READY_FOR_REVIEW_LABEL
+  if (label === 'Review' || label === 'Ready for review') {return READY_FOR_REVIEW_LABEL}
   return label
 }
 
 function transcriptionStatusBadgeClass(txSt) {
-  if (txSt === 'completed') return 'badge-completed'
-  if (txSt === 'failed') return 'badge-overdue'
+  if (txSt === 'completed') {return 'badge-completed'}
+  if (txSt === 'failed') {return 'badge-overdue'}
   return BADGE_WITH_SCRIBE_CLASS
 }
 
@@ -612,7 +613,7 @@ function scheduleVisitBadgeClass(status) {
 
 // Status priority for the Schedule "Sort: Status" option (lower = more urgent).
 function scheduleStatusSortRank(v, off) {
-  if (isScheduleVisitOverdue(v, off)) return 0 // Overdue
+  if (isScheduleVisitOverdue(v, off)) {return 0} // Overdue
   switch (v.status) {
     case 'note-ready':
       return 1 // Ready for Review
@@ -677,11 +678,11 @@ function canPreviewUploadedNote(h) {
 }
 
 /** Chip / display key for history rows (visit + note workflow). */
-function historyRowDisplayStatus(h) {
-  if (h.status === 'done') return 'done'
-  if (h.status === 'uploaded') return 'uploaded'
-  if (h.note_status === 'uploaded') return 'uploaded'
-  if (h.note_status === 'submitted') return 'submitted'
+function _historyRowDisplayStatus(h) {
+  if (h.status === 'done') {return 'done'}
+  if (h.status === 'uploaded') {return 'uploaded'}
+  if (h.note_status === 'uploaded') {return 'uploaded'}
+  if (h.note_status === 'submitted') {return 'submitted'}
   return h.status
 }
 
@@ -690,7 +691,7 @@ function notesVisitHasRecording(h) {
 }
 
 function notesVisitAppointmentPast(h) {
-  if (!h?.visit_date) return false
+  if (!h?.visit_date) {return false}
   // visit_date can arrive as a full ISO timestamp; without slicing, the
   // concatenation below produces an Invalid Date and "overdue" never shows.
   const datePart = String(h.visit_date).slice(0, 10)
@@ -702,21 +703,21 @@ function notesVisitAppointmentPast(h) {
 
 /** Notes page card badge — rendering only; defaults to With Scribe when status is unknown. */
 function notesCardBadgeKey(h) {
-  if (!h) return 'processing'
-  if (h.status === 'done') return 'closed'
-  if (h.status === 'uploaded' || h.note_status === 'uploaded') return 'completed'
-  if (h.status === 'note-ready') return 'ready'
-  if (notesVisitAppointmentPast(h) && !notesVisitHasRecording(h)) return 'overdue'
+  if (!h) {return 'processing'}
+  if (h.status === 'done') {return 'closed'}
+  if (h.status === 'uploaded' || h.note_status === 'uploaded') {return 'completed'}
+  if (h.status === 'note-ready') {return 'ready'}
+  if (notesVisitAppointmentPast(h) && !notesVisitHasRecording(h)) {return 'overdue'}
   return 'processing'
 }
 
 function notesCardActionKind(h) {
   const key = notesCardBadgeKey(h)
-  if (key === 'overdue' || h.status === 'upcoming') return null
+  if (key === 'overdue' || h.status === 'upcoming') {return null}
   if (key === 'ready' || key === 'completed' || key === 'closed' || canPreviewUploadedNote(h)) {
     return 'review'
   }
-  if (key === 'processing') return 'awaiting'
+  if (key === 'processing') {return 'awaiting'}
   return null
 }
 
@@ -726,7 +727,7 @@ function isNoteDetailCompleted(note) {
   return !!note?.locked_at
 }
 
-function isNoteDetailReadyForReview(note) {
+function _isNoteDetailReadyForReview(note) {
   return note?.status === 'note-ready' && !isNoteDetailCompleted(note)
 }
 
@@ -738,7 +739,7 @@ function notesReadyForReviewMatch(h) {
   return notesCardBadgeKey(h) === 'ready'
 }
 
-function notesCompletedMatch(h) {
+function _notesCompletedMatch(h) {
   const key = notesCardBadgeKey(h)
   return key === 'completed' || key === 'closed'
 }
@@ -759,7 +760,7 @@ function normalizeVisitType(type) {
 }
 
 function notesEncounterTypeMatch(h, filterKey) {
-  if (filterKey === 'all') return true
+  if (filterKey === 'all') {return true}
   const t = normalizeVisitType(h.visit_type)
   switch (filterKey) {
     case 'new-patient':
@@ -776,7 +777,7 @@ function notesEncounterTypeMatch(h, filterKey) {
 }
 
 function notesScribeStatusMatch(h, filterKey) {
-  if (filterKey === 'all') return true
+  if (filterKey === 'all') {return true}
   switch (filterKey) {
     case 'with-scribe':
       return notesWithScribeMatch(h)
@@ -798,7 +799,7 @@ function notesDateSortKey(h) {
 
 function notesWaitingMs(h) {
   const raw = h?.note_updated_at || h?.updated_at || h?.created_at || h?.visit_date
-  if (!raw) return 0
+  if (!raw) {return 0}
   const ms = Date.now() - new Date(raw).getTime()
   return Number.isNaN(ms) || ms < 0 ? 0 : ms
 }
@@ -856,7 +857,7 @@ const DEFAULT_TEMPLATES = [
 ]
 
 function loadTemplates() {
-  try { const s = localStorage.getItem('anot_cl_tpl'); if (s) return JSON.parse(s) } catch (err) { console.error('[Clinician] Template load failed:', err?.message) }
+  try { const s = localStorage.getItem('anot_cl_tpl'); if (s) {return JSON.parse(s)} } catch (err) { console.error('[Clinician] Template load failed:', err?.message) }
   return DEFAULT_TEMPLATES
 }
 function saveTemplates(t) {
@@ -876,7 +877,7 @@ function getAuthHeaders() {
 async function fetchVisitAudioCount(visitId) {
   try {
     const response = await fetch(`${API_BASE}/audio/${visitId}/count`, { headers: getAuthHeaders() })
-    if (!response.ok) throw new Error('Audio count unavailable')
+    if (!response.ok) {throw new Error('Audio count unavailable')}
     const data = await response.json()
     return data.count > 0 ? data.count : 1
   } catch (err) {
@@ -890,7 +891,7 @@ async function fetchVisitAudioCount(visitId) {
  */
 async function loadVisitAudioBlob(visitId, idx) {
   const response = await fetch(`${API_BASE}/audio/${visitId}?index=${idx}`, { headers: getAuthHeaders() })
-  if (!response.ok) throw new Error('Failed to load audio')
+  if (!response.ok) {throw new Error('Failed to load audio')}
   return response.blob()
 }
 
@@ -915,9 +916,9 @@ function attachAudioElementHandlers(a, durSet, setDur, setCur, setPlay) {
 }
 
 function getTranscriptionStatusLabel(txSt) {
-  if (txSt === 'processing') return 'Status: With Scribe'
-  if (txSt === 'completed') return 'Status: Scribe draft ready'
-  if (txSt === 'failed') return 'Status: failed'
+  if (txSt === 'processing') {return 'Status: With Scribe'}
+  if (txSt === 'completed') {return 'Status: Scribe draft ready'}
+  if (txSt === 'failed') {return 'Status: failed'}
   return null
 }
 
@@ -934,7 +935,7 @@ function AudioModalHeader({ count, onClose }) {
 }
 
 function AudioRecordingTabs({ count, idx, onSelect }) {
-  if (count <= 1) return null
+  if (count <= 1) {return null}
   return (
     <div style={{ display:'flex', gap:8, marginBottom:20 }}>
       {Array.from({ length: count }, (_, i) => (
@@ -1005,12 +1006,12 @@ function AudioModal({ visitId, visit, onClose, showToast }) {
     durSet.current = false
     if (blobUrl.current) { URL.revokeObjectURL(blobUrl.current); blobUrl.current = null }
     const a = aRef.current
-    if (!a) return
+    if (!a) {return}
 
     let cancelled = false
     loadVisitAudioBlob(visitId, idx)
       .then((blob) => {
-        if (cancelled) return
+        if (cancelled) {return}
         blobUrl.current = URL.createObjectURL(blob)
         a.src = blobUrl.current
         attachAudioElementHandlers(a, durSet, setDur, setCur, setPlay)
@@ -1033,20 +1034,20 @@ function AudioModal({ visitId, visit, onClose, showToast }) {
 
   const toggle = () => {
     const a = aRef.current
-    if (!a || status !== 'ready') return
+    if (!a || status !== 'ready') {return}
     if (playing) { a.pause(); setPlay(false) }
-    else a.play().then(() => setPlay(true)).catch(() => {})
+    else {a.play().then(() => setPlay(true)).catch(() => {})}
   }
 
   const skip = (s) => {
     const a = aRef.current
-    if (!a || status !== 'ready') return
+    if (!a || status !== 'ready') {return}
     a.currentTime = Math.max(0, Math.min(dur, a.currentTime + s))
   }
 
   const seek = (e) => {
     const a = aRef.current
-    if (!a || status !== 'ready' || !dur) return
+    if (!a || status !== 'ready' || !dur) {return}
     const rect = e.currentTarget.getBoundingClientRect()
     a.currentTime = Math.round(((e.clientX - rect.left) / rect.width) * dur)
   }
@@ -1098,8 +1099,8 @@ async function fetchVisitNote(visitId, { silent = false } = {}) {
     headers: { Authorization: `Bearer ${token}` },
   })
   const d = await r.json().catch(() => ({}))
-  if (r.ok) return d.note
-  if (!silent) return null
+  if (r.ok) {return d.note}
+  if (!silent) {return null}
   return undefined
 }
 
@@ -1107,7 +1108,7 @@ async function fetchVisitNote(visitId, { silent = false } = {}) {
  * Parse AI draft text into structured sections.
  */
 function parseNoteDraftSections(txt) {
-  if (!txt) return null
+  if (!txt) {return null}
   const m = (r) => { const x = txt.match(r); return x ? x[1].trim() : '' }
   return {
     cc:      m(/CHIEF COMPLAINT[:\s]*([\s\S]*?)(?=HISTORY|HPI|$)/i),
@@ -1122,7 +1123,7 @@ function parseNoteDraftSections(txt) {
  * Parse transcription field into array of segments.
  */
 function parseNoteTranscriptions(note) {
-  if (!note?.transcription) return []
+  if (!note?.transcription) {return []}
   try {
     const p = JSON.parse(note.transcription)
     return Array.isArray(p) ? p : [p]
@@ -1132,9 +1133,9 @@ function parseNoteTranscriptions(note) {
 }
 
 function getTranscriptionBadgeText(txSt, prefix = 'Transcription') {
-  if (txSt === 'processing') return `${prefix}: With Scribe`
-  if (txSt === 'completed') return `${prefix}: Scribe draft ready`
-  if (txSt === 'failed') return `${prefix}: failed`
+  if (txSt === 'processing') {return `${prefix}: With Scribe`}
+  if (txSt === 'completed') {return `${prefix}: Scribe draft ready`}
+  if (txSt === 'failed') {return `${prefix}: failed`}
   return null
 }
 
@@ -1163,7 +1164,7 @@ function AIModalHeader({ visit, hideAudioControls, txBadge, txSt, txBusy, loadin
 }
 
 function AIModalTabBar({ tab, onTabChange, hideAudioControls }) {
-  if (hideAudioControls) return null
+  if (hideAudioControls) {return null}
   return (
     <div style={{ display:'flex', borderBottom:'1px solid #E2E8F0', padding:'0 24px' }}>
       {[['ai','Scribe draft'],['transcription','Transcript']].map(([k,l]) => (
@@ -1224,14 +1225,14 @@ function AIModal({ visit, onClose, showToast, hideAudioControls = false }) {
 
   const loadNoteData = useCallback(async (opts = {}) => {
     const silent = !!opts.silent
-    if (!silent) setLoad(true)
+    if (!silent) {setLoad(true)}
     try {
       const loaded = await fetchVisitNote(visit.id, { silent })
-      if (loaded !== undefined) setNote(loaded)
+      if (loaded !== undefined) {setNote(loaded)}
     } catch {
-      if (!silent) setNote(null)
+      if (!silent) {setNote(null)}
     } finally {
-      if (!silent) setLoad(false)
+      if (!silent) {setLoad(false)}
     }
   }, [visit.id])
 
@@ -1240,7 +1241,7 @@ function AIModal({ visit, onClose, showToast, hideAudioControls = false }) {
   }, [loadNoteData])
 
   useEffect(() => {
-    if (note?.transcription_status !== 'processing') return
+    if (note?.transcription_status !== 'processing') {return}
     const t = setInterval(() => { void loadNoteData({ silent: true }) }, 4000)
     return () => clearInterval(t)
   }, [note?.transcription_status, loadNoteData])
@@ -1318,7 +1319,7 @@ function TemplatesScreen({ showToast }) {
 
   const reset = () => {
     const def = DEFAULT_TEMPLATES.find(t => t.id === selected.id)
-    if (!def) return
+    if (!def) {return}
     const updated = updateTemplateInList(templates, selected.id, def.content)
     setTemplates(updated); saveTemplates(updated)
     setSelected(prev => ({ ...prev, content: def.content }))
@@ -1504,7 +1505,7 @@ function ClinicianSidebarNav({ screen, scheduleUpcomingBadge, readyForReviewCoun
 /**
  * Clinician portal sidebar — navigation, confirm dialog, logout footer.
  */
-function Sidebar({ screen, setScreen, sidebar, currentUser, scheduleUpcomingBadge, readyForReviewCount, drawerMode, onRequestLogout, confirmDialog, confirmLoading, onDismissConfirm, onConfirmAction, branding }) {
+function Sidebar({ screen, setScreen, sidebar, currentUser, scheduleUpcomingBadge, readyForReviewCount, drawerMode: _drawerMode, onRequestLogout, confirmDialog, confirmLoading, onDismissConfirm, onConfirmAction, branding }) {
   const offCanvasSidebar = useSidebarOffCanvasMode()
 
   const navigateToScreen = (key) => {
@@ -1651,7 +1652,7 @@ function ClinicianTopbar({
 
 // ─── BUTTON STYLES ────────────────────────────────────────────────────────────
 
-const B = {
+const _B = {
   primary: { display:'inline-flex', alignItems:'center', gap:8, padding:'10px 20px', borderRadius:12, background:'linear-gradient(135deg,#4260E9,#7B61FF)', color:'#fff', border:'none', fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:'inherit', boxShadow:'0 4px 14px rgba(66,96,233,.35)' },
   outline: { display:'inline-flex', alignItems:'center', gap:8, padding:'10px 20px', borderRadius:12, background:'#fff', color:'#475569', border:'1.5px solid #E2E8F0', fontSize:14, fontWeight:600, cursor:'pointer', fontFamily:'inherit' },
   action:  { display:'inline-flex', alignItems:'center', gap:6, padding:'9px 16px', borderRadius:10, fontSize:13, fontWeight:700, cursor:'pointer', border:'none', fontFamily:'inherit', whiteSpace:'nowrap' },
@@ -1749,7 +1750,7 @@ function Clinician() {
   const [scheduleSyncedAt, setScheduleSyncedAt] = useState(null)
   const [historySyncedAt, setHistorySyncedAt]   = useState(null)
   const [liveNow, setLiveNow]       = useState(() => new Date())
-  const [histAudioOnly, setHistAudioOnly]       = useState(false)
+  const [histAudioOnly]       = useState(false)
   const [notesFilter, setNotesFilter]           = useState('all')
   const [notesTypeFilter, setNotesTypeFilter]   = useState('all')
   const [notesScribeFilter, setNotesScribeFilter] = useState('all')
@@ -1824,7 +1825,7 @@ function Clinician() {
     applyScheduleOff((prev) => {
       const next = prev + delta
       setWeekCenterOff((wc) => {
-        if (next < wc - 2 || next > wc + 2) return next
+        if (next < wc - 2 || next > wc + 2) {return next}
         return wc
       })
       return next
@@ -1867,7 +1868,7 @@ function Clinician() {
   const [lockConfirmLoading, setLockConfirmLoading] = useState(false)
 
   const runConfirm = async () => {
-    if (!confirmDialog?.onConfirm) return
+    if (!confirmDialog?.onConfirm) {return}
     setConfirmLoading(true)
     try {
       await Promise.resolve(confirmDialog.onConfirm())
@@ -1900,7 +1901,7 @@ function Clinician() {
     try {
       setLoading(true)
       const d = await visitsAPI.getByDate(dayKey, controller.signal)
-      if (controller.signal.aborted) return
+      if (controller.signal.aborted) {return}
       setVisits(d.visits || [])
       setScheduleDayCounts((prev) => ({
         ...prev,
@@ -1911,9 +1912,9 @@ function Clinician() {
         [dayKey]: scheduleDayStatusBreakdown(d.visits || [], off),
       }))
       setScheduleSyncedAt(new Date().toISOString())
-      if (opts.notify) showToast('Schedule updated')
+      if (opts.notify) {showToast('Schedule updated')}
     } catch (e) {
-      if (isAbortError(e) || controller.signal.aborted) return
+      if (isAbortError(e) || controller.signal.aborted) {return}
       showToast(e.message, 'error')
     } finally {
       if (visitsAbortRef.current === controller) {
@@ -1926,26 +1927,28 @@ function Clinician() {
   // Latest loadVisits for callbacks installed once (e.g. the offline upload
   // flush effect), so they don't need loadVisits in their dependency arrays.
   const loadVisitsRef = useRef(loadVisits)
-  loadVisitsRef.current = loadVisits
+  useEffect(() => {
+    loadVisitsRef.current = loadVisits
+  }, [loadVisits])
 
   const loadHistory = useCallback(async (opts = {}) => {
     historyAbortRef.current?.abort()
     const controller = new AbortController()
     historyAbortRef.current = controller
     try {
-      if (!opts.silent) setLoading(true)
+      if (!opts.silent) {setLoading(true)}
       const d = await visitsAPI.getHistory(controller.signal)
-      if (controller.signal.aborted) return
+      if (controller.signal.aborted) {return}
       setHistory(d.visits || [])
       setHistorySyncedAt(new Date().toISOString())
-      if (opts.notify) showToast('History updated')
+      if (opts.notify) {showToast('History updated')}
     } catch (e) {
-      if (isAbortError(e) || controller.signal.aborted) return
-      if (!opts.silent) showToast(e.message, 'error')
+      if (isAbortError(e) || controller.signal.aborted) {return}
+      if (!opts.silent) {showToast(e.message, 'error')}
     } finally {
       if (historyAbortRef.current === controller) {
         historyAbortRef.current = null
-        if (!opts.silent) setLoading(false)
+        if (!opts.silent) {setLoading(false)}
       }
     }
   }, [showToast])
@@ -1964,7 +1967,7 @@ function Clinician() {
           // A queued primary recording means endVisit was deferred (ending a
           // visit with no audio would hand the scribe nothing to transcribe).
           // Now that the audio landed, finish the encounter properly.
-          if (item.mode === 'primary' && item.durationSeconds != null) {
+          if (item.mode === 'primary' && item.durationSeconds !== null && item.durationSeconds !== undefined) {
             try {
               await visitsAPI.endVisit(item.visitId, item.durationSeconds)
             } catch (err) {
@@ -1981,7 +1984,7 @@ function Clinician() {
   useEffect(() => {
     const onKey = (e) => {
       const t = e.target
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) {return}
       if (screen === 'schedule' && e.key === 't' && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault()
         goToToday()
@@ -1996,9 +1999,9 @@ function Clinician() {
   }, [])
 
   useEffect(() => { loadHistory({ silent: true }) }, [loadHistory])
-  useEffect(() => { if (screen === 'schedule') loadVisits() }, [off, screen, loadVisits])
+  useEffect(() => { if (screen === 'schedule') {loadVisits()} }, [off, screen, loadVisits])
   useEffect(() => {
-    if (screen !== 'schedule') return
+    if (screen !== 'schedule') {return}
     setScheduleDayCounts((prev) => ({
       ...prev,
       [localDate(off)]: visits.length,
@@ -2009,16 +2012,16 @@ function Clinician() {
     }))
   }, [visits, off, screen])
   useEffect(() => {
-    if (screen === 'notes') loadHistory()
+    if (screen === 'notes') {loadHistory()}
   }, [screen, loadHistory])
 
   useEffect(() => {
-    if (screen !== 'profile') return
+    if (screen !== 'profile') {return}
     let alive = true
     ;(async () => {
       try {
         const [h, v] = await Promise.all([visitsAPI.getHistory(), visitsAPI.getByDate(localDate(off))])
-        if (!alive) return
+        if (!alive) {return}
         setHistory(h.visits || [])
         setVisits(v.visits || [])
         setHistorySyncedAt(new Date().toISOString())
@@ -2074,20 +2077,20 @@ function Clinician() {
   }, [])
 
   useEffect(() => {
-    if (sessionStorage.getItem(REVIEW_REMINDER_DISMISS_KEY)) return
+    if (sessionStorage.getItem(REVIEW_REMINDER_DISMISS_KEY)) {return}
     const ready = history.filter(notesReadyForReviewMatch)
-    if (!ready.length) return
+    if (!ready.length) {return}
     const hasWaitingOver24h = ready.some((h) => notesWaitingMs(h) >= 24 * 3600000)
-    if (!hasWaitingOver24h) return
+    if (!hasWaitingOver24h) {return}
     const oldestHours = Math.floor(Math.max(...ready.map(notesWaitingMs)) / 3600000)
     setReviewReminder((prev) => {
-      if (prev) return prev
+      if (prev) {return prev}
       return { count: readyForReviewCount, oldestHours }
     })
   }, [history, readyForReviewCount])
 
   useEffect(() => {
-    if (!reviewReminder) return
+    if (!reviewReminder) {return}
     if (sessionStorage.getItem(REVIEW_REMINDER_DISMISS_KEY)) {
       setReviewReminder(null)
       return
@@ -2112,12 +2115,12 @@ function Clinician() {
   }
 
   const startVisit = async (v) => {
-    if (active) return
+    if (active) {return}
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       const rec = new MediaRecorder(stream, getMime() ? { mimeType: getMime() } : {})
       cRef.current = []; mRef.current = rec
-      rec.ondataavailable = (e) => { if (e.data?.size > 0) cRef.current.push(e.data) }
+      rec.ondataavailable = (e) => { if (e.data?.size > 0) {cRef.current.push(e.data)} }
       rec.start(1000)
       await visitsAPI.updateStatus(v.id, 'in-progress')
       setVisits(p => p.map(x => x.id === v.id ? { ...x, status:'in-progress' } : x))
@@ -2144,15 +2147,15 @@ function Clinician() {
   }
 
   const pauseResume = () => {
-    if (!paused) { clearInterval(tRef.current); if (mRef.current?.state === 'recording') mRef.current.pause(); setPaused(true) }
-    else { tRef.current = setInterval(() => setTimer(t => t+1), 1000); if (mRef.current?.state === 'paused') mRef.current.resume(); setPaused(false) }
+    if (!paused) { clearInterval(tRef.current); if (mRef.current?.state === 'recording') {mRef.current.pause();} setPaused(true) }
+    else { tRef.current = setInterval(() => setTimer(t => t+1), 1000); if (mRef.current?.state === 'paused') {mRef.current.resume();} setPaused(false) }
   }
 
   /**
    * Validate visit can be ended
    */
   const validateVisitForEnding = (visit) => {
-    if (!visit) throw new Error('No active visit')
+    if (!visit) {throw new Error('No active visit')}
   }
 
   /**
@@ -2210,7 +2213,7 @@ function Clinician() {
           : v
       )
     )
-    if (screen === 'notes') loadHistory()
+    if (screen === 'notes') {loadHistory()}
     showToast(`✓ Encounter ended — preparing note for ${patientName}`)
   }
 
@@ -2254,20 +2257,20 @@ function Clinician() {
   }
 
   const startAdd = async (v) => {
-    if (active || addRec) return
+    if (active || addRec) {return}
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       const rec = new MediaRecorder(stream, getMime() ? { mimeType: getMime() } : {})
       acRef.current = []; arRef.current = rec
-      rec.ondataavailable = (e) => { if (e.data?.size > 0) acRef.current.push(e.data) }
+      rec.ondataavailable = (e) => { if (e.data?.size > 0) {acRef.current.push(e.data)} }
       rec.start(1000); setAddRec(v); setAddTimer(0); setAddPaused(false)
       atRef.current = setInterval(() => setAddTimer(t => t + 1), 1000)
     } catch { showToast('Microphone access denied.', 'error') }
   }
 
   const pauseResumeAdd = () => {
-    if (!addPaused) { clearInterval(atRef.current); if (arRef.current?.state === 'recording') arRef.current.pause(); setAddPaused(true) }
-    else { atRef.current = setInterval(() => setAddTimer(t => t+1), 1000); if (arRef.current?.state === 'paused') arRef.current.resume(); setAddPaused(false) }
+    if (!addPaused) { clearInterval(atRef.current); if (arRef.current?.state === 'recording') {arRef.current.pause();} setAddPaused(true) }
+    else { atRef.current = setInterval(() => setAddTimer(t => t+1), 1000); if (arRef.current?.state === 'paused') {arRef.current.resume();} setAddPaused(false) }
   }
 
   const stopAdd = async () => {
@@ -2373,7 +2376,7 @@ function Clinician() {
   })()
 
   const notesTabCount = (key) => {
-    if (key === 'all') return historyDateFiltered.length
+    if (key === 'all') {return historyDateFiltered.length}
     return historyDateFiltered.filter((h) => notesTabFilterMatch(h, key)).length
   }
 
@@ -2452,10 +2455,10 @@ function Clinician() {
   }
 
   const saveEditedNote = async () => {
-    if (!reviewNote?.note_id) return
+    if (!reviewNote?.note_id) {return}
     setSavingNote(true)
     try {
-      const data = await notesAPI.updateNote(reviewNote.note_id, editedNoteContent)
+      await notesAPI.updateNote(reviewNote.note_id, editedNoteContent)
       setReview((prev) => ({
         ...prev,
         final_note: editedNoteContent,
@@ -2484,7 +2487,7 @@ function Clinician() {
   }
 
   const confirmLockNote = async () => {
-    if (!reviewNote?.id) return
+    if (!reviewNote?.id) {return}
     setLockConfirmLoading(true)
     try {
       const d = await visitsAPI.lockNote(reviewNote.id)
@@ -3377,8 +3380,8 @@ function Clinician() {
                         const dobIso = normalizeDob(pt.dob) || ''
                         const openDobPicker = () => {
                           const el = dobPickerRef.current
-                          if (!el) return
-                          try { el.showPicker?.() } catch (_) { el.focus() }
+                          if (!el) {return}
+                          try { el.showPicker?.() } catch { el.focus() }
                         }
                         return (
                           <div key={key} className="sf-form-group">
@@ -3417,8 +3420,8 @@ function Clinician() {
                       }
                       const isPicker = type === 'date' || type === 'time'
                       const openPicker = (e) => {
-                        if (!isPicker) return
-                        try { e.currentTarget.showPicker?.() } catch (_) { /* unsupported */ }
+                        if (!isPicker) {return}
+                        try { e.currentTarget.showPicker?.() } catch { /* unsupported */ }
                       }
                       return (
                         <div key={key} className="sf-form-group">

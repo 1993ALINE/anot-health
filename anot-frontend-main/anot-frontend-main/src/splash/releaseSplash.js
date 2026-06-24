@@ -3,13 +3,13 @@
  * if the node is already gone.
  */
 export function releaseSplash() {
-  if (typeof document === 'undefined') return
+  if (typeof document === 'undefined') {return}
   const splash = document.getElementById('anot-splash')
   if (!splash) {
     document.body.classList.add('anot-app-ready')
     return
   }
-  if (splash.dataset.anotReleased === '1') return
+  if (splash.dataset.anotReleased === '1') {return}
   splash.dataset.anotReleased = '1'
   splash.classList.add('anot-splash--exit')
   splash.setAttribute('aria-busy', 'false')
@@ -21,11 +21,11 @@ export function releaseSplash() {
 
 /** True when we should keep the boot splash until getMe / session bootstrap finishes. */
 export function needsAuthSplashHold() {
-  if (typeof window === 'undefined') return false
+  if (typeof window === 'undefined') {return false}
   const has = !!(localStorage.getItem('token') && localStorage.getItem('user'))
-  if (!has) return false
+  if (!has) {return false}
   const p = window.location.pathname
-  if (p === '/login' || p === '/') return true
+  if (p === '/login' || p === '/') {return true}
   if (
     p.startsWith('/clinician') ||
     p.startsWith('/scribe') ||

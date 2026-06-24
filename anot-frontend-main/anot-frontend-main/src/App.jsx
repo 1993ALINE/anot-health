@@ -20,7 +20,8 @@ function PortalLoading() {
 }
 import { dashboardPathForRole, roleMatchesPortal } from './auth/dashboardPaths'
 import { applyBrandingToDocument, getCachedBranding, refreshBranding } from './services/branding'
-import { SplashGate, useReleaseSplash } from './splash/SplashGate'
+import { SplashGate } from './splash/SplashGate'
+import { useReleaseSplash } from './splash/useReleaseSplash'
 import {
   startOnlineListener,
   stopOnlineListener,
@@ -31,7 +32,7 @@ import {
 function RootHome() {
   const token = localStorage.getItem('token')
   const raw = localStorage.getItem('user')
-  if (!token || !raw) return <Navigate to="/login" replace />
+  if (!token || !raw) {return <Navigate to="/login" replace />}
   const path = (() => {
     try {
       return dashboardPathForRole(JSON.parse(raw).role)
@@ -39,7 +40,7 @@ function RootHome() {
       return null
     }
   })()
-  if (!path) return <Navigate to="/login" replace />
+  if (!path) {return <Navigate to="/login" replace />}
   return <Navigate to={path} replace />
 }
 
@@ -53,12 +54,12 @@ function ProtectedRoute({ element, allowedRole }) {
   const [verified, setVerified] = useState(() => (hasSession ? null : false))
 
   useEffect(() => {
-    if (!hasSession) return
+    if (!hasSession) {return}
     let cancelled = false
     authAPI
       .getMe()
       .then(() => {
-        if (!cancelled) setVerified(true)
+        if (!cancelled) {setVerified(true)}
       })
       .catch((err) => {
         if (!cancelled) {
@@ -73,7 +74,7 @@ function ProtectedRoute({ element, allowedRole }) {
   }, [hasSession])
 
   useEffect(() => {
-    if (verified !== null) releaseSplash()
+    if (verified !== null) {releaseSplash()}
   }, [verified, releaseSplash])
 
   if (!hasSession || verified === false) {

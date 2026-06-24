@@ -7,7 +7,7 @@ export default function PortalTooltip({
   className = '',
   children,
 }) {
-  if (!tip) return children
+  if (!tip) {return children}
   return (
     <span
       className={[

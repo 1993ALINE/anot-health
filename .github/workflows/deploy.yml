@@ -1,0 +1,37 @@
+﻿name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy-backend:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend artifact
+        working-directory: anot-backend-main/anot-backend-main
+        run: |
+          npm ci --omit=dev
+          echo "Deploy backend via your EB/Railway pipeline here"
+      - name: Deployment placeholder
+        run: echo "Configure deploy secrets (AWS_EB, RAILWAY_TOKEN) in repo settings"
+
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Build frontend
+        working-directory: anot-frontend-main/anot-frontend-main
+        run: |
+          npm ci
+          npm run build
+      - name: Deployment placeholder
+        run: echo "Configure S3/CloudFront or Vercel deploy step"

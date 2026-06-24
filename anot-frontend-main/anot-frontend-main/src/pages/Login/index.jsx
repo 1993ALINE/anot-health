@@ -4,7 +4,7 @@ import './login.css'
 import { API_BASE, authAPI, isLikelyNetworkFailure } from '../../services/api'
 import { dashboardPathForRole } from '../../auth/dashboardPaths'
 import { DEFAULT_BRAND_LOGO_SRC, useBranding } from '../../services/branding'
-import { useReleaseSplash } from '../../splash/SplashGate'
+import { useReleaseSplash } from '../../splash/useReleaseSplash'
 import PhiTrainingModal from '../../components/PhiTrainingModal'
 import PasswordChangeModal from '../../components/PasswordChangeModal'
 
@@ -17,7 +17,7 @@ function networkErrorMessage() {
 }
 
 function humanizeAuthError(err) {
-  if (isLikelyNetworkFailure(err)) return networkErrorMessage()
+  if (isLikelyNetworkFailure(err)) {return networkErrorMessage()}
   const msg = err?.message || ''
   return msg || 'Sign-in failed.'
 }
@@ -154,14 +154,14 @@ function TypewriterLine({ text, className, reducedMotion }) {
   const done = shown >= text.length
 
   useEffect(() => {
-    if (reducedMotion) return
+    if (reducedMotion) {return}
     let cancelled = false
     let tid = null
 
     const step = (i) => {
-      if (cancelled) return
+      if (cancelled) {return}
       setLen(i)
-      if (i >= text.length) return
+      if (i >= text.length) {return}
       const delay = 26 + Math.floor(Math.random() * 20)
       tid = window.setTimeout(() => step(i + 1), delay)
     }
@@ -169,7 +169,7 @@ function TypewriterLine({ text, className, reducedMotion }) {
     tid = window.setTimeout(() => step(1), 380)
     return () => {
       cancelled = true
-      if (tid) window.clearTimeout(tid)
+      if (tid) {window.clearTimeout(tid)}
     }
   }, [text, reducedMotion])
 
@@ -225,12 +225,12 @@ export default function Login() {
   }
 
   useEffect(() => {
-    if (phase !== 'session') return
+    if (phase !== 'session') {return}
     let cancelled = false
     authAPI
       .getMe()
       .then(() => {
-        if (cancelled) return
+        if (cancelled) {return}
         const u = authAPI.getCurrentUser()
         const path = dashboardPathForRole(u?.role)
         if (path) {
@@ -241,7 +241,7 @@ export default function Login() {
         }
       })
       .catch((err) => {
-        if (cancelled) return
+        if (cancelled) {return}
         authAPI.logout()
         if (isLikelyNetworkFailure(err)) {
           setError(networkErrorMessage())
@@ -263,29 +263,18 @@ export default function Login() {
   // password change first, then PHI training. Each is handled by a mandatory
   // modal; only an ungated response carries a real `user` + session token.
   const routeAfterAuth = (data) => {
-    // Safe diagnostics: log only the routing decision + non-PII gate flags.
-    // Never log the user object or full response (PHI/PII) to the console.
-    console.log('[routeAfterAuth] gates:', {
-      requirePasswordChange: !!data.requirePasswordChange,
-      requirePhiTraining: !!data.requirePhiTraining,
-      hasSessionToken: !!data.token,
-    })
-
     // Forced password change gate: new users / admin resets must set a new
     // password before anything else. No session token yet.
     if (data.requirePasswordChange) {
-      console.log('[routeAfterAuth] → password change modal')
       setPasswordChangeToken(data.temporaryToken)
       return
     }
     // PHI awareness training gate: no session token yet — show the mandatory
     // acknowledgment modal and finish the login once the user acknowledges.
     if (data.requirePhiTraining) {
-      console.log('[routeAfterAuth] → PHI training modal')
       setPhiTrainingToken(data.temporaryToken)
       return
     }
-    console.log('[routeAfterAuth] → dashboard')
     goToDashboard(data.user)
   }
 
@@ -409,7 +398,7 @@ export default function Login() {
                         value={email}
                         onChange={(e) => {
                           setEmail(e.target.value)
-                          if (error) setError('')
+                          if (error) {setError('')}
                         }}
                         autoComplete="email"
                       />
@@ -429,7 +418,7 @@ export default function Login() {
                         value={password}
                         onChange={(e) => {
                           setPassword(e.target.value)
-                          if (error) setError('')
+                          if (error) {setError('')}
                         }}
                         autoComplete="current-password"
                       />

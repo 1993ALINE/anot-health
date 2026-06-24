@@ -26,7 +26,7 @@ const DISALLOWED = new Set(
 )
 
 export function isDisallowedPassword(password) {
-  if (typeof password !== 'string') return true
+  if (typeof password !== 'string') {return true}
   return DISALLOWED.has(password.toLowerCase().trim())
 }
 
@@ -53,13 +53,13 @@ export function getPasswordChecks(password) {
 export function validatePassword(password) {
   const checks = getPasswordChecks(password)
   let message = null
-  if (!checks.length) message = `Password must be at least ${MIN_LENGTH} characters.`
-  else if (!checks.uppercase) message = 'Password must contain at least one uppercase letter.'
-  else if (!checks.lowercase) message = 'Password must contain at least one lowercase letter.'
-  else if (!checks.number) message = 'Password must contain at least one number.'
-  else if (!checks.special) message = 'Password must contain at least one special character.'
+  if (!checks.length) {message = `Password must be at least ${MIN_LENGTH} characters.`}
+  else if (!checks.uppercase) {message = 'Password must contain at least one uppercase letter.'}
+  else if (!checks.lowercase) {message = 'Password must contain at least one lowercase letter.'}
+  else if (!checks.number) {message = 'Password must contain at least one number.'}
+  else if (!checks.special) {message = 'Password must contain at least one special character.'}
   else if (isDisallowedPassword(password))
-    message = 'This password is too common. Choose a unique password.'
+    {message = 'This password is too common. Choose a unique password.'}
   return { valid: message === null, message, checks }
 }
 
@@ -71,19 +71,19 @@ export function validatePassword(password) {
  */
 export function getPasswordStrength(password) {
   const pw = typeof password === 'string' ? password : ''
-  if (!pw) return { score: 0, label: 'Enter a password', color: '#D1D5DB', percent: 0 }
+  if (!pw) {return { score: 0, label: 'Enter a password', color: '#D1D5DB', percent: 0 }}
 
   const checks = getPasswordChecks(pw)
   const satisfied = Object.values(checks).filter(Boolean).length // 0–5
 
   let score = 0
-  if (satisfied >= 2) score = 1
-  if (satisfied >= 3) score = 2
-  if (satisfied >= 4) score = 3
-  if (satisfied === 5 && pw.length >= 16) score = 4
-  else if (satisfied === 5) score = 3
+  if (satisfied >= 2) {score = 1}
+  if (satisfied >= 3) {score = 2}
+  if (satisfied >= 4) {score = 3}
+  if (satisfied === 5 && pw.length >= 16) {score = 4}
+  else if (satisfied === 5) {score = 3}
 
-  if (isDisallowedPassword(pw)) score = 0
+  if (isDisallowedPassword(pw)) {score = 0}
 
   const meta = [
     { label: 'Very weak', color: '#EF4444' },

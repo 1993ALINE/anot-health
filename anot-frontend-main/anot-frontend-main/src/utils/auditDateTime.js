@@ -13,12 +13,12 @@ function hasExplicitZone(s) {
  * @returns {Date|null}
  */
 export function parseAuditInstant(value) {
-    if (value == null) return null
+    if (value === null || value === undefined) {return null}
     if (value instanceof Date) {
         return Number.isNaN(value.getTime()) ? null : value
     }
     const s = String(value).trim()
-    if (!s) return null
+    if (!s) {return null}
     if (hasExplicitZone(s)) {
         const d = new Date(s)
         return Number.isNaN(d.getTime()) ? null : d
@@ -31,7 +31,7 @@ export function parseAuditInstant(value) {
         return Number.isNaN(d.getTime()) ? null : d
     }
     const t = Date.parse(s)
-    if (Number.isNaN(t)) return null
+    if (Number.isNaN(t)) {return null}
     return new Date(t)
 }
 
@@ -42,7 +42,7 @@ export function parseAuditInstant(value) {
  */
 export function formatAuditDateTime(value, opts = {}) {
     const d = parseAuditInstant(value)
-    if (!d) return opts.fallback ?? '—'
+    if (!d) {return opts.fallback ?? '—'}
     return d.toLocaleString(undefined, {
         year: 'numeric',
         month: 'short',
@@ -55,8 +55,8 @@ export function formatAuditDateTime(value, opts = {}) {
 
 /** `YYYY-MM-DD` bucket key from API date field (date or timestamptz). */
 export function auditBucketDateKey(raw) {
-    if (raw == null) return ''
-    if (raw instanceof Date) return raw.toISOString().slice(0, 10)
+    if (raw === null || raw === undefined) {return ''}
+    if (raw instanceof Date) {return raw.toISOString().slice(0, 10)}
     const s = String(raw).trim()
     const m = s.match(/^(\d{4}-\d{2}-\d{2})/)
     return m ? m[1] : ''
@@ -64,9 +64,9 @@ export function auditBucketDateKey(raw) {
 
 /** Label for a UTC calendar bucket (daily chart). */
 export function formatAuditBucketDayUTC(yyyyMmDd) {
-    if (!yyyyMmDd) return ''
+    if (!yyyyMmDd) {return ''}
     const [y, mo, d] = yyyyMmDd.split('-').map((x) => parseInt(x, 10))
-    if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return yyyyMmDd
+    if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) {return yyyyMmDd}
     return new Date(Date.UTC(y, mo - 1, d)).toLocaleDateString(undefined, {
         month: 'short',
         day: 'numeric',

@@ -1,8 +1,8 @@
-const auditLogger = require('../utils/logger')
+﻿const auditLogger = require('../utils/logger')
 
 // Resolve the client IP the SAME way the canonical Postgres audit trail does:
 // trust Express's `req.ip`, which honors the configured `trust proxy` hop count
-// (see server.js). We deliberately do NOT hand-parse X-Forwarded-For — that
+// (see server.js). We deliberately do NOT hand-parse X-Forwarded-For â€” that
 // header is fully attacker-controlled, so parsing it would let any client spoof
 // the IP recorded in the HIPAA audit log.
 function getClientIp(req) {
@@ -20,7 +20,7 @@ function loggingMiddleware(req, res, next) {
         if (res.statusCode >= 400) {
             auditLogger.logError(
                 'HTTP_ERROR',
-                `${req.method} ${req.originalUrl || req.path} returned ${res.statusCode}`,
+                `[${req.correlationId || 'no-corr-id'}] ${req.method} ${req.originalUrl || req.path} returned ${res.statusCode}`,
                 req.user?.id ?? null,
                 `${req.method} ${req.path}`,
                 res.statusCode,

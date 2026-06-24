@@ -22,12 +22,12 @@ const PayrollMiniChart = lazy(() =>
 )
 
 function initials(n) {
-    if (!n) return '?'
+    if (!n) {return '?'}
     return n.split(' ').map((x) => x[0]).join('').slice(0, 2).toUpperCase()
 }
 
 function fmtAdminDate(raw) {
-  if (!raw) return '—'
+  if (!raw) {return '—'}
   try {
     return new Date(raw).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -40,8 +40,8 @@ function fmtAdminDate(raw) {
 }
 
 function displayEmail(email) {
-  if (!email) return '—'
-  if (email.includes('@dev.anot.local')) return '(dev account)'
+  if (!email) {return '—'}
+  if (email.includes('@dev.anot.local')) {return '(dev account)'}
   return email
 }
 
@@ -49,15 +49,15 @@ function displayEmail(email) {
  * Validate admin settings form
  */
 function validateSettingsForm(form) {
-    if (!form.system_name.trim()) return 'System name is required.'
+    if (!form.system_name.trim()) {return 'System name is required.'}
     if (form.system_email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.system_email)) {
         return 'Enter a valid system email.'
     }
     const urls = ['website_url', 'facebook_url', 'linkedin_url', 'instagram_url', 'x_url']
     for (const key of urls) {
         const value = form[key]?.trim()
-        if (!value) continue
-        if (!/^https?:\/\/.+/i.test(value)) return `Enter a valid URL for ${key.replace('_url', '').replace('_', ' ')}.`
+        if (!value) {continue}
+        if (!/^https?:\/\/.+/i.test(value)) {return `Enter a valid URL for ${key.replace('_url', '').replace('_', ' ')}.`}
     }
     if (form.deepgram_enabled && !form.deepgram_api_key_set && !form.deepgram_api_key?.trim()) {
         return 'Deepgram is enabled but no API key is saved. Enter a key or turn Deepgram off.'
@@ -106,10 +106,10 @@ function buildSettingsPayload(form) {
         ffmpeg_max_upload_mb: Math.max(1, Math.min(500, Number(form.ffmpeg_max_upload_mb) || 100)),
         ffmpeg_preprocess_before_transcribe: !!form.ffmpeg_preprocess_before_transcribe,
     }
-    if (form.deepgram_api_key?.trim()) payload.deepgram_api_key = form.deepgram_api_key.trim()
-    if (form.deepgram_clear_api_key) payload.deepgram_clear_api_key = true
-    if (form.anthropic_api_key?.trim()) payload.anthropic_api_key = form.anthropic_api_key.trim()
-    if (form.anthropic_clear_api_key) payload.anthropic_clear_api_key = true
+    if (form.deepgram_api_key?.trim()) {payload.deepgram_api_key = form.deepgram_api_key.trim()}
+    if (form.deepgram_clear_api_key) {payload.deepgram_clear_api_key = true}
+    if (form.anthropic_api_key?.trim()) {payload.anthropic_api_key = form.anthropic_api_key.trim()}
+    if (form.anthropic_clear_api_key) {payload.anthropic_clear_api_key = true}
     return payload
 }
 
@@ -119,12 +119,12 @@ function buildSettingsPayload(form) {
 function validateRegisterUserInput(newUser, newUserPassword, addRole) {
     const cleanName = newUser.name.trim()
     const cleanEmail = newUser.email.toLowerCase().trim()
-    if (!cleanName) return { error: 'Name is required.' }
-    if (!cleanEmail) return { error: 'Email is required.' }
-    if (!cleanEmail.includes('@')) return { error: 'Enter a valid email.' }
+    if (!cleanName) {return { error: 'Name is required.' }}
+    if (!cleanEmail) {return { error: 'Email is required.' }}
+    if (!cleanEmail.includes('@')) {return { error: 'Enter a valid email.' }}
     if (newUserPassword) {
         const pwCheck = validatePassword(newUserPassword)
-        if (!pwCheck.valid) return { error: pwCheck.message }
+        if (!pwCheck.valid) {return { error: pwCheck.message }}
     }
     return {
         payload: {
@@ -247,7 +247,7 @@ const DEFAULT_SETTINGS_FORM = {
 function ModuleHero({ tab, chips }) {
     const nav = NAV.find((n) => n.key === tab)
     const meta = MODULE_META[tab]
-    if (!nav || !meta) return null
+    if (!nav || !meta) {return null}
     return (
         <header className="adm-module-hero" aria-labelledby={`adm-hero-title-${tab}`}>
             <div className="adm-module-hero__main">
@@ -313,14 +313,14 @@ function buildDailyCountSeries(entries, getDate, days, filterFn = () => true) {
     const start = today.getTime() - (days - 1) * dayMs
     const buckets = Array.from({ length: days }, () => 0)
     for (const item of entries) {
-        if (!filterFn(item)) continue
+        if (!filterFn(item)) {continue}
         const raw = getDate(item)
-        if (!raw) continue
+        if (!raw) {continue}
         const d = new Date(raw)
-        if (Number.isNaN(d.getTime())) continue
+        if (Number.isNaN(d.getTime())) {continue}
         d.setHours(0, 0, 0, 0)
         const idx = Math.floor((d.getTime() - start) / dayMs)
-        if (idx >= 0 && idx < days) buckets[idx] += 1
+        if (idx >= 0 && idx < days) {buckets[idx] += 1}
     }
     return buckets
 }
@@ -432,7 +432,7 @@ function AdminSidebar({ tab, onSelectTab, currentUser, onRequestSignOut, badges,
             : itemKey === 'assignments' ? badges.assignments
             : itemKey === 'audit' ? badges.audit
             : 0
-        if (!c) return null
+        if (!c) {return null}
         return <span className="sf-sidebar-rich__nav-badge sf-sidebar-rich__nav-badge--subtle">{c}</span>
     }
     return (
@@ -506,10 +506,10 @@ function filterAdminUsers(userList, search, statusFilter) {
  * CSS class suffix for admin table role styling.
  */
 function getAdminTableRoleClass(role) {
-    if (role === 'clinician') return 'clinicians'
-    if (role === 'scribe') return 'scribes'
-    if (role === 'qps') return 'qps'
-    if (role === 'admin' || role === 'elevated') return 'admins'
+    if (role === 'clinician') {return 'clinicians'}
+    if (role === 'scribe') {return 'scribes'}
+    if (role === 'qps') {return 'qps'}
+    if (role === 'admin' || role === 'elevated') {return 'admins'}
     return 'generic'
 }
 
@@ -707,7 +707,7 @@ function AdminUserTable({
                             u={u}
                             role={role}
                             roleClass={roleClass}
-                            isNew={highlightUserId != null && String(u.id) === String(highlightUserId)}
+                            isNew={highlightUserId !== null && highlightUserId !== undefined && String(u.id) === String(highlightUserId)}
                             isSuperAdminViewer={isSuperAdminViewer}
                             semantic={getRoleSemantic(u, u.role || role)}
                             onEdit={(user) => setEditUser({ ...user })}
@@ -803,14 +803,14 @@ function Admin() {
 
     const toggleAdminModuleKey = useCallback((key) => {
         setEditUser((prev) => {
-            if (!prev || prev.role !== 'admin') return prev
+            if (!prev || prev.role !== 'admin') {return prev}
             const all = ADMIN_GRANTABLE_MODULE_KEYS
-            const base = prev.admin_modules == null
+            const base = prev.admin_modules === null || prev.admin_modules === undefined
                 ? [...ADMIN_DEFAULT_MODULE_KEYS_FOR_ADMIN]
                 : [...prev.admin_modules]
             const set = new Set(base)
-            if (set.has(key)) set.delete(key)
-            else set.add(key)
+            if (set.has(key)) {set.delete(key)}
+            else {set.add(key)}
             const next = all.filter((k) => set.has(k))
             const isDefault =
                 next.length === ADMIN_DEFAULT_MODULE_KEYS_FOR_ADMIN.length
@@ -850,7 +850,7 @@ function Admin() {
             headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
         })
         const data = await res.json().catch(() => ({}))
-        if (!res.ok) throw new Error(data.error || 'Failed to load assignments.')
+        if (!res.ok) {throw new Error(data.error || 'Failed to load assignments.')}
         return data.assignments || []
     }, [])
 
@@ -900,14 +900,14 @@ function Admin() {
         const keys = new Set(resolvedAdminModuleKeys(currentUser))
         const needUsers = ['overview', 'clinicians', 'scribes', 'qps', 'assignments', 'admins'].some((k) => keys.has(k))
         if (!needUsers) {
-            if (!silent) showToast('No permission to refresh the user directory.', 'error')
+            if (!silent) {showToast('No permission to refresh the user directory.', 'error')}
             return false
         }
         try {
             setUsersRefreshing(true)
             const data = await usersAPI.getAll()
             setUsers(data.users || [])
-            if (!silent) showToast('User list updated')
+            if (!silent) {showToast('User list updated')}
             return true
         } catch (err) {
             showToast(`Failed to refresh users: ${err.message}`, 'error')
@@ -957,7 +957,7 @@ function Admin() {
     }, [hydrateSettingsForm])
 
     useEffect(() => {
-        if (recentlyAddedUserId == null) return
+        if (recentlyAddedUserId === null || recentlyAddedUserId === undefined) {return}
         const timer = setTimeout(() => setRecentlyAddedUserId(null), 2600)
         return () => clearTimeout(timer)
     }, [recentlyAddedUserId])
@@ -969,25 +969,25 @@ function Admin() {
 
     useEffect(() => {
         queueMicrotask(() => {
-            if (tab === 'overview') void loadAuditLogs()
-            if (tab === 'payroll') void loadPayroll()
-            if (tab === 'settings') void loadSettings()
+            if (tab === 'overview') {void loadAuditLogs()}
+            if (tab === 'payroll') {void loadPayroll()}
+            if (tab === 'settings') {void loadSettings()}
         })
     }, [tab, currentUser, loadPayroll, loadAuditLogs, loadSettings])
 
     // Auto-refresh payroll and overview audit sample every 30 seconds
     useEffect(() => {
-        if (!['overview', 'payroll'].includes(tab)) return
+        if (!['overview', 'payroll'].includes(tab)) {return}
         const interval = setInterval(() => {
-            if (tab === 'overview' && adminMayOpenTab(currentUser, 'audit')) void loadAuditLogs()
-            if (tab === 'payroll' && adminMayOpenTab(currentUser, 'payroll')) void loadPayroll()
+            if (tab === 'overview' && adminMayOpenTab(currentUser, 'audit')) {void loadAuditLogs()}
+            if (tab === 'payroll' && adminMayOpenTab(currentUser, 'payroll')) {void loadPayroll()}
         }, 30000)
         return () => clearInterval(interval)
     }, [tab, currentUser, loadPayroll, loadAuditLogs])
 
     // Settings tab loads from GET /settings/internal; syncing branding here races refreshBranding and clears social/AI fields.
     useEffect(() => {
-        if (!branding || tab === 'settings' || settingsDirty) return
+        if (!branding || tab === 'settings' || settingsDirty) {return}
         queueMicrotask(() => {
             hydrateSettingsForm(branding)
         })
@@ -1000,7 +1000,7 @@ function Admin() {
 
 
     const fileToDataUrl = async (file) => {
-        if (!file) return ''
+        if (!file) {return ''}
         return new Promise((resolve, reject) => {
             const reader = new FileReader()
             reader.onload = () => resolve(String(reader.result || ''))
@@ -1012,7 +1012,7 @@ function Admin() {
     const onImagePick = async (event, key) => {
         try {
             const file = event.target.files?.[0]
-            if (!file) return
+            if (!file) {return}
             if (!file.type.startsWith('image/')) {
                 showToast('Please select an image file.', 'error')
                 return
@@ -1071,7 +1071,6 @@ function Admin() {
         try {
             setAddLoading(true)
             const data = await usersAPI.register(validated.payload)
-            console.log('[Admin] User registered')
             setUsers((prev) => [data.user, ...prev.filter((u) => u.id !== data.user.id)])
             setRecentlyAddedUserId(data.user.id)
             void refreshUsers(true)
@@ -1140,7 +1139,7 @@ function Admin() {
             }
             if (isSuperAdmin(currentUser) && editUser.role === 'admin') {
                 const am = editUser.admin_modules
-                if (am == null) {
+                if (am === null || am === undefined) {
                     payload.admin_modules = null
                 } else if (Array.isArray(am)) {
                     const def = ADMIN_DEFAULT_MODULE_KEYS_FOR_ADMIN
@@ -1163,12 +1162,12 @@ function Admin() {
 
     const saveModulePermissions = useCallback(async (draftModules) => {
         const u = modulePermUser
-        if (!u) return
+        if (!u) {return}
         setModulePermSaving(true)
         try {
             const admin_modules = (() => {
-                if (!Array.isArray(draftModules)) return null
-                if (draftModules.length === 0) return []
+                if (!Array.isArray(draftModules)) {return null}
+                if (draftModules.length === 0) {return []}
                 const def = ADMIN_DEFAULT_MODULE_KEYS_FOR_ADMIN
                 const isDefault =
                     draftModules.length === def.length && def.every((k) => draftModules.includes(k))
@@ -1226,14 +1225,12 @@ function Admin() {
     // ── Reset password ────────────────────────────────
     const resetPassword = async () => {
         setResetError('')
-        if (!resetUser) return
+        if (!resetUser) {return}
         const target = resetUser
         try {
             setResetLoading(true)
             // The server generates a secure temporary password and returns it once.
             const data = await usersAPI.resetPassword(target.id)
-            // Log the API response for debugging (never the temp password itself).
-            console.log('[Admin] Password reset completed')
             setResetUser(null)
             if (data.temporaryPassword) {
                 setCredentialCopied(false)
@@ -1265,7 +1262,7 @@ function Admin() {
     }
 
     const runConfirmAction = async () => {
-        if (!confirmDialog?.onConfirm) return
+        if (!confirmDialog?.onConfirm) {return}
         try {
             setConfirmLoading(true)
             await confirmDialog.onConfirm()
@@ -1299,7 +1296,7 @@ function Admin() {
                 body: JSON.stringify({ clinician_id: assignClinicianId, scribe_id: assignScribeId }),
             })
             const data = await res.json()
-            if (!res.ok) throw new Error(data.error)
+            if (!res.ok) {throw new Error(data.error)}
             setAssignments(prev => [...prev, data.assignment])
             setAssignClinicianId(''); setAssignScribeId('')
             showToast('Scribe assigned successfully')
@@ -1314,7 +1311,7 @@ function Admin() {
                 headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
             })
             const data = await res.json().catch(() => ({}))
-            if (!res.ok) throw new Error(data.error || 'Failed to remove assignment.')
+            if (!res.ok) {throw new Error(data.error || 'Failed to remove assignment.')}
             setAssignments(prev => prev.filter(a => a.id !== id))
             showToast('Assignment removed')
         } catch (err) { showToast(err.message, 'error') }
@@ -1504,9 +1501,9 @@ function Admin() {
                 ]
             case 'audit':
                 return [
-                    { label: 'Directory total', value: auditDashMeta?.total != null ? String(auditDashMeta.total) : String(auditTotalEvents) },
-                    { label: 'Page', value: auditDashMeta?.page != null ? String(auditDashMeta.page) : '—' },
-                    { label: 'Alerts', value: auditDashMeta?.alerts != null ? String(auditDashMeta.alerts) : '—' },
+                    { label: 'Directory total', value: auditDashMeta?.total !== null && auditDashMeta?.total !== undefined ? String(auditDashMeta.total) : String(auditTotalEvents) },
+                    { label: 'Page', value: auditDashMeta?.page !== null && auditDashMeta?.page !== undefined ? String(auditDashMeta.page) : '—' },
+                    { label: 'Alerts', value: auditDashMeta?.alerts !== null && auditDashMeta?.alerts !== undefined ? String(auditDashMeta.alerts) : '—' },
                 ]
             case 'settings':
                 return [
@@ -1549,13 +1546,14 @@ function Admin() {
         // System Health is Super Admin-only and intentionally not part of the
         // grantable admin-module set (the backend enforces super_admin too), so
         // it's surfaced here rather than via resolvedAdminModuleKeys.
-        if (isSuperAdmin(currentUser)) keys.add('health')
+        if (isSuperAdmin(currentUser)) {keys.add('health')}
         return NAV.filter((n) => keys.has(n.key))
     }, [currentUser])
 
     useEffect(() => {
         if (!navItems.some((n) => n.key === tab)) {
-            setTab(navItems[0]?.key || 'overview')
+            const next = navItems[0]?.key || 'overview'
+            queueMicrotask(() => setTab(next))
         }
     }, [navItems, tab])
 
@@ -2340,7 +2338,7 @@ function Admin() {
                                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
                                             {ADMIN_PORTAL_MODULES.map(({ key: mk, icon, label }) => {
                                                 const on =
-                                                    editUser.admin_modules == null ||
+                                                    editUser.admin_modules === null || editUser.admin_modules === undefined ||
                                                     (Array.isArray(editUser.admin_modules) && editUser.admin_modules.includes(mk))
                                                 return (
                                                     <label
@@ -2469,7 +2467,7 @@ function Admin() {
             <AdminModulePermissionsModal
                 open={!!modulePermUser}
                 user={modulePermUser}
-                onClose={() => { if (!modulePermSaving) setModulePermUser(null) }}
+                onClose={() => { if (!modulePermSaving) {setModulePermUser(null)} }}
                 onSave={saveModulePermissions}
                 saving={modulePermSaving}
             />

@@ -33,7 +33,7 @@ export default class ErrorBoundary extends Component {
 
   render() {
     const { error } = this.state
-    if (!error) return this.props.children
+    if (!error) {return this.props.children}
 
     if (Object.prototype.hasOwnProperty.call(this.props, 'fallback')) {
       return this.props.fallback

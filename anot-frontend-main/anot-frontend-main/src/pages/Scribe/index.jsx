@@ -11,7 +11,8 @@ import { cleanAiDraftForDisplay } from '../../utils/aiDraftFormat'
 import { useRenderRateWarning } from '../../utils/useRenderRateWarning'
 import PortalSidebarFooter from '../../components/PortalSidebarFooter'
 import ErrorBoundary, { PortalCrashFallback } from '../../components/ErrorBoundary'
-import PortalCalendarDayPreview, { scribeDayPreviewRows } from '../../components/PortalCalendarDayPreview'
+import PortalCalendarDayPreview from '../../components/PortalCalendarDayPreview'
+import { scribeDayPreviewRows } from '../../components/scribeDayPreviewRows'
 import { fmtAppointmentTime } from '../../utils/timeFormat'
 import { getCurrentUser } from '../../utils/getCurrentUser'
 import { useSessionTimeout } from '../../utils/useSessionTimeout'
@@ -30,9 +31,9 @@ function localDate(off = 0, fmt = 'input') {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
-  if (fmt === 'input') return `${y}-${m}-${day}`
-  if (fmt === 'day') return d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()
-  if (fmt === 'date') return String(d.getDate())
+  if (fmt === 'input') {return `${y}-${m}-${day}`}
+  if (fmt === 'day') {return d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()}
+  if (fmt === 'date') {return String(d.getDate())}
   return `${y}-${m}-${day}`
 }
 
@@ -46,16 +47,16 @@ function summarizeVisitsForDay(visits) {
   for (const v of list) {
     counts.total += 1
     const st = scribeEffectiveStatus(v)
-    if (st === 'uploaded') counts.completed += 1
-    else if (st === 'submitted') counts.submitted += 1
-    else counts.pending += 1
+    if (st === 'uploaded') {counts.completed += 1}
+    else if (st === 'submitted') {counts.submitted += 1}
+    else {counts.pending += 1}
   }
   return counts
 }
 
 function scheduleDayPreviewHeading(dayOff, stats) {
   const total = stats && typeof stats.total === 'number' ? stats.total : null
-  const countLabel = total == null ? '…' : String(total)
+  const countLabel = total === null || total === undefined ? '…' : String(total)
   const suffix = total === 1 ? '' : 's'
   return `${localDate(dayOff, 'day')} ${localDate(dayOff, 'date')} · ${countLabel} visit${suffix}`
 }
@@ -71,7 +72,7 @@ function ScheduleDayPreview({ dayOff, stats, providerName }) {
         providerName={providerName ? `Provider: ${providerName}` : null}
         rows={rows}
         emptyMessage={safeStats ? 'No visits for this provider' : undefined}
-        loading={safeStats == null}
+        loading={safeStats === null || safeStats === undefined}
         classPrefix="portal-cal-strip"
       />
     </ErrorBoundary>
@@ -85,7 +86,7 @@ function localDateStr(offsetDays = 0) {
 }
 
 function addDaysToDateStr(dateStr, delta) {
-  if (!dateStr) return localDateStr(delta)
+  if (!dateStr) {return localDateStr(delta)}
   const [y, m, d] = dateStr.split('-').map(Number)
   const dt = new Date(y, m - 1, d)
   dt.setDate(dt.getDate() + delta)
@@ -93,19 +94,19 @@ function addDaysToDateStr(dateStr, delta) {
 }
 
 function fmtDateLabel(dateStr) {
-  if (!dateStr) return ''
+  if (!dateStr) {return ''}
   const [y, m, day] = dateStr.split('-').map(Number)
   return new Date(y, m - 1, day).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 }
 
 function fmtShortDate(dateStr) {
-  if (!dateStr) return ''
+  if (!dateStr) {return ''}
   const [y, m, day] = dateStr.split('-').map(Number)
   return new Date(y, m - 1, day).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
 function fmtDisplayDate(dateStr) {
-  if (!dateStr) return ''
+  if (!dateStr) {return ''}
   const d = new Date(dateStr)
   if (!Number.isNaN(d.getTime())) {
     return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
@@ -114,9 +115,9 @@ function fmtDisplayDate(dateStr) {
 }
 
 function fmtDisplayDateTime(value) {
-  if (!value) return ''
+  if (!value) {return ''}
   const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return fmtDisplayDate(value)
+  if (Number.isNaN(d.getTime())) {return fmtDisplayDate(value)}
   return d.toLocaleString('en-US', {
     year: 'numeric', month: 'long', day: 'numeric',
     hour: 'numeric', minute: '2-digit',
@@ -124,12 +125,12 @@ function fmtDisplayDateTime(value) {
 }
 
 function fmtDuration(secs) {
-  if (!secs) return '—'
+  if (!secs) {return '—'}
   return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
 }
 
 function fmtTime(t) {
-  if (!t) return ''
+  if (!t) {return ''}
   const [h, m] = t.split(':')
   const hour = parseInt(h)
   return `${hour > 12 ? hour - 12 : hour === 0 ? 12 : hour}:${m} ${hour >= 12 ? 'PM' : 'AM'}`
@@ -137,10 +138,10 @@ function fmtTime(t) {
 
 // Parse transcription stored as JSON array or plain string
 function parseTranscriptions(raw) {
-  if (!raw) return []
+  if (!raw) {return []}
   try {
     const parsed = JSON.parse(raw)
-    if (Array.isArray(parsed)) return parsed
+    if (Array.isArray(parsed)) {return parsed}
     return [parsed]
   } catch {
     return [raw]
@@ -152,7 +153,7 @@ function parseTranscriptions(raw) {
  */
 function mergePolledNoteData(note, visitId, baselineRef, txSegmentsRef) {
   const updates = { note, selectedRecPatch: { transcription_status: note.transcription_status } }
-  if (!note.transcription) return updates
+  if (!note.transcription) {return updates}
 
   const base = baselineRef.current
   const hasBaseline = String(base.visitId) === String(visitId)
@@ -206,7 +207,7 @@ const STATUS_CFG = {
 }
 
 function ScoreBar({ value }) {
-  if (!value) return <span style={{ color: '#B4B2A9', fontSize: 12 }}>—</span>
+  if (!value) {return <span style={{ color: '#B4B2A9', fontSize: 12 }}>—</span>}
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <div style={{ flex: 1, height: 6, background: '#E2E8F0', borderRadius: 3, overflow: 'hidden' }}>
@@ -379,12 +380,14 @@ function Scribe() {
   // Latest values for callbacks that must not re-subscribe per keystroke
   // (e.g. the 30s transcription poll's merge path).
   const baselineRef = useRef(baseline)
-  baselineRef.current = baseline
   const txSegmentsRef = useRef(txSegments)
-  txSegmentsRef.current = txSegments
+  useEffect(() => {
+    baselineRef.current = baseline
+    txSegmentsRef.current = txSegments
+  }, [baseline, txSegments])
 
   const isDirty = useMemo(() => {
-    if (!selectedRec?.id || baseline.visitId !== selectedRec.id) return false
+    if (!selectedRec?.id || baseline.visitId !== selectedRec.id) {return false}
     return finalNote !== baseline.final || JSON.stringify(txSegments) !== baseline.tx
   }, [selectedRec?.id, finalNote, txSegments, baseline])
 
@@ -425,7 +428,7 @@ function Scribe() {
 
   const runConfirm = useCallback(async () => {
     const onConfirm = confirmDialog?.onConfirm
-    if (!onConfirm) return
+    if (!onConfirm) {return}
     setConfirmLoading(true)
     try {
       await onConfirm()
@@ -436,8 +439,8 @@ function Scribe() {
   }, [confirmDialog])
 
   const loadDayStats = useCallback(async (dayOff) => {
-    if (!selectedProvider?.id) return
-    if (dayStatsLoadingRef.current.has(dayOff)) return
+    if (!selectedProvider?.id) {return}
+    if (dayStatsLoadingRef.current.has(dayOff)) {return}
     let alreadyLoaded = false
     setDayStats((prev) => {
       if (prev[dayOff] !== undefined && prev[dayOff] !== null) {
@@ -446,7 +449,7 @@ function Scribe() {
       }
       return { ...prev, [dayOff]: null }
     })
-    if (alreadyLoaded) return
+    if (alreadyLoaded) {return}
     dayStatsLoadingRef.current.add(dayOff)
     try {
       const data = await visitsAPI.getAll(selectedProvider.id, localDate(dayOff))
@@ -483,11 +486,11 @@ function Scribe() {
       setLoadingRecordings(true)
       setRecordingsError(null)
       const data = await visitsAPI.getAll(providerId, date, controller.signal)
-      if (controller.signal.aborted) return
+      if (controller.signal.aborted) {return}
       const all  = data.visits || []
       setRecordings(all.filter(v => !['upcoming', 'scheduled', 'in-progress'].includes(v.status)))
     } catch (err) {
-      if (isAbortError(err) || controller.signal.aborted) return
+      if (isAbortError(err) || controller.signal.aborted) {return}
       setRecordings([])
       setRecordingsError('Could not load recordings. Check your connection and try again later.')
       showNotif('Failed to load recordings.', 'red')
@@ -506,9 +509,9 @@ function Scribe() {
       const controller = new AbortController()
       noteAbortRef.current = controller
       try {
-        if (!mergeOnly) setLoadingNote(true)
+        if (!mergeOnly) {setLoadingNote(true)}
         const data = await notesAPI.getByVisit(visitId, controller.signal)
-        if (controller.signal.aborted) return false
+        if (controller.signal.aborted) {return false}
         const n = data.note
 
         if (mergeOnly) {
@@ -552,7 +555,7 @@ function Scribe() {
         )
         return true
       } catch (err) {
-        if (isAbortError(err) || controller.signal.aborted) return false
+        if (isAbortError(err) || controller.signal.aborted) {return false}
         if (!mergeOnly) {
           const failed = handleNoteLoadFailure(showNotif, mergeOnly)
           setNote(failed.note)
@@ -564,7 +567,7 @@ function Scribe() {
       } finally {
         if (noteAbortRef.current === controller) {
           noteAbortRef.current = null
-          if (!mergeOnly) setLoadingNote(false)
+          if (!mergeOnly) {setLoadingNote(false)}
         }
       }
     },
@@ -573,7 +576,7 @@ function Scribe() {
 
   const performNoteRefresh = useCallback(
     async (mode) => {
-      if (!selectedRec?.id || noteRefreshing) return
+      if (!selectedRec?.id || noteRefreshing) {return}
       setNoteRefreshing(true)
       try {
         const ok =
@@ -592,8 +595,8 @@ function Scribe() {
     [selectedRec?.id, noteRefreshing, loadNote, showNotif],
   )
 
-  const onDiscardReloadFromServer = useCallback(() => {
-    if (!selectedRec?.id || noteRefreshing || loadingNote) return
+  const _onDiscardReloadFromServer = useCallback(() => {
+    if (!selectedRec?.id || noteRefreshing || loadingNote) {return}
     setConfirmDialog({
       tone: 'danger',
       title: 'Discard local edits and reload?',
@@ -618,7 +621,7 @@ function Scribe() {
   }
 
   useEffect(() => {
-    if (!isDirty) return
+    if (!isDirty) {return}
     const onBeforeUnload = (e) => {
       e.preventDefault()
       e.returnValue = ''
@@ -639,8 +642,8 @@ function Scribe() {
   }, [])
 
   useEffect(() => {
-    if (activeTab === 'notes')  loadMyNotes()
-    if (activeTab === 'grades') loadGrades()
+    if (activeTab === 'notes')  {loadMyNotes()}
+    if (activeTab === 'grades') {loadGrades()}
   }, [activeTab]) // eslint-disable-line react-hooks/exhaustive-deps -- tab switch only; loaders intentionally omitted
 
   useEffect(() => {
@@ -649,12 +652,12 @@ function Scribe() {
   }, [selectedProvider?.id])
 
   useEffect(() => {
-    if (screen !== 'recordings' || !selectedProvider?.id || !selectedDate) return
+    if (screen !== 'recordings' || !selectedProvider?.id || !selectedDate) {return}
     void loadRecordings(selectedProvider.id, selectedDate)
   }, [screen, selectedProvider?.id, selectedDate, loadRecordings])
 
   const saveDraft = async () => {
-    if (!selectedRec?.id) return
+    if (!selectedRec?.id) {return}
     if (!finalNote.trim()) { showNotif('Please write the note before saving.', 'amber'); return }
     try {
       setSavingDraft(true)
@@ -665,7 +668,7 @@ function Scribe() {
         const fn = saved.note.final_note || ''
         setFinalNote(fn)
         let segs = txSegments
-        if (saved.note.transcription != null && String(saved.note.transcription).length > 0) {
+        if (saved.note.transcription !== null && saved.note.transcription !== undefined && String(saved.note.transcription).length > 0) {
           segs = parseTranscriptions(saved.note.transcription)
           setTxSegments(segs)
         }
@@ -677,7 +680,7 @@ function Scribe() {
   }
 
   const uploadToEMR = async () => {
-    if (!selectedRec?.id) return
+    if (!selectedRec?.id) {return}
     if (!finalNote.trim()) { showNotif('Please write the note before uploading.', 'amber'); return }
     try {
       setUploadingToEMR(true)
@@ -697,7 +700,7 @@ function Scribe() {
 
   const runGenerateDraft = async () => {
     const noteDone = ['submitted', 'uploaded'].includes(selectedRec?.note_status ?? selectedRec?.status)
-    if (!selectedRec?.id || generatingDraft || noteDone) return
+    if (!selectedRec?.id || generatingDraft || noteDone) {return}
     setGeneratingDraft(true)
     try {
       const data = await visitsAPI.generateDraft(selectedRec.id)
@@ -711,9 +714,9 @@ function Scribe() {
   }
 
   useEffect(() => {
-    if (screen !== 'note' || !selectedRec?.id) return undefined
+    if (screen !== 'note' || !selectedRec?.id) {return undefined}
     const st = note?.transcription_status || selectedRec?.transcription_status
-    if (st !== 'processing') return undefined
+    if (st !== 'processing') {return undefined}
     const timer = setInterval(() => {
       void loadNote(selectedRec.id, { mergeOnly: true })
     }, 30000)
@@ -780,7 +783,7 @@ function Scribe() {
   }
 
   const applyEhrUpload = useCallback((updatedNote) => {
-    if (!updatedNote) return
+    if (!updatedNote) {return}
     const noteId = updatedNote.id
     const visitId = updatedNote.visit_id
     setNote((prev) => (prev && String(prev.id) === String(noteId)
@@ -796,7 +799,7 @@ function Scribe() {
   }, [])
 
   const requestUploadToEHR = useCallback((noteId) => {
-    if (!noteId) return
+    if (!noteId) {return}
     setConfirmDialog({
       tone: 'primary',
       title: 'Upload to EHR',
@@ -819,9 +822,9 @@ function Scribe() {
     leaveNoteScreen(() => {
       setActiveTab(tab)
       if (tab === 'recordings') {
-        if (selectedProvider) setScreen('date')
-        else setScreen('providers')
-      } else setScreen(tab)
+        if (selectedProvider) {setScreen('date')}
+        else {setScreen('providers')}
+      } else {setScreen(tab)}
       sidebar.close()
     })
   }, [leaveNoteScreen, selectedProvider, sidebar])
@@ -858,7 +861,7 @@ function Scribe() {
       onLogout={requestLogout}
     />
   ), [
-    sidebar.open,
+    sidebar,
     offCanvasSidebar,
     branding,
     activeTab,
@@ -866,7 +869,7 @@ function Scribe() {
     selectedProvider,
     selectedDate,
     screen,
-    currentUser.name,
+    currentUser,
     confirmDialog,
     confirmLoading,
     leaveNoteScreen,
@@ -880,7 +883,7 @@ function Scribe() {
   // ─── MY NOTES ─────────────────────────────────────
 
   if (screen === 'notes') {
-    const byProvider = myNotes.reduce((acc, n) => { const key = n.clinician_name || 'Unknown'; if (!acc[key]) acc[key] = []; acc[key].push(n); return acc }, {})
+    const byProvider = myNotes.reduce((acc, n) => { const key = n.clinician_name || 'Unknown'; if (!acc[key]) {acc[key] = [];} acc[key].push(n); return acc }, {})
     return (
       <div className="sf-page sf-portal adm-shell scribe-portal">
         {sessionTimeoutModal}
@@ -1447,7 +1450,7 @@ function Scribe() {
 
   // ─── NOTE EDITOR ──────────────────────────────────
 
-  if (screen !== 'note') return null
+  if (screen !== 'note') {return null}
 
   const notePhase = selectedRec?.note_status ?? selectedRec?.status
   const isDone = ['submitted', 'uploaded'].includes(notePhase)
@@ -1460,11 +1463,6 @@ function Scribe() {
   )
   const currentSeg = txSegments[activeRecIdx] ?? ''
   const txSt = note?.transcription_status || selectedRec?.transcription_status
-  const txBadge =
-    txSt === 'processing' ? { label: 'Processing', cls: 'badge-blue' }
-      : txSt === 'completed' ? { label: 'Completed', cls: 'badge-green' }
-        : txSt === 'failed' ? { label: 'Failed', cls: 'badge-gray' }
-          : { label: 'Idle', cls: 'badge-amber' }
   return (
     <div className="sf-page-fixed sf-portal adm-shell scribe-portal">
       {sessionTimeoutModal}
@@ -1525,7 +1523,7 @@ function Scribe() {
                     const v = e.target.value
                     setTxSegments((prev) => {
                       const next = [...prev]
-                      while (next.length <= activeRecIdx) next.push('')
+                      while (next.length <= activeRecIdx) {next.push('')}
                       next[activeRecIdx] = v
                       return next
                     })

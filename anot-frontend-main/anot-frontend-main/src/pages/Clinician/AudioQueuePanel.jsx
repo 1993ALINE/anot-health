@@ -3,7 +3,7 @@ import * as offlineAudioQueue from '../../utils/offlineAudioQueue'
 import { getQueueStatus, retryFailedUploads } from '../../utils/offlineSyncManager'
 
 function formatTime(ts) {
-  if (!ts) return '—'
+  if (!ts) {return '—'}
   try {
     return new Date(ts).toLocaleString(undefined, {
       month: 'short',

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
     ADMIN_DEFAULT_MODULE_KEYS_FOR_ADMIN,
     ADMIN_GRANTABLE_MODULE_KEYS,
@@ -8,32 +8,24 @@ import './adminModulePermissionsModal.css'
 
 function toggleKeyInDraft(draft, key, on) {
     const set = new Set(draft)
-    if (on) set.add(key)
-    else set.delete(key)
+    if (on) { set.add(key) }
+    else { set.delete(key) }
     return ADMIN_GRANTABLE_MODULE_KEYS.filter((k) => set.has(k))
 }
 
-export default function AdminModulePermissionsModal({
-    open,
-    user,
-    onClose,
-    onSave,
-    saving,
-}) {
-    const [draft, setDraft] = useState([])
-    const [error, setError] = useState('')
+function computeModuleDraft(user) {
+    if (user.admin_modules === null || user.admin_modules === undefined) {
+        return [...ADMIN_DEFAULT_MODULE_KEYS_FOR_ADMIN]
+    }
+    if (Array.isArray(user.admin_modules)) {
+        return ADMIN_GRANTABLE_MODULE_KEYS.filter((k) => user.admin_modules.includes(k))
+    }
+    return [...ADMIN_DEFAULT_MODULE_KEYS_FOR_ADMIN]
+}
 
-    useEffect(() => {
-        if (!open || !user) return
-        if (user.admin_modules == null) {
-            setDraft([...ADMIN_DEFAULT_MODULE_KEYS_FOR_ADMIN])
-        } else if (Array.isArray(user.admin_modules)) {
-            setDraft(ADMIN_GRANTABLE_MODULE_KEYS.filter((k) => user.admin_modules.includes(k)))
-        } else {
-            setDraft([...ADMIN_DEFAULT_MODULE_KEYS_FOR_ADMIN])
-        }
-        setError('')
-    }, [open, user])
+function AdminModulePermissionsModalBody({ user, onClose, onSave, saving }) {
+    const [draft, setDraft] = useState(() => computeModuleDraft(user))
+    const [error, setError] = useState('')
 
     const selectedCount = draft.length
     const allSelected = useMemo(
@@ -51,23 +43,20 @@ export default function AdminModulePermissionsModal({
     const removeAll = useCallback(() => setDraft([]), [])
 
     const handleSave = useCallback(async () => {
-        if (!user) return
         setError('')
         try {
             await onSave(draft)
         } catch (e) {
             setError(e?.message || 'Save failed.')
         }
-    }, [user, draft, onSave])
-
-    if (!open || !user) return null
+    }, [draft, onSave])
 
     return (
         <div
             className="adm-modperm-overlay"
             role="presentation"
             onClick={(e) => {
-                if (e.target === e.currentTarget && !saving) onClose()
+                if (e.target === e.currentTarget && !saving) { onClose() }
             }}
         >
             <div
@@ -157,5 +146,25 @@ export default function AdminModulePermissionsModal({
                 </footer>
             </div>
         </div>
+    )
+}
+
+export default function AdminModulePermissionsModal({
+    open,
+    user,
+    onClose,
+    onSave,
+    saving,
+}) {
+    if (!open || !user) { return null }
+
+    return (
+        <AdminModulePermissionsModalBody
+            key={user.id}
+            user={user}
+            onClose={onClose}
+            onSave={onSave}
+            saving={saving}
+        />
     )
 }

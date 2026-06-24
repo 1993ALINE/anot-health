@@ -1,4 +1,4 @@
-/* eslint-disable no-restricted-globals */
+ 
 const CACHE_NAME = 'anot-v1'
 const urlsToCache = ['/', '/index.html']
 
@@ -20,7 +20,7 @@ self.addEventListener('fetch', (event) => {
   const { request } = event
   const url = new URL(request.url)
 
-  if (request.method !== 'GET') return
+  if (request.method !== 'GET') {return}
 
   if (url.pathname.includes('/assets/') || /\.(js|css|png|jpg|jpeg|svg|webp|woff2?)$/i.test(url.pathname)) {
     event.respondWith(

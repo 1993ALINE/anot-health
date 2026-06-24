@@ -1,6 +1,7 @@
 ﻿import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
+import './pages/landscape-orientation.css'
 import './pages/global.css'
 import './pages/mobile-responsive-patch.css'
 import './components/portal-calendar-strip.css'

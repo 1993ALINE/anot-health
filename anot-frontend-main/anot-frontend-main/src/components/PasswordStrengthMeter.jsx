@@ -16,7 +16,7 @@ const RULES = [
  * @param {boolean} showChecklist Show the per-rule checklist (default true).
  */
 export default function PasswordStrengthMeter({ password = '', showChecklist = true }) {
-  if (!password) return null
+  if (!password) {return null}
 
   const strength = getPasswordStrength(password)
   const checks = getPasswordChecks(password)

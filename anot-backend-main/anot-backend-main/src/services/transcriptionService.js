@@ -1,4 +1,5 @@
-const { loadAiSettings, useDeepgram } = require('./aiSettings')
+﻿const { extractConfidence } = require('../utils/transcriptionConfidence')
+const { loadAiSettings, useDeepgram, defaultRuntimeSettings } = require('./aiSettings')
 
 /**
  * Validate transcription request inputs
@@ -85,7 +86,13 @@ class TranscriptionService {
   static async transcribeAudio(audioBuffer, visitId, language = 'en', options = {}) {
     validateTranscriptionRequest(visitId, audioBuffer)
 
-    const settings = await loadAiSettings()
+    let settings
+    try {
+      settings = await loadAiSettings()
+    } catch (err) {
+      console.warn('[transcriptionService] loadAiSettings failed:', err.message)
+      settings = defaultRuntimeSettings()
+    }
     assertDeepgramConfigured(settings)
 
     const params = buildTranscriptionParams(settings, language, options)

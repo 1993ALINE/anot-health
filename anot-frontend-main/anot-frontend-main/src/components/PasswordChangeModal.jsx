@@ -52,7 +52,7 @@ export default function PasswordChangeModal({ temporaryToken, onPasswordChanged 
 
   const handleSubmit = async (e) => {
     e?.preventDefault?.()
-    if (submitting) return
+    if (submitting) {return}
     if (!policy.valid) {
       setError(policy.message || PASSWORD_POLICY_TEXT)
       return
@@ -112,7 +112,7 @@ export default function PasswordChangeModal({ temporaryToken, onPasswordChanged 
               value={newPassword}
               onChange={(e) => {
                 setNewPassword(e.target.value)
-                if (error) setError('')
+                if (error) {setError('')}
               }}
               style={S.input}
               autoComplete="new-password"
@@ -142,7 +142,7 @@ export default function PasswordChangeModal({ temporaryToken, onPasswordChanged 
             value={confirm}
             onChange={(e) => {
               setConfirm(e.target.value)
-              if (error) setError('')
+              if (error) {setError('')}
             }}
             style={S.input}
             autoComplete="new-password"

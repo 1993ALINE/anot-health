@@ -55,7 +55,7 @@ function withStore(mode, fn) {
  * @param {object} metadata - mode, durationSeconds, patientName, type, etc.
  */
 export async function addToQueue(audioBlob, patientId, visitId, metadata = {}) {
-  if (!audioBlob?.size || !visitId) return null
+  if (!audioBlob?.size || !visitId) {return null}
 
   const item = {
     audioBlob,

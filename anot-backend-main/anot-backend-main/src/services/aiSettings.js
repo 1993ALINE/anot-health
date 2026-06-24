@@ -21,20 +21,36 @@ const DEFAULTS = {
   ffmpeg_preprocess_before_transcribe: true,
 }
 
-let cache = { at: 0, value: null }
+let cache = { at: 0, value: null, degraded: false }
 const TTL_MS = 4000
 
+function defaultRuntimeSettings() {
+  return { ...DEFAULTS, deepgram_api_key: null, anthropic_api_key: null }
+}
+
+function safeDecrypt(encrypted, fieldName) {
+  if (!encrypted) return null
+  try {
+    return decryptString(encrypted, fieldName)
+  } catch (err) {
+    console.warn(`[aiSettings] Skipping ${fieldName}: ${err.message}`)
+    return null
+  }
+}
+
 function rowToRuntime(row) {
-  if (!row) return { ...DEFAULTS, deepgram_api_key: null, anthropic_api_key: null }
+  if (!row) return defaultRuntimeSettings()
 
   const encryptedKey = row.deepgram_api_key_enc
-  const key = encryptedKey ? decryptString(encryptedKey) : null
-
-  const anthropicKey = row.anthropic_api_key_enc ? decryptString(row.anthropic_api_key_enc) : null
+  const key = safeDecrypt(encryptedKey, 'deepgram_api_key_enc')
+  const anthropicKey = safeDecrypt(row.anthropic_api_key_enc, 'anthropic_api_key_enc')
   const model = String(row.anthropic_model || DEFAULTS.anthropic_model).trim()
 
   if (encryptedKey && !key) {
-    console.error('[aiSettings] Deepgram API key could not be decrypted (check SETTINGS_ENCRYPTION_KEY / JWT_SECRET).')
+    console.warn('[aiSettings] Deepgram API key could not be decrypted — transcription will be unavailable until the key is re-entered in Settings')
+  }
+  if (row.anthropic_api_key_enc && !anthropicKey) {
+    console.warn('[aiSettings] Anthropic API key could not be decrypted — AI note generation will use ANTHROPIC_API_KEY env var if set')
   }
 
   return {
@@ -62,17 +78,27 @@ async function loadAiSettings() {
   if (cache.value && now - cache.at < TTL_MS) {
     return cache.value
   }
-  await ensureMediaAndAiSchema()
-  const cols = await getSystemSettingsColumns()
-  const r = await pool.query('SELECT * FROM system_settings WHERE id = 1')
-  const merged = mergeRowWithExtensions(r.rows[0] || {}, cols)
-  const value = rowToRuntime(merged)
-  cache = { at: now, value }
-  return value
+
+  try {
+    await ensureMediaAndAiSchema()
+    const cols = await getSystemSettingsColumns()
+    const r = await pool.query('SELECT * FROM system_settings WHERE id = 1')
+    const merged = mergeRowWithExtensions(r.rows[0] || {}, cols)
+    const value = rowToRuntime(merged)
+    cache = { at: now, value, degraded: false }
+    return value
+  } catch (err) {
+    console.error('[aiSettings] Failed to load settings from database:', err.message)
+    console.warn('[aiSettings] Continuing with default AI settings — API will remain available')
+    const fallback = defaultRuntimeSettings()
+    cache = { at: now, value: fallback, degraded: true }
+    return fallback
+  }
 }
 
 function invalidateAiSettingsCache() {
   cache.value = null
+  cache.degraded = false
 }
 
 function useDeepgram(settings) {
@@ -83,8 +109,13 @@ function useDeepgram(settings) {
 }
 
 async function getAnthropicKey() {
-  const settings = await loadAiSettings()
-  return settings.anthropic_api_key || process.env.ANTHROPIC_API_KEY || null
+  try {
+    const settings = await loadAiSettings()
+    return settings.anthropic_api_key || process.env.ANTHROPIC_API_KEY || null
+  } catch (err) {
+    console.warn('[aiSettings] getAnthropicKey fallback:', err.message)
+    return process.env.ANTHROPIC_API_KEY || null
+  }
 }
 
 module.exports = {
@@ -92,5 +123,6 @@ module.exports = {
   invalidateAiSettingsCache,
   useDeepgram,
   getAnthropicKey,
+  defaultRuntimeSettings,
   DEFAULTS,
 }

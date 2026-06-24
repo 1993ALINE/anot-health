@@ -11,7 +11,7 @@ const SECTIONS = [
 function parseNote(text) {
   const bodies = Object.fromEntries(SECTIONS.map((s) => [s.label, '']))
   const raw = String(text || '').trim()
-  if (!raw) return bodies
+  if (!raw) {return bodies}
 
   let remaining = raw
   for (let i = 0; i < SECTIONS.length; i += 1) {
@@ -19,7 +19,7 @@ function parseNote(text) {
     const next = SECTIONS[i + 1]
     const headerRe = new RegExp(`${section.match.source}\\s*:?\\s*`, 'i')
     const headerMatch = remaining.match(headerRe)
-    if (!headerMatch) continue
+    if (!headerMatch) {continue}
 
     const start = headerMatch.index + headerMatch[0].length
     let end = remaining.length
@@ -27,7 +27,7 @@ function parseNote(text) {
       const nextRe = new RegExp(`${next.match.source}\\s*:?`, 'i')
       const tail = remaining.slice(start)
       const nextMatch = tail.match(nextRe)
-      if (nextMatch) end = start + nextMatch.index
+      if (nextMatch) {end = start + nextMatch.index}
     }
     bodies[section.label] = remaining.slice(start, end).trim()
   }
