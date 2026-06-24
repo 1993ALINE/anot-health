@@ -1,4 +1,4 @@
-﻿/** Format confidence score for display (0-1 -> percentage) */
+/** Format confidence score for display (0-1 -> percentage) */
 export function formatConfidence(score) {
   if ((score === null || score === undefined) || Number.isNaN(Number(score))) { return null }
   const pct = Math.round(Number(score) * 100)

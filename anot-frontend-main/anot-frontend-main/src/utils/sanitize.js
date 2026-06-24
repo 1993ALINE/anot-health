@@ -1,4 +1,4 @@
-﻿/**
+/**
  * HTML/text sanitization for user-generated content display.
  * Strips script tags and event handlers before rendering.
  */
