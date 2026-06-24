@@ -1,4 +1,4 @@
-﻿import js from '@eslint/js'
+import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
@@ -51,7 +51,7 @@ export default defineConfig([
       'src/pages/Clinician/AudioQueuePanel.jsx',
       'src/pages/Clinician/OfflineIndicator.jsx',
       'src/components/PortalAudioPlayer.jsx',
-      'src/utils/useSessionTimeout.js',
+      'src/utils/useSessionTimeout.jsx',
     ],
     rules: {
       'react-hooks/set-state-in-effect': 'off',

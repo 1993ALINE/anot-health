@@ -25,14 +25,11 @@ export default defineConfig({
       },
       closeBundle() {
         try {
-          // Ensure dist directory exists
           mkdirSync(resolve(__dirname, 'dist'), { recursive: true })
-          // Copy service worker
           copyFileSync(serviceWorkerPath, resolve(__dirname, 'dist/service-worker.js'))
-          console.log('? Service worker copied to dist/')
+          console.log('Service worker copied to dist/')
         } catch (error) {
-          console.warn('?? Service worker copy warning:', error.message)
-          // Don't fail build if service worker copy fails
+          console.warn('Service worker copy warning:', error.message)
         }
       },
     },
