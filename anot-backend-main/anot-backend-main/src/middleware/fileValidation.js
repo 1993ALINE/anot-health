@@ -18,7 +18,7 @@ const ALLOWED_AUDIO_MIMES = [
   'audio/opus',
 ]
 
-const MAX_FILE_SIZE = 500 * 1024 * 1024
+const MAX_FILE_SIZE = 100 * 1024 * 1024
 
 const AUDIO_SIGNATURES = {
   'audio/webm': [[0x1a, 0x45, 0xdf, 0xa3]],
@@ -63,15 +63,13 @@ function validateUploadedFile(req, res, next) {
       return res.status(400).json({ error: 'No audio file uploaded.' })
     }
 
-    const { buffer, mimetype, size } = req.file
+    const { size, s3Key } = req.file
     if (size > MAX_FILE_SIZE) {
       return res.status(413).json({ error: `File too large. Maximum size: ${MAX_FILE_SIZE / (1024 * 1024)}MB.` })
     }
 
-    if (!verifyFileSignature(buffer, mimetype)) {
-      return res.status(400).json({
-        error: 'File signature does not match MIME type. Possible corruption or spoofing.',
-      })
+    if (!s3Key) {
+      return res.status(500).json({ error: 'Upload did not complete.' })
     }
 
     req.fileValidated = true

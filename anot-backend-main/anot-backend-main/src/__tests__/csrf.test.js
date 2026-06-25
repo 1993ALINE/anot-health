@@ -47,7 +47,7 @@ describe('csrf middleware (stateless double-submit)', () => {
     const req = mockReq('GET', { cookies: { [TOKEN_COOKIE]: token } })
     const res = mockRes()
     csrfTokenRoute(req, res)
-    expect(res.body).toEqual({ csrfToken: token })
+    expect(res.body).toEqual({ csrfToken: token, cookieName: TOKEN_COOKIE })
     expect(res.cookieArgs.value).toBe(token)
     expect(res.cookieArgs.opts.maxAge).toBeGreaterThan(0)
   })
@@ -85,7 +85,24 @@ describe('csrf middleware (stateless double-submit)', () => {
     expect(res.body.error).toMatch(/csrf/i)
   })
 
-  test('clearCsrfCookie clears the csrf_token cookie', () => {
+  test('csrfProtection rejects POST without CSRF header', () => {
+    const token = 'e'.repeat(64)
+    const req = mockReq('POST', { cookies: { [TOKEN_COOKIE]: token } })
+    const res = mockRes()
+    csrfProtection(req, res, jest.fn())
+    expect(res.statusCode).toBe(403)
+  })
+
+  test('csrfProtection skips webhook paths (HMAC auth)', () => {
+    const req = mockReq('POST', { headers: {} })
+    req.originalUrl = '/api/webhooks/deepgram'
+    const res = mockRes()
+    const next = jest.fn()
+    csrfProtection(req, res, next)
+    expect(next).toHaveBeenCalled()
+  })
+
+  test('clearCsrfCookie clears the CSRF cookie', () => {
     const res = mockRes()
     clearCsrfCookie(res)
     expect(res.clearedCookie.name).toBe(TOKEN_COOKIE)

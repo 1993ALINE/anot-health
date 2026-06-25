@@ -3,19 +3,16 @@ const router = express.Router()
 const multer = require('multer')
 const pool = require('../config/db')
 const { protect, restrict } = require('../middleware/auth')
-const { createSecureUpload, validateUploadedFile } = require('../middleware/fileValidation')
+const { audioFileFilter, MAX_FILE_SIZE } = require('../middleware/fileValidation')
+const { createS3StreamStorage } = require('../middleware/s3StreamUpload')
 const { getPublicErrorMessage, logServerError } = require('../utils/errorMessages')
 const { runAIPipeline } = require('../utils/aiPipeline')
 const { getVisitForUser } = require('../utils/visitAccess')
 const { loadAiSettings, defaultRuntimeSettings } = require('../services/aiSettings')
-const { uploadAudio, getAudioStream, dbPathToKey } = require('../services/s3Storage')
+const { getAudioStream, dbPathToKey } = require('../services/s3Storage')
 const cloudWatchAudit = require('../utils/logger')
 
-// ─── Storage ──────────────────────────────────────────────────────────────────
-// Files are buffered in memory then uploaded to S3 (local disk is wiped on
-// every Elastic Beanstalk redeploy, so nothing durable can live there).
-
-const upload = createSecureUpload(multer.memoryStorage())
+// Stream multipart uploads directly to S3 (no in-memory buffering).
 
 function extFromMimetype(mimetype) {
   return mimetype.includes('mp4') ? 'mp4' : mimetype.includes('ogg') ? 'ogg' : 'webm'
@@ -23,6 +20,51 @@ function extFromMimetype(mimetype) {
 
 function buildAudioFilename(visitId, mimetype) {
   return `visit_${visitId}_${Date.now()}.${extFromMimetype(mimetype)}`
+}
+
+async function resolveUploadTarget(req, file) {
+  const visitId = req.params.visitId
+  const visit = await getVisitForUser(visitId, req.user)
+  if (!visit) {
+    throw Object.assign(new Error('Visit not found or not yours.'), { status: 404 })
+  }
+
+  let settings
+  try {
+    settings = await loadAiSettings()
+  } catch (err) {
+    console.warn('[audio] loadAiSettings failed, using defaults:', err.message)
+    settings = defaultRuntimeSettings()
+  }
+
+  const maxBytes = Math.min(
+    (settings.ffmpeg_max_upload_mb || 100) * 1024 * 1024,
+    MAX_FILE_SIZE,
+  )
+  const filename = buildAudioFilename(visitId, file.mimetype)
+  const audioPath = `/uploads/${filename}`
+
+  req._audioUploadMeta = { visit, settings, audioPath, maxBytes }
+  return { key: dbPathToKey(audioPath), maxBytes }
+}
+
+const upload = multer({
+  storage: createS3StreamStorage(resolveUploadTarget),
+  fileFilter: audioFileFilter,
+  limits: { fileSize: MAX_FILE_SIZE, files: 1 },
+})
+
+function handleMulterError(err, req, res, next) {
+  if (!err) { return next() }
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({ error: `File too large. Maximum size: ${MAX_FILE_SIZE / (1024 * 1024)}MB.` })
+  }
+  const status = err.status || 500
+  if (err.status) {
+    return res.status(status).json({ error: getPublicErrorMessage(status, err) })
+  }
+  logServerError('audio.multer', err, req)
+  return res.status(500).json({ error: getPublicErrorMessage(500, err) })
 }
 
 async function maybeAutoTranscribe(visitId, user, req) {
@@ -37,43 +79,27 @@ async function maybeAutoTranscribe(visitId, user, req) {
   }
 }
 
-/**
- * Validate audio upload request
- */
-async function validateAudioUpload(req, visitId) {
+function validateAudioUpload(req) {
   if (!req.file) throw Object.assign(new Error('No audio file uploaded.'), { status: 400 })
-  const visit = await getVisitForUser(visitId, req.user)
-  if (!visit) throw Object.assign(new Error('Visit not found or not yours.'), { status: 404 })
-  let settings
-  try {
-    settings = await loadAiSettings()
-  } catch (err) {
-    console.warn('[audio] loadAiSettings failed, using defaults:', err.message)
-    settings = defaultRuntimeSettings()
+  if (!req._audioUploadMeta?.visit) {
+    throw Object.assign(new Error('Visit not found or not yours.'), { status: 404 })
   }
-  const maxBytes = (settings.ffmpeg_max_upload_mb || 100) * 1024 * 1024
+  const { maxBytes } = req._audioUploadMeta
   if (req.file.size > maxBytes) {
     throw Object.assign(
-      new Error(`Audio exceeds max size (${settings.ffmpeg_max_upload_mb} MB).`),
-      { status: 413 }
+      new Error(`Audio exceeds max size (${Math.round(maxBytes / (1024 * 1024))} MB).`),
+      { status: 413 },
     )
   }
-  return { visit, settings }
+  return req._audioUploadMeta
 }
 
-/**
- * Upload audio buffer to S3 and return DB path
- */
-async function uploadAudioToStorage(visitId, file) {
-  const filename = buildAudioFilename(visitId, file.mimetype)
-  const audioPath = `/uploads/${filename}`
-  await uploadAudio(dbPathToKey(audioPath), file.buffer, file.mimetype)
+function uploadAudioToStorage(req) {
+  const { audioPath } = req._audioUploadMeta
+  const filename = audioPath.replace(/^\/uploads\//, '')
   return { audioPath, filename }
 }
 
-/**
- * Atomically append audio path to visit record
- */
 async function appendAudioPathToVisit(visitId, audioPath, status) {
   const params = status
     ? [audioPath, status, visitId]
@@ -97,9 +123,6 @@ async function appendAudioPathToVisit(visitId, audioPath, status) {
   return status ? null : result.rows[0]?.audio_file
 }
 
-/**
- * Handle audio upload route errors
- */
 function handleAudioUploadError(res, err, req) {
   const status = err.status || 500
   if (err.status) {
@@ -109,13 +132,11 @@ function handleAudioUploadError(res, err, req) {
   return res.status(500).json({ error: getPublicErrorMessage(500, err) })
 }
 
-// ─── POST /api/audio/:visitId — Upload primary recording ─────────────────────
-
-router.post('/:visitId', protect, restrict('clinician'), upload.single('audio'), validateUploadedFile, async (req, res) => {
+router.post('/:visitId', protect, restrict('clinician'), upload.single('audio'), handleMulterError, async (req, res) => {
   try {
     const { visitId } = req.params
-    await validateAudioUpload(req, visitId)
-    const { audioPath, filename } = await uploadAudioToStorage(visitId, req.file)
+    validateAudioUpload(req)
+    const { audioPath, filename } = uploadAudioToStorage(req)
     await appendAudioPathToVisit(visitId, audioPath, 'recording-uploaded')
 
     res.status(200).json({
@@ -127,7 +148,7 @@ router.post('/:visitId', protect, restrict('clinician'), upload.single('audio'),
 
     cloudWatchAudit.logDataAccess(
       req.user.id, req.user.role, 'audio', visitId, 'UPLOAD', req.clientIp,
-      { filename, size: req.file.size, kind: 'primary' }
+      { filename, size: req.file.size, kind: 'primary' },
     )
 
     await maybeAutoTranscribe(visitId, req.user, req)
@@ -136,13 +157,11 @@ router.post('/:visitId', protect, restrict('clinician'), upload.single('audio'),
   }
 })
 
-// ─── POST /api/audio/:visitId/append — Append additional recording ───────────
-
-router.post('/:visitId/append', protect, restrict('clinician'), upload.single('audio'), validateUploadedFile, async (req, res) => {
+router.post('/:visitId/append', protect, restrict('clinician'), upload.single('audio'), handleMulterError, async (req, res) => {
   try {
     const { visitId } = req.params
-    await validateAudioUpload(req, visitId)
-    const { audioPath, filename } = await uploadAudioToStorage(visitId, req.file)
+    validateAudioUpload(req)
+    const { audioPath, filename } = uploadAudioToStorage(req)
     const updated = await appendAudioPathToVisit(visitId, audioPath) || audioPath
 
     res.status(200).json({
@@ -153,19 +172,17 @@ router.post('/:visitId/append', protect, restrict('clinician'), upload.single('a
 
     cloudWatchAudit.logDataAccess(
       req.user.id, req.user.role, 'audio', visitId, 'UPLOAD', req.clientIp,
-      { filename, kind: 'append', total_recordings: updated.split(',').length }
+      { filename, kind: 'append', total_recordings: updated.split(',').length },
     )
 
     setImmediate(() => {
-      console.log(`🔄 Re-running AI pipeline for visit ${visitId} after additional recording`)
+      console.log(`Re-running AI pipeline for visit ${visitId} after additional recording`)
       runAIPipeline(visitId, { user: req.user, req }).catch((err) => console.error('AI re-run error:', err.message))
     })
   } catch (err) {
     handleAudioUploadError(res, err, req)
   }
 })
-
-// ─── GET /api/audio/:visitId/count — Count recordings ────────────────────────
 
 router.get('/:visitId/count', protect, restrict('clinician', 'scribe', 'qps'), async (req, res) => {
   try {
@@ -180,9 +197,6 @@ router.get('/:visitId/count', protect, restrict('clinician', 'scribe', 'qps'), a
     res.status(500).json({ error: getPublicErrorMessage(500, err) })
   }
 })
-
-// ─── GET /api/audio/:visitId — Stream audio with Range support (?index=N) ─────
-// Authenticated proxy to S3 — no presigned URL exposed to the client.
 
 router.get('/:visitId', protect, restrict('clinician', 'scribe', 'qps'), async (req, res) => {
   try {
@@ -215,7 +229,7 @@ router.get('/:visitId', protect, restrict('clinician', 'scribe', 'qps'), async (
 
     cloudWatchAudit.logDataAccess(
       req.user.id, req.user.role, 'audio', visitId, 'STREAM', req.clientIp,
-      { index, partial: !!rangeHeader }
+      { index, partial: !!rangeHeader },
     )
 
     streamResult.body.pipe(res)

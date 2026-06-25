@@ -4,30 +4,135 @@ on:
   push:
     branches: [main]
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
-  deploy-backend:
+  test-gate:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-    environment: production
+    defaults:
+      run:
+        working-directory: anot-backend-main/anot-backend-main
     steps:
       - uses: actions/checkout@v4
-      - name: Build backend artifact
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: anot-backend-main/anot-backend-main/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  deploy-backend:
+    runs-on: ubuntu-latest
+    needs: test-gate
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    defaults:
+      run:
         working-directory: anot-backend-main/anot-backend-main
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify Node 22
+        run: node --version | grep -E '^v22\.'
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION || 'ap-southeast-1' }}
+
+      - name: Install production dependencies
+        run: npm ci --omit=dev
+
+      - name: Create deployment bundle
         run: |
-          npm ci --omit=dev
-          echo "Deploy backend via your EB/Railway pipeline here"
-      - name: Deployment placeholder
-        run: echo "Configure deploy secrets (AWS_EB, RAILWAY_TOKEN) in repo settings"
+          zip -r deploy.zip . \
+            -x "*.git*" \
+            -x "coverage/*" \
+            -x "**/__tests__/**" \
+            -x "**/*.test.js"
+
+      - name: Upload bundle to S3
+        env:
+          DEPLOY_BUCKET: ${{ secrets.AWS_EB_DEPLOY_BUCKET }}
+          VERSION_LABEL: ${{ github.sha }}
+        run: |
+          aws s3 cp deploy.zip "s3://${DEPLOY_BUCKET}/anot-backend/${VERSION_LABEL}.zip"
+
+      - name: Create Elastic Beanstalk application version
+        env:
+          EB_APP_NAME: ${{ secrets.AWS_EB_APP_NAME }}
+          DEPLOY_BUCKET: ${{ secrets.AWS_EB_DEPLOY_BUCKET }}
+          VERSION_LABEL: ${{ github.sha }}
+        run: |
+          aws elasticbeanstalk create-application-version \
+            --application-name "${EB_APP_NAME}" \
+            --version-label "${VERSION_LABEL}" \
+            --source-bundle S3Bucket="${DEPLOY_BUCKET}",S3Key="anot-backend/${VERSION_LABEL}.zip" \
+            --description "GitHub deploy ${GITHUB_SHA}"
+
+      - name: Update Elastic Beanstalk environment
+        env:
+          EB_APP_NAME: ${{ secrets.AWS_EB_APP_NAME }}
+          EB_ENV_NAME: ${{ secrets.AWS_EB_ENV_NAME }}
+          VERSION_LABEL: ${{ github.sha }}
+        run: |
+          aws elasticbeanstalk update-environment \
+            --application-name "${EB_APP_NAME}" \
+            --environment-name "${EB_ENV_NAME}" \
+            --version-label "${VERSION_LABEL}"
+
+      - name: Wait for environment health
+        env:
+          EB_ENV_NAME: ${{ secrets.AWS_EB_ENV_NAME }}
+        run: |
+          echo "Waiting for Elastic Beanstalk environment to become Ok..."
+          for i in $(seq 1 60); do
+            HEALTH=$(aws elasticbeanstalk describe-environments \
+              --environment-names "${EB_ENV_NAME}" \
+              --query 'Environments[0].Health' \
+              --output text)
+            STATUS=$(aws elasticbeanstalk describe-environments \
+              --environment-names "${EB_ENV_NAME}" \
+              --query 'Environments[0].Status' \
+              --output text)
+            echo "Attempt ${i}: Health=${HEALTH} Status=${STATUS}"
+            if [ "${HEALTH}" = "Ok" ] && [ "${STATUS}" = "Ready" ]; then
+              echo "Environment is healthy."
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "Environment did not reach Ok within timeout."
+          exit 1
+
+      - name: Smoke test API health
+        env:
+          API_HEALTH_URL: ${{ vars.API_HEALTH_URL || 'https://app.anot.health/api/health' }}
+        run: |
+          curl -fsS "${API_HEALTH_URL}" | grep -q healthy
 
   deploy-frontend:
     runs-on: ubuntu-latest
+    needs: test-gate
     if: github.ref == 'refs/heads/main'
     environment: production
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: anot-frontend-main/anot-frontend-main/package-lock.json
+      - name: Verify Node 22
+        run: node --version | grep -E '^v22\.'
       - name: Build frontend
         working-directory: anot-frontend-main/anot-frontend-main
         env:
@@ -35,5 +140,5 @@ jobs:
         run: |
           npm ci
           npm run build
-      - name: Deployment placeholder
-        run: echo "Configure S3/CloudFront or Vercel deploy step"
+      - name: Deployment note
+        run: echo "Upload dist/ to S3/CloudFront or connect Vercel project for static hosting."

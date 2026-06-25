@@ -1,14 +1,18 @@
 /** Stateless CSRF helper — double-submit cookie + X-CSRF-Token header. */
 
-const COOKIE_NAME = 'csrf_token'
+const COOKIE_NAMES = ['__Host-csrf_token', 'csrf_token']
 
 /** In-memory cache only (never localStorage); cookie is the durable source of truth. */
 let cachedCsrfToken = null
 
 function readCsrfCookie() {
   if (typeof document === 'undefined') { return null }
-  const match = document.cookie.match(new RegExp(`(?:^|; )${COOKIE_NAME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}=([^;]*)`))
-  return match ? decodeURIComponent(match[1]) : null
+  for (const name of COOKIE_NAMES) {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const match = document.cookie.match(new RegExp(`(?:^|; )${escaped}=([^;]*)`))
+    if (match) { return decodeURIComponent(match[1]) }
+  }
+  return null
 }
 
 function syncCache(token) {
@@ -17,7 +21,7 @@ function syncCache(token) {
 }
 
 /**
- * GET /api/csrf-token — ensures csrf_token cookie exists and returns its value.
+ * GET /api/csrf-token — ensures CSRF cookie exists and returns its value.
  * Prefers the browser cookie over memory so cache clears never desync from the server.
  * @param {string} apiBase e.g. https://app.anot.health/api
  */

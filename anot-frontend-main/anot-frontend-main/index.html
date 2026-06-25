@@ -1,113 +1,20 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob:; connect-src 'self' https://app.anot.health https://api.anot.health; font-src 'self' https://fonts.gstatic.com; base-uri 'self'; form-action 'self'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' https://fonts.googleapis.com; img-src 'self' data: blob:; connect-src 'self' https://app.anot.health https://api.anot.health; font-src 'self' https://fonts.gstatic.com; base-uri 'self'; form-action 'self'; object-src 'none'; frame-src 'none'" />
     <meta http-equiv="Strict-Transport-Security" content="max-age=31536000; includeSubDomains" />
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/brand/anot-logo.jfif" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#4260E9" />
-    <meta name="description" content="Anot â€” secure clinical documentation and care team workspace." />
+    <meta name="description" content="Anot — secure clinical documentation and care team workspace." />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@500;600;700;800&display=swap" rel="stylesheet" />
-    <title>Anot Â· Clinical documentation</title>
+    <link rel="stylesheet" href="/splash.css" />
+    <title>Anot · Clinical documentation</title>
     <!-- Critical splash: shows before Vite/React bundle loads. #root stays hidden until splash is gone so the fade never reveals a second logo underneath. -->
-    <style>
-      body:not(.anot-app-ready) #root {
-        visibility: hidden;
-      }
-      #anot-splash.anot-splash {
-        position: fixed;
-        inset: 0;
-        z-index: 2147483646;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 1.25rem;
-        margin: 0;
-        isolation: isolate;
-        background: linear-gradient(
-            155deg,
-            rgba(238, 242, 255, 0.92) 0%,
-            rgba(248, 250, 252, 0.88) 45%,
-            rgba(224, 231, 255, 0.9) 100%
-          ),
-          rgba(255, 255, 255, 0.35);
-        backdrop-filter: blur(18px);
-        -webkit-backdrop-filter: blur(18px);
-      }
-      #anot-splash .anot-splash__logo-wrap {
-        position: relative;
-        width: min(22vw, 120px);
-        height: min(22vw, 120px);
-        border-radius: 1.25rem;
-        box-shadow:
-          0 0 0 1px rgba(37, 99, 235, 0.12),
-          0 18px 40px -12px rgba(37, 99, 235, 0.35);
-        background: #fff;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 0.65rem;
-      }
-      #anot-splash .anot-splash__logo {
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-        animation: anot-splash-pulse 1.35s ease-in-out infinite;
-      }
-      #anot-splash .anot-splash__ring {
-        position: absolute;
-        inset: -10px;
-        border-radius: 1.5rem;
-        border: 2px solid transparent;
-        border-top-color: rgba(37, 99, 235, 0.55);
-        border-right-color: rgba(13, 148, 136, 0.35);
-        animation: anot-splash-spin 0.95s linear infinite;
-        pointer-events: none;
-      }
-      #anot-splash .anot-splash__label {
-        font-family: 'Poppins', 'Inter', system-ui, sans-serif;
-        font-size: 0.9rem;
-        font-weight: 600;
-        letter-spacing: 0.04em;
-        color: #475569;
-      }
-      #anot-splash.anot-splash--exit {
-        opacity: 0;
-        visibility: hidden;
-        pointer-events: none;
-        transition: opacity 0.42s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.42s cubic-bezier(0.4, 0, 0.2, 1);
-      }
-      @keyframes anot-splash-pulse {
-        0%,
-        100% {
-          transform: scale(1);
-          opacity: 1;
-        }
-        50% {
-          transform: scale(0.97);
-          opacity: 0.94;
-        }
-      }
-      @keyframes anot-splash-spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        #anot-splash .anot-splash__logo,
-        #anot-splash .anot-splash__ring {
-          animation: none !important;
-        }
-        #anot-splash.anot-splash--exit {
-          transition-duration: 0.15s;
-        }
-      }
-    </style>
   </head>
   <body>
     <div id="anot-splash" class="anot-splash" aria-busy="true" aria-label="Loading">

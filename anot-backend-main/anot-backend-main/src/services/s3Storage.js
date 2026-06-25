@@ -14,6 +14,7 @@ const {
   GetObjectCommand,
   DeleteObjectCommand,
 } = require('@aws-sdk/client-s3')
+const { Upload } = require('@aws-sdk/lib-storage')
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner')
 
 const AUDIO_BUCKET = process.env.S3_AUDIO_BUCKET || 'anot-audio-625242092266'
@@ -39,6 +40,24 @@ async function uploadAudio(key, buffer, contentType) {
     ContentType: contentType,
     ServerSideEncryption: 'AES256',
   }))
+}
+
+/** Stream upload via S3 multipart — no in-memory buffering of the full file. */
+async function uploadAudioStream(key, stream, contentType) {
+  const upload = new Upload({
+    client: s3,
+    params: {
+      Bucket: AUDIO_BUCKET,
+      Key: key,
+      Body: stream,
+      ContentType: contentType,
+      ServerSideEncryption: 'AES256',
+    },
+    queueSize: 4,
+    partSize: 5 * 1024 * 1024,
+    leavePartsOnError: false,
+  })
+  await upload.done()
 }
 
 /** Presigned GET URL, valid 15 minutes. */
@@ -94,6 +113,7 @@ module.exports = {
   AUDIO_BUCKET,
   dbPathToKey,
   uploadAudio,
+  uploadAudioStream,
   getSignedAudioUrl,
   getAudioStream,
   downloadAudioToTemp,

@@ -178,4 +178,14 @@ const restrict = (...roles) => {
     }
 }
 
-module.exports = { protect, restrict, invalidateUserAuthCache }
+module.exports = {
+  protect,
+  restrict,
+  invalidateUserAuthCache,
+  extractBearerToken,
+  verifyJwtToken,
+  validateUserAuthState,
+  checkPasswordChangeRequired,
+  checkMfaRequired,
+  checkPhiTrainingRequired,
+}

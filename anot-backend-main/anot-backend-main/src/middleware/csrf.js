@@ -3,13 +3,14 @@
 /**
  * Stateless double-submit CSRF protection.
  *
- * No server-side token store — the csrf_token cookie is the source of truth.
+ * No server-side token store — the CSRF cookie is the source of truth.
  * Mutating requests must send the same value in the X-CSRF-Token header.
  * Survives EB restarts and scales across instances; cookie is long-lived (no expiry).
  */
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 const TOKEN_HEADER = 'x-csrf-token'
-const TOKEN_COOKIE = 'csrf_token'
+/** __Host- prefix enforces Secure + Path=/ + no Domain (HTTPS production only). */
+const TOKEN_COOKIE = process.env.NODE_ENV === 'production' ? '__Host-csrf_token' : 'csrf_token'
 /** 10 years — effectively permanent; browser may cap but never session-only. */
 const COOKIE_MAX_AGE_MS = 10 * 365 * 24 * 60 * 60 * 1000
 const TOKEN_REGEX = /^[a-f0-9]{64}$/
@@ -56,7 +57,6 @@ function isWebhookPath(req) {
 }
 
 function csrfProtection(req, res, next) {
-  // Webhooks authenticate via HMAC — no browser session / CSRF cookie.
   if (isWebhookPath(req)) {
     return next()
   }
@@ -81,7 +81,7 @@ function csrfProtection(req, res, next) {
 function csrfTokenRoute(req, res) {
   const token = resolveToken(req)
   setCsrfCookie(res, token)
-  res.json({ csrfToken: token })
+  res.json({ csrfToken: token, cookieName: TOKEN_COOKIE })
 }
 
 module.exports = {

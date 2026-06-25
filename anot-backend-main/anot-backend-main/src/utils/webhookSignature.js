@@ -81,4 +81,5 @@ module.exports = {
   signDeepgramVisitToken,
   verifyDeepgramVisitToken,
   appendDeepgramVisitQuery,
+  webhookSecret,
 }
