@@ -53,12 +53,12 @@ jobs:
       run:
         working-directory: anot-backend-main/anot-backend-main
     env:
-      AWS_REGION: ${{ vars.AWS_REGION || env.AWS_REGION }}
-      EB_APP_NAME: ${{ vars.AWS_EB_APPLICATION || secrets.AWS_EB_APPLICATION || env.AWS_EB_APPLICATION }}
-      EB_ENV_NAME: ${{ vars.AWS_EB_ENVIRONMENT || secrets.AWS_EB_ENVIRONMENT || env.AWS_EB_ENVIRONMENT }}
-      DEPLOY_BUCKET: ${{ vars.S3_BUCKET || secrets.S3_BUCKET || env.S3_BUCKET }}
-      DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN || env.AWS_DEPLOY_ROLE_ARN }}
-      API_HEALTH_URL: ${{ vars.API_HEALTH_URL || env.API_HEALTH_URL }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-southeast-1' }}
+      EB_APP_NAME: ${{ vars.AWS_EB_APPLICATION || secrets.AWS_EB_APPLICATION || 'anot-backend' }}
+      EB_ENV_NAME: ${{ vars.AWS_EB_ENVIRONMENT || secrets.AWS_EB_ENVIRONMENT || 'anot-backend-prod' }}
+      DEPLOY_BUCKET: ${{ vars.S3_BUCKET || secrets.S3_BUCKET || 'elasticbeanstalk-ap-southeast-1-625242092266' }}
+      DEPLOY_ROLE_ARN: ${{ secrets.AWS_DEPLOY_ROLE_ARN || 'arn:aws:iam::625242092266:role/GitHubActionsRole' }}
+      API_HEALTH_URL: ${{ vars.API_HEALTH_URL || 'https://app.anot.health/api/health' }}
     steps:
       - uses: actions/checkout@v4
 
