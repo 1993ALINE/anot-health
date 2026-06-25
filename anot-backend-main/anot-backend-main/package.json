@@ -10,7 +10,9 @@
         "test": "jest --coverage",
         "test:watch": "jest --watch",
         "seed:dev": "node scripts/seed-dev-users.js",
-        "sync:rate-limit": "node scripts/sync-rate-limit-config.js"
+        "sync:rate-limit": "node scripts/sync-rate-limit-config.js",
+        "migrate": "node scripts/run-migrations.js",
+        "migrate:prod": "node scripts/run-migrations.js"
     },
     "keywords": [],
     "author": "",
