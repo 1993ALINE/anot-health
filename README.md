@@ -2,6 +2,8 @@
 
 ![Deploy Status](https://github.com/1993ALINE/anot-health/actions/workflows/deploy.yml/badge.svg)
 
+**CI/CD:** Automated tests on every push to `main`; **production backend deploy is manual** ([runbook](docs/DEPLOYMENT_RUNBOOK.md)).
+
 ## What this project is
 
 **Anot** is a **clinical documentation** platform: care teams capture **visit audio**, produce **structured notes** (transcription via **Deepgram**, with optional **AI** draft via **Anthropic Claude**), and move work through **scribe → QPS review** flows. **Clinicians** (physicians) manage **patients and visits**; **admins** handle **users, assignments, payroll, and audit**.
