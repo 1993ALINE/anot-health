@@ -1,7 +1,7 @@
 ﻿describe('health utilities', () => {
-  it('returns healthy status shape', () => {
-    const payload = { message: 'Anot API is running', version: 'v42', status: 'healthy' }
-    expect(payload.status).toBe('healthy')
-    expect(payload.message).toContain('Anot')
+  it('returns minimal public health shape', () => {
+    const payload = { status: 'ok' }
+    expect(payload.status).toBe('ok')
+    expect(Object.keys(payload)).toEqual(['status'])
   })
 })

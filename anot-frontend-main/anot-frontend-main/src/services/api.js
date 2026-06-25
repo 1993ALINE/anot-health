@@ -414,6 +414,10 @@ export const settingsAPI = {
   getTranscription: async () => apiFetch('/settings/transcription'),
   updateTranscription: async (settings) => apiMutate('PUT', '/settings/transcription', { body: { settings } }),
   update: async (settings) => apiMutate('PUT', '/settings', { body: settings }),
+  getClinicianTemplates: async () => apiFetch('/settings/clinician-templates'),
+  saveClinicianTemplates: async (templates) =>
+    apiMutate('POST', '/settings/clinician-templates', { body: { templates } }),
+  deleteClinicianTemplate: async (id) => apiMutate('DELETE', `/settings/clinician-templates/${encodeURIComponent(id)}`),
 }
 
 export const assignmentsAPI = {

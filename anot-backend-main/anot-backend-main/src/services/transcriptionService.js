@@ -45,7 +45,6 @@ function buildTranscriptionParams(settings, language, options = {}) {
  * Call Deepgram transcription API
  */
 async function callTranscriptionAPI(audioBuffer, params) {
-  console.log('[transcriptionService] Sending to Deepgram...')
   const response = await fetch(params.url, {
     method: 'POST',
     headers: {
@@ -55,10 +54,12 @@ async function callTranscriptionAPI(audioBuffer, params) {
     body: audioBuffer,
   })
 
-  console.log('[transcriptionService] Response status:', response.status)
   if (!response.ok) {
-    const errorText = await response.text().catch(() => '')
-    console.error('[transcriptionService] Deepgram error:', response.status, errorText.slice(0, 300))
+    const errorType = response.status === 401 ? 'auth_failed'
+      : response.status === 429 ? 'rate_limit'
+      : response.status >= 500 ? 'server_error'
+      : 'api_error'
+    console.error('[transcriptionService] Deepgram error:', response.status, errorType)
     throw new Error(`Transcription failed: Deepgram returned ${response.status}`)
   }
   return response.json()

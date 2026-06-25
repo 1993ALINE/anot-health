@@ -419,8 +419,8 @@ function Scribe() {
         ? 'You have unsaved edits to a note. Signing out will lose those changes unless you saved a draft. You will need to sign in again to use Anot.'
         : 'You will need to sign in again to use Anot.',
       confirmText: 'Log out',
-      onConfirm: () => {
-        authAPI.logout()
+      onConfirm: async () => {
+        await authAPI.logout()
         navigate('/login', { replace: true })
       },
     })

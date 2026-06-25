@@ -19,13 +19,15 @@ router.post('/setup', protect, async (req, res) => {
   if (!encrypted) {
     return res.status(503).json({ error: 'MFA setup unavailable — encryption key not configured.' })
   }
+  const { rows } = await pool.query('SELECT email FROM users WHERE id = $1', [req.user.id])
+  const email = rows[0]?.email || `user-${req.user.id}`
   await pool.query(
     'UPDATE users SET mfa_secret_encrypted = $1, mfa_recovery_codes = $2 WHERE id = $3',
     [encrypted, JSON.stringify(hashed), req.user.id]
   )
   res.json({
     secret,
-    otpauthUrl: `otpauth://totp/Anot:${req.user.email}?secret=${secret}&issuer=Anot`,
+    otpauthUrl: `otpauth://totp/Anot:${email}?secret=${secret}&issuer=Anot`,
     recoveryCodes: codes,
   })
 })

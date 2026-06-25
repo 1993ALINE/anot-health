@@ -227,8 +227,8 @@ function QPS() {
       title: 'Sign out?',
       message: 'You will need to sign in again to use Anot.',
       confirmText: 'Log out',
-      onConfirm: () => {
-        authAPI.logout()
+      onConfirm: async () => {
+        await authAPI.logout()
         navigate('/login', { replace: true })
       },
     })

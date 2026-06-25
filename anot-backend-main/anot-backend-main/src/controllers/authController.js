@@ -31,11 +31,9 @@ const PHI_TRAINING_VERSION = 1
 const generateToken = (user) => {
     return jwt.sign(
         {
-            id:        user.id,
-            name:      user.name,
-            email:     user.email,
-            role:      user.role,
-            specialty: user.specialty,
+            id: user.id,
+            userId: user.id,
+            role: user.role,
             token_version: Number(user.token_version) || 0,
         },
         process.env.JWT_SECRET,
@@ -48,8 +46,7 @@ const generateTemporaryToken = (user, claim, expiresIn = '15m') => {
     return jwt.sign(
         {
             id: user.id,
-            name: user.name,
-            email: user.email,
+            userId: user.id,
             role: user.role,
             [claim]: true,
         },
@@ -507,7 +504,8 @@ const logout = async (req, res) => {
     try {
         await incrementTokenVersion(req.user.id)
         void auditLog(req.user, 'LOGOUT', 'auth', String(req.user.id), 'User signed out', { req, module_key: 'authentication', status: 'success', action_category: 'authentication' }).catch(reportAuditFailure)
-        cloudWatchAudit.logLogout(req.user.id, req.user.email, req.clientIp)
+        const emailRow = await pool.query('SELECT email FROM users WHERE id = $1', [req.user.id])
+        cloudWatchAudit.logLogout(req.user.id, emailRow.rows[0]?.email || null, req.clientIp)
         clearCsrfCookie(res)
         res.status(204).send()
     } catch (err) {

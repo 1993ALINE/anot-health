@@ -32,18 +32,45 @@ import {
 
 /** `/` → dashboard if already signed in, otherwise login. */
 function RootHome() {
-  if (!hasValidSession()) {return <Navigate to="/login" replace />}
-  const raw = getStoredUserRaw()
-  if (!raw) {return <Navigate to="/login" replace />}
-  const path = (() => {
-    try {
-      return dashboardPathForRole(JSON.parse(raw).role)
-    } catch {
-      return null
+  const releaseSplash = useReleaseSplash()
+  const hasSession = hasValidSession() && !!getStoredUserRaw()
+  const [target, setTarget] = useState(null)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    if (!hasSession) {
+      releaseSplash()
+      return
     }
-  })()
-  if (!path) {return <Navigate to="/login" replace />}
-  return <Navigate to={path} replace />
+    let cancelled = false
+    authAPI
+      .getMe()
+      .then(() => {
+        if (cancelled) { return }
+        const user = authAPI.getCurrentUser()
+        const path = dashboardPathForRole(user?.role)
+        if (path) {
+          setTarget(path)
+        } else {
+          setFailed(true)
+        }
+      })
+      .catch(() => {
+        if (cancelled) { return }
+        authAPI.logout()
+        setFailed(true)
+      })
+      .finally(() => {
+        if (!cancelled) { releaseSplash() }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [hasSession, releaseSplash])
+
+  if (!hasSession || failed) { return <Navigate to="/login" replace /> }
+  if (!target) { return null }
+  return <Navigate to={target} replace />
 }
 
 // ─── PROTECTED ROUTE ─────────────────────────────────────────────────────────

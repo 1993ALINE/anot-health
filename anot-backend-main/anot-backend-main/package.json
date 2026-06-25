@@ -9,6 +9,7 @@
         "dev:nodemon": "nodemon src/server.js",
         "test": "jest --coverage",
         "test:watch": "jest --watch",
+        "seed:dev": "node scripts/seed-dev-users.js",
         "sync:rate-limit": "node scripts/sync-rate-limit-config.js"
     },
     "keywords": [],

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { authAPI, visitsAPI, patientsAPI, notesAPI, audioAPI, isAbortError } from '../../services/api'
+import { authAPI, visitsAPI, patientsAPI, notesAPI, audioAPI, settingsAPI, isAbortError } from '../../services/api'
 import { useBranding } from '../../services/branding'
 import SystemProfileManager from '../../components/SystemProfileManager'
 import PortalSidebarFooter from '../../components/PortalSidebarFooter'
@@ -14,6 +14,7 @@ import ContactScreen from './ContactScreen'
 import { getPatientAvatarColor } from '../../utils/avatarColor'
 import { getCurrentUser } from '../../utils/getCurrentUser'
 import { useSessionTimeout } from '../../utils/useSessionTimeout'
+import { saveClinicianTemplates } from '../../utils/clinicianTemplates'
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -856,14 +857,6 @@ const DEFAULT_TEMPLATES = [
     content:'VISIT TYPE:\n\n\nCHIEF COMPLAINT:\n\n\nHISTORY:\n\n\nEXAMINATION:\n\n\nASSESSMENT & PLAN:\n' },
 ]
 
-function loadTemplates() {
-  try { const s = localStorage.getItem('anot_cl_tpl'); if (s) {return JSON.parse(s)} } catch (err) { console.error('[Clinician] Template load failed:', err?.message) }
-  return DEFAULT_TEMPLATES
-}
-function saveTemplates(t) {
-  try { localStorage.setItem('anot_cl_tpl', JSON.stringify(t)) } catch (err) { console.error('[Clinician] Template save failed:', err?.message) }
-}
-
 // ─── AUDIO PLAYER ─────────────────────────────────────────────────────────────
 
 /**
@@ -1293,25 +1286,56 @@ function updateTemplateInList(templates, templateId, content) {
 }
 
 function TemplatesScreen({ showToast }) {
-  const [templates, setTemplates] = useState(loadTemplates)
+  const [templates, setTemplates] = useState([])
+  const [loading, setLoading] = useState(true)
   const [selected, setSelected]   = useState(null)
   const [editing, setEditing]     = useState(false)
   const [draft, setDraft]         = useState('')
 
+  useEffect(() => {
+    let cancelled = false
+    settingsAPI
+      .getClinicianTemplates()
+      .then((data) => {
+        if (!cancelled) { setTemplates(Array.isArray(data.templates) ? data.templates : DEFAULT_TEMPLATES) }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error('[Clinician] Template load failed:', err?.message)
+          setTemplates(DEFAULT_TEMPLATES)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) { setLoading(false) }
+      })
+    return () => { cancelled = true }
+  }, [])
+
+  const persistTemplates = async (updated) => {
+    try {
+      const saved = await saveClinicianTemplates(settingsAPI, updated)
+      setTemplates(saved)
+      return saved
+    } catch (err) {
+      showToast(err.message || 'Could not save templates', 'error')
+      throw err
+    }
+  }
+
   const open = (t) => { setSelected(t); setDraft(t.content); setEditing(false) }
 
-  const save = () => {
+  const save = async () => {
     const updated = updateTemplateInList(templates, selected.id, draft)
-    setTemplates(updated); saveTemplates(updated)
+    await persistTemplates(updated)
     setSelected(prev => ({ ...prev, content: draft }))
     setEditing(false); showToast('Template saved')
   }
 
-  const reset = () => {
+  const reset = async () => {
     const def = DEFAULT_TEMPLATES.find(t => t.id === selected.id)
     if (!def) {return}
     const updated = updateTemplateInList(templates, selected.id, def.content)
-    setTemplates(updated); saveTemplates(updated)
+    await persistTemplates(updated)
     setSelected(prev => ({ ...prev, content: def.content }))
     setDraft(def.content); setEditing(false)
     showToast('Template reset to default')
@@ -1379,12 +1403,20 @@ function TemplatesScreen({ showToast }) {
     )
   }
 
+  if (loading) {
+    return (
+      <div className="sf-body cl-templates-page">
+        <p className="cl-templates-intro__text">Loading templates…</p>
+      </div>
+    )
+  }
+
   return (
     <div className="sf-body cl-templates-page">
       <header className="cl-templates-intro">
         <span className="cl-templates-intro__badge">{templates.length} templates</span>
         <p className="cl-templates-intro__text">
-          Structured starters for common visit types. Choose one to preview, copy to clipboard, or edit — saved locally in this browser.
+          Structured starters for common visit types. Choose one to preview, copy to clipboard, or edit — saved to your account.
         </p>
       </header>
       <div className="cl-templates-grid">
@@ -1874,8 +1906,8 @@ function Clinician() {
       title: 'Sign out?',
       message: 'You will need to sign in again to use Anot.',
       confirmText: 'Log out',
-      onConfirm: () => {
-        authAPI.logout()
+      onConfirm: async () => {
+        await authAPI.logout()
         navigate('/login', { replace: true })
       },
     })

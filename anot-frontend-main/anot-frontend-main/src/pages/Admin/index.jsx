@@ -1278,7 +1278,7 @@ function Admin() {
             confirmText: 'Sign out',
             tone: 'danger',
             onConfirm: async () => {
-                authAPI.logout()
+                await authAPI.logout()
                 navigate('/login', { replace: true })
             },
         })

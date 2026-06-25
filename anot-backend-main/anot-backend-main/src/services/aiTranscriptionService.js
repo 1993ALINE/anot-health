@@ -98,7 +98,7 @@ function extractDeepgramText(result) {
     }
   } catch { /* */ }
   if (result?.err_msg != null) {
-    console.warn('[aiTranscription] Deepgram err_msg:', String(result.err_msg).slice(0, 400))
+    console.warn('[aiTranscription] Deepgram err_msg type: parse_error')
   }
   return null
 }
@@ -168,28 +168,23 @@ function resolveDeepgramTimeoutMs(settings) {
 /**
  * Handle non-OK Deepgram response with retry logic
  */
-async function handleDeepgramErrorResponse(response, attempt, errorText) {
+async function handleDeepgramErrorResponse(response, attempt) {
   if (response.status === 401) {
-    console.error('[aiTranscription] Deepgram auth failed - invalid/expired API key')
-    console.error('[aiTranscription] FIX: Update API key in app.anot.health/settings')
+    console.error('[aiTranscription] Deepgram error:', response.status, 'auth_failed')
     return { action: 'abort' }
   }
 
   const transient = response.status === 429 || response.status >= 500
   if (transient && attempt < DEEPGRAM_MAX_ATTEMPTS) {
     const delay = backoffDelayMs(attempt, response)
-    const reason = response.status === 429 ? 'rate limit (429)' : `server error (${response.status})`
-    console.warn(`[aiTranscription] Deepgram ${reason} - retrying in ${delay}ms (attempt ${attempt}/${DEEPGRAM_MAX_ATTEMPTS})`)
+    const errorType = response.status === 429 ? 'rate_limit' : 'server_error'
+    console.warn(`[aiTranscription] Deepgram ${response.status} ${errorType} - retry ${attempt}/${DEEPGRAM_MAX_ATTEMPTS}`)
     await sleep(delay)
     return { action: 'retry' }
   }
 
-  if (response.status === 429) {
-    console.error('[aiTranscription] Deepgram rate limit - quota exceeded (retries exhausted)')
-  } else {
-    console.error('[aiTranscription] Deepgram API error:', response.status, response.statusText)
-    console.error('[aiTranscription] Response:', errorText.slice(0, 500))
-  }
+  const errorType = response.status === 429 ? 'rate_limit' : 'api_error'
+  console.error('[aiTranscription] Deepgram error:', response.status, errorType)
   return { action: 'abort' }
 }
 
@@ -213,8 +208,8 @@ async function callDeepgramWithRetries(url, fetchOptions, queryParams, timeoutMs
     try {
       const response = await fetchWithTimeout(url, fetchOptions, timeoutMs)
       if (!response.ok) {
-        const errorText = await response.text().catch(() => '')
-        const outcome = await handleDeepgramErrorResponse(response, attempt, errorText)
+        await response.text().catch(() => '')
+        const outcome = await handleDeepgramErrorResponse(response, attempt)
         if (outcome.action === 'retry') continue
         return null
       }
@@ -223,12 +218,13 @@ async function callDeepgramWithRetries(url, fetchOptions, queryParams, timeoutMs
     } catch (error) {
       if (attempt < DEEPGRAM_MAX_ATTEMPTS) {
         const delay = backoffDelayMs(attempt, null)
-        const label = error.isTimeout ? 'timeout' : 'network error'
-        console.warn(`[aiTranscription] Deepgram ${label} (${error.message}) - retrying in ${delay}ms (attempt ${attempt}/${DEEPGRAM_MAX_ATTEMPTS})`)
+        const errorType = error.isTimeout ? 'timeout' : 'network_error'
+        console.warn(`[aiTranscription] Deepgram ${errorType} - retry ${attempt}/${DEEPGRAM_MAX_ATTEMPTS}`)
         await sleep(delay)
         continue
       }
-      console.error('[aiTranscription] Deepgram request failed (retries exhausted):', error.message)
+      const errorType = error.isTimeout ? 'timeout' : 'network_error'
+      console.error('[aiTranscription] Deepgram error:', errorType, 'retries_exhausted')
       return null
     }
   }
@@ -286,17 +282,16 @@ async function transcribeFile(absPath, settingsOverride, visitId) {
         console.log('[aiTranscription] Transcription successful')
         return text
       }
-      console.warn('[aiTranscription] Deepgram returned empty text')
+      console.warn('[aiTranscription] Deepgram empty_transcript')
       return null
     } catch (error) {
-      console.error('[aiTranscription] Deepgram failed:', error.message)
+      const errorType = error.isTimeout ? 'timeout' : 'request_failed'
+      console.error('[aiTranscription] Deepgram error:', errorType)
       return null
     }
   }
 
-  // No Deepgram configured - manual transcription required
-  console.error('[aiTranscription] CRITICAL: Deepgram not configured')
-  console.error('[aiTranscription] ACTION: Configure Deepgram API key in app.anot.health/settings')
+  console.error('[aiTranscription] Deepgram error: not_configured')
   return null
 }
 

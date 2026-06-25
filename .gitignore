@@ -4,6 +4,9 @@ dist/
 *.bak
 *.backup
 backups/
+backup-v*/
+temp-extract-*/
+coverage/
 .env
 .env.local
 .env.*.local
