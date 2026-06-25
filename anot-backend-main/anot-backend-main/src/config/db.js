@@ -83,7 +83,19 @@ function stripSslParams(connectionString) {
   }
 }
 
-const useUrl = !!process.env.DATABASE_URL
+function databaseUrlIsUsable() {
+  const url = process.env.DATABASE_URL?.trim()
+  if (!url) return false
+  if (!/^postgres(ql)?:\/\//i.test(url)) return false
+  try {
+    new URL(url)
+    return true
+  } catch {
+    return false
+  }
+}
+
+const useUrl = databaseUrlIsUsable()
 const sslEnabled =
   useUrl ||
   process.env.DB_SSL === 'true' ||

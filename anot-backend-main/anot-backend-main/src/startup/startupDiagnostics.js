@@ -29,6 +29,16 @@ function maskSecret(value) {
   return `${value.slice(0, 4)}…${value.slice(-4)} (${value.length} chars)`
 }
 
+function hasDiscreteDbCredentials() {
+  return !!(
+    process.env.DB_HOST?.trim() &&
+    process.env.DB_NAME?.trim() &&
+    process.env.DB_USER?.trim() &&
+    process.env.DB_PASSWORD != null &&
+    String(process.env.DB_PASSWORD).length > 0
+  )
+}
+
 function databaseConfigSummary() {
   if (process.env.DATABASE_URL?.trim()) {
     try {
@@ -36,6 +46,10 @@ function databaseConfigSummary() {
       const db = u.pathname.replace(/^\//, '') || '(unknown)'
       return `DATABASE_URL → ${u.hostname}:${u.port || '5432'}/${db}`
     } catch {
+      if (hasDiscreteDbCredentials()) {
+        const port = process.env.DB_PORT || '5432'
+        return `DB_* → ${process.env.DB_USER}@${process.env.DB_HOST}:${port}/${process.env.DB_NAME} (DATABASE_URL unparsable)`
+      }
       return 'DATABASE_URL → (invalid URL format)'
     }
   }
@@ -68,6 +82,13 @@ function validateDatabaseUrlFormat() {
     // eslint-disable-next-line no-new
     new URL(url)
   } catch {
+    if (hasDiscreteDbCredentials()) {
+      console.warn(
+        '[startup] DATABASE_URL is not parseable as a URL — using DB_HOST/DB_NAME/DB_USER/DB_PASSWORD instead. ' +
+          'Consider URL-encoding the password in SSM /anot/prod/DATABASE_URL.',
+      )
+      return { ok: true }
+    }
     return {
       ok: false,
       message: 'DATABASE_URL is not a valid URL. Check for unescaped special characters in the password.',
@@ -216,6 +237,7 @@ module.exports = {
   validateJwtSecret,
   validateDatabaseUrlFormat,
   hasDatabaseConfig,
+  hasDiscreteDbCredentials,
   logRuntimeInfo,
   MIN_JWT_SECRET_LENGTH,
 }

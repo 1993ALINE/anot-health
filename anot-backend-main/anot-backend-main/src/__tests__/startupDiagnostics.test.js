@@ -41,6 +41,15 @@ describe('startupDiagnostics', () => {
     expect(validateDatabaseUrlFormat().ok).toBe(false)
   })
 
+  it('validateDatabaseUrlFormat accepts unparsable DATABASE_URL when DB_* creds exist', () => {
+    process.env.DATABASE_URL = 'postgresql://user:bad pass@host/anot'
+    process.env.DB_HOST = 'prod.rds.amazonaws.com'
+    process.env.DB_NAME = 'anot'
+    process.env.DB_USER = 'anot_app'
+    process.env.DB_PASSWORD = 'secret-with-special-chars!'
+    expect(validateDatabaseUrlFormat().ok).toBe(true)
+  })
+
   it('hasDatabaseConfig accepts DATABASE_URL or DB_* style', () => {
     delete process.env.DATABASE_URL
     delete process.env.DB_HOST
