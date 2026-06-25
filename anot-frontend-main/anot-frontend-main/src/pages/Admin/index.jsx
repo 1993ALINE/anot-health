@@ -92,12 +92,13 @@ function buildSettingsPayload(form) {
             instagram_url: form.instagram_url.trim(),
             x_url: form.x_url.trim(),
         },
-        audit_retention_days: Math.max(30, Math.min(Number(form.audit_retention_days) || 365, 3650)),
+        audit_retention_days: Math.max(2190, Math.min(Number(form.audit_retention_days) || 2555, 3650)),
         deepgram_enabled: !!form.deepgram_enabled,
         deepgram_model: form.deepgram_model?.trim() || 'nova-2',
         deepgram_language: form.deepgram_language?.trim() || 'en-US',
         deepgram_webhook_url: form.deepgram_webhook_url?.trim() || '',
         deepgram_auto_transcribe_on_upload: !!form.deepgram_auto_transcribe_on_upload,
+        deepgram_timeout_seconds: Math.max(5, Math.min(Number(form.deepgram_timeout_seconds) || 30, 300)),
         anthropic_enabled: !!form.anthropic_enabled,
         anthropic_model: form.anthropic_model || 'claude-haiku-4-5',
         ffmpeg_enabled: !!form.ffmpeg_enabled,
@@ -223,7 +224,7 @@ const DEFAULT_SETTINGS_FORM = {
     primary_color: '#4260E9',
     secondary_color: '#7B61FF',
     system_description: 'Clinical documentation platform',
-    audit_retention_days: 365,
+    audit_retention_days: 2555,
     deepgram_enabled: false,
     deepgram_api_key: '',
     deepgram_api_key_set: false,
@@ -232,6 +233,7 @@ const DEFAULT_SETTINGS_FORM = {
     deepgram_language: 'en-US',
     deepgram_webhook_url: '',
     deepgram_auto_transcribe_on_upload: false,
+    deepgram_timeout_seconds: 30,
     anthropic_api_key: '',
     anthropic_api_key_set: false,
     anthropic_clear_api_key: false,
@@ -836,6 +838,7 @@ function Admin() {
             deepgram_enabled: raw?.deepgram_enabled ?? false,
             deepgram_model: raw?.deepgram_model ?? 'nova-2',
             deepgram_language: raw?.deepgram_language ?? 'en-US',
+            deepgram_timeout_seconds: raw?.deepgram_timeout_seconds ?? 30,
             anthropic_api_key: '',
             anthropic_clear_api_key: false,
             anthropic_api_key_set: raw?.anthropic_api_key_set,
@@ -2089,6 +2092,12 @@ function Admin() {
                                                 <label className="adm-form-label">
                                                     <input type="checkbox" checked={!!settingsForm.deepgram_auto_transcribe_on_upload} onChange={(e) => handleSettingInput('deepgram_auto_transcribe_on_upload', e.target.checked)} /> Auto-transcribe when primary recording is uploaded
                                                 </label>
+                                            </div>
+                                            <div className="adm-form-group">
+                                                <label className="adm-form-label">Transcription timeout (seconds)</label>
+                                                <input className="adm-input" type="number" min={5} max={300} value={settingsForm.deepgram_timeout_seconds}
+                                                    onChange={(e) => handleSettingInput('deepgram_timeout_seconds', e.target.value)} />
+                                                <p className="adm-settings-note" style={{ marginTop: 8 }}>Deepgram HTTP timeout (5–300 seconds). Default 30.</p>
                                             </div>
                                         </div>
                                         <div className="adm-form-card__title" style={{ fontSize: 15, marginTop: 20 }}>Anthropic (AI note generation)</div>

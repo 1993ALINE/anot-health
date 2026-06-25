@@ -17,15 +17,16 @@ async function bootstrap() {
   const cors         = require('cors')
   const helmet       = require('helmet')
   const cookieParser = require('cookie-parser')
-  const { apiLimiter, getRateLimitConfig } = require('./middleware/rateLimit')
+  const { initRateLimiters, getRateLimitConfig } = require('./middleware/rateLimit')
+  const errorHandler = require('./middleware/errorHandler')
 
   const jwtSecret = process.env.JWT_SECRET?.trim()
   if (!jwtSecret) {
     console.error('FATAL: JWT_SECRET is required.')
     process.exit(1)
   }
-  if (jwtSecret.length < 16 && process.env.NODE_ENV === 'production') {
-    console.error('FATAL: JWT_SECRET must be at least 16 characters in production.')
+  if (jwtSecret.length < 32) {
+    console.error('FATAL: JWT_SECRET must be at least 32 characters.')
     process.exit(1)
   }
 
@@ -145,6 +146,8 @@ console.log(
     `login ${rateLimitConfig.login.max} attempts / ${Math.round(rateLimitConfig.login.windowMs / 60000)} min`,
 )
 
+await initRateLimiters()
+const { apiLimiter } = require('./middleware/rateLimit')
 app.use('/api', apiLimiter)
 
 const jsonSmall = express.json({ limit: '2mb' })
@@ -229,7 +232,7 @@ Sentry.setupExpressErrorHandler(app)
 
 // ??? ERROR HANDLER ????????????????????????????????????????????????????????????
 
-app.use(require('./middleware/errorHandler'))
+app.use(errorHandler)
 
 // ??? START ????????????????????????????????????????????????????????????????????
 

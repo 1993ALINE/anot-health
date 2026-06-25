@@ -2,26 +2,20 @@
 
 const rateLimit = require('express-rate-limit')
 
-/**
- * Paths under /api that are excluded from the general API rate limiter.
- * Root (/) and EB health probes are outside /api and are never limited here.
- */
+let loginLimiter = null
+let apiLimiter = null
+let redisClient = null
+
 const PUBLIC_API_PATHS = new Set([
   '/admin/health',
-  '/openapi.yaml',
-  '/docs',
 ])
 
 function parsePositiveInt(value, fallback) {
-  if (value == null || value === '') return fallback
+  if (value == null || value === '') { return fallback }
   const n = parseInt(String(value), 10)
   return Number.isFinite(n) && n > 0 ? n : fallback
 }
 
-/**
- * Read rate-limit settings from environment (EB env props, .env, or SSM via loadSecrets).
- * Defaults: login 10 / 15 min, API 200 / 1 min (production).
- */
 function getRateLimitConfig() {
   const isProduction = process.env.NODE_ENV === 'production'
 
@@ -47,20 +41,30 @@ function getRateLimitConfig() {
 
 function shouldSkipApiRateLimit(req) {
   const path = (req.path || '').split('?')[0]
-  if (PUBLIC_API_PATHS.has(path)) return true
-  if (path.startsWith('/webhooks')) return true
+  if (PUBLIC_API_PATHS.has(path)) { return true }
+  if (path.startsWith('/webhooks')) { return true }
   return false
 }
 
-function createLoginLimiter() {
-  const cfg = getRateLimitConfig().login
-  const windowMinutes = Math.round(cfg.windowMs / 60000)
-
-  return rateLimit({
+function buildLimiterOptions(cfg, store) {
+  const base = {
     windowMs: cfg.windowMs,
     max: cfg.max,
     standardHeaders: true,
     legacyHeaders: false,
+  }
+  if (store) {
+    base.store = store
+  }
+  return base
+}
+
+function createLoginLimiter(store) {
+  const cfg = getRateLimitConfig().login
+  const windowMinutes = Math.round(cfg.windowMs / 60000)
+
+  return rateLimit({
+    ...buildLimiterOptions(cfg, store),
     skipSuccessfulRequests: true,
     message: {
       error: `Too many login attempts. Please try again in ${windowMinutes} minutes.`,
@@ -72,14 +76,11 @@ function createLoginLimiter() {
   })
 }
 
-function createApiLimiter() {
+function createApiLimiter(store) {
   const cfg = getRateLimitConfig().api
 
   return rateLimit({
-    windowMs: cfg.windowMs,
-    max: cfg.max,
-    standardHeaders: true,
-    legacyHeaders: false,
+    ...buildLimiterOptions(cfg, store),
     skip: shouldSkipApiRateLimit,
     message: { error: 'Too many requests. Please try again later.' },
     handler(req, res, _next, options) {
@@ -89,14 +90,61 @@ function createApiLimiter() {
   })
 }
 
-const loginLimiter = createLoginLimiter()
-const apiLimiter = createApiLimiter()
+async function createRedisStore(prefix) {
+  const url = process.env.REDIS_URL?.trim()
+  if (!url) { return null }
+
+  try {
+    const { createClient } = require('redis')
+    const { RedisStore } = require('rate-limit-redis')
+
+    if (!redisClient) {
+      redisClient = createClient({ url })
+      redisClient.on('error', (err) => {
+        console.warn('[rate-limit] Redis error:', err.message)
+      })
+      await redisClient.connect()
+      console.log('[rate-limit] Redis store connected')
+    }
+
+    return new RedisStore({
+      sendCommand: (...args) => redisClient.sendCommand(args),
+      prefix,
+    })
+  } catch (err) {
+    console.warn('[rate-limit] Redis unavailable — using in-memory store:', err.message)
+    return null
+  }
+}
+
+async function initRateLimiters() {
+  const store = await createRedisStore('anot:rl:')
+  loginLimiter = createLoginLimiter(store)
+  apiLimiter = createApiLimiter(store)
+  if (store) {
+    console.log('[rate-limit] Using Redis-backed rate limiting')
+  } else {
+    console.log('[rate-limit] Using in-memory rate limiting')
+  }
+  return { loginLimiter, apiLimiter }
+}
+
+function getLoginLimiter() {
+  if (!loginLimiter) { loginLimiter = createLoginLimiter(null) }
+  return loginLimiter
+}
+
+function getApiLimiter() {
+  if (!apiLimiter) { apiLimiter = createApiLimiter(null) }
+  return apiLimiter
+}
 
 module.exports = {
   getRateLimitConfig,
   shouldSkipApiRateLimit,
   createLoginLimiter,
   createApiLimiter,
-  loginLimiter,
-  apiLimiter,
+  initRateLimiters,
+  get loginLimiter() { return getLoginLimiter() },
+  get apiLimiter() { return getApiLimiter() },
 }

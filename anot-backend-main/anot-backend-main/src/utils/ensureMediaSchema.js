@@ -20,6 +20,7 @@ const MEDIA_COLUMNS = [
     { table: 'system_settings', name: 'anthropic_api_key_enc', ddl: `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS anthropic_api_key_enc TEXT` },
     { table: 'system_settings', name: 'anthropic_enabled', ddl: `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS anthropic_enabled BOOLEAN NOT NULL DEFAULT true` },
     { table: 'system_settings', name: 'anthropic_model', ddl: `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS anthropic_model VARCHAR(100) NOT NULL DEFAULT 'claude-haiku-4-5'` },
+    { table: 'system_settings', name: 'deepgram_timeout_ms', ddl: `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS deepgram_timeout_ms INTEGER NOT NULL DEFAULT 30000` },
 ]
 
 /** Idempotent DDL for AI/media columns (shared by settings + runtime). */

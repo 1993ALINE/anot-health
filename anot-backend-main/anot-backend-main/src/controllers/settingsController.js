@@ -7,6 +7,12 @@ const { ensureMediaAndAiSchema } = require('../utils/ensureMediaSchema')
 const { addColumnIfMissing, columnExists } = require('../utils/schemaDdl')
 const { getSystemSettingsColumns, updateSystemSettingsRow, invalidateSettingsColumnCache } = require('../utils/settingsSchemaCompat')
 const { publicSocialLinks, mergeRowWithExtensions, packSocialLinksForSave } = require('../utils/settingsExtensions')
+const {
+  MIN_AUDIT_RETENTION_DAYS,
+  MAX_AUDIT_RETENTION_DAYS,
+  DEFAULT_AUDIT_RETENTION_DAYS,
+  clampAuditRetentionDays,
+} = require('../utils/auditRetentionPolicy')
 
 const DEFAULT_SETTINGS = {
   system_name: 'Anot',
@@ -39,7 +45,11 @@ const AI_DEFAULTS = {
   ffmpeg_compression: 5,
   ffmpeg_max_upload_mb: 100,
   ffmpeg_preprocess_before_transcribe: true,
+  deepgram_timeout_ms: 30000,
 }
+
+const MIN_DEEPGRAM_TIMEOUT_SEC = 5
+const MAX_DEEPGRAM_TIMEOUT_SEC = 300
 
 let initialized = false
 
@@ -74,11 +84,11 @@ async function ensureSettingsTable() {
   await addColumnIfMissing(
     'system_settings',
     'audit_retention_days',
-    `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS audit_retention_days INTEGER NOT NULL DEFAULT 365`,
+    `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS audit_retention_days INTEGER NOT NULL DEFAULT ${DEFAULT_AUDIT_RETENTION_DAYS}`,
   )
   if (await columnExists('system_settings', 'audit_retention_days')) {
     await pool.query(
-      `UPDATE system_settings SET audit_retention_days = GREATEST(30, LEAST(COALESCE(audit_retention_days, 365), 3650)) WHERE id = 1`,
+      `UPDATE system_settings SET audit_retention_days = GREATEST(${MIN_AUDIT_RETENTION_DAYS}, LEAST(COALESCE(audit_retention_days, ${DEFAULT_AUDIT_RETENTION_DAYS}), ${MAX_AUDIT_RETENTION_DAYS})) WHERE id = 1`,
     )
   }
 
@@ -146,6 +156,7 @@ function mapAiSettings(row) {
     ffmpeg_compression: row.ffmpeg_compression != null ? Number(row.ffmpeg_compression) : AI_DEFAULTS.ffmpeg_compression,
     ffmpeg_max_upload_mb: row.ffmpeg_max_upload_mb != null ? Number(row.ffmpeg_max_upload_mb) : AI_DEFAULTS.ffmpeg_max_upload_mb,
     ffmpeg_preprocess_before_transcribe: row.ffmpeg_preprocess_before_transcribe !== false,
+    deepgram_timeout_seconds: Math.round((Number(row.deepgram_timeout_ms) || AI_DEFAULTS.deepgram_timeout_ms) / 1000),
   }
 }
 
@@ -153,7 +164,7 @@ function mapInternalRow(row, columnSet) {
   const merged = mergeRowWithExtensions(row, columnSet)
   return {
     ...mapBaseSettings(merged),
-    audit_retention_days: merged.audit_retention_days != null ? Number(merged.audit_retention_days) : 365,
+    audit_retention_days: clampAuditRetentionDays(merged.audit_retention_days),
     ...mapAiSettings(merged),
   }
 }
@@ -203,10 +214,10 @@ const updateSettings = async (req, res) => {
     const currentRow = await pool.query('SELECT * FROM system_settings WHERE id = 1')
     const cur = currentRow.rows[0] || {}
 
-    let audit_retention_days = Number(cur.audit_retention_days) || 365
+    let audit_retention_days = clampAuditRetentionDays(cur.audit_retention_days)
     if (payload.audit_retention_days != null && payload.audit_retention_days !== '') {
       const n = parseInt(String(payload.audit_retention_days), 10)
-      if (Number.isFinite(n)) audit_retention_days = Math.max(30, Math.min(n, 3650))
+      if (Number.isFinite(n)) { audit_retention_days = clampAuditRetentionDays(n) }
     }
 
     // ── API keys: encrypted at rest in system_settings (NOT SSM) ─────────────
@@ -293,6 +304,15 @@ const updateSettings = async (req, res) => {
         ? !!payload.ffmpeg_preprocess_before_transcribe
         : cur.ffmpeg_preprocess_before_transcribe !== false
 
+    let deepgram_timeout_ms = Number(cur.deepgram_timeout_ms) || AI_DEFAULTS.deepgram_timeout_ms
+    if (payload.deepgram_timeout_seconds != null && payload.deepgram_timeout_seconds !== '') {
+      const sec = parseInt(String(payload.deepgram_timeout_seconds), 10)
+      if (Number.isFinite(sec)) {
+        const clamped = Math.max(MIN_DEEPGRAM_TIMEOUT_SEC, Math.min(MAX_DEEPGRAM_TIMEOUT_SEC, sec))
+        deepgram_timeout_ms = clamped * 1000
+      }
+    }
+
     const columnSet = await getSystemSettingsColumns()
     const packedSocial = packSocialLinksForSave(userSocial, {
       audit_retention_days,
@@ -310,6 +330,7 @@ const updateSettings = async (req, res) => {
       ffmpeg_compression,
       ffmpeg_max_upload_mb,
       ffmpeg_preprocess_before_transcribe,
+      deepgram_timeout_ms,
     }, columnSet)
 
     const result = await updateSystemSettingsRow({
@@ -341,6 +362,7 @@ const updateSettings = async (req, res) => {
       ffmpeg_compression,
       ffmpeg_max_upload_mb,
       ffmpeg_preprocess_before_transcribe,
+      deepgram_timeout_ms,
     })
 
     invalidateAiSettingsCache()
@@ -356,7 +378,7 @@ const updateSettings = async (req, res) => {
       deepgram_webhook_url: deepgram_webhook_raw || '', deepgram_auto_transcribe_on_upload,
       anthropic_enabled, anthropic_model,
       ffmpeg_enabled, ffmpeg_target_format, ffmpeg_compression, ffmpeg_max_upload_mb,
-      ffmpeg_preprocess_before_transcribe,
+      ffmpeg_preprocess_before_transcribe, deepgram_timeout_ms,
     }
     const norm = (v) => (v === null || v === undefined ? '' : String(v))
     for (const [name, nextVal] of Object.entries(trackedNext)) {
@@ -395,9 +417,80 @@ const getInternalSettings = async (req, res) => {
   }
 }
 
+const getTranscriptionSettings = async (req, res) => {
+  try {
+    await ensureSettingsTable()
+    await ensureMediaAndAiSchema()
+    const result = await pool.query(
+      `SELECT deepgram_timeout_ms, deepgram_enabled, deepgram_model, deepgram_language,
+              deepgram_auto_transcribe_on_upload, ffmpeg_max_upload_mb
+       FROM system_settings WHERE id = 1`,
+    )
+    const row = result.rows[0] || {}
+    const timeoutMs = Number(row.deepgram_timeout_ms) || AI_DEFAULTS.deepgram_timeout_ms
+    res.status(200).json({
+      settings: {
+        deepgram_timeout_seconds: Math.max(
+          MIN_DEEPGRAM_TIMEOUT_SEC,
+          Math.min(MAX_DEEPGRAM_TIMEOUT_SEC, Math.round(timeoutMs / 1000)),
+        ),
+        deepgram_enabled: !!row.deepgram_enabled,
+        deepgram_model: row.deepgram_model || AI_DEFAULTS.deepgram_model,
+        deepgram_language: row.deepgram_language || AI_DEFAULTS.deepgram_language,
+        deepgram_auto_transcribe_on_upload: !!row.deepgram_auto_transcribe_on_upload,
+        ffmpeg_max_upload_mb: row.ffmpeg_max_upload_mb != null ? Number(row.ffmpeg_max_upload_mb) : AI_DEFAULTS.ffmpeg_max_upload_mb,
+      },
+    })
+  } catch (err) {
+    sendHttpError(res, 500, err, { context: 'settings.getTranscription', req })
+  }
+}
+
+const updateTranscriptionSettings = async (req, res) => {
+  try {
+    await ensureSettingsTable()
+    await ensureMediaAndAiSchema()
+    const payload = req.body?.settings != null ? req.body.settings : req.body
+    const cur = (await pool.query('SELECT deepgram_timeout_ms FROM system_settings WHERE id = 1')).rows[0] || {}
+
+    let deepgram_timeout_ms = Number(cur.deepgram_timeout_ms) || AI_DEFAULTS.deepgram_timeout_ms
+    if (payload.deepgram_timeout_seconds != null && payload.deepgram_timeout_seconds !== '') {
+      const sec = parseInt(String(payload.deepgram_timeout_seconds), 10)
+      if (Number.isFinite(sec)) {
+        const clamped = Math.max(MIN_DEEPGRAM_TIMEOUT_SEC, Math.min(MAX_DEEPGRAM_TIMEOUT_SEC, sec))
+        deepgram_timeout_ms = clamped * 1000
+      }
+    }
+
+    await pool.query(
+      `UPDATE system_settings SET deepgram_timeout_ms = $1, updated_at = NOW() WHERE id = 1`,
+      [deepgram_timeout_ms],
+    )
+    invalidateAiSettingsCache()
+
+    cloudWatchAudit.logSettingChange(
+      req.user.id,
+      req.user.role,
+      'deepgram_timeout_ms',
+      cur.deepgram_timeout_ms,
+      deepgram_timeout_ms,
+      req.clientIp,
+    )
+
+    res.status(200).json({
+      message: 'Transcription settings updated.',
+      settings: { deepgram_timeout_seconds: Math.round(deepgram_timeout_ms / 1000) },
+    })
+  } catch (err) {
+    sendHttpError(res, 500, err, { context: 'settings.updateTranscription', req })
+  }
+}
+
 module.exports = {
   getPublicSettings,
   getInternalSettings,
+  getTranscriptionSettings,
+  updateTranscriptionSettings,
   updateSettings,
   ensureSettingsTable,
 }

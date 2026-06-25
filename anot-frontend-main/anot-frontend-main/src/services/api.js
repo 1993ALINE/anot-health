@@ -411,6 +411,8 @@ export const adminAPI = {
 export const settingsAPI = {
   getPublic: async () => apiFetch('/settings/public', { includeAuth: false }),
   getInternal: async () => apiFetch('/settings/internal'),
+  getTranscription: async () => apiFetch('/settings/transcription'),
+  updateTranscription: async (settings) => apiMutate('PUT', '/settings/transcription', { body: { settings } }),
   update: async (settings) => apiMutate('PUT', '/settings', { body: settings }),
 }
 

@@ -1,29 +1,4 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// CloudWatch HIPAA audit logger
-//
-// This ships structured audit events to AWS CloudWatch Logs. It is intentionally
-// independent of the Postgres `auditLogger.js` (which remains the canonical,
-// queryable audit trail); CloudWatch gives an append-only, tamper-evident copy
-// outside the application database for HIPAA retention.
-//
-// Design notes vs. a naive implementation:
-//   • Uses AWS SDK v3 (@aws-sdk/client-cloudwatch-logs) — the project already
-//     ships v3 (@aws-sdk/client-s3); SDK v2 ("aws-sdk") is in maintenance mode
-//     and is NOT a dependency here.
-//   • Graceful no-op: if AUDIT_CLOUDWATCH_ENABLED !== 'true' (or the SDK/creds
-//     are unavailable) nothing is shipped to AWS and the app keeps running. This
-//     matters because the service may run on Railway, where there is no
-//     CloudWatch IAM role. Set AUDIT_CLOUDWATCH_ENABLED=true on AWS.
-//   • Sequence-token aware: CloudWatch Logs `PutLogEvents` returns the next
-//     sequence token, which the following call must echo back. We track it and
-//     self-heal on InvalidSequenceToken / DataAlreadyAccepted.
-//   • The flush timer is unref()'d so it never keeps the process (or tests)
-//     alive on its own.
-//
-// IMPORTANT (PHI): audit events legitimately carry identifiers (user id, email,
-// patient id). We do NOT print event bodies to stdout by default — set
-// AUDIT_CONSOLE=true to echo them locally. Never log clinical note content here.
-// ─────────────────────────────────────────────────────────────────────────────
+const { redactSensitiveData } = require('./phiSafeLogger')
 
 const REGION = process.env.AUDIT_CLOUDWATCH_REGION || process.env.AWS_REGION || 'ap-southeast-1'
 const LOG_GROUP = process.env.AUDIT_LOG_GROUP || '/aws/elasticbeanstalk/anot-backend-prod'
@@ -69,10 +44,10 @@ class AuditLogger {
     }
 
     log(event) {
-        const logEntry = {
+        const logEntry = redactSensitiveData({
             timestamp: new Date().toISOString(),
             ...event,
-        }
+        })
 
         if (CONSOLE_ENABLED) {
             console.log('[AUDIT]', JSON.stringify(logEntry))
@@ -214,7 +189,7 @@ class AuditLogger {
         })
     }
 
-    logError(errorType, errorMessage, userId, endpoint, statusCode, ipAddress) {
+    logError(errorType, errorMessage, userId, endpoint, statusCode, ipAddress, details = null) {
         this.log({
             event: 'error',
             error_type: errorType,
@@ -223,6 +198,7 @@ class AuditLogger {
             endpoint,
             status_code: statusCode,
             ip_address: ipAddress,
+            ...(details ? { details } : {}),
         })
     }
 }

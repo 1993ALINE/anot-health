@@ -1,4 +1,5 @@
 ﻿const auditLogger = require('../utils/logger')
+const { redactSensitiveData } = require('../utils/phiSafeLogger')
 
 // Resolve the client IP the SAME way the canonical Postgres audit trail does:
 // trust Express's `req.ip`, which honors the configured `trust proxy` hop count
@@ -25,6 +26,10 @@ function loggingMiddleware(req, res, next) {
                 `${req.method} ${req.path}`,
                 res.statusCode,
                 req.clientIp,
+                redactSensitiveData({
+                    query: req.query,
+                    body: req.body,
+                }),
             )
         }
     })

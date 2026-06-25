@@ -19,6 +19,7 @@ const DEFAULTS = {
   ffmpeg_compression: 5,
   ffmpeg_max_upload_mb: 100,
   ffmpeg_preprocess_before_transcribe: true,
+  deepgram_timeout_ms: 30000,
 }
 
 let cache = { at: 0, value: null, degraded: false }
@@ -70,6 +71,7 @@ function rowToRuntime(row) {
     ffmpeg_compression: Math.max(0, Math.min(9, Number(row.ffmpeg_compression) || DEFAULTS.ffmpeg_compression)),
     ffmpeg_max_upload_mb: Math.max(1, Math.min(500, Number(row.ffmpeg_max_upload_mb) || DEFAULTS.ffmpeg_max_upload_mb)),
     ffmpeg_preprocess_before_transcribe: row.ffmpeg_preprocess_before_transcribe !== false,
+    deepgram_timeout_ms: Math.max(5000, Math.min(300000, Number(row.deepgram_timeout_ms) || DEFAULTS.deepgram_timeout_ms)),
   }
 }
 

@@ -1,5 +1,6 @@
 const pool = require('../config/db')
 const Sentry = require('@sentry/node')
+const { redactSensitiveData, safeAuditDetails } = require('./phiSafeLogger')
 
 let colsReady = false
 
@@ -151,7 +152,9 @@ async function auditLog(user, action, entityType, entityId, details, sixth, seve
     const status = (options.status || 'success').toString().slice(0, 24)
     const module_key = options.module_key != null ? String(options.module_key).slice(0, 64) : null
     const action_category = (options.action_category || inferActionCategory(action)).toString().slice(0, 48)
-    const metaObj = options.metadata != null && typeof options.metadata === 'object' ? options.metadata : {}
+    const metaObj = options.metadata != null && typeof options.metadata === 'object'
+      ? redactSensitiveData(options.metadata)
+      : {}
     const { ip, ua, path } = requestMeta(options.req)
 
     await client.query(
@@ -166,7 +169,7 @@ async function auditLog(user, action, entityType, entityId, details, sixth, seve
             String(action).slice(0, 160),
             entityType != null ? String(entityType).slice(0, 64) : null,
             entityId != null ? String(entityId).slice(0, 160) : null,
-            details != null ? String(details).slice(0, 4000) : null,
+            details != null ? safeAuditDetails(details) : null,
             ip,
             ua || null,
             status,

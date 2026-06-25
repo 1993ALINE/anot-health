@@ -3,6 +3,7 @@ const router = express.Router()
 const multer = require('multer')
 const pool = require('../config/db')
 const { protect, restrict } = require('../middleware/auth')
+const { createSecureUpload, validateUploadedFile } = require('../middleware/fileValidation')
 const { getPublicErrorMessage, logServerError } = require('../utils/errorMessages')
 const { runAIPipeline } = require('../utils/aiPipeline')
 const { getVisitForUser } = require('../utils/visitAccess')
@@ -14,17 +15,7 @@ const cloudWatchAudit = require('../utils/logger')
 // Files are buffered in memory then uploaded to S3 (local disk is wiped on
 // every Elastic Beanstalk redeploy, so nothing durable can live there).
 
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 500 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('audio/')) {
-      cb(null, true)
-    } else {
-      cb(new Error('Only audio files are allowed.'))
-    }
-  },
-})
+const upload = createSecureUpload(multer.memoryStorage())
 
 function extFromMimetype(mimetype) {
   return mimetype.includes('mp4') ? 'mp4' : mimetype.includes('ogg') ? 'ogg' : 'webm'
@@ -120,7 +111,7 @@ function handleAudioUploadError(res, err, req) {
 
 // ─── POST /api/audio/:visitId — Upload primary recording ─────────────────────
 
-router.post('/:visitId', protect, restrict('clinician'), upload.single('audio'), async (req, res) => {
+router.post('/:visitId', protect, restrict('clinician'), upload.single('audio'), validateUploadedFile, async (req, res) => {
   try {
     const { visitId } = req.params
     await validateAudioUpload(req, visitId)
@@ -147,7 +138,7 @@ router.post('/:visitId', protect, restrict('clinician'), upload.single('audio'),
 
 // ─── POST /api/audio/:visitId/append — Append additional recording ───────────
 
-router.post('/:visitId/append', protect, restrict('clinician'), upload.single('audio'), async (req, res) => {
+router.post('/:visitId/append', protect, restrict('clinician'), upload.single('audio'), validateUploadedFile, async (req, res) => {
   try {
     const { visitId } = req.params
     await validateAudioUpload(req, visitId)

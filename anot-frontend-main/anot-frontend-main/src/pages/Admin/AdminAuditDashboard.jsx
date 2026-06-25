@@ -113,7 +113,7 @@ export default function AdminAuditDashboard({ showToast, currentUser, onMeta }) 
     const [tableLoading, setTableLoading] = useState(true)
     const [live, setLive] = useState(true)
     const [selected, setSelected] = useState(null)
-    const [retentionDays, setRetentionDays] = useState(365)
+    const [retentionDays, setRetentionDays] = useState(2555)
     const [retentionSaving, setRetentionSaving] = useState(false)
     const [settingsSnapshot, setSettingsSnapshot] = useState(null)
     const [purgeConfirmOpen, setPurgeConfirmOpen] = useState(false)
@@ -285,7 +285,7 @@ export default function AdminAuditDashboard({ showToast, currentUser, onMeta }) 
         try {
             await settingsAPI.update({
                 ...settingsSnapshot,
-                audit_retention_days: Math.max(30, Math.min(Number(retentionDays) || 365, 3650)),
+                audit_retention_days: Math.max(2190, Math.min(Number(retentionDays) || 2555, 3650)),
             })
             showToast?.('Audit retention policy saved.', 'success')
         } catch (err) {
@@ -511,7 +511,7 @@ export default function AdminAuditDashboard({ showToast, currentUser, onMeta }) 
                                 type="number"
                                 className="adm-input"
                                 style={{ marginLeft: 8, width: 100 }}
-                                min={30}
+                                min={2190}
                                 max={3650}
                                 value={retentionDays}
                                 onChange={(e) => setRetentionDays(Number(e.target.value))}
