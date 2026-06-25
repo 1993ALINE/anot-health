@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, lazy, Suspense, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { authAPI, usersAPI, adminAPI, settingsAPI, assignmentsAPI } from '../../services/api'
+import { authAPI, usersAPI, adminAPI, settingsAPI, assignmentsAPI, API_BASE } from '../../services/api'
+import { fetchCsrfToken } from '../../utils/csrf'
 import { setBranding, useBranding } from '../../services/branding'
 import SystemProfileManager from '../../components/SystemProfileManager'
 import PasswordStrengthMeter from '../../components/PasswordStrengthMeter'
@@ -743,6 +744,7 @@ function Admin() {
             setCurrentUser(getCurrentUser())
         }).catch(() => {})
     }, [])
+
     const branding = useBranding()
     const sidebar = useSidebar()
     const sessionTimeoutModal = useSessionTimeout(!!currentUser && Object.keys(currentUser).length > 0)
@@ -962,8 +964,16 @@ function Admin() {
     }, [recentlyAddedUserId])
 
     // ── Load data ─────────────────────────────────────
+    // Fetch CSRF before parallel GETs so cookie + cached header stay in sync.
     useEffect(() => {
-        queueMicrotask(() => { void loadAll() })
+        queueMicrotask(async () => {
+            try {
+                await fetchCsrfToken(API_BASE)
+            } catch {
+                /* best-effort; mutating calls retry CSRF on 403 */
+            }
+            void loadAll()
+        })
     }, [loadAll])
 
     useEffect(() => {

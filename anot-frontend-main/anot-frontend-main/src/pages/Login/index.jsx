@@ -216,6 +216,7 @@ export default function Login() {
   const [phiTrainingToken, setPhiTrainingToken] = useState(null)
   const [passwordChangeToken, setPasswordChangeToken] = useState(null)
   const [mfaToken, setMfaToken] = useState(null)
+  const [csrfReady, setCsrfReady] = useState(false)
   const reducedMotion = usePrefersReducedMotion()
 
   const goToDashboard = (user) => {
@@ -262,12 +263,23 @@ export default function Login() {
     }
   }, [phase, navigate, releaseSplash])
 
-  // Prefetch CSRF token on page load so the csrf_token cookie is set before login.
+  // Prefetch CSRF token on page load so the cookie is set before login POST.
   useEffect(() => {
-    if (phase !== 'form') { return }
-    fetchCsrfToken(API_BASE).catch(() => {
-      /* login submit will retry; avoid blocking the form on transient errors */
-    })
+    if (phase !== 'form') {
+      setCsrfReady(false)
+      return
+    }
+    let cancelled = false
+    fetchCsrfToken(API_BASE)
+      .then(() => {
+        if (!cancelled) { setCsrfReady(true) }
+      })
+      .catch(() => {
+        if (!cancelled) { setCsrfReady(true) }
+      })
+    return () => {
+      cancelled = true
+    }
   }, [phase])
 
   // Resolves a successful /auth/login response. The server returns at most one
@@ -299,7 +311,7 @@ export default function Login() {
     }
     setLoading(true)
     try {
-      await fetchCsrfToken(API_BASE)
+      await fetchCsrfToken(API_BASE, { forceRefresh: true })
       const data = await authAPI.login(email.trim(), password)
       routeAfterAuth(data)
     } catch (err) {
@@ -318,7 +330,7 @@ export default function Login() {
     setError('')
     setLoading(true)
     try {
-      await fetchCsrfToken(API_BASE)
+      await fetchCsrfToken(API_BASE, { forceRefresh: true })
       const data = await authAPI.login(email.trim(), newPassword)
       routeAfterAuth(data)
     } catch (err) {
@@ -455,7 +467,7 @@ export default function Login() {
                     </div>
                   ) : null}
 
-                  <button type="submit" className="login-page__submit" disabled={loading}>
+                  <button type="submit" className="login-page__submit" disabled={loading || !csrfReady}>
                     {loading ? 'Signing in…' : `Sign in to ${branding.system_name || 'Anot'}`}
                   </button>
                 </form>

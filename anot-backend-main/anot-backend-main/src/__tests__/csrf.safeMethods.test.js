@@ -21,12 +21,12 @@ describe('csrfProtection safe methods', () => {
     return res
   }
 
-  test('csrfProtection sets cookie on safe GET when missing', () => {
+  test('csrfProtection does not mint CSRF cookie on safe GET (use /csrf-token instead)', () => {
     const req = mockReq('GET')
     const res = mockRes()
     const next = jest.fn()
     csrfProtection(req, res, next)
     expect(next).toHaveBeenCalled()
-    expect(res.cookieArgs?.value).toMatch(/^[a-f0-9]{64}$/)
+    expect(res.cookieArgs).toBeNull()
   })
 })

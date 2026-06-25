@@ -91,6 +91,8 @@ async function bootstrap() {
         frameSrc: ["'none'"],
         baseUri: ["'self'"],
         formAction: ["'self'"],
+        frameAncestors: ["'self'"],
+        scriptSrcAttr: ["'none'"],
       },
     },
     crossOriginEmbedderPolicy: false,
@@ -144,6 +146,8 @@ async function bootstrap() {
       }
     },
     credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'x-csrf-token'],
+    exposedHeaders: ['x-csrf-token'],
   }
 
   // cors() handles OPTIONS preflight automatically, so no explicit app.options() route
@@ -197,9 +201,10 @@ async function bootstrap() {
   // ships error responses to CloudWatch for HIPAA audit. Placed after trust proxy
   // + body parsing so the IP is correct, and ahead of all routes.
   app.use(loggingMiddleware)
+
+  // CSRF: cookie-parser → /api/csrf-token route → webhooks (HMAC, no CSRF) → csrfProtection → routes
   const { csrfProtection, csrfTokenRoute } = require('./middleware/csrf')
   app.get('/api/csrf-token', csrfTokenRoute)
-  // Webhooks use HMAC verification — mount before CSRF middleware.
   app.use('/api/webhooks', require('./routes/webhooks'))
   app.use('/api', csrfProtection)
 

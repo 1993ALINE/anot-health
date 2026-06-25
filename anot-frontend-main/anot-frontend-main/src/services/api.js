@@ -1,6 +1,6 @@
 // Production API URL — set in .env.production and CI (required for `npm run build`).
 import { getCurrentUser as readStoredUser } from '../utils/getCurrentUser'
-import { fetchCsrfToken, getCsrfHeaders, clearCsrfToken } from '../utils/csrf'
+import { fetchCsrfToken, getCsrfToken, getCsrfHeaders, clearCsrfToken } from '../utils/csrf'
 import {
   getToken,
   setSession,
@@ -84,11 +84,20 @@ const headers = buildRequestHeaders
 
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
-/** Headers for all requests: Bearer auth + CSRF token (cookie double-submit). */
+const API_CSRF_DEBUG =
+  import.meta.env.DEV ||
+  import.meta.env.VITE_CSRF_DEBUG === 'true' ||
+  import.meta.env.VITE_CSRF_DEBUG === '1'
+
+/** Headers for mutating requests: Bearer auth + CSRF token (cookie double-submit). */
 async function buildApiHeaders(method, includeAuth = true, extraHeaders = {}, { forceRefresh = false } = {}) {
   const h = buildRequestHeaders(includeAuth, extraHeaders)
-  const csrf = await fetchCsrfToken(API_BASE, { forceRefresh })
-  Object.assign(h, getCsrfHeaders(csrf))
+  const upper = String(method).toUpperCase()
+  if (MUTATING_METHODS.has(upper)) {
+    await fetchCsrfToken(API_BASE, { forceRefresh })
+    const csrf = getCsrfToken()
+    Object.assign(h, getCsrfHeaders(csrf))
+  }
   return h
 }
 
@@ -114,6 +123,14 @@ export async function apiFetch(path, {
 
   const run = async (forceRefresh) => {
     const hdrs = await buildApiHeaders(upper, includeAuth, extraHeaders, { forceRefresh })
+    if (MUTATING_METHODS.has(upper)) {
+      const token = hdrs['X-CSRF-Token']
+      if (API_CSRF_DEBUG) {
+        console.log('[API] Mutating method:', upper)
+        console.log('[API] CSRF token:', token)
+        console.log('[API] Cookies:', typeof document !== 'undefined' ? document.cookie : '(n/a)')
+      }
+    }
     if (isFormData) { delete hdrs['Content-Type'] }
     const opts = { method: upper, credentials: 'include', headers: hdrs }
     if (body !== null && body !== undefined && upper !== 'GET' && upper !== 'HEAD') {
