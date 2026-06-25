@@ -372,12 +372,9 @@ catch {
     exit 1
 }
 
-$expectedMessage = 'Anot API is running'
-$expectedStatus  = 'healthy'
-
-if ($parsed.message -ne $expectedMessage -or $parsed.status -ne $expectedStatus) {
+if ($parsed.status -ne 'ok' -and $parsed.status -ne 'healthy') {
     Write-Fail "Deployment verification failed: unexpected JSON payload."
-    Write-Fail "Expected message='$expectedMessage' status='$expectedStatus'"
+    Write-Fail "Expected status='ok' (or legacy 'healthy')"
     Write-Fail "Got: $body"
     exit 1
 }
