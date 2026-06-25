@@ -1,5 +1,7 @@
 # anot — full stack workspace
 
+![Deploy Status](https://github.com/1993ALINE/anot-health/actions/workflows/deploy.yml/badge.svg)
+
 ## What this project is
 
 **Anot** is a **clinical documentation** platform: care teams capture **visit audio**, produce **structured notes** (transcription via **Deepgram**, with optional **AI** draft via **Anthropic Claude**), and move work through **scribe → QPS review** flows. **Clinicians** (physicians) manage **patients and visits**; **admins** handle **users, assignments, payroll, and audit**.
@@ -23,6 +25,8 @@ It is built as **two packages** in one workspace—**not** two unrelated apps:
 | **Amazon AWS deployment** | [`deploy/AWS_DEPLOYMENT.md`](deploy/AWS_DEPLOYMENT.md) |
 | **cPanel deployment** | [`deploy/CPANEL_DEPLOYMENT.md`](deploy/CPANEL_DEPLOYMENT.md) |
 | **Index** | [`deploy/README.md`](deploy/README.md) |
+| **CI/CD pipeline** | [`docs/CI_CD_PIPELINE.md`](docs/CI_CD_PIPELINE.md) |
+| **Deployment runbook** | [`docs/DEPLOYMENT_RUNBOOK.md`](docs/DEPLOYMENT_RUNBOOK.md) |
 
 ## Layout on disk
 

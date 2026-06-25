@@ -38,4 +38,4 @@ Run `npm audit` in `anot-backend-main/anot-backend-main` and `anot-frontend-main
 
 ## Deployment
 
-Production deploys require passing tests (`npm test`) and use AWS OIDC (no long-lived access keys in GitHub). Elastic Beanstalk health must reach **Ok** before the deploy job completes.
+Production deploys require passing tests (`npm test`) and use AWS OIDC (no long-lived access keys in GitHub). Elastic Beanstalk health must reach **Ready / Green** (or `HealthStatus=Ok`) before the deploy job completes.
