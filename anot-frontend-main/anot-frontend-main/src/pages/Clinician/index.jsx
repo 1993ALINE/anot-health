@@ -1081,7 +1081,7 @@ async function fetchVisitNote(visitId, { silent = false } = {}) {
   try {
     const d = await notesAPI.getByVisit(visitId)
     return d.note
-  } catch (err) {
+  } catch {
     if (!silent) {return null}
     return undefined
   }

@@ -216,7 +216,8 @@ export default function Login() {
   const [phiTrainingToken, setPhiTrainingToken] = useState(null)
   const [passwordChangeToken, setPasswordChangeToken] = useState(null)
   const [mfaToken, setMfaToken] = useState(null)
-  const [csrfReady, setCsrfReady] = useState(false)
+  const [csrfTokenFetched, setCsrfTokenFetched] = useState(false)
+  const csrfReady = phase === 'form' && csrfTokenFetched
   const reducedMotion = usePrefersReducedMotion()
 
   const goToDashboard = (user) => {
@@ -266,16 +267,15 @@ export default function Login() {
   // Prefetch CSRF token on page load so the cookie is set before login POST.
   useEffect(() => {
     if (phase !== 'form') {
-      setCsrfReady(false)
       return
     }
     let cancelled = false
     fetchCsrfToken(API_BASE)
       .then(() => {
-        if (!cancelled) { setCsrfReady(true) }
+        if (!cancelled) { setCsrfTokenFetched(true) }
       })
       .catch(() => {
-        if (!cancelled) { setCsrfReady(true) }
+        if (!cancelled) { setCsrfTokenFetched(true) }
       })
     return () => {
       cancelled = true

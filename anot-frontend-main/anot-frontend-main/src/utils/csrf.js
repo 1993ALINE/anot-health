@@ -4,7 +4,7 @@ const TOKEN_REGEX = /^[a-f0-9]{64}$/
 
 /** In-memory cache only (never localStorage); cookie is the durable source of truth. */
 let cachedCsrfToken = null
-let cachedCookieName = null
+let _cachedCookieName = null
 /** Dedupes concurrent /csrf-token fetches (parallel GETs caused token/cookie mismatch → 403). */
 let inFlightFetch = null
 
@@ -15,7 +15,7 @@ const CSRF_DEBUG =
 
 function csrfDebug(message, meta = {}) {
   if (!CSRF_DEBUG) { return }
-  console.debug('[csrf]', message, meta)
+  console.warn('[csrf]', message, meta)
 }
 
 function isValidToken(token) {
@@ -45,7 +45,7 @@ function resolveDocumentCsrfToken() {
 function syncCache(token, cookieName) {
   if (token) {
     cachedCsrfToken = token
-    if (cookieName) { cachedCookieName = cookieName }
+    if (cookieName) { _cachedCookieName = cookieName }
   }
   return cachedCsrfToken
 }
@@ -116,7 +116,7 @@ export async function fetchCsrfToken(apiBase, { forceRefresh = false } = {}) {
 
 export function clearCsrfToken() {
   cachedCsrfToken = null
-  cachedCookieName = null
+  _cachedCookieName = null
   inFlightFetch = null
   csrfDebug('cleared CSRF cache')
 }

@@ -126,9 +126,9 @@ export async function apiFetch(path, {
     if (MUTATING_METHODS.has(upper)) {
       const token = hdrs['X-CSRF-Token']
       if (API_CSRF_DEBUG) {
-        console.log('[API] Mutating method:', upper)
-        console.log('[API] CSRF token:', token)
-        console.log('[API] Cookies:', typeof document !== 'undefined' ? document.cookie : '(n/a)')
+        console.warn('[API] Mutating method:', upper)
+        console.warn('[API] CSRF token:', token)
+        console.warn('[API] Cookies:', typeof document !== 'undefined' ? document.cookie : '(n/a)')
       }
     }
     if (isFormData) { delete hdrs['Content-Type'] }
