@@ -1,8 +1,15 @@
 const pool = require('../config/db')
+const { columnExists } = require('../utils/schemaDdl')
 const { encryptString } = require('../utils/settingsEncryption')
 
 /** One-time migration: encrypt any remaining plaintext MFA secrets at startup. */
 async function encryptPlaintextMfaSecrets() {
+    const hasLegacyColumn = await columnExists('users', 'mfa_secret')
+    if (!hasLegacyColumn) {
+        console.log('[encryptMfaSecrets] No legacy mfa_secret column — skipping plaintext migration')
+        return
+    }
+
     const { rows } = await pool.query(
         `SELECT id, mfa_secret FROM users
          WHERE mfa_secret IS NOT NULL AND mfa_secret <> ''

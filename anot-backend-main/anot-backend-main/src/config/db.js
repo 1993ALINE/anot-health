@@ -25,17 +25,20 @@ const BUNDLED_RDS_CA = path.join(__dirname, '..', '..', 'certs', 'rds-global-bun
 //                     (rejectUnauthorized: true). RDS certs chain to Amazon roots
 //                     trusted by modern Node, so this also works — DB_SSL_CA just
 //                     pins the exact CA and is the recommended production setting.
-function buildSslConfig() {
-  // Explicit CA path wins (when it actually exists); otherwise fall back to the
-  // CA bundle shipped in the deploy artifact. A misconfigured DB_SSL_CA path must
-  // not crash boot — we degrade to the bundled CA rather than throwing. Either
-  // way we verify (rejectUnauthorized: true).
-  const explicit =
-    process.env.DB_SSL_CA && fs.existsSync(process.env.DB_SSL_CA) ? process.env.DB_SSL_CA : null
-  const caPath = explicit || (fs.existsSync(BUNDLED_RDS_CA) ? BUNDLED_RDS_CA : null)
-  if (caPath) {
-    return { ca: fs.readFileSync(caPath, 'utf8'), rejectUnauthorized: true }
+function databaseHostLooksLikeRds() {
+  try {
+    if (process.env.DATABASE_URL) {
+      const host = new URL(process.env.DATABASE_URL).hostname.toLowerCase()
+      return host.includes('.rds.amazonaws.com')
+    }
+  } catch {
+    /* ignore malformed URL — validated earlier in startupDiagnostics */
   }
+  const host = String(process.env.DB_HOST || '').toLowerCase()
+  return host.includes('.rds.amazonaws.com')
+}
+
+function buildSslConfig() {
   if (process.env.DB_SSL_NO_VERIFY === 'true') {
     console.warn(
       '⚠ DB TLS certificate verification is DISABLED (DB_SSL_NO_VERIFY=true). The ' +
@@ -44,8 +47,19 @@ function buildSslConfig() {
     )
     return { rejectUnauthorized: false }
   }
-  // No CA file available: still verify against Node's built-in trust store (RDS
-  // certs chain to Amazon roots Node trusts). Never silently accept any cert.
+
+  // Explicit CA path wins (when it actually exists). Otherwise use the bundled RDS
+  // CA only when the target host is actually RDS — applying the Amazon CA to Neon
+  // or other providers causes "unable to get local issuer certificate" at boot.
+  const explicit =
+    process.env.DB_SSL_CA && fs.existsSync(process.env.DB_SSL_CA) ? process.env.DB_SSL_CA : null
+  const useBundledRdsCa =
+    !explicit && databaseHostLooksLikeRds() && fs.existsSync(BUNDLED_RDS_CA)
+  const caPath = explicit || (useBundledRdsCa ? BUNDLED_RDS_CA : null)
+  if (caPath) {
+    return { ca: fs.readFileSync(caPath, 'utf8'), rejectUnauthorized: true }
+  }
+  // No CA file: verify against Node's built-in trust store (Neon, etc.).
   return { rejectUnauthorized: true }
 }
 
@@ -56,7 +70,7 @@ function buildSslConfig() {
 // certificate chain" error we hit), while `sslmode=no-verify`/`disable` would
 // weaken TLS. We strip them all so this file is the single source of truth for
 // TLS policy regardless of how the URL was provisioned.
-const SSL_URL_PARAMS = ['sslmode', 'ssl', 'rejectunauthorized', 'sslrootcert', 'sslcert', 'sslkey']
+const SSL_URL_PARAMS = ['sslmode', 'ssl', 'rejectunauthorized', 'sslrootcert', 'sslcert', 'sslkey', 'channel_binding']
 function stripSslParams(connectionString) {
   try {
     const u = new URL(connectionString)
@@ -102,22 +116,39 @@ pool.on('error', (err) => {
   console.error('PostgreSQL idle client error (connection will be re-established):', err.message)
 })
 
-// Fatal on startup connect failure so the process supervisor (EB/PM2/Railway)
-// restarts cleanly instead of serving a 100% 500 backend.
-pool.connect((err, client, release) => {
-  if (err) {
-    console.error('❌ Database connection failed at startup:', err.message)
+/**
+ * Verify database connectivity at boot. Called from server.js after env validation
+ * so failures log actionable diagnostics before EB marks the deployment unhealthy.
+ */
+async function verifyDatabaseConnection() {
+  let client
+  try {
+    client = await pool.connect()
+    await client.query('SELECT 1 AS ok')
+    console.log('[startup] ✅ Database connection verified (TLS active)')
+  } catch (err) {
+    console.error('[startup] ❌ Database connection failed:', err.message)
     if (/self-signed|self signed|unable to (get|verify)|certificate/i.test(err.message)) {
       console.error(
-        '   ↳ TLS cert verification failed. Set DB_SSL_CA to the Amazon RDS CA bundle ' +
-          '(region-bundle.pem) and remove any sslmode= from DATABASE_URL.',
+        '   ↳ TLS cert verification failed. For RDS set DB_SSL_CA to the Amazon RDS CA bundle ' +
+          '(certs/rds-global-bundle.pem ships in the deploy artifact) and remove sslmode= from DATABASE_URL.',
       )
     }
-    process.exit(1)
+    if (/password authentication failed|no pg_hba/i.test(err.message)) {
+      console.error(
+        '   ↳ Authentication failed. Verify DATABASE_URL / DB_PASSWORD in SSM matches the live RDS password.',
+      )
+    }
+    if (/ENOTFOUND|getaddrinfo|ETIMEDOUT|ECONNREFUSED/i.test(err.message)) {
+      console.error(
+        '   ↳ Network/host unreachable. Verify DB_HOST in DATABASE_URL and security group allows EB → RDS.',
+      )
+    }
+    throw err
+  } finally {
+    if (client) client.release()
   }
-  console.log('✅ Connected to PostgreSQL database (TLS verified)')
-  release()
-})
+}
 
 // Transaction helper: acquires a client, BEGIN/COMMIT/ROLLBACK, always releases.
 //   await withTransaction(async (client) => { await client.query(...) ... })
@@ -138,3 +169,4 @@ async function withTransaction(fn) {
 
 module.exports = pool
 module.exports.withTransaction = withTransaction
+module.exports.verifyDatabaseConnection = verifyDatabaseConnection
