@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { authAPI } from '../services/api'
+import { clearSession } from '../utils/sessionAuth'
 import SessionWarningModal from '../components/SessionWarningModal'
 
 /**
@@ -34,8 +35,7 @@ async function handleLogout() {
     /* ignore — still clear local session and redirect */
   }
   try {
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
+    clearSession()
   } catch {
     /* ignore storage access errors */
   }

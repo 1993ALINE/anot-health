@@ -18,7 +18,7 @@ const { getSignedUrl } = require('@aws-sdk/s3-request-presigner')
 
 const AUDIO_BUCKET = process.env.S3_AUDIO_BUCKET || 'anot-audio-625242092266'
 const AWS_REGION = process.env.AWS_REGION || 'ap-southeast-1'
-const SIGNED_URL_TTL_SECONDS = 604800 // 7 days (the SigV4 presigning maximum)
+const SIGNED_URL_TTL_SECONDS = 900 // 15 minutes — PHI-safe presign window
 
 const s3 = new S3Client({ region: AWS_REGION })
 
@@ -41,10 +41,31 @@ async function uploadAudio(key, buffer, contentType) {
   }))
 }
 
-/** Presigned GET URL, valid 7 days. */
+/** Presigned GET URL, valid 15 minutes. */
 async function getSignedAudioUrl(key) {
   const command = new GetObjectCommand({ Bucket: AUDIO_BUCKET, Key: key })
   return getSignedUrl(s3, command, { expiresIn: SIGNED_URL_TTL_SECONDS })
+}
+
+/**
+ * Stream an S3 audio object with optional HTTP Range support.
+ * @returns {Promise<{ body: import('stream').Readable, contentType?: string, contentLength?: number, contentRange?: string, acceptRanges?: string, statusCode: number }>}
+ */
+async function getAudioStream(key, rangeHeader) {
+  const params = { Bucket: AUDIO_BUCKET, Key: key }
+  if (rangeHeader) {
+    params.Range = rangeHeader
+  }
+  const res = await s3.send(new GetObjectCommand(params))
+  const statusCode = rangeHeader && res.ContentRange ? 206 : 200
+  return {
+    body: res.Body,
+    contentType: res.ContentType,
+    contentLength: res.ContentLength,
+    contentRange: res.ContentRange,
+    acceptRanges: res.AcceptRanges || 'bytes',
+    statusCode,
+  }
 }
 
 /**
@@ -74,6 +95,7 @@ module.exports = {
   dbPathToKey,
   uploadAudio,
   getSignedAudioUrl,
+  getAudioStream,
   downloadAudioToTemp,
   deleteAudio,
 }

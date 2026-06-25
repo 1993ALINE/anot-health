@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { authAPI, visitsAPI, patientsAPI, notesAPI, API_BASE, isAbortError } from '../../services/api'
+import { authAPI, visitsAPI, patientsAPI, notesAPI, audioAPI, isAbortError } from '../../services/api'
 import { useBranding } from '../../services/branding'
 import SystemProfileManager from '../../components/SystemProfileManager'
 import PortalSidebarFooter from '../../components/PortalSidebarFooter'
@@ -866,19 +866,12 @@ function saveTemplates(t) {
 
 // ─── AUDIO PLAYER ─────────────────────────────────────────────────────────────
 
-function getAuthHeaders() {
-  const token = localStorage.getItem('token')
-  return { Authorization: `Bearer ${token}` }
-}
-
 /**
  * Fetch recording count for a visit.
  */
 async function fetchVisitAudioCount(visitId) {
   try {
-    const response = await fetch(`${API_BASE}/audio/${visitId}/count`, { headers: getAuthHeaders() })
-    if (!response.ok) {throw new Error('Audio count unavailable')}
-    const data = await response.json()
+    const data = await audioAPI.getCount(visitId)
     return data.count > 0 ? data.count : 1
   } catch (err) {
     console.error('[Clinician] Audio count fetch failed:', err?.message)
@@ -890,9 +883,7 @@ async function fetchVisitAudioCount(visitId) {
  * Load audio blob for playback index.
  */
 async function loadVisitAudioBlob(visitId, idx) {
-  const response = await fetch(`${API_BASE}/audio/${visitId}?index=${idx}`, { headers: getAuthHeaders() })
-  if (!response.ok) {throw new Error('Failed to load audio')}
-  return response.blob()
+  return audioAPI.getBlob(visitId, idx)
 }
 
 function attachAudioElementHandlers(a, durSet, setDur, setCur, setPlay) {
@@ -1094,14 +1085,13 @@ const NOTE_DRAFT_SECTIONS = [
  * Fetch note data for a visit.
  */
 async function fetchVisitNote(visitId, { silent = false } = {}) {
-  const token = localStorage.getItem('token')
-  const r = await fetch(`${API_BASE}/notes/visit/${visitId}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  const d = await r.json().catch(() => ({}))
-  if (r.ok) {return d.note}
-  if (!silent) {return null}
-  return undefined
+  try {
+    const d = await notesAPI.getByVisit(visitId)
+    return d.note
+  } catch (err) {
+    if (!silent) {return null}
+    return undefined
+  }
 }
 
 /**

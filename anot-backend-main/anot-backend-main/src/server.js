@@ -1,15 +1,15 @@
-// ─── SECRETS BOOTSTRAP (must run first) ─────────────────────────────────────
+// ??? SECRETS BOOTSTRAP (must run first) ?????????????????????????????????????
 // loadSecrets() hydrates process.env from SSM (prod) or .env (local) BEFORE any
 // module that reads process.env at require-time is loaded. instrument.js reads
 // SENTRY_DSN on require, and ./config/db builds the PG Pool on require, so both
-// are deferred into bootstrap() below — after secrets are in place. See
+// are deferred into bootstrap() below � after secrets are in place. See
 // src/config/loadSecrets.js for the full rationale.
 const loadSecrets = require('./config/loadSecrets')
 
 async function bootstrap() {
   await loadSecrets()
 
-  // Sentry init reads SENTRY_DSN — require only after secrets are loaded.
+  // Sentry init reads SENTRY_DSN � require only after secrets are loaded.
   require('../instrument.js')
 
   const Sentry       = require('@sentry/node')
@@ -38,6 +38,7 @@ async function bootstrap() {
   const { ensureUserProfileSchema } = require('./utils/ensureUserProfileSchema')
   const { loadAiSettings } = require('./services/aiSettings')
   const { cleanCorruptedSettings } = require('./startup/cleanCorruptedSettings')
+  const { encryptPlaintextMfaSecrets } = require('./startup/encryptMfaSecrets')
 
   const app = express()
 const { correlationIdMiddleware } = require('./middleware/correlationId')
@@ -58,7 +59,7 @@ if (_tp === 'false' || _tp === '0') {
   if (Number.isFinite(n) && n > 0) app.set('trust proxy', n)
 }
 
-// ─── SECURITY HEADERS ─────────────────────────────────────────────────────────
+// ??? SECURITY HEADERS ?????????????????????????????????????????????????????????
 
 app.use(helmet({
   contentSecurityPolicy: {
@@ -97,11 +98,11 @@ app.use((req, res, next) => {
   next()
 })
 
-// ─── CORS ─────────────────────────────────────────────────────────────────────
+// ??? CORS ?????????????????????????????????????????????????????????????????????
 // Local dev origins are always allowed; CORS_ORIGINS adds extra entries (comma-separated).
 // The previous /\.vercel\.app$/ regex matched any attacker-deployed *.vercel.app, so it's gone.
 // CORS must run BEFORE rate limiting so that 429 responses (and preflight requests
-// throttled by the limiter) still carry Access-Control-Allow-Origin — otherwise the
+// throttled by the limiter) still carry Access-Control-Allow-Origin � otherwise the
 // browser reports those as CORS failures instead of the real status.
 
 // CORS configuration - ISSUE-005 Fix
@@ -135,7 +136,7 @@ const corsOptions = {
 app.use(cookieParser())
 app.use(cors(corsOptions))
 
-// ─── RATE LIMITING ────────────────────────────────────────────────────────────
+// ??? RATE LIMITING ????????????????????????????????????????????????????????????
 // General API limit + stricter limit on auth routes to slow brute-force attempts.
 
 const rateLimitConfig = getRateLimitConfig()
@@ -159,8 +160,8 @@ app.use(express.urlencoded({ extended: true, limit: '2mb' }))
 // SyntaxError with status 400; an oversized body throws status 413. Without this
 // handler those errors fall through to the generic 500 ("Internal server error"),
 // which is what made POST /api/visits, POST /api/patients and the audit routes
-// look "broken" / "return invalid JSON". We catch them here — before the Sentry
-// error handler — so the client gets an actionable 4xx and we don't log garbage
+// look "broken" / "return invalid JSON". We catch them here � before the Sentry
+// error handler � so the client gets an actionable 4xx and we don't log garbage
 // payloads as server errors.
 app.use((err, req, res, next) => {
   if (err && (err.type === 'entity.parse.failed' || (err.status === 400 && 'body' in err))) {
@@ -174,16 +175,18 @@ app.use((err, req, res, next) => {
 
 // Audio is served only via authorized GET /api/audio/:visitId (not a public /uploads URL).
 
-// ─── AUDIT LOGGING ──────────────────────────────────────────────────────────
-// Attaches req.clientIp (the trusted req.ip — not spoofable X-Forwarded-For) and
+// ??? AUDIT LOGGING ??????????????????????????????????????????????????????????
+// Attaches req.clientIp (the trusted req.ip � not spoofable X-Forwarded-For) and
 // ships error responses to CloudWatch for HIPAA audit. Placed after trust proxy
 // + body parsing so the IP is correct, and ahead of all routes.
 app.use(loggingMiddleware)
 const { csrfProtection, csrfTokenRoute } = require('./middleware/csrf')
 app.get('/api/csrf-token', csrfTokenRoute)
+// Webhooks use HMAC verification � mount before CSRF middleware.
+app.use('/api/webhooks', require('./routes/webhooks'))
 app.use('/api', csrfProtection)
 
-// ─── HEALTH CHECK ─────────────────────────────────────────────────────────────
+// ??? HEALTH CHECK ?????????????????????????????????????????????????????????????
 
 app.get('/', (req, res) => {
   res.json({ message: 'Anot API is running', version: 'v42', status: 'healthy' })
@@ -193,11 +196,10 @@ app.get('/api/health', (req, res) => {
   res.json({ message: 'Anot API is running', version: 'v42', status: 'healthy' })
 })
 
-// ─── ROUTES
+// ??? ROUTES
 app.use('/api', require('./routes/openapi'))
 
 app.use('/api/auth',        require('./routes/auth'))
-app.use('/api/webhooks',    require('./routes/webhooks'))
 app.use('/api/users',       require('./routes/users'))
 app.use('/api/patients',    require('./routes/patients'))
 app.use('/api/visits',      require('./routes/visits'))
@@ -213,32 +215,23 @@ app.use('/api/admin', enforceAdminMfa)
 app.use('/api/consent',     require('./routes/consent'))
 app.use('/api/admin',       require('./routes/health'))
 
-// ─── 404 HANDLER ─────────────────────────────────────────────────────────────
+// ??? 404 HANDLER ?????????????????????????????????????????????????????????????
 
 app.use((req, res) => {
-  res.status(404).json({ error: `Route not found: ${req.method} ${req.originalUrl}` })
+  res.status(404).json({ error: 'Resource not found' })
 })
 
-// ─── SENTRY ERROR HANDLER ─────────────────────────────────────────────────────
+// ??? SENTRY ERROR HANDLER ?????????????????????????????????????????????????????
 // Must be registered after all routes/controllers and before our own error
 // handler. PHI scrubbing is configured in instrument.js (beforeSend).
 
 Sentry.setupExpressErrorHandler(app)
 
-// ─── ERROR HANDLER ────────────────────────────────────────────────────────────
+// ??? ERROR HANDLER ????????????????????????????????????????????????????????????
 
-app.use((err, req, res, next) => {
-  if (err.message && String(err.message).startsWith('CORS:')) {
-    return res.status(403).json({ error: 'Origin not allowed.' })
-  }
-  console.error('Server error:', err.message)
-  res.status(500).json({
-    error: 'Internal server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong',
-  })
-})
+app.use(require('./middleware/errorHandler'))
 
-// ─── START ────────────────────────────────────────────────────────────────────
+// ??? START ????????????????????????????????????????????????????????????????????
 
 const PORT = process.env.PORT || 5000
 // Bind IPv4 explicitly so http://127.0.0.1:PORT always hits this process on Windows/WSL.
@@ -253,6 +246,7 @@ const startServer = async () => {
     console.log('[Startup] Ensuring user profile schema...')
     await ensureUserProfileSchema()
     console.log('[Startup] Schema ready')
+    await encryptPlaintextMfaSecrets()
   } catch (err) {
     console.error('[Startup] Schema initialization failed:', err.message)
     process.exit(1)
@@ -273,7 +267,7 @@ const startServer = async () => {
 
   const server = app.listen(PORT, HOST, () => {
     console.log(`[Server] Listening on port ${PORT}`)
-    console.log(`[Server] Bound ${HOST}:${PORT} � environment: ${process.env.NODE_ENV || 'development'}`)
+    console.log(`[Server] Bound ${HOST}:${PORT} � environment: ${process.env.NODE_ENV || 'development'}`)
     // Provision the CloudWatch log group/stream. No-ops safely when audit
     // shipping is disabled or AWS isn't configured (e.g. Railway).
     initCloudWatch().catch((err) => console.error('[CloudWatch] Init failed:', err.message))

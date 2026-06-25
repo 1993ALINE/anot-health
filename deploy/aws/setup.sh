@@ -25,6 +25,7 @@ set -euo pipefail
 export AWS_REGION="${AWS_REGION:-ap-southeast-1}"
 export AWS_DEFAULT_REGION="$AWS_REGION"
 APP_NAME="${APP_NAME:-anot}"
+SSM_PREFIX="${SSM_PREFIX:-/anot/prod}"
 
 # Elastic Beanstalk (backend)
 EB_APP="${EB_APP:-anot-backend}"
@@ -122,12 +123,12 @@ aws ec2 authorize-security-group-ingress \
 log "RDS security group: $DB_SG_ID"
 
 # DB password: reuse if already in SSM, else generate (kept only in SSM).
-if ssm_exists "/$APP_NAME/db-password"; then
-  DB_PASSWORD="$(ssm_get "/$APP_NAME/db-password")"
+if ssm_exists "$SSM_PREFIX/DB_PASSWORD"; then
+  DB_PASSWORD="$(ssm_get "$SSM_PREFIX/DB_PASSWORD")"
   echo "  reusing existing DB password from SSM."
 else
   DB_PASSWORD="$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-32)"
-  ssm_put "/$APP_NAME/db-password" "$DB_PASSWORD"
+  ssm_put "$SSM_PREFIX/DB_PASSWORD" "$DB_PASSWORD"
 fi
 
 log "Ensuring RDS instance '$DB_INSTANCE_ID' ($DB_CLASS)..."
@@ -158,18 +159,19 @@ DB_HOST="$(aws rds describe-db-instances --db-instance-identifier "$DB_INSTANCE_
   --query 'DBInstances[0].Endpoint.Address' --output text)"
 log "RDS endpoint: $DB_HOST"
 
-# ── 3. Secrets → SSM Parameter Store ─────────────────────────────────────────
-log "Writing secrets to SSM Parameter Store under /$APP_NAME/ ..."
-if ssm_exists "/$APP_NAME/jwt-secret"; then echo "  jwt-secret exists; keeping."; else ssm_put "/$APP_NAME/jwt-secret" "$(openssl rand -base64 48)"; fi
-if ssm_exists "/$APP_NAME/settings-encryption-key"; then echo "  settings-encryption-key exists; keeping."; else ssm_put "/$APP_NAME/settings-encryption-key" "$(openssl rand -hex 32)"; fi
-ssm_put "/$APP_NAME/anthropic-key"            "${ANTHROPIC_API_KEY:-REPLACE_ME}"
-ssm_put "/$APP_NAME/deepgram-webhook-secret"  "${DEEPGRAM_WEBHOOK_SECRET:-REPLACE_ME}"
-[ -n "$ANTHROPIC_API_KEY" ] || warn "ANTHROPIC_API_KEY not provided — placeholder stored. Update with: aws ssm put-parameter --name /$APP_NAME/anthropic-key --type SecureString --overwrite --value sk-ant-..."
+# ── 3. Secrets → SSM Parameter Store (/anot/prod/{VAR_NAME}) ─────────────────
+log "Writing secrets to SSM Parameter Store under ${SSM_PREFIX}/ ..."
+if ssm_exists "$SSM_PREFIX/JWT_SECRET"; then echo "  JWT_SECRET exists; keeping."; else ssm_put "$SSM_PREFIX/JWT_SECRET" "$(openssl rand -base64 48)"; fi
+if ssm_exists "$SSM_PREFIX/SETTINGS_ENCRYPTION_KEY"; then echo "  SETTINGS_ENCRYPTION_KEY exists; keeping."; else ssm_put "$SSM_PREFIX/SETTINGS_ENCRYPTION_KEY" "$(openssl rand -hex 32)"; fi
+ssm_put "$SSM_PREFIX/ANTHROPIC_API_KEY"            "${ANTHROPIC_API_KEY:-REPLACE_ME}"
+ssm_put "$SSM_PREFIX/DEEPGRAM_WEBHOOK_SECRET"      "${DEEPGRAM_WEBHOOK_SECRET:-REPLACE_ME}"
+ssm_put "$SSM_PREFIX/DB_HOST"                      "$DB_HOST"
+[ -n "$ANTHROPIC_API_KEY" ] || warn "ANTHROPIC_API_KEY not provided — placeholder stored. Update with: aws ssm put-parameter --name ${SSM_PREFIX}/ANTHROPIC_API_KEY --type SecureString --overwrite --value sk-ant-..."
 
-JWT_SECRET="$(ssm_get "/$APP_NAME/jwt-secret")"
-SETTINGS_ENCRYPTION_KEY="$(ssm_get "/$APP_NAME/settings-encryption-key")"
-ANTHROPIC_KEY_VAL="$(ssm_get "/$APP_NAME/anthropic-key")"
-DEEPGRAM_VAL="$(ssm_get "/$APP_NAME/deepgram-webhook-secret")"
+JWT_SECRET="$(ssm_get "$SSM_PREFIX/JWT_SECRET")"
+SETTINGS_ENCRYPTION_KEY="$(ssm_get "$SSM_PREFIX/SETTINGS_ENCRYPTION_KEY")"
+ANTHROPIC_KEY_VAL="$(ssm_get "$SSM_PREFIX/ANTHROPIC_API_KEY")"
+DEEPGRAM_VAL="$(ssm_get "$SSM_PREFIX/DEEPGRAM_WEBHOOK_SECRET")"
 
 # ── 4. IAM roles for Elastic Beanstalk ───────────────────────────────────────
 log "Ensuring Elastic Beanstalk IAM roles..."
@@ -259,6 +261,9 @@ cat > "$OPTS_FILE" <<JSON
   {"Namespace":"aws:autoscaling:launchconfiguration","OptionName":"IamInstanceProfile","Value":"$EB_INSTANCE_PROFILE"},
   {"Namespace":"aws:ec2:instances","OptionName":"InstanceTypes","Value":"$EB_INSTANCE_TYPE"},
   {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"NODE_ENV","Value":"production"},
+  {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"USE_SSM","Value":"true"},
+  {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"SSM_PREFIX","Value":"$SSM_PREFIX"},
+  {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"SSM_REGION","Value":"$AWS_REGION"},
   {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"DB_HOST","Value":"$DB_HOST"},
   {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"DB_PORT","Value":"5432"},
   {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"DB_NAME","Value":"$DB_NAME"},

@@ -2,11 +2,14 @@ import { Fragment, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import './login.css'
 import { API_BASE, authAPI, isLikelyNetworkFailure } from '../../services/api'
+import { fetchCsrfToken } from '../../utils/csrf'
 import { dashboardPathForRole } from '../../auth/dashboardPaths'
 import { DEFAULT_BRAND_LOGO_SRC, useBranding } from '../../services/branding'
 import { useReleaseSplash } from '../../splash/useReleaseSplash'
+import { hasValidSession } from '../../utils/sessionAuth'
 import PhiTrainingModal from '../../components/PhiTrainingModal'
 import PasswordChangeModal from '../../components/PasswordChangeModal'
+import MfaChallengeModal from '../../components/MfaChallengeModal'
 
 function networkErrorMessage() {
   const isLocalApi = API_BASE.includes('localhost') || API_BASE.includes('127.0.0.1')
@@ -204,7 +207,7 @@ export default function Login() {
   const navigate = useNavigate()
   const branding = useBranding()
   const releaseSplash = useReleaseSplash()
-  const [phase, setPhase] = useState(() => (localStorage.getItem('token') ? 'session' : 'form'))
+  const [phase, setPhase] = useState(() => (hasValidSession() ? 'session' : 'form'))
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
@@ -212,6 +215,7 @@ export default function Login() {
   const [error, setError] = useState('')
   const [phiTrainingToken, setPhiTrainingToken] = useState(null)
   const [passwordChangeToken, setPasswordChangeToken] = useState(null)
+  const [mfaToken, setMfaToken] = useState(null)
   const reducedMotion = usePrefersReducedMotion()
 
   const goToDashboard = (user) => {
@@ -258,21 +262,29 @@ export default function Login() {
     }
   }, [phase, navigate, releaseSplash])
 
+  // Prefetch CSRF token on page load so the csrf_token cookie is set before login.
+  useEffect(() => {
+    if (phase !== 'form') { return }
+    fetchCsrfToken(API_BASE).catch(() => {
+      /* login submit will retry; avoid blocking the form on transient errors */
+    })
+  }, [phase])
+
   // Resolves a successful /auth/login response. The server returns at most one
   // pre-session gate (a temporaryToken instead of a real session): forced
   // password change first, then PHI training. Each is handled by a mandatory
   // modal; only an ungated response carries a real `user` + session token.
   const routeAfterAuth = (data) => {
-    // Forced password change gate: new users / admin resets must set a new
-    // password before anything else. No session token yet.
     if (data.requirePasswordChange) {
       setPasswordChangeToken(data.temporaryToken)
       return
     }
-    // PHI awareness training gate: no session token yet — show the mandatory
-    // acknowledgment modal and finish the login once the user acknowledges.
     if (data.requirePhiTraining) {
       setPhiTrainingToken(data.temporaryToken)
+      return
+    }
+    if (data.requireMfa) {
+      setMfaToken(data.temporaryToken)
       return
     }
     goToDashboard(data.user)
@@ -287,6 +299,7 @@ export default function Login() {
     }
     setLoading(true)
     try {
+      await fetchCsrfToken(API_BASE)
       const data = await authAPI.login(email.trim(), password)
       routeAfterAuth(data)
     } catch (err) {
@@ -305,6 +318,7 @@ export default function Login() {
     setError('')
     setLoading(true)
     try {
+      await fetchCsrfToken(API_BASE)
       const data = await authAPI.login(email.trim(), newPassword)
       routeAfterAuth(data)
     } catch (err) {
@@ -465,8 +479,18 @@ export default function Login() {
       {phiTrainingToken ? (
         <PhiTrainingModal
           temporaryToken={phiTrainingToken}
-          onAcknowledged={(user) => {
+          onAcknowledged={(data) => {
             setPhiTrainingToken(null)
+            routeAfterAuth(data)
+          }}
+        />
+      ) : null}
+
+      {mfaToken ? (
+        <MfaChallengeModal
+          temporaryToken={mfaToken}
+          onVerified={(user) => {
+            setMfaToken(null)
             goToDashboard(user)
           }}
         />

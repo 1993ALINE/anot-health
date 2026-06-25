@@ -1,4 +1,4 @@
- 
+
 const CACHE_NAME = 'anot-v1'
 const urlsToCache = ['/', '/index.html']
 
@@ -16,11 +16,22 @@ self.addEventListener('activate', (event) => {
   )
 })
 
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'CLEAR_CACHE') {
+    event.waitUntil(caches.delete(CACHE_NAME))
+  }
+})
+
 self.addEventListener('fetch', (event) => {
   const { request } = event
   const url = new URL(request.url)
 
-  if (request.method !== 'GET') {return}
+  if (request.method !== 'GET') { return }
+
+  // Never cache API responses — they may contain PHI.
+  if (url.pathname.includes('/api/')) {
+    return
+  }
 
   if (url.pathname.includes('/assets/') || /\.(js|css|png|jpg|jpeg|svg|webp|woff2?)$/i.test(url.pathname)) {
     event.respondWith(
@@ -31,21 +42,6 @@ self.addEventListener('fetch', (event) => {
         }
         return response
       })),
-    )
-    return
-  }
-
-  if (url.pathname.includes('/api/')) {
-    event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (response.ok) {
-            const clone = response.clone()
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone))
-          }
-          return response
-        })
-        .catch(() => caches.match(request)),
     )
   }
 })

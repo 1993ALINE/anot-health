@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, lazy, Suspense, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { authAPI, usersAPI, adminAPI, settingsAPI, API_BASE } from '../../services/api'
+import { authAPI, usersAPI, adminAPI, settingsAPI, assignmentsAPI } from '../../services/api'
 import { setBranding, useBranding } from '../../services/branding'
 import SystemProfileManager from '../../components/SystemProfileManager'
 import PasswordStrengthMeter from '../../components/PasswordStrengthMeter'
@@ -846,11 +846,7 @@ function Admin() {
     }, [])
 
     const fetchAssignments = useCallback(async () => {
-        const res = await fetch(`${API_BASE}/assignments`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-        })
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok) {throw new Error(data.error || 'Failed to load assignments.')}
+        const data = await assignmentsAPI.getAll()
         return data.assignments || []
     }, [])
 
@@ -1290,13 +1286,7 @@ function Admin() {
         if (!assignClinicianId || !assignScribeId) { showToast('Select both a clinician and a scribe.', 'error'); return }
         try {
             setAssignLoading(true)
-            const res = await fetch(`${API_BASE}/assignments`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
-                body: JSON.stringify({ clinician_id: assignClinicianId, scribe_id: assignScribeId }),
-            })
-            const data = await res.json()
-            if (!res.ok) {throw new Error(data.error)}
+            const data = await assignmentsAPI.create(assignClinicianId, assignScribeId)
             setAssignments(prev => [...prev, data.assignment])
             setAssignClinicianId(''); setAssignScribeId('')
             showToast('Scribe assigned successfully')
@@ -1306,12 +1296,7 @@ function Admin() {
 
     const removeAssignment = async (id) => {
         try {
-            const res = await fetch(`${API_BASE}/assignments/${id}`, {
-                method: 'DELETE',
-                headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-            })
-            const data = await res.json().catch(() => ({}))
-            if (!res.ok) {throw new Error(data.error || 'Failed to remove assignment.')}
+            await assignmentsAPI.delete(id)
             setAssignments(prev => prev.filter(a => a.id !== id))
             showToast('Assignment removed')
         } catch (err) { showToast(err.message, 'error') }
@@ -2066,7 +2051,7 @@ function Admin() {
                                     <div className="adm-form-card">
                                         <div className="adm-form-card__title">AI &amp; media services</div>
                                         <p className="adm-settings-note" style={{ marginBottom: 16 }}>
-                                            Deepgram, Anthropic, and FFmpeg run only on the server. Store a strong <code>SETTINGS_ENCRYPTION_KEY</code> in production for API key encryption at rest.
+                                            Deepgram and Anthropic API keys are stored encrypted in the database (AES-256-GCM), not in SSM — so admins can rotate them here without a redeploy. Rate limits are managed separately via SSM (<code>/anot/prod/RATE_LIMIT_*</code>). See <code>docs/ADMIN_SETTINGS_ARCHITECTURE.md</code>.
                                         </p>
                                         <div className="adm-form-card__title" style={{ fontSize: 15, marginTop: 8 }}>Deepgram (transcription)</div>
                                         <div className="adm-form-grid">
@@ -2076,7 +2061,7 @@ function Admin() {
                                                 </label>
                                             </div>
                                             <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>
-                                                <label className="adm-form-label">API key {settingsForm.deepgram_api_key_set ? <span style={{ color: '#059669' }}>(saved)</span> : null}</label>
+                                                <label className="adm-form-label" title="Encrypted at rest in the database. Enter a new value to rotate; leave blank to keep the saved key.">API key {settingsForm.deepgram_api_key_set ? <span style={{ color: '#059669' }}>(saved — encrypted in DB)</span> : null}</label>
                                                 <input className="adm-input" type="password" autoComplete="new-password" placeholder={settingsForm.deepgram_api_key_set ? 'Leave blank to keep existing key' : 'Enter Deepgram API key'}
                                                     value={settingsForm.deepgram_api_key} onChange={(e) => handleSettingInput('deepgram_api_key', e.target.value)} />
                                             </div>
@@ -2114,7 +2099,7 @@ function Admin() {
                                                 </label>
                                             </div>
                                             <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>
-                                                <label className="adm-form-label">Anthropic API key {settingsForm.anthropic_api_key_set ? <span style={{ color: '#059669' }}>(saved)</span> : null}</label>
+                                                <label className="adm-form-label" title="Encrypted at rest in the database. Enter a new value to rotate; leave blank to keep the saved key.">Anthropic API key {settingsForm.anthropic_api_key_set ? <span style={{ color: '#059669' }}>(saved — encrypted in DB)</span> : null}</label>
                                                 <input className="adm-input" type="password" autoComplete="new-password" placeholder={settingsForm.anthropic_api_key_set ? 'Leave blank to keep existing key' : 'sk-ant-...'}
                                                     value={settingsForm.anthropic_api_key} onChange={(e) => handleSettingInput('anthropic_api_key', e.target.value)} />
                                             </div>

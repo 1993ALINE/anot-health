@@ -30,6 +30,8 @@ jobs:
           node-version: '20'
       - name: Build frontend
         working-directory: anot-frontend-main/anot-frontend-main
+        env:
+          VITE_API_URL: https://app.anot.health/api
         run: |
           npm ci
           npm run build

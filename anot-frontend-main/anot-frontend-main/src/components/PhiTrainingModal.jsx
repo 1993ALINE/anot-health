@@ -44,7 +44,7 @@ export default function PhiTrainingModal({ temporaryToken, onAcknowledged }) {
     setError('')
     try {
       const data = await authAPI.acknowledgePhiTraining(temporaryToken)
-      onAcknowledged?.(data.user)
+      onAcknowledged?.(data)
     } catch (err) {
       if (isLikelyNetworkFailure(err)) {
         setError('Cannot reach the server. Please check your connection and try again.')

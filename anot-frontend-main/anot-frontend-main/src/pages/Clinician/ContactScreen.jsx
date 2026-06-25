@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { API_BASE } from '../../services/api'
+import { supportAPI } from '../../services/api'
 
 const CONTACT_SUBJECTS = ['General Question', 'Technical Issue', 'Billing', 'Feature Request']
 
@@ -61,24 +61,12 @@ export default function ContactScreen({ currentUser, showToast }) {
     }
     setSending(true)
     try {
-      const token = localStorage.getItem('token')
-      const res = await fetch(`${API_BASE}/support/message`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          name: form.name.trim(),
-          subject: form.subject,
-          message: form.message.trim(),
-          clinicianName: currentUser?.name,
-        }),
+      await supportAPI.sendMessage({
+        name: form.name.trim(),
+        subject: form.subject,
+        message: form.message.trim(),
+        clinicianName: currentUser?.name,
       })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        throw new Error(data.error || `Request failed (${res.status})`)
-      }
       setSent(true)
       setForm((prev) => ({ ...prev, message: '' }))
     } catch (err) {

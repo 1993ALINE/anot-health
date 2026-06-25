@@ -1,3 +1,4 @@
+const { sendHttpError } = require('../utils/errorMessages')
 const pool = require('../config/db')
 const { withTransaction } = require('../config/db')
 const { auditLog, reportAuditFailure } = require('../utils/auditLogger')
@@ -85,8 +86,7 @@ const getVisitsByDate = async (req, res) => {
       { scope: 'by_date', date: localDate, count: result.rows.length }
     )
   } catch (err) {
-    console.error('Get visits error:', err.message)
-    res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
   }
 }
 
@@ -172,8 +172,7 @@ const getAllVisits = async (req, res) => {
       { scope: 'list', count: result.rows.length }
     )
   } catch (err) {
-    console.error('Get all visits error:', err.message)
-    res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
   }
 }
 
@@ -258,8 +257,7 @@ const createVisit = async (req, res) => {
       { patient_id: pid, visit_type: visitTypeStr }
     )
   } catch (err) {
-    console.error('Create visit error:', err.message)
-    res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
   }
 }
 
@@ -332,8 +330,7 @@ const updateVisitStatus = async (req, res) => {
       { changes: { status: { from: current, to: status } } }
     )
   } catch (err) {
-    console.error('Update visit status error:', err.message)
-    res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
   }
 }
 
@@ -410,8 +407,7 @@ const endVisit = async (req, res) => {
     })
 
   } catch (err) {
-    console.error('End visit error:', err.message)
-    res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
   }
 }
 
@@ -465,8 +461,7 @@ const updateVisit = async (req, res) => {
       { updated_fields: ['visit_time', 'visit_type'] }
     )
   } catch (err) {
-    console.error('Update visit error:', err.message)
-    res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
   }
 }
 
@@ -517,8 +512,7 @@ const deleteVisit = async (req, res) => {
 
     res.status(200).json({ message: 'Visit deleted.' })
   } catch (err) {
-    console.error('Delete visit error:', err.message)
-    res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
   }
 }
 
@@ -573,8 +567,7 @@ const getVisitHistory = async (req, res) => {
       { scope: 'history', count: result.rows.length }
     )
   } catch (err) {
-    console.error('Get visit history error:', err.message)
-    res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
   }
 }
 
@@ -648,8 +641,7 @@ const lockNote = async (req, res) => {
     if (!result.rows[0]) return res.status(404).json({ error: 'Visit not found.' })
     res.status(200).json({ visit: result.rows[0] })
   } catch (err) {
-    console.error('Lock note error:', err.message)
-    res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
   }
 }
 

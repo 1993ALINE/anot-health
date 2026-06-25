@@ -11,3 +11,4 @@ src/uploads/
 # Build artifacts
 *.zip
 *.tar.gz
+coverage/

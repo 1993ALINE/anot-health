@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react'
-import { API_BASE } from '../services/api'
+import { audioAPI } from '../services/api'
 import { fmtSecsAudio } from '../utils/timeFormat'
 import { useRenderRateWarning } from '../utils/useRenderRateWarning'
 
@@ -110,12 +110,7 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
   const fetchBlobUrl = useCallback(async (idx) => {
     if (blobUrlsRef.current[idx]) {return blobUrlsRef.current[idx]}
 
-    const token = localStorage.getItem('token')
-    const res = await fetch(`${API_BASE}/audio/${visitIdRef.current}?index=${idx}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    if (!res.ok) {throw new Error('no audio')}
-    const blob = await res.blob()
+    const blob = await audioAPI.getBlob(visitIdRef.current, idx)
     if (!blob?.size) {throw new Error('empty')}
 
     const url = URL.createObjectURL(blob)
@@ -144,11 +139,7 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
     Object.values(blobUrlsRef.current).forEach((url) => URL.revokeObjectURL(url))
     blobUrlsRef.current = {}
 
-    const token = localStorage.getItem('token')
-    fetch(`${API_BASE}/audio/${visitId}/count`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => r.json())
+    audioAPI.getCount(visitId)
       .then((d) => {
         if (!cancelled && d.count > 0) {setCount(d.count)}
       })

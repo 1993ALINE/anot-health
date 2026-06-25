@@ -1,3 +1,4 @@
+const { getPublicErrorMessage, sendHttpError } = require('../utils/errorMessages')
 const pool = require('../config/db')
 const cloudWatchAudit = require('../utils/logger')
 const { encryptString } = require('../utils/settingsEncryption')
@@ -169,8 +170,7 @@ const getPublicSettings = async (req, res) => {
     const cols = await getSystemSettingsColumns()
     res.status(200).json({ settings: mapPublicRow(mergeRowWithExtensions(row, cols)) })
   } catch (err) {
-    console.error('Get settings error:', err.message)
-    res.status(500).json({ error: 'Failed to load settings.' })
+    sendHttpError(res, 500, err, { context: 'settings.getPublic', req })
   }
 }
 
@@ -209,6 +209,10 @@ const updateSettings = async (req, res) => {
       if (Number.isFinite(n)) audit_retention_days = Math.max(30, Math.min(n, 3650))
     }
 
+    // ── API keys: encrypted at rest in system_settings (NOT SSM) ─────────────
+    // Admins rotate Deepgram/Anthropic keys via Settings UI without redeploy.
+    // SETTINGS_ENCRYPTION_KEY (from SSM at boot) decrypts blobs at runtime.
+    // See docs/ADMIN_SETTINGS_ARCHITECTURE.md.
     let deepgram_api_key_enc = cur.deepgram_api_key_enc || null
     let newDeepgramKeySaved = false
     if (payload.deepgram_clear_api_key === true) {
@@ -216,7 +220,7 @@ const updateSettings = async (req, res) => {
     } else if (payload.deepgram_api_key != null && String(payload.deepgram_api_key).trim()) {
       deepgram_api_key_enc = encryptString(String(payload.deepgram_api_key).trim())
       if (!deepgram_api_key_enc) {
-        return res.status(500).json({ error: 'Could not encrypt API key (check SETTINGS_ENCRYPTION_KEY / JWT_SECRET).' })
+        return res.status(500).json({ error: getPublicErrorMessage(500, new Error('encryption failed')) })
       }
       newDeepgramKeySaved = true
     }
@@ -254,7 +258,7 @@ const updateSettings = async (req, res) => {
     } else if (payload.anthropic_api_key != null && String(payload.anthropic_api_key).trim()) {
       anthropic_api_key_enc = encryptString(String(payload.anthropic_api_key).trim())
       if (!anthropic_api_key_enc) {
-        return res.status(500).json({ error: 'Could not encrypt API key (check SETTINGS_ENCRYPTION_KEY / JWT_SECRET).' })
+        return res.status(500).json({ error: getPublicErrorMessage(500, new Error('encryption failed')) })
       }
       newAnthropicKeySaved = true
     }
@@ -372,12 +376,10 @@ const updateSettings = async (req, res) => {
 
     res.status(200).json({ message: 'Settings saved successfully.', settings: mapInternalRow(result.rows[0], columnSet) })
   } catch (err) {
-    console.error('Update settings error:', err.message)
-    const hint =
-      /does not exist/i.test(String(err.message))
-        ? ' Database schema is out of date — run scripts/fix-local-schema-gaps.ps1 as postgres, or apply migrations/20260515_local_schema_gaps.sql.'
-        : ''
-    res.status(500).json({ error: `Failed to save settings.${hint}` })
+    if (/does not exist/i.test(String(err.message))) {
+      console.error('[settings.update] Schema gap:', err.message)
+    }
+    sendHttpError(res, 500, err, { context: 'settings.update', req })
   }
 }
 
@@ -389,8 +391,7 @@ const getInternalSettings = async (req, res) => {
     const cols = await getSystemSettingsColumns()
     res.status(200).json({ settings: mapInternalRow(row, cols) })
   } catch (err) {
-    console.error('Get internal settings error:', err.message)
-    res.status(500).json({ error: 'Failed to load settings.' })
+    sendHttpError(res, 500, err, { context: 'settings.getInternal', req })
   }
 }
 

@@ -2,6 +2,8 @@ import { useEffect, useState, lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Login from './pages/Login/index'
 import { authAPI } from './services/api'
+import { hasValidSession, getStoredUserRaw } from './utils/sessionAuth'
+import { getCurrentUser } from './utils/getCurrentUser'
 
 // Code-split each portal so the initial load only ships the login + shell.
 // Each portal is a large bundle (recorder, charts, editors) only needed once
@@ -30,9 +32,9 @@ import {
 
 /** `/` → dashboard if already signed in, otherwise login. */
 function RootHome() {
-  const token = localStorage.getItem('token')
-  const raw = localStorage.getItem('user')
-  if (!token || !raw) {return <Navigate to="/login" replace />}
+  if (!hasValidSession()) {return <Navigate to="/login" replace />}
+  const raw = getStoredUserRaw()
+  if (!raw) {return <Navigate to="/login" replace />}
   const path = (() => {
     try {
       return dashboardPathForRole(JSON.parse(raw).role)
@@ -50,7 +52,7 @@ function RootHome() {
 
 function ProtectedRoute({ element, allowedRole }) {
   const releaseSplash = useReleaseSplash()
-  const hasSession = !!localStorage.getItem('token') && !!localStorage.getItem('user')
+  const hasSession = hasValidSession() && !!getStoredUserRaw()
   const [verified, setVerified] = useState(() => (hasSession ? null : false))
 
   useEffect(() => {
@@ -85,10 +87,8 @@ function ProtectedRoute({ element, allowedRole }) {
     return null
   }
 
-  let parsedUser
-  try {
-    parsedUser = JSON.parse(localStorage.getItem('user') || '{}')
-  } catch {
+  const parsedUser = getCurrentUser()
+  if (!parsedUser?.role) {
     authAPI.logout()
     return <Navigate to="/login" replace />
   }

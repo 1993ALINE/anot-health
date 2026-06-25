@@ -37,3 +37,7 @@ jobs:
       - run: npm ci
       - run: npm run lint --if-present
       - run: npm test --if-present
+      - name: Production build (validates VITE_API_URL)
+        env:
+          VITE_API_URL: https://app.anot.health/api
+        run: npm run build

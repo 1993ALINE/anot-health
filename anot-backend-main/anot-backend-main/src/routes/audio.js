@@ -3,10 +3,11 @@ const router = express.Router()
 const multer = require('multer')
 const pool = require('../config/db')
 const { protect, restrict } = require('../middleware/auth')
+const { getPublicErrorMessage, logServerError } = require('../utils/errorMessages')
 const { runAIPipeline } = require('../utils/aiPipeline')
 const { getVisitForUser } = require('../utils/visitAccess')
 const { loadAiSettings, defaultRuntimeSettings } = require('../services/aiSettings')
-const { uploadAudio, getSignedAudioUrl, dbPathToKey } = require('../services/s3Storage')
+const { uploadAudio, getAudioStream, dbPathToKey } = require('../services/s3Storage')
 const cloudWatchAudit = require('../utils/logger')
 
 // ─── Storage ──────────────────────────────────────────────────────────────────
@@ -108,11 +109,13 @@ async function appendAudioPathToVisit(visitId, audioPath, status) {
 /**
  * Handle audio upload route errors
  */
-function handleAudioUploadError(res, err) {
+function handleAudioUploadError(res, err, req) {
   const status = err.status || 500
-  const message = err.status ? err.message : 'Failed to upload audio.'
-  if (!err.status) console.error('Audio upload error:', err.message)
-  res.status(status).json({ error: message })
+  if (err.status) {
+    return res.status(status).json({ error: getPublicErrorMessage(status, err) })
+  }
+  logServerError('audio.upload', err, req)
+  return res.status(500).json({ error: getPublicErrorMessage(500, err) })
 }
 
 // ─── POST /api/audio/:visitId — Upload primary recording ─────────────────────
@@ -138,7 +141,7 @@ router.post('/:visitId', protect, restrict('clinician'), upload.single('audio'),
 
     await maybeAutoTranscribe(visitId, req.user, req)
   } catch (err) {
-    handleAudioUploadError(res, err)
+    handleAudioUploadError(res, err, req)
   }
 })
 
@@ -167,9 +170,7 @@ router.post('/:visitId/append', protect, restrict('clinician'), upload.single('a
       runAIPipeline(visitId, { user: req.user, req }).catch((err) => console.error('AI re-run error:', err.message))
     })
   } catch (err) {
-    console.error('Append audio error:', err.message)
-    const status = err.status || 500
-    res.status(status).json({ error: err.status ? err.message : 'Failed to upload additional recording.' })
+    handleAudioUploadError(res, err, req)
   }
 })
 
@@ -184,17 +185,13 @@ router.get('/:visitId/count', protect, restrict('clinician', 'scribe', 'qps'), a
     const count = audioFile ? audioFile.split(',').filter(Boolean).length : 0
     res.json({ count })
   } catch (err) {
-    console.error('Count audio error:', err.message)
-    res.status(500).json({ error: 'Server error.' })
+    logServerError('audio.count', err, req)
+    res.status(500).json({ error: getPublicErrorMessage(500, err) })
   }
 })
 
-// ─── GET /api/audio/:visitId — Serve audio (supports ?index=N) ────────────────
-// Redirects to a presigned S3 URL (valid 7 days — SIGNED_URL_TTL_SECONDS in
-// s3Storage.js). S3 handles Range requests natively, so seeking and Safari's
-// 206 Partial Content requirement still work. NOTE: anyone holding the signed
-// URL can fetch the audio without auth for the full TTL; keep the TTL choice
-// deliberate for PHI.
+// ─── GET /api/audio/:visitId — Stream audio with Range support (?index=N) ─────
+// Authenticated proxy to S3 — no presigned URL exposed to the client.
 
 router.get('/:visitId', protect, restrict('clinician', 'scribe', 'qps'), async (req, res) => {
   try {
@@ -216,11 +213,27 @@ router.get('/:visitId', protect, restrict('clinician', 'scribe', 'qps'), async (
       return res.status(400).json({ error: 'Invalid audio path.' })
     }
 
-    const signedUrl = await getSignedAudioUrl(dbPathToKey(filePath))
-    res.redirect(302, signedUrl)
+    const rangeHeader = req.headers.range
+    const streamResult = await getAudioStream(dbPathToKey(filePath), rangeHeader)
+
+    res.status(streamResult.statusCode)
+    if (streamResult.contentType) res.setHeader('Content-Type', streamResult.contentType)
+    if (streamResult.contentLength != null) res.setHeader('Content-Length', String(streamResult.contentLength))
+    if (streamResult.contentRange) res.setHeader('Content-Range', streamResult.contentRange)
+    res.setHeader('Accept-Ranges', streamResult.acceptRanges || 'bytes')
+
+    cloudWatchAudit.logDataAccess(
+      req.user.id, req.user.role, 'audio', visitId, 'STREAM', req.clientIp,
+      { index, partial: !!rangeHeader }
+    )
+
+    streamResult.body.pipe(res)
   } catch (err) {
-    console.error('Audio serve error:', err.message)
-    res.status(500).json({ error: 'Failed to serve audio.' })
+    if (err.name === 'NoSuchKey' || err.$metadata?.httpStatusCode === 404) {
+      return res.status(404).json({ error: 'Audio file not found.' })
+    }
+    logServerError('audio.stream', err, req)
+    res.status(500).json({ error: getPublicErrorMessage(500, err) })
   }
 })
 

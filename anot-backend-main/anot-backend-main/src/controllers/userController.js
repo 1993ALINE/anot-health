@@ -1,3 +1,4 @@
+const { sendHttpError } = require('../utils/errorMessages')
 const pool = require('../config/db')
 const bcrypt = require('bcryptjs')
 const { validatePassword, generateSecurePassword } = require('../utils/passwordPolicy')
@@ -16,6 +17,7 @@ const {
 const { ensureUserProfileSchema } = require('../utils/ensureUserProfileSchema')
 const { userSelectList, hasRatePerNoteColumn } = require('../utils/userColumns')
 const { invalidateUserAuthCache } = require('../middleware/auth')
+const { incrementTokenVersion } = require('../utils/tokenVersion')
 
 const VALID_ROLES = ['clinician', 'scribe', 'qps', 'admin', 'super_admin']
 
@@ -64,8 +66,7 @@ const getAllUsers = async (req, res) => {
         const result = await pool.query(sql, params)
         res.status(200).json({ users: result.rows })
     } catch (err) {
-        console.error('Get all users error:', err.message)
-        res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
     }
 }
 
@@ -86,8 +87,7 @@ const getUser = async (req, res) => {
         }
         res.status(200).json({ user: target })
     } catch (err) {
-        console.error('Get user error:', err.message)
-        res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
     }
 }
 
@@ -230,6 +230,7 @@ const updateUser = async (req, res) => {
         // A role change must invalidate any cached session so the next request
         // sees the new role (and rejects tokens carrying the stale role).
         invalidateUserAuthCache(id)
+        await incrementTokenVersion(id)
 
         const auditWrites = [
             auditLog(req.user, 'USER_UPDATED', 'user', id,
@@ -254,8 +255,7 @@ const updateUser = async (req, res) => {
         if (err.code === '23505' && err.constraint === 'users_one_super_admin') {
             return res.status(409).json({ error: 'Only one Super Admin account is allowed in the system.' })
         }
-        console.error('Update user error:', err.message)
-        res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
     }
 }
 
@@ -305,8 +305,7 @@ const patchAdminModules = async (req, res) => {
 
         res.status(200).json({ message: 'Module permissions updated.', user: result.rows[0] })
     } catch (err) {
-        console.error('Patch admin modules error:', err.message)
-        res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
     }
 }
 
@@ -344,9 +343,9 @@ const toggleStatus = async (req, res) => {
             [newStatus, id]
         )
 
-        // Drop the cached session state so a deactivation takes effect on the
-        // next request instead of after the 60s revocation-cache TTL.
+        // Drop the cached session state and revoke outstanding JWTs immediately.
         invalidateUserAuthCache(id)
+        await incrementTokenVersion(id)
 
         await auditLog(req.user,
             newStatus === 'active' ? 'USER_ACTIVATED' : 'USER_DEACTIVATED',
@@ -359,8 +358,7 @@ const toggleStatus = async (req, res) => {
             user: result.rows[0],
         })
     } catch (err) {
-        console.error('Toggle status error:', err.message)
-        res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
     }
 }
 
@@ -410,8 +408,7 @@ const deleteUser = async (req, res) => {
             { req, module_key: 'admins', action_category: 'delete', status: 'critical' })
         res.status(200).json({ message: 'User deleted successfully.' })
     } catch (err) {
-        console.error('Delete user error:', err.message)
-        res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
     }
 }
 
@@ -450,8 +447,7 @@ const getUsersByRole = async (req, res) => {
         )
         res.status(200).json({ users: result.rows })
     } catch (err) {
-        console.error('Get users by role error:', err.message)
-        res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
     }
 }
 
@@ -493,8 +489,7 @@ const updateRate = async (req, res) => {
 
         res.status(200).json({ message: `Rate updated for ${result.rows[0].name}`, user: result.rows[0] })
     } catch (err) {
-        console.error('Update rate error:', err.message)
-        res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
     }
 }
 
@@ -545,8 +540,9 @@ const resetPassword = async (req, res) => {
             return res.status(404).json({ error: 'User not found.' })
         }
 
-        // Drop any cached session so the forced-change state is enforced promptly.
+        // Drop any cached session and revoke outstanding JWTs for the reset account.
         invalidateUserAuthCache(id)
+        await incrementTokenVersion(id)
 
         // Audit the reset — record that a temp password was generated, NEVER the
         // password itself.
@@ -562,8 +558,7 @@ const resetPassword = async (req, res) => {
             note: 'User must change password on first login',
         })
     } catch (err) {
-        console.error('Reset password error:', err.message)
-        res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
     }
 }
 
@@ -593,8 +588,7 @@ const getAdminStats = async (req, res) => {
             },
         })
     } catch (err) {
-        console.error('Get admin stats error:', err.message)
-        res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
     }
 }
 
@@ -628,8 +622,7 @@ const getPayroll = async (req, res) => {
         `)
         res.status(200).json({ payroll: result.rows })
     } catch (err) {
-        console.error('Get payroll error:', err.message)
-        res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
     }
 }
 
@@ -663,8 +656,7 @@ const getPerformance = async (req, res) => {
         `)
         res.status(200).json({ performance: result.rows })
     } catch (err) {
-        console.error('Get performance error:', err.message)
-        res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
     }
 }
 

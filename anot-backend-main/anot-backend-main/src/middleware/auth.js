@@ -6,7 +6,7 @@ const pool = require('../config/db')
 // role changed, after the token was issued (tokens live up to JWT_EXPIRES_IN).
 // We re-check the account against the DB, but cache the result briefly so we
 // don't add a query to every single authenticated request.
-const USER_CHECK_TTL_MS = 60 * 1000
+const USER_CHECK_TTL_MS = 10 * 1000
 const userCheckCache = new Map() // userId -> { status, role, found, expiresAt }
 
 async function getUserAuthState(userId) {
@@ -15,12 +15,13 @@ async function getUserAuthState(userId) {
     const cached = userCheckCache.get(key)
     if (cached && cached.expiresAt > now) return cached
 
-    const { rows } = await pool.query('SELECT status, role FROM users WHERE id = $1', [key])
+    const { rows } = await pool.query('SELECT status, role, token_version FROM users WHERE id = $1', [key])
     const row = rows[0]
     const state = {
         found:  !!row,
         status: row ? row.status : null,
         role:   row ? row.role : null,
+        token_version: row ? Number(row.token_version) || 0 : null,
         expiresAt: now + USER_CHECK_TTL_MS,
     }
     userCheckCache.set(key, state)
@@ -61,6 +62,11 @@ function validateUserAuthState(state, decoded) {
     if (state.role !== decoded.role) {
         return { ok: false, status: 401, error: 'Session expired. Please log in again.' }
     }
+    const jwtVersion = Number(decoded.token_version) || 0
+    const dbVersion = Number(state.token_version) || 0
+    if (jwtVersion !== dbVersion) {
+        return { ok: false, status: 401, error: 'Session expired. Please log in again.' }
+    }
     return { ok: true }
 }
 
@@ -89,6 +95,21 @@ function checkPhiTrainingRequired(user) {
             status: 403,
             error: 'PHI training acknowledgment required before accessing other features',
             code: 'PHI_TRAINING_REQUIRED',
+        }
+    }
+    return { ok: true }
+}
+
+/**
+ * Check MFA verification scope (login gate)
+ */
+function checkMfaRequired(user, reqPath) {
+    if (user.requireMfa === true && !reqPath.includes('/verify-mfa')) {
+        return {
+            ok: false,
+            status: 403,
+            error: 'MFA verification required before accessing other features',
+            code: 'MFA_REQUIRED',
         }
     }
     return { ok: true }
@@ -131,6 +152,9 @@ const protect = async (req, res, next) => {
 
         const phiCheck = checkPhiTrainingRequired(req.user)
         if (!phiCheck.ok) return sendAuthFailure(res, phiCheck)
+
+        const mfaCheck = checkMfaRequired(req.user, req.path)
+        if (!mfaCheck.ok) return sendAuthFailure(res, mfaCheck)
 
         next()
     } catch (err) {

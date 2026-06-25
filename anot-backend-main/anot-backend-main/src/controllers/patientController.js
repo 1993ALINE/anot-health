@@ -1,3 +1,4 @@
+const { sendHttpError } = require('../utils/errorMessages')
 const pool = require('../config/db')
 const { auditLog, reportAuditFailure } = require('../utils/auditLogger')
 
@@ -38,8 +39,7 @@ const getAllPatients = async (req, res) => {
 
         res.status(200).json({ patients: result.rows })
     } catch (err) {
-        console.error('Get patients error:', err.message)
-        res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
     }
 }
 
@@ -93,8 +93,7 @@ const createPatient = async (req, res) => {
             patient: newPatient,
         })
     } catch (err) {
-        console.error('Create patient error:', err.message)
-        res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
     }
 }
 
@@ -141,8 +140,7 @@ const getPatient = async (req, res) => {
 
         res.status(200).json({ patient })
     } catch (err) {
-        console.error('Get patient error:', err.message)
-        res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
     }
 }
 

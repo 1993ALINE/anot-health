@@ -7,6 +7,9 @@ const { assertAdminMayUseStaffRole } = require('../utils/adminPortalAccess')
 const { auditLog, reportAuditFailure } = require('../utils/auditLogger')
 const cloudWatchAudit = require('../utils/logger')
 const { ensureUserProfileSchema } = require('../utils/ensureUserProfileSchema')
+const { sendHttpError } = require('../utils/errorMessages')
+const { incrementTokenVersion } = require('../utils/tokenVersion')
+const { verifyTotp, resolveMfaSecret, loginRequiresMfa } = require('../services/mfaService')
 
 function roleToStaffModule(role) {
     const m = {
@@ -33,10 +36,87 @@ const generateToken = (user) => {
             email:     user.email,
             role:      user.role,
             specialty: user.specialty,
+            token_version: Number(user.token_version) || 0,
         },
         process.env.JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRES_IN || '8h' }
+        { expiresIn: process.env.JWT_EXPIRES_IN || '1h' }
     )
+}
+
+/** Short-lived token scoped to a single pre-session gate (password change, PHI training, MFA). */
+const generateTemporaryToken = (user, claim, expiresIn = '15m') => {
+    return jwt.sign(
+        {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            [claim]: true,
+        },
+        process.env.JWT_SECRET,
+        { expiresIn }
+    )
+}
+
+/** Issue full session or the next mandatory gate after password verification. */
+function buildPostPasswordLoginResponse(user, req) {
+    if (user.force_password_change) {
+        const temporaryToken = generateTemporaryToken(user, 'require_password_change')
+        void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_PASSWORD_CHANGE_REQUIRED', 'auth', String(user.id), 'Login requires password change', { req, module_key: 'authentication', status: 'warning', action_category: 'authentication' }).catch(reportAuditFailure)
+        cloudWatchAudit.logLogin(user.id, user.email, user.role, req.clientIp, 'success')
+        return {
+            status: 200,
+            body: {
+                success: true,
+                requirePasswordChange: true,
+                force_password_change: true,
+                temporaryToken,
+                message: 'You must change your password before accessing the application',
+            },
+        }
+    }
+
+    if (needsPhiTraining(user)) {
+        const temporaryToken = generateTemporaryToken(user, 'requirePhiTraining')
+        void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_PHI_TRAINING_REQUIRED', 'auth', String(user.id), 'Login requires PHI training acknowledgment', { req, module_key: 'authentication', status: 'warning', action_category: 'authorization' }).catch(reportAuditFailure)
+        cloudWatchAudit.logLogin(user.id, user.email, user.role, req.clientIp, 'success')
+        return {
+            status: 200,
+            body: {
+                success: true,
+                requirePhiTraining: true,
+                temporaryToken,
+                message: 'You must acknowledge the PHI awareness training before accessing the application.',
+            },
+        }
+    }
+
+    if (loginRequiresMfa(user)) {
+        const temporaryToken = generateTemporaryToken(user, 'requireMfa', '5m')
+        void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_MFA_REQUIRED', 'auth', String(user.id), 'Login requires MFA verification', { req, module_key: 'authentication', status: 'warning', action_category: 'authentication' }).catch(reportAuditFailure)
+        cloudWatchAudit.logLogin(user.id, user.email, user.role, req.clientIp, 'success')
+        return {
+            status: 200,
+            body: {
+                success: true,
+                requireMfa: true,
+                temporaryToken,
+                message: 'Enter the code from your authenticator app to continue.',
+            },
+        }
+    }
+
+    const token = generateToken(user)
+    void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_SUCCESS', 'auth', String(user.id), 'Signed in successfully', { req, module_key: 'authentication', status: 'success', action_category: 'authentication' }).catch(reportAuditFailure)
+    cloudWatchAudit.logLogin(user.id, user.email, user.role, req.clientIp, 'success')
+    return {
+        status: 200,
+        body: {
+            message: 'Login successful',
+            token,
+            user: toAuthUser(user),
+        },
+    }
 }
 
 // Shape of the user object returned to the client on a successful session start.
@@ -111,65 +191,11 @@ const login = async (req, res) => {
             return res.status(401).json(INVALID)
         }
 
-        // Forced password change (seeded accounts, admin temp-password resets).
-        // Authentication succeeded, but we only issue a short-lived token scoped
-        // to the password-change endpoint until the user picks a new password.
-        if (user.force_password_change) {
-            const temporaryToken = jwt.sign(
-                { id: user.id, name: user.name, email: user.email, role: user.role, require_password_change: true },
-                process.env.JWT_SECRET,
-                { expiresIn: '15m' }
-            )
-
-            void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_PASSWORD_CHANGE_REQUIRED', 'auth', String(user.id), 'Login requires password change', { req, module_key: 'authentication', status: 'warning', action_category: 'authentication' }).catch(reportAuditFailure)
-            cloudWatchAudit.logLogin(user.id, user.email, user.role, req.clientIp, 'success')
-
-            return res.status(200).json({
-                success: true,
-                requirePasswordChange: true,
-                force_password_change: true,
-                temporaryToken,
-                message: 'You must change your password before accessing the application',
-            })
-        }
-
-        // PHI awareness training gate. The credentials are valid, but the user
-        // must acknowledge the current training revision before we hand out a
-        // real session token. We issue a short-lived token scoped (by the
-        // protect middleware) to the acknowledge endpoint only — it cannot reach
-        // any PHI until the acknowledgment is recorded.
-        if (needsPhiTraining(user)) {
-            const temporaryToken = jwt.sign(
-                { id: user.id, name: user.name, email: user.email, role: user.role, requirePhiTraining: true },
-                process.env.JWT_SECRET,
-                { expiresIn: '15m' }
-            )
-
-            void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_PHI_TRAINING_REQUIRED', 'auth', String(user.id), 'Login requires PHI training acknowledgment', { req, module_key: 'authentication', status: 'warning', action_category: 'authorization' }).catch(reportAuditFailure)
-            cloudWatchAudit.logLogin(user.id, user.email, user.role, req.clientIp, 'success')
-
-            return res.status(200).json({
-                success: true,
-                requirePhiTraining: true,
-                temporaryToken,
-                message: 'You must acknowledge the PHI awareness training before accessing the application.',
-            })
-        }
-
-        const token = generateToken(user)
-
-        void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_SUCCESS', 'auth', String(user.id), 'Signed in successfully', { req, module_key: 'authentication', status: 'success', action_category: 'authentication' }).catch(reportAuditFailure)
-        cloudWatchAudit.logLogin(user.id, user.email, user.role, req.clientIp, 'success')
-
-        // Return user info and token
-        res.status(200).json({
-            message: 'Login successful',
-            token,
-            user: toAuthUser(user),
-        })
+        // Pre-session gates: forced password change → PHI training → MFA → full session.
+        const { status, body } = buildPostPasswordLoginResponse(user, req)
+        return res.status(status).json(body)
     } catch (err) {
-        console.error('Login error:', err.message)
-        res.status(500).json({ error: 'Server error during login.' })
+        sendHttpError(res, 500, err, { context: 'auth.login', req })
     }
 }
 
@@ -239,14 +265,23 @@ const acknowledgePhiTraining = async (req, res) => {
 
         const token = generateToken(fresh)
 
+        // PHI training complete — check for MFA gate before issuing full session.
+        if (loginRequiresMfa(fresh)) {
+            const temporaryToken = generateTemporaryToken(fresh, 'requireMfa', '5m')
+            return res.status(200).json({
+                message: 'PHI training acknowledged.',
+                requireMfa: true,
+                temporaryToken,
+            })
+        }
+
         res.status(200).json({
             message: 'PHI training acknowledged.',
             token,
             user: toAuthUser(fresh),
         })
     } catch (err) {
-        console.error('Acknowledge PHI training error:', err.message)
-        res.status(500).json({ error: 'Server error while recording acknowledgment.' })
+        sendHttpError(res, 500, err, { context: 'auth.phiTraining', req })
     }
 }
 
@@ -341,8 +376,7 @@ const register = async (req, res) => {
         if (err.code === '23505' && err.constraint === 'users_one_super_admin') {
             return res.status(409).json({ error: 'Only one Super Admin account is allowed in the system.' })
         }
-        console.error('Register error:', err.message)
-        res.status(500).json({ error: 'Server error during registration.' })
+        sendHttpError(res, 500, err, { context: 'auth.register', req })
     }
 }
 
@@ -362,8 +396,7 @@ const getMe = async (req, res) => {
 
         res.status(200).json({ user: result.rows[0] })
     } catch (err) {
-        console.error('Get me error:', err.message)
-        res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'auth.getMe', req })
     }
 }
 
@@ -412,8 +445,7 @@ const updateMe = async (req, res) => {
         }
         res.status(200).json({ message: 'Profile updated successfully.', user: result.rows[0] })
     } catch (err) {
-        console.error('Update profile error:', err.message)
-        res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'auth.updateMe', req })
     }
 }
 
@@ -459,24 +491,96 @@ const changePassword = async (req, res) => {
         // Always clear the forced-change flag once a new password is set.
         await pool.query('UPDATE users SET password = $1, force_password_change = false WHERE id = $2', [hashed, req.user.id])
 
+        await incrementTokenVersion(req.user.id)
+
         void auditLog(req.user, 'SELF_PASSWORD_CHANGED', 'user', String(req.user.id), 'User changed their own password', { req, module_key: 'authentication', status: 'success', action_category: 'authorization', metadata: { self: true, forced: isTemporaryPasswordChange } }).catch(reportAuditFailure)
 
         res.status(200).json({ message: 'Password changed successfully.' })
     } catch (err) {
-        console.error('Change password error:', err.message)
-        res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'auth.changePassword', req })
     }
 }
+
+const { clearCsrfCookie } = require('../middleware/csrf')
 
 const logout = async (req, res) => {
     try {
+        await incrementTokenVersion(req.user.id)
         void auditLog(req.user, 'LOGOUT', 'auth', String(req.user.id), 'User signed out', { req, module_key: 'authentication', status: 'success', action_category: 'authentication' }).catch(reportAuditFailure)
         cloudWatchAudit.logLogout(req.user.id, req.user.email, req.clientIp)
+        clearCsrfCookie(res)
         res.status(204).send()
     } catch (err) {
-        console.error('Logout error:', err.message)
-        res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'auth.logout', req })
     }
 }
 
-module.exports = { login, register, getMe, updateMe, changePassword, logout, acknowledgePhiTraining }
+// ─── VERIFY MFA AT LOGIN ──────────────────────────────────────────────────────
+// Exchanges the short-lived requireMfa temporaryToken (issued after password
+// verification) for a full 1h session JWT after TOTP succeeds.
+
+const verifyMfaLogin = async (req, res) => {
+    try {
+        await ensureUserProfileSchema()
+
+        const { temporaryToken, token: totpCode } = req.body || {}
+        if (!temporaryToken || !totpCode) {
+            return res.status(400).json({ error: 'MFA token and authenticator code are required.' })
+        }
+
+        let decoded
+        try {
+            decoded = jwt.verify(temporaryToken, process.env.JWT_SECRET)
+        } catch (_) {
+            return res.status(401).json({ error: 'Your session expired. Please sign in again.' })
+        }
+
+        if (decoded.requireMfa !== true) {
+            return res.status(403).json({ error: 'This token cannot be used for MFA verification.' })
+        }
+
+        const result = await pool.query('SELECT * FROM users WHERE id = $1', [decoded.id])
+        const user = result.rows[0]
+        if (!user || user.status !== 'active') {
+            return res.status(401).json({ error: 'Account is unavailable. Please contact your administrator.' })
+        }
+        if (!user.mfa_enabled) {
+            return res.status(403).json({ error: 'MFA is not enabled for this account.' })
+        }
+
+        const secret = resolveMfaSecret(user)
+        if (!secret || !verifyTotp(secret, totpCode)) {
+            void auditLog(
+                { id: user.id, name: user.name, role: user.role },
+                'MFA_LOGIN_FAILED',
+                'auth',
+                String(user.id),
+                'Invalid MFA code at login',
+                { req, module_key: 'authentication', status: 'failed', action_category: 'authentication' }
+            ).catch(reportAuditFailure)
+            return res.status(401).json({ error: 'Invalid authenticator code.' })
+        }
+
+        void auditLog(
+            { id: user.id, name: user.name, role: user.role },
+            'MFA_LOGIN_SUCCESS',
+            'auth',
+            String(user.id),
+            'MFA verified at login',
+            { req, module_key: 'authentication', status: 'success', action_category: 'authentication' }
+        ).catch(reportAuditFailure)
+
+        const sessionToken = generateToken(user)
+        cloudWatchAudit.logLogin(user.id, user.email, user.role, req.clientIp, 'success')
+
+        res.status(200).json({
+            message: 'MFA verified. Login successful.',
+            token: sessionToken,
+            user: toAuthUser(user),
+        })
+    } catch (err) {
+        sendHttpError(res, 500, err, { context: 'auth.verifyMfa', req })
+    }
+}
+
+module.exports = { login, register, getMe, updateMe, changePassword, logout, acknowledgePhiTraining, verifyMfaLogin }

@@ -1,3 +1,4 @@
+const { sendHttpError } = require('../utils/errorMessages')
 const pool = require('../config/db')
 const { withTransaction } = require('../config/db')
 const { auditLog } = require('../utils/auditLogger')
@@ -49,8 +50,7 @@ const getNoteByVisit = async (req, res) => {
     if (!result.rows[0]) return res.status(404).json({ error: 'Note not found for this visit.' })
     res.status(200).json({ note: result.rows[0] })
   } catch (err) {
-    console.error('Get note error:', err.message)
-    res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
   }
 }
 
@@ -78,8 +78,7 @@ const getMyNotes = async (req, res) => {
     )
     res.status(200).json({ notes: result.rows })
   } catch (err) {
-    console.error('Get my notes error:', err.message)
-    res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
   }
 }
 
@@ -121,8 +120,7 @@ const getAllNotes = async (req, res) => {
     const result = await pool.query(query, params)
     res.status(200).json({ notes: result.rows })
   } catch (err) {
-    console.error('Get all notes error:', err.message)
-    res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
   }
 }
 
@@ -149,8 +147,7 @@ const getClinicianNotes = async (req, res) => {
     )
     res.status(200).json({ notes: result.rows })
   } catch (err) {
-    console.error('Get clinician notes error:', err.message)
-    res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
   }
 }
 
@@ -178,8 +175,7 @@ const getMyGrades = async (req, res) => {
     )
     res.status(200).json({ grades: result.rows })
   } catch (err) {
-    console.error('Get my grades error:', err.message)
-    res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
   }
 }
 
@@ -245,8 +241,7 @@ const saveDraft = async (req, res) => {
       { visit_id: visit_id, stage: 'draft' }
     )
   } catch (err) {
-    console.error('Save draft error:', err.message)
-    res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
   }
 }
 
@@ -320,8 +315,7 @@ const submitNote = async (req, res) => {
 
     res.status(200).json({ message: 'Note submitted successfully.', note: out.note })
   } catch (err) {
-    console.error('Submit note error:', err.message)
-    res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
   }
 }
 
@@ -391,8 +385,7 @@ const updateNoteContent = async (req, res) => {
 
     res.status(200).json({ message: 'Note updated successfully.', note: out.note })
   } catch (err) {
-    console.error('Update note content error:', err.message)
-    res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
   }
 }
 
@@ -451,8 +444,7 @@ const requestEdit = async (req, res) => {
 
     res.status(200).json({ message: 'Edit requested.' })
   } catch (err) {
-    console.error('Request edit error:', err.message)
-    res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
   }
 }
 
@@ -519,8 +511,7 @@ const uploadToEHR = async (req, res) => {
 
     res.status(200).json({ message: 'Note uploaded to EHR.', note: out.note })
   } catch (err) {
-    console.error('Upload to EHR error:', err.message)
-    res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
   }
 }
 
@@ -595,8 +586,7 @@ const submitGrade = async (req, res) => {
 
     res.status(201).json({ message: 'Grade submitted successfully.', grade: out.grade })
   } catch (err) {
-    console.error('Submit grade error:', err.message)
-    res.status(500).json({ error: 'Server error.' })
+        sendHttpError(res, 500, err, { context: 'undefined', req })
   }
 }
 

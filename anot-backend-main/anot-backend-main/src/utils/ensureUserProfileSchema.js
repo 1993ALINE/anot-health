@@ -14,6 +14,8 @@ const PROFILE_COLUMNS = [
     { name: 'phi_training_acknowledged', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS phi_training_acknowledged BOOLEAN NOT NULL DEFAULT false' },
     { name: 'phi_training_acknowledged_at', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS phi_training_acknowledged_at TIMESTAMPTZ' },
     { name: 'phi_training_version', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS phi_training_version INTEGER NOT NULL DEFAULT 1' },
+    { name: 'token_version', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0' },
+    { name: 'mfa_secret_encrypted', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_secret_encrypted TEXT' },
 ]
 
 const PROFILE_INDEXES = [

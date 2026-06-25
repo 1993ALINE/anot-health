@@ -1,7 +1,7 @@
 const express = require('express')
 const rateLimit = require('express-rate-limit')
 const router = express.Router()
-const { login, register, getMe, updateMe, changePassword, logout, acknowledgePhiTraining } = require('../controllers/authController')
+const { login, register, getMe, updateMe, changePassword, logout, acknowledgePhiTraining, verifyMfaLogin } = require('../controllers/authController')
 const { protect, restrict } = require('../middleware/auth')
 const { loadAdminPortalModuleKeys } = require('../middleware/adminPortalModules')
 const { loginLimiter } = require('../middleware/rateLimit')
@@ -24,6 +24,9 @@ router.post('/login', loginLimiter, login)
 // (it arrives in the body, not the Authorization header), so no `protect` here.
 // Rate-limited like other credential endpoints to bound abuse.
 router.post('/acknowledge-phi-training', loginLimiter, acknowledgePhiTraining)
+
+// POST /api/auth/verify-mfa — completes the MFA gate after password verification.
+router.post('/verify-mfa', loginLimiter, verifyMfaLogin)
 
 // POST /api/auth/register (admin only)
 router.post('/register', protect, loadAdminPortalModuleKeys, restrict('admin', 'super_admin'), register)
