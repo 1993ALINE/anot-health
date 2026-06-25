@@ -91,7 +91,7 @@ export default function MfaChallengeModal({ temporaryToken, onVerified }) {
             value={code}
             onChange={(e) => {
               setCode(e.target.value.replace(/\D/g, '').slice(0, 6))
-              if (error) setError('')
+              if (error) { setError('') }
             }}
             style={S.input}
             disabled={submitting}

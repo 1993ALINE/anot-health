@@ -114,12 +114,12 @@ export async function apiFetch(path, {
 
   const run = async (forceRefresh) => {
     const hdrs = await buildApiHeaders(upper, includeAuth, extraHeaders, { forceRefresh })
-    if (isFormData) delete hdrs['Content-Type']
+    if (isFormData) { delete hdrs['Content-Type'] }
     const opts = { method: upper, credentials: 'include', headers: hdrs }
-    if (body != null && upper !== 'GET' && upper !== 'HEAD') {
+    if (body !== null && body !== undefined && upper !== 'GET' && upper !== 'HEAD') {
       opts.body = isFormData || typeof body === 'string' ? body : JSON.stringify(body)
     }
-    if (signal) opts.signal = signal
+    if (signal) { opts.signal = signal }
     return fetch(url, opts)
   }
 
@@ -139,7 +139,7 @@ export async function apiFetch(path, {
     }
     return res.blob()
   }
-  if (responseType === 'raw') return res
+  if (responseType === 'raw') { return res }
   return handleResponse(res)
 }
 
@@ -197,21 +197,6 @@ const handleResponse = async (res) => {
   const data = parseResponseBody(text, res)
   if (!res.ok) {throw createApiError(data, res)}
   return data
-}
-
-/**
- * Build fetch options for JSON API requests.
- * @deprecated Use apiFetch instead.
- */
-function buildFetchOptions(method, body, includeAuth = true, extraHeaders = {}) {
-  const options = {
-    method,
-    headers: buildRequestHeaders(includeAuth, extraHeaders),
-  }
-  if (body !== null && body !== undefined && method !== 'GET') {
-    options.body = JSON.stringify(body)
-  }
-  return options
 }
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────

@@ -3,15 +3,16 @@ import react from '@vitejs/plugin-react'
 import { copyFileSync, readFileSync, mkdirSync } from 'fs'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import { cwd } from 'node:process'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const serviceWorkerPath = resolve(__dirname, 'src/service-worker.js')
 
 /** Fail the build when production API URL is missing or points at localhost. */
 function validateProductionApiUrl(mode) {
-  if (mode !== 'production') return
+  if (mode !== 'production') { return }
 
-  const env = loadEnv(mode, process.cwd(), '')
+  const env = loadEnv(mode, cwd(), '')
   const apiUrl = (env.VITE_API_URL || '').replace(/\/+$/, '')
 
   if (!apiUrl) {
