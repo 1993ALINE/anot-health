@@ -6,6 +6,8 @@ const {
   hashRecoveryCode,
   adminRequiresMfa,
   loginRequiresMfa,
+  buildOtpauthUrl,
+  generateQrCodeDataUrl,
 } = require('../services/mfaService')
 
 describe('MFA service', () => {
@@ -27,6 +29,13 @@ describe('MFA service', () => {
     const hash = hashRecoveryCode(code)
     expect(hashRecoveryCode(code)).toBe(hash)
     expect(hashRecoveryCode('WRONG')).not.toBe(hash)
+  })
+
+  test('generateQrCodeDataUrl returns a PNG data URL', async () => {
+    const secret = generateSecret()
+    const otpauthUrl = buildOtpauthUrl('clinician@dev.anot.local', secret)
+    const qrCode = await generateQrCodeDataUrl(otpauthUrl)
+    expect(qrCode).toMatch(/^data:image\/png;base64,[A-Za-z0-9+/=]+$/)
   })
 })
 

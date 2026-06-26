@@ -1,4 +1,5 @@
 ﻿const crypto = require('crypto')
+const QRCode = require('qrcode')
 const { authenticator } = require('otplib')
 const { encryptString, decryptString } = require('../utils/settingsEncryption')
 
@@ -71,6 +72,21 @@ function loginRequiresMfa(user) {
   return true
 }
 
+/** Build standard otpauth:// URI for authenticator apps. */
+function buildOtpauthUrl(email, secret) {
+  const label = email || 'user'
+  return authenticator.keyuri(label, 'Anot', secret)
+}
+
+/** PNG data URL suitable for <img src={...}> (CSP img-src data:). */
+async function generateQrCodeDataUrl(otpauthUrl) {
+  return QRCode.toDataURL(otpauthUrl, {
+    errorCorrectionLevel: 'M',
+    margin: 2,
+    width: 200,
+  })
+}
+
 module.exports = {
   generateSecret,
   generateRecoveryCodes,
@@ -81,4 +97,6 @@ module.exports = {
   resolveMfaSecret,
   encryptMfaSecret,
   loginRequiresMfa,
+  buildOtpauthUrl,
+  generateQrCodeDataUrl,
 }

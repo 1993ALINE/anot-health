@@ -11,6 +11,8 @@ const {
   verifyTotp,
   resolveMfaSecret,
   encryptMfaSecret,
+  buildOtpauthUrl,
+  generateQrCodeDataUrl,
   PHI_ROLES,
 } = require('../services/mfaService')
 
@@ -54,13 +56,16 @@ router.post('/setup', protect, async (req, res) => {
   }
   const { rows } = await pool.query('SELECT email FROM users WHERE id = $1', [req.user.id])
   const email = rows[0]?.email || `user-${req.user.id}`
+  const otpauthUrl = buildOtpauthUrl(email, secret)
+  const qrCode = await generateQrCodeDataUrl(otpauthUrl)
   await pool.query(
     'UPDATE users SET mfa_secret_encrypted = $1, mfa_recovery_codes = $2 WHERE id = $3',
     [encrypted, JSON.stringify(hashed), req.user.id]
   )
   res.json({
     secret,
-    otpauthUrl: `otpauth://totp/Anot:${email}?secret=${secret}&issuer=Anot`,
+    otpauthUrl,
+    qrCode,
     recoveryCodes: codes,
   })
 })

@@ -80,9 +80,7 @@ export default function MfaEnrollmentModal({ temporaryToken, onEnrolled }) {
     }
   }
 
-  const qrUrl = setup?.otpauthUrl
-    ? `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(setup.otpauthUrl)}`
-    : null
+  const qrSrc = setup?.qrCode || null
 
   return (
     <div style={S.overlay} role="presentation">
@@ -119,11 +117,13 @@ export default function MfaEnrollmentModal({ temporaryToken, onEnrolled }) {
 
         {step === 'scan' && setup ? (
           <>
-            {qrUrl ? (
+            {qrSrc ? (
               <div style={S.qrWrap}>
-                <img src={qrUrl} alt="QR code for authenticator app" width={200} height={200} style={S.qr} />
+                <img src={qrSrc} alt="QR code for authenticator app" width={200} height={200} style={S.qr} />
               </div>
-            ) : null}
+            ) : (
+              <p style={S.error} role="alert">QR code unavailable — use the manual key below.</p>
+            )}
             <p style={S.hint}>
               Can&apos;t scan? Enter this key manually:{' '}
               <code style={S.secret}>{setup.secret}</code>
