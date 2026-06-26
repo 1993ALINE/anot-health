@@ -63,6 +63,23 @@ describe('validateUserAuthState (session)', () => {
     )
     expect(result.ok).toBe(false)
   })
+
+  test('accepts temporary gate token when token_version matches DB', () => {
+    const result = validateUserAuthState(
+      { found: true, status: 'active', role: 'clinician', token_version: 3 },
+      { role: 'clinician', token_version: 3, requireMfaEnrollment: true },
+    )
+    expect(result.ok).toBe(true)
+  })
+
+  test('rejects temporary gate token missing token_version after password change', () => {
+    const result = validateUserAuthState(
+      { found: true, status: 'active', role: 'clinician', token_version: 1 },
+      { role: 'clinician', requireMfaEnrollment: true },
+    )
+    expect(result.ok).toBe(false)
+    expect(result.error).toMatch(/session expired/i)
+  })
 })
 
 describe('restrict (role enforcement)', () => {

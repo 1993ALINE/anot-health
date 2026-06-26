@@ -17,6 +17,8 @@ describe('auth scope gates', () => {
 
     expect(checkMfaEnrollmentRequired({ requireMfaEnrollment: true }, '/api/mfa/setup').ok).toBe(true)
     expect(checkMfaEnrollmentRequired({ requireMfaEnrollment: true }, '/api/mfa/verify').ok).toBe(true)
+    expect(checkMfaEnrollmentRequired({ requireMfaEnrollment: true }, '/setup').ok).toBe(true)
+    expect(checkMfaEnrollmentRequired({ requireMfaEnrollment: true }, '/verify').ok).toBe(true)
   })
 
   test('checkPhiTrainingRequired blocks until training acknowledged', () => {

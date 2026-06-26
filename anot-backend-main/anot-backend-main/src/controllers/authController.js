@@ -48,6 +48,7 @@ const generateTemporaryToken = (user, claim, expiresIn = '15m') => {
             id: user.id,
             userId: user.id,
             role: user.role,
+            token_version: Number(user.token_version) || 0,
             [claim]: true,
         },
         process.env.JWT_SECRET,

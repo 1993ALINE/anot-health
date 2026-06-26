@@ -105,7 +105,12 @@ function checkPhiTrainingRequired(user) {
  */
 function checkMfaEnrollmentRequired(user, reqPath) {
     if (user.requireMfaEnrollment === true) {
-        const allowed = reqPath.includes('/mfa/setup') || reqPath.includes('/mfa/verify')
+        // req.path is router-relative (/setup) when protect runs on /api/mfa routes.
+        const allowed =
+            reqPath.includes('/mfa/setup') ||
+            reqPath.includes('/mfa/verify') ||
+            reqPath.endsWith('/setup') ||
+            reqPath.endsWith('/verify')
         if (!allowed) {
             return {
                 ok: false,
