@@ -1,0 +1,5 @@
+{
+  "commands": [
+    "grep -n \"loginRequiresMfa\\|enrollmentRequired\\|ENROLLMENT_REQUIRED\" /var/app/current/src/controllers/authController.js 2>/dev/null | head -30 || grep -n \"loginRequiresMfa\\|enrollmentRequired\" /var/app/staging/current/src/controllers/authController.js | head -30"
+  ]
+}

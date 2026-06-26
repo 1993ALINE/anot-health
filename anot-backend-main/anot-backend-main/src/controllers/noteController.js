@@ -1,7 +1,7 @@
 const { sendHttpError } = require('../utils/errorMessages')
 const pool = require('../config/db')
 const { withTransaction } = require('../config/db')
-const { auditLog } = require('../utils/auditLogger')
+const { auditLog, reportAuditFailure } = require('../utils/auditLogger')
 const cloudWatchAudit = require('../utils/logger')
 const { getVisitForUser } = require('../utils/visitAccess')
 const { visitDurationSelect, visitTranscriptionStatusSelect } = require('../utils/visitSchemaCompat')
@@ -48,7 +48,20 @@ const getNoteByVisit = async (req, res) => {
       [visitId]
     )
     if (!result.rows[0]) return res.status(404).json({ error: 'Note not found for this visit.' })
-    res.status(200).json({ note: result.rows[0] })
+
+    const note = result.rows[0]
+    void auditLog(req.user, 'NOTE_VIEWED', 'note', String(note.id), 'Clinical note accessed', {
+      req,
+      module_key: 'clinical',
+      action_category: 'read',
+      metadata: { visit_id: visitId },
+    }).catch(reportAuditFailure)
+    cloudWatchAudit.logDataAccess(
+      req.user.id, req.user.role, 'note', String(note.id), 'READ', req.clientIp,
+      { visit_id: visitId },
+    )
+
+    res.status(200).json({ note })
   } catch (err) {
         sendHttpError(res, 500, err, { context: 'undefined', req })
   }

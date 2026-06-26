@@ -51,31 +51,23 @@ router.post('/recording', protect, restrict('clinician'), async (req, res) => {
       return res.status(404).json({ error: 'Visit not found or not yours.' })
     }
 
-    const patientRow = await pool.query(
-      'SELECT name, mrn FROM patients WHERE id = $1',
-      [visit.patient_id],
-    )
-    const patient = patientRow.rows[0] || {}
-
     await pool.query(
       'UPDATE visits SET patient_consent_recorded = true WHERE id = $1',
       [visitId],
     )
 
-    const detail = `Patient recording consent recorded for ${patient.name || 'patient'} (visit ${visitId})`
     void auditLog(
       req.user,
       'PATIENT_RECORDING_CONSENT',
       'visit',
       String(visitId),
-      detail,
+      `Patient recording consent recorded (visit ${visitId})`,
       {
         req,
         module_key: 'clinical',
         action_category: 'update',
         status: 'success',
         metadata: {
-          patient_mrn: patient.mrn || null,
           visit_date: visit.visit_date || null,
         },
       },
@@ -83,7 +75,7 @@ router.post('/recording', protect, restrict('clinician'), async (req, res) => {
 
     cloudWatchAudit.logDataAccess(
       req.user.id, req.user.role, 'visit', String(visitId), 'UPDATE', req.clientIp,
-      { action: 'patient_recording_consent', patient_mrn: patient.mrn || null },
+      { action: 'patient_recording_consent' },
     )
 
     res.json({ visitId, patient_consent_recorded: true })

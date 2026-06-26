@@ -1,0 +1,6 @@
+{
+  "commands": [
+    "cd /var/app/current",
+    "node -e \"const {loginRequiresMfa}=require('./src/services/mfaService');const pool=require('./src/config/db');(async()=>{const r=await pool.query('SELECT * FROM users WHERE email=$1',['celina@anot.health']);const u=r.rows[0];console.log(JSON.stringify({mfa_enabled:u.mfa_enabled,type:typeof u.mfa_enabled,result:loginRequiresMfa(u)}));await pool.end();})().catch(e=>{console.error(e.message);process.exit(1);});\""
+  ]
+}

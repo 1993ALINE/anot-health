@@ -72,7 +72,7 @@ const createPatient = async (req, res) => {
         if (existing.rows.length > 0) {
             return res.status(409).json({
                 error: 'A patient with this MRN already exists.',
-                patient: existing.rows[0],
+                patient: { id: existing.rows[0].id },
             })
         }
 
@@ -85,8 +85,8 @@ const createPatient = async (req, res) => {
 
         const newPatient = result.rows[0]
         await auditLog(req.user, 'PATIENT_CREATED', 'patient', newPatient.id,
-            `Created patient: ${newPatient.name}`,
-            { req, module_key: 'clinical', action_category: 'create', metadata: { mrn: newPatient.mrn } }).catch(reportAuditFailure)
+            `Created patient record (id ${newPatient.id})`,
+            { req, module_key: 'clinical', action_category: 'create', metadata: { patient_id: newPatient.id } }).catch(reportAuditFailure)
 
         res.status(201).json({
             message: 'Patient created successfully.',
@@ -135,7 +135,7 @@ const getPatient = async (req, res) => {
 
         const patient = result.rows[0]
         await auditLog(req.user, 'PATIENT_VIEWED', 'patient', patient.id,
-            `Viewed patient: ${patient.name}`,
+            `Viewed patient record (id ${patient.id})`,
             { req, module_key: 'clinical', action_category: 'read' }).catch(reportAuditFailure)
 
         res.status(200).json({ patient })

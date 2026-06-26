@@ -170,7 +170,20 @@ async function resolveStuckTranscription(visitId, visit) {
     return { ...visit, transcription_status: 'completed' }
   }
 
-  // Prior run crashed, deferred on unreachable webhook, or was interrupted — allow retry.
+  // Only reset a stuck 'processing' state when no pipeline has started recently —
+  // avoids racing an in-flight Deepgram/Anthropic job.
+  const STUCK_MS = 15 * 60 * 1000
+  const started = await pool.query(
+    `SELECT created_at FROM audit_logs
+     WHERE entity_type = 'visit' AND entity_id = $1 AND action = 'TRANSCRIPTION_STARTED'
+     ORDER BY created_at DESC LIMIT 1`,
+    [String(visitId)],
+  )
+  const startedAt = started.rows[0]?.created_at
+  if (startedAt && Date.now() - new Date(startedAt).getTime() < STUCK_MS) {
+    return visit
+  }
+
   await setVisitTranscriptionStatus(visitId, 'idle')
   return { ...visit, transcription_status: 'idle' }
 }

@@ -175,11 +175,8 @@ function csrfProtection(req, res, next) {
   const validation = validateCsrf(req)
   const { headerToken, cookieTokens, matched, ok } = validation
 
-  if (process.env.NODE_ENV === 'production') {
-    csrfDebugLog(req, { headerToken, cookieTokens, matched })
-  }
-
   if (CSRF_DEBUG) {
+    csrfDebugLog(req, { headerToken, cookieTokens, matched })
     const cookieName = getTokenCookieName()
     console.log('[CSRF-CHECK]', req.method, path)
     console.log('[CSRF-CHECK] Header token:', headerToken?.substring(0, 8))

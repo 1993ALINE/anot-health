@@ -2364,13 +2364,8 @@ function Clinician() {
         const d = await patientsAPI.create({ name:pt.name.trim(), mrn:pt.mrn.trim().toUpperCase(), date_of_birth:dobIso||null })
         patient = d.patient
       } catch (e) {
-        if (e.payload?.patient) {
+        if (e.payload?.patient?.id) {
           patient = e.payload.patient
-          linkedExistingMrn = true
-        } else if (e.message.includes('already exists')) {
-          const d = await patientsAPI.getAll()
-          patient = d.patients.find((p) => p.mrn === pt.mrn.trim().toUpperCase())
-          if (!patient) { setPtErr(e.message); return }
           linkedExistingMrn = true
         } else {
           setPtErr(e.message)
@@ -2378,12 +2373,14 @@ function Clinician() {
         }
       }
       const vd = await visitsAPI.create({ patient_id:patient.id, visit_date:localDate(off), visit_time:pt.time, visit_type:pt.type })
-      setVisits(p => [...p, { ...vd.visit, patient_name:patient.name, mrn:patient.mrn }].sort((a,b) => a.visit_time.localeCompare(b.visit_time)))
+      const patientName = patient.name || pt.name.trim()
+      const patientMrn = patient.mrn || pt.mrn.trim().toUpperCase()
+      setVisits(p => [...p, { ...vd.visit, patient_name: patientName, mrn: patientMrn }].sort((a,b) => a.visit_time.localeCompare(b.visit_time)))
       setPt({ name:'', mrn:'', time:'', type:'Follow-up', dob:'' }); setShowAdd(false)
       showToast(
         linkedExistingMrn
-          ? `✓ Visit scheduled for ${patient.name} (MRN already on file)`
-          : `✓ ${patient.name} added`,
+          ? `✓ Visit scheduled for ${patientName} (MRN already on file)`
+          : `✓ ${patientName} added`,
       )
     } catch(e) { setPtErr(e.message) }
   }
