@@ -19,12 +19,16 @@ export default function MfaEnrollmentModal({ temporaryToken, onEnrolled }) {
     mfaAPI
       .setupWithToken(temporaryToken)
       .then((data) => {
-        if (cancelled) return
+        if (cancelled) {
+          return
+        }
         setSetup(data)
         setStep('scan')
       })
       .catch((err) => {
-        if (cancelled) return
+        if (cancelled) {
+          return
+        }
         setError(err?.message || 'Could not start MFA setup. Please sign in again.')
         setStep('error')
       })
