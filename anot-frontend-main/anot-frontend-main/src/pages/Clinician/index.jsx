@@ -4,7 +4,7 @@ import { authAPI, visitsAPI, patientsAPI, notesAPI, audioAPI, settingsAPI, isAbo
 import { useBranding } from '../../services/branding'
 import SystemProfileManager from '../../components/SystemProfileManager'
 import PortalSidebarFooter from '../../components/PortalSidebarFooter'
-import { useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, useSidebarOffCanvasMode, portalSidebarAriaHidden, ConfirmDialog, PortalSidebarBrand } from '../shared'
+import { useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, useSidebarOffCanvasMode, portalSidebarAriaHidden, portalSidebarInert, ConfirmDialog, PortalSidebarBrand } from '../shared'
 import { queueAudioUpload, flushPendingAudioUploads, installOfflineUploadFlush } from '../../utils/offlineUploadQueue'
 import './clinician.css'
 import './clinician-redesign.css'
@@ -867,8 +867,7 @@ async function fetchVisitAudioCount(visitId) {
   try {
     const data = await audioAPI.getCount(visitId)
     return data.count > 0 ? data.count : 1
-  } catch (err) {
-    console.error('[Clinician] Audio count fetch failed:', err?.message)
+  } catch {
     return 1
   }
 }
@@ -981,9 +980,7 @@ function AudioModal({ visitId, visit, onClose, showToast }) {
   const durSet = useRef(false)
 
   useEffect(() => {
-    fetchVisitAudioCount(visitId).then(setCount).catch((err) => {
-      console.error('[Clinician] Audio count failed:', err?.message)
-    })
+    fetchVisitAudioCount(visitId).then(setCount).catch(() => {})
   }, [visitId])
 
   useEffect(() => {
@@ -1003,11 +1000,8 @@ function AudioModal({ visitId, visit, onClose, showToast }) {
         a.load()
         setStatus('ready')
       })
-      .catch((err) => {
-        if (!cancelled) {
-          console.error('[Clinician] Audio load failed:', err?.message)
-          setStatus('error')
-        }
+      .catch(() => {
+        if (!cancelled) { setStatus('error') }
       })
 
     return () => {
@@ -1300,9 +1294,8 @@ function TemplatesScreen({ showToast }) {
       .then((data) => {
         if (!cancelled) { setTemplates(Array.isArray(data.templates) ? data.templates : DEFAULT_TEMPLATES) }
       })
-      .catch((err) => {
+      .catch(() => {
         if (!cancelled) {
-          console.error('[Clinician] Template load failed:', err?.message)
           setTemplates(DEFAULT_TEMPLATES)
         }
       })
@@ -1548,6 +1541,7 @@ function Sidebar({ screen, setScreen, sidebar, currentUser, scheduleUpcomingBadg
         id="clinician-sidebar"
         className={`sf-sidebar sf-sidebar--rich adm-sidebar cl-sidebar${sidebar.open ? ' open' : ''}`}
         aria-hidden={portalSidebarAriaHidden(offCanvasSidebar, sidebar.open)}
+        inert={portalSidebarInert(offCanvasSidebar, sidebar.open) || undefined}
       >
         <div className="cl-sidebar__header sf-sidebar-top sf-sidebar-rich__top">
           <button
@@ -1994,8 +1988,8 @@ function Clinician() {
           if (item.mode === 'primary' && item.durationSeconds !== null && item.durationSeconds !== undefined) {
             try {
               await visitsAPI.endVisit(item.visitId, item.durationSeconds)
-            } catch (err) {
-              console.error('[Clinician.upload] Deferred endVisit failed:', err?.message)
+            } catch {
+              showToast('Recording uploaded but visit could not be finalized. Refresh the schedule.', 'error')
             }
           }
           showToast('Queued recording uploaded successfully')
@@ -2215,14 +2209,12 @@ function Clinician() {
         try {
           const b = new Blob(cRef.current, { type: rec.mimeType || 'audio/webm' })
           await visitsAPI.uploadAudio(visitId, b)
-        } catch (err) {
-          console.error('[Clinician.upload] Primary audio upload failed:', err?.message)
+        } catch {
           try {
             const b = new Blob(cRef.current, { type: rec.mimeType || 'audio/webm' })
             await queueAudioUpload({ visitId, blob: b, mode: 'primary', durationSeconds: timer })
             uploadQueued = true
-          } catch (qErr) {
-            console.error('[Clinician.upload] Queue fallback failed:', qErr?.message)
+          } catch {
             showToast('Upload failed. Check your connection and try again.', 'error')
           }
         }
@@ -2252,7 +2244,13 @@ function Clinician() {
     setVisits((p) =>
       p.map((v) =>
         v.id === visitId
-          ? { ...v, ...(vr || {}), patient_name: v.patient_name, duration_seconds: vr?.duration_seconds ?? duration }
+          ? {
+              ...v,
+              ...(vr || {}),
+              status: vr?.status ?? 'recording-uploaded',
+              patient_name: v.patient_name,
+              duration_seconds: vr?.duration_seconds ?? duration,
+            }
           : v
       )
     )
@@ -2264,7 +2262,6 @@ function Clinician() {
    * Handle end visit error
    */
   const handleVisitEndError = (err) => {
-    console.error('[Clinician.endVisit]', err.message)
     showToast(err.message || 'Failed to end visit', 'error')
   }
 
@@ -2327,8 +2324,7 @@ function Clinician() {
               const b = new Blob(acRef.current, { type: arRef.current.mimeType || 'audio/webm' })
               await visitsAPI.appendAudio(vid, b)
               showToast('✓ Additional recording uploaded')
-            } catch (err) {
-              console.error('[Clinician.upload] Append audio failed:', err?.message)
+            } catch {
               try {
                 const b = new Blob(acRef.current, { type: arRef.current.mimeType || 'audio/webm' })
                 await queueAudioUpload({ visitId: vid, blob: b, mode: 'append' })
@@ -2344,7 +2340,7 @@ function Clinician() {
       })
       setVisits(p => p.map(v => v.id === vid ? { ...v, duration_seconds:(v.duration_seconds||0)+extra, recording_count:(v.recording_count||1)+1 } : v))
       setAddRec(null); setAddTimer(0); acRef.current = []; arRef.current = null
-    } catch (err) { console.error('[Clinician.upload] Stop add recording failed:', err?.message) } finally { setUploading(false) }
+    } catch { showToast('Could not finish additional recording. Try again.', 'error') } finally { setUploading(false) }
   }
 
   const addPatient = async () => {
@@ -2587,6 +2583,15 @@ function Clinician() {
     />
   ) : null
 
+  const consentModal = consentPending?.visit ? (
+    <PatientConsentModal
+      key={consentPending.visit.id}
+      visit={consentPending.visit}
+      onConfirmed={handleConsentConfirmed}
+      onCancel={() => setConsentPending(null)}
+    />
+  ) : null
+
   if (screen === 'contact') {
     return (
       <div className="sf-page sf-portal adm-shell cl-clinician-shell cl-portal">
@@ -2614,6 +2619,7 @@ function Clinician() {
           </div>
           {toast && <Toast toast={toast} />}
         </div>
+        {consentModal}
       </div>
     )
   }
@@ -2671,6 +2677,7 @@ function Clinician() {
           </div>
           {toast && <Toast toast={toast} />}
         </div>
+        {consentModal}
       </div>
     )
   }
@@ -3801,13 +3808,7 @@ function Clinician() {
 
       {aiVisit    && <AIModal    visit={aiVisit}    onClose={() => { setAiVisit(null); setAiVisitFromNotes(false) }} hideAudioControls={aiVisitFromNotes} showToast={showToast} />}
       {playVisit  && screen !== 'notes' && <AudioModal visitId={playVisit.id} visit={playVisit} onClose={() => setPlayVisit(null)} showToast={showToast} />}
-      {consentPending?.visit && (
-        <PatientConsentModal
-          visit={consentPending.visit}
-          onConfirmed={handleConsentConfirmed}
-          onCancel={() => setConsentPending(null)}
-        />
-      )}
+      {consentModal}
       {toast      && <Toast toast={toast} />}
     </div>
   )

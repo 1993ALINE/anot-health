@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { consentAPI, isLikelyNetworkFailure } from '../services/api'
 
 /**
  * Patient recording consent gate before audio capture.
  * Clinician must confirm the patient authorized recording before the mic starts.
+ * Portaled to document.body so stacking context / overflow never hides the dialog.
  */
 export default function PatientConsentModal({ visit, onConfirmed, onCancel }) {
   const [checked, setChecked] = useState(false)
@@ -19,6 +21,17 @@ export default function PatientConsentModal({ visit, onConfirmed, onCancel }) {
       document.body.style.overflow = prevOverflow
     }
   }, [])
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape' && !submitting) {
+        e.preventDefault()
+        onCancel?.()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [submitting, onCancel])
 
   const handleConfirm = async () => {
     if (!checked || submitting || !visit?.id) { return }
@@ -39,7 +52,7 @@ export default function PatientConsentModal({ visit, onConfirmed, onCancel }) {
 
   const patientLabel = visit?.patient_name || 'this patient'
 
-  return (
+  const modal = (
     <div style={S.overlay} role="presentation" onClick={() => !submitting && onCancel?.()}>
       <div
         ref={dialogRef}
@@ -114,6 +127,9 @@ export default function PatientConsentModal({ visit, onConfirmed, onCancel }) {
       </div>
     </div>
   )
+
+  if (typeof document === 'undefined') { return modal }
+  return createPortal(modal, document.body)
 }
 
 const S = {

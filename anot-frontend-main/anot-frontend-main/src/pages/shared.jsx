@@ -92,6 +92,12 @@ export function portalSidebarAriaHidden(isOffCanvas, isOpen) {
     return !isOpen
 }
 
+/** inert when off-canvas drawer is closed — blocks focus/tab into hidden sidebar (a11y). */
+export function portalSidebarInert(isOffCanvas, isOpen) {
+    if (!isOffCanvas) {return undefined}
+    return !isOpen
+}
+
 /**
  * Sticky header matching Admin `adm-topbar`: in-bar menu on drawer breakpoints, module title, brand line, account menu.
  * Pass `titleRow` to replace the default title stack (e.g. back button + headings).

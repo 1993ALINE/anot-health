@@ -324,7 +324,7 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
 
   return (
     <div className={`sf-audio-bar sf-audio-bar--portal${compact ? ' sf-audio-bar--compact' : ''}`}>
-      <audio ref={audioRef} preload="metadata" style={{ display: 'none' }} />
+      <audio ref={audioRef} preload="metadata" style={{ display: 'none' }} aria-label="Encounter recording playback" />
       <div className="sf-audio-bar__row sf-audio-bar__row--meta">
         {count > 1 ? (
           <div className="sf-audio-bar__tabs">
@@ -346,7 +346,7 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
         </span>
         {resolvedStatus === 'loading' ? <span className="sf-audio-bar__pill">Loading…</span> : null}
         {resolvedStatus === 'ready' ? <span className="sf-audio-bar__pill sf-audio-bar__pill--ok">Ready</span> : null}
-        {resolvedStatus === 'error' ? <span className="sf-audio-bar__pill">No audio</span> : null}
+        {resolvedStatus === 'error' ? <span className="sf-audio-bar__pill sf-audio-bar__pill--error">Audio unavailable</span> : null}
         <span className="sf-audio-timer" aria-live="polite">
           <span>{displayCurrent} / {displayTotal}</span>
         </span>

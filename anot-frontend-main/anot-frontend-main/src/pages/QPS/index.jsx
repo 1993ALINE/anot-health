@@ -7,7 +7,7 @@ import PortalAudioPlayer from '../../components/PortalAudioPlayer'
 import NoteWorkspacePanel from '../../components/NoteWorkspacePanel'
 import PortalSidebarFooter from '../../components/PortalSidebarFooter'
 import { fmtAppointmentTime } from '../../utils/timeFormat'
-import { parseTranscriptionBlocks, useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, useSidebarOffCanvasMode, portalSidebarAriaHidden, ConfirmDialog, PortalSidebarBrand } from '../shared'
+import { parseTranscriptionBlocks, useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, useSidebarOffCanvasMode, portalSidebarAriaHidden, portalSidebarInert, ConfirmDialog, PortalSidebarBrand } from '../shared'
 import ErrorBoundary, { PortalCrashFallback } from '../../components/ErrorBoundary'
 import { getCurrentUser } from '../../utils/getCurrentUser'
 import { useSessionTimeout } from '../../utils/useSessionTimeout'
@@ -136,6 +136,7 @@ function QPSSidebar({
         id="qps-sidebar"
         className={`sf-sidebar sf-sidebar--rich adm-sidebar${sidebar.open ? ' open' : ''}`}
         aria-hidden={portalSidebarAriaHidden(offCanvasSidebar, sidebar.open)}
+        inert={portalSidebarInert(offCanvasSidebar, sidebar.open) || undefined}
       >
         <div className="sf-sidebar-top sf-sidebar-rich__top">
           <button

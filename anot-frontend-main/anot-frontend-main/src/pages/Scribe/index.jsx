@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, useSidebarOffCanvasMode, portalSidebarAriaHidden, ConfirmDialog, PortalSidebarBrand } from '../shared'
+import { useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, useSidebarOffCanvasMode, portalSidebarAriaHidden, portalSidebarInert, ConfirmDialog, PortalSidebarBrand } from '../shared'
 import { authAPI, usersAPI, visitsAPI, notesAPI, isAbortError } from '../../services/api'
 import { useBranding } from '../../services/branding'
 import SystemProfileManager from '../../components/SystemProfileManager'
@@ -273,6 +273,7 @@ function ScribeSidebar({
         id="scribe-sidebar"
         className={`sf-sidebar sf-sidebar--rich adm-sidebar${sidebar.open ? ' open' : ''}`}
         aria-hidden={portalSidebarAriaHidden(offCanvasSidebar, sidebar.open)}
+        inert={portalSidebarInert(offCanvasSidebar, sidebar.open) || undefined}
       >
         <div className="sf-sidebar-top sf-sidebar-rich__top">
           <button
@@ -719,9 +720,15 @@ function Scribe() {
     if (st !== 'processing') {return undefined}
     const timer = setInterval(() => {
       void loadNote(selectedRec.id, { mergeOnly: true })
-    }, 30000)
+    }, 15000)
     return () => clearInterval(timer)
   }, [screen, selectedRec?.id, selectedRec?.transcription_status, note?.transcription_status, loadNote])
+
+  useEffect(() => {
+    if (activeRecIdx >= txSegments.length && txSegments.length > 0) {
+      setActiveRecIdx(0)
+    }
+  }, [txSegments.length, activeRecIdx])
 
   const openRecording = (rec) => {
     const go = () => {
@@ -1536,6 +1543,11 @@ function Scribe() {
               {!loadingNote && !currentSeg && txSt === 'failed' && (
                 <div className="sf-notif sf-notif-amber" style={{ borderRadius: 10, fontSize: 12, lineHeight: 1.6 }}>
                   Transcription could not be completed. Ask an admin to verify the Deepgram API key in Settings, or have the clinician re-record the visit.
+                </div>
+              )}
+              {!loadingNote && !currentSeg && txSt === 'processing' && (
+                <div style={{ color: '#64748B', fontSize: 12, lineHeight: 1.6 }}>
+                  Transcription in progress… This panel refreshes automatically.
                 </div>
               )}
               {!loadingNote && !currentSeg && txSt !== 'processing' && txSt !== 'failed' && (

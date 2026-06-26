@@ -9,7 +9,7 @@ import { validatePassword } from '../../utils/passwordPolicy'
 import AdminModulePermissionsModal from '../../components/AdminModulePermissionsModal'
 import AdminAuditDashboard from './AdminAuditDashboard'
 import SystemHealth from './SystemHealth'
-import { SfAccountMenu, useSidebar, Overlay, usePortalDrawerMode, portalSidebarAriaHidden, PortalSidebarBrand } from '../shared'
+import { SfAccountMenu, useSidebar, Overlay, usePortalDrawerMode, portalSidebarAriaHidden, portalSidebarInert, PortalSidebarBrand } from '../shared'
 import { isSuperAdmin, ADMIN_GRANTABLE_MODULE_KEYS, ADMIN_DEFAULT_MODULE_KEYS_FOR_ADMIN, ADMIN_PORTAL_MODULES, adminMayOpenTab, resolvedAdminModuleKeys } from '../../auth/roles'
 import ErrorBoundary, { PortalCrashFallback } from '../../components/ErrorBoundary'
 import { getCurrentUser } from '../../utils/getCurrentUser'
@@ -443,6 +443,7 @@ function AdminSidebar({ tab, onSelectTab, currentUser, onRequestSignOut, badges,
             id="adm-admin-sidebar"
             className={`sidebar-wrapper sf-sidebar sf-sidebar--rich adm-sidebar${sidebarOpen ? ' open' : ''}`}
             aria-hidden={portalSidebarAriaHidden(sidebarDrawerMode, sidebarOpen)}
+            inert={portalSidebarInert(sidebarDrawerMode, sidebarOpen) || undefined}
         >
             <div className="sf-sidebar-top sf-sidebar-rich__top">
                 <button
