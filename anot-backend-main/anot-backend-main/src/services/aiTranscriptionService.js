@@ -111,9 +111,9 @@ function buildDeepgramQueryParams(settings, visitId) {
   const { appendDeepgramVisitQuery } = require('../utils/webhookSignature')
 
   const queryParams = new URLSearchParams({
-    model: settings.deepgram_model || 'nova-2-medical',
+    model: settings.deepgram_model || 'nova-2-meeting',
     language: settings.deepgram_language || 'en-US',
-    smart_format: 'true',
+    smart_format: String(settings.deepgram_smart_format || true),
     punctuate: 'true',
     diarize: 'true',
     utterances: 'true',

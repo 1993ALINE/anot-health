@@ -8,7 +8,8 @@ const ANTHROPIC_MODELS = new Set(['claude-haiku-4-5', 'claude-sonnet-4-5', 'clau
 
 const DEFAULTS = {
   deepgram_enabled: false,
-  deepgram_model: 'nova-2',
+  deepgram_model: 'nova-2-meeting',
+  deepgram_smart_format: true,
   deepgram_language: 'en-US',
   deepgram_webhook_url: '',
   deepgram_auto_transcribe_on_upload: false,
@@ -58,6 +59,7 @@ function rowToRuntime(row) {
     deepgram_enabled: !!row.deepgram_enabled,
     deepgram_api_key: key,
     deepgram_model: String(row.deepgram_model || DEFAULTS.deepgram_model).slice(0, 64),
+    deepgram_smart_format: !!row.deepgram_smart_format,
     deepgram_language: String(row.deepgram_language || DEFAULTS.deepgram_language).slice(0, 32),
     deepgram_webhook_url: String(row.deepgram_webhook_url || '').trim().slice(0, 2000),
     deepgram_auto_transcribe_on_upload: !!row.deepgram_auto_transcribe_on_upload,

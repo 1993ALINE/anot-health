@@ -29,9 +29,9 @@ function assertDeepgramConfigured(settings) {
 function buildTranscriptionParams(settings, language, options = {}) {
   return {
     url: `https://api.deepgram.com/v1/listen?${new URLSearchParams({
-      model: settings.deepgram_model || 'nova-2-medical',
+      model: settings.deepgram_model || 'nova-2-meeting',
       language: settings.deepgram_language || language || 'en-US',
-      smart_format: 'true',
+      smart_format: String(settings.deepgram_smart_format || true),
       punctuate: 'true',
       diarize: 'true',
       numerals: 'true',
