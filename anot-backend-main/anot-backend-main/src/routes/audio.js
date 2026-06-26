@@ -8,6 +8,7 @@ const { createS3StreamStorage } = require('../middleware/s3StreamUpload')
 const { getPublicErrorMessage, logServerError } = require('../utils/errorMessages')
 const { runAIPipeline } = require('../utils/aiPipeline')
 const { getVisitForUser } = require('../utils/visitAccess')
+const { visitHasPatientConsentRecorded } = require('../utils/visitSchemaCompat')
 const { loadAiSettings, defaultRuntimeSettings } = require('../services/aiSettings')
 const { getAudioStream, dbPathToKey } = require('../services/s3Storage')
 const cloudWatchAudit = require('../utils/logger')
@@ -27,6 +28,15 @@ async function resolveUploadTarget(req, file) {
   const visit = await getVisitForUser(visitId, req.user)
   if (!visit) {
     throw Object.assign(new Error('Visit not found or not yours.'), { status: 404 })
+  }
+
+  if (await visitHasPatientConsentRecorded()) {
+    if (!visit.patient_consent_recorded) {
+      throw Object.assign(
+        new Error('Patient recording consent is required before uploading audio.'),
+        { status: 403 },
+      )
+    }
   }
 
   let settings

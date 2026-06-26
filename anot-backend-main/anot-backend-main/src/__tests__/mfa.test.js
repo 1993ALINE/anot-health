@@ -31,14 +31,19 @@ describe('MFA service', () => {
 })
 
 describe('MFA policy helpers', () => {
-  test('adminRequiresMfa for admin without MFA enabled', () => {
+  test('adminRequiresMfa for PHI roles without MFA enabled', () => {
     expect(adminRequiresMfa('admin', false)).toBe(true)
     expect(adminRequiresMfa('admin', true)).toBe(false)
-    expect(adminRequiresMfa('clinician', false)).toBe(false)
+    expect(adminRequiresMfa('clinician', false)).toBe(true)
+    expect(adminRequiresMfa('receptionist', false)).toBe(false)
   })
 
-  test('loginRequiresMfa when MFA enabled on account', () => {
-    expect(loginRequiresMfa({ mfa_enabled: true })).toBe(true)
-    expect(loginRequiresMfa({ mfa_enabled: false })).toBe(false)
+  test('loginRequiresMfa for PHI roles', () => {
+    expect(loginRequiresMfa({ role: 'clinician', mfa_enabled: true })).toBe(true)
+    expect(loginRequiresMfa({ role: 'clinician', mfa_enabled: false })).toBe('ENROLLMENT_REQUIRED')
+    expect(loginRequiresMfa({ role: 'scribe', mfa_enabled: false })).toBe('ENROLLMENT_REQUIRED')
+    expect(loginRequiresMfa({ role: 'admin', mfa_enabled: false })).toBe('ENROLLMENT_REQUIRED')
+    expect(loginRequiresMfa({ role: 'receptionist', mfa_enabled: false })).toBe(false)
+    expect(loginRequiresMfa({ role: 'receptionist', mfa_enabled: true })).toBe(false)
   })
 })

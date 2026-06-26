@@ -88,7 +88,26 @@ function buildPostPasswordLoginResponse(user, req) {
         }
     }
 
-    if (loginRequiresMfa(user)) {
+    const mfaStatus = loginRequiresMfa(user)
+
+    if (mfaStatus === 'ENROLLMENT_REQUIRED') {
+        const temporaryToken = generateTemporaryToken(user, 'requireMfaEnrollment', '15m')
+        void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_MFA_ENROLLMENT_REQUIRED', 'auth', String(user.id), 'Login requires MFA enrollment for PHI access', { req, module_key: 'authentication', status: 'warning', action_category: 'authentication' }).catch(reportAuditFailure)
+        cloudWatchAudit.logLogin(user.id, user.email, user.role, req.clientIp, 'success')
+        return {
+            status: 200,
+            body: {
+                success: true,
+                userId: user.id,
+                requireMfa: true,
+                enrollmentRequired: true,
+                temporaryToken,
+                message: 'MFA setup required for PHI access',
+            },
+        }
+    }
+
+    if (mfaStatus === true) {
         const temporaryToken = generateTemporaryToken(user, 'requireMfa', '5m')
         void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_MFA_REQUIRED', 'auth', String(user.id), 'Login requires MFA verification', { req, module_key: 'authentication', status: 'warning', action_category: 'authentication' }).catch(reportAuditFailure)
         cloudWatchAudit.logLogin(user.id, user.email, user.role, req.clientIp, 'success')
@@ -96,9 +115,11 @@ function buildPostPasswordLoginResponse(user, req) {
             status: 200,
             body: {
                 success: true,
+                userId: user.id,
                 requireMfa: true,
+                enrollmentRequired: false,
                 temporaryToken,
-                message: 'Enter the code from your authenticator app to continue.',
+                message: 'Enter your authenticator code',
             },
         }
     }
@@ -260,17 +281,31 @@ const acknowledgePhiTraining = async (req, res) => {
             { req, module_key: 'authentication', status: 'success', action_category: 'authorization', metadata: { phi_training_version: PHI_TRAINING_VERSION } }
         ).catch(reportAuditFailure)
 
-        const token = generateToken(fresh)
+        const mfaStatus = loginRequiresMfa(fresh)
 
-        // PHI training complete — check for MFA gate before issuing full session.
-        if (loginRequiresMfa(fresh)) {
-            const temporaryToken = generateTemporaryToken(fresh, 'requireMfa', '5m')
+        if (mfaStatus === 'ENROLLMENT_REQUIRED') {
+            const temporaryToken = generateTemporaryToken(fresh, 'requireMfaEnrollment', '15m')
             return res.status(200).json({
                 message: 'PHI training acknowledged.',
+                userId: fresh.id,
                 requireMfa: true,
+                enrollmentRequired: true,
                 temporaryToken,
             })
         }
+
+        if (mfaStatus === true) {
+            const temporaryToken = generateTemporaryToken(fresh, 'requireMfa', '5m')
+            return res.status(200).json({
+                message: 'PHI training acknowledged.',
+                userId: fresh.id,
+                requireMfa: true,
+                enrollmentRequired: false,
+                temporaryToken,
+            })
+        }
+
+        const token = generateToken(fresh)
 
         res.status(200).json({
             message: 'PHI training acknowledged.',

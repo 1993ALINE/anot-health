@@ -11,7 +11,7 @@ async function enforceAdminMfa(req, res, next) {
     const u = rows[0]
     if (u && adminRequiresMfa(u.role, u.mfa_enabled)) {
       return res.status(403).json({
-        error: 'MFA setup required for admin accounts.',
+        error: 'MFA setup required for PHI access.',
         code: 'MFA_REQUIRED',
       })
     }

@@ -101,6 +101,24 @@ function checkPhiTrainingRequired(user) {
 }
 
 /**
+ * Check MFA enrollment scope (login gate for PHI roles without MFA)
+ */
+function checkMfaEnrollmentRequired(user, reqPath) {
+    if (user.requireMfaEnrollment === true) {
+        const allowed = reqPath.includes('/mfa/setup') || reqPath.includes('/mfa/verify')
+        if (!allowed) {
+            return {
+                ok: false,
+                status: 403,
+                error: 'MFA enrollment required before accessing other features',
+                code: 'MFA_ENROLLMENT_REQUIRED',
+            }
+        }
+    }
+    return { ok: true }
+}
+
+/**
  * Check MFA verification scope (login gate)
  */
 function checkMfaRequired(user, reqPath) {
@@ -153,6 +171,9 @@ const protect = async (req, res, next) => {
         const phiCheck = checkPhiTrainingRequired(req.user)
         if (!phiCheck.ok) return sendAuthFailure(res, phiCheck)
 
+        const enrollCheck = checkMfaEnrollmentRequired(req.user, req.path)
+        if (!enrollCheck.ok) return sendAuthFailure(res, enrollCheck)
+
         const mfaCheck = checkMfaRequired(req.user, req.path)
         if (!mfaCheck.ok) return sendAuthFailure(res, mfaCheck)
 
@@ -186,6 +207,7 @@ module.exports = {
   verifyJwtToken,
   validateUserAuthState,
   checkPasswordChangeRequired,
+  checkMfaEnrollmentRequired,
   checkMfaRequired,
   checkPhiTrainingRequired,
 }

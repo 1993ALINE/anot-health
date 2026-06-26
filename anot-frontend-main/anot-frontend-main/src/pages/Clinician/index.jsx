@@ -15,6 +15,7 @@ import { getPatientAvatarColor } from '../../utils/avatarColor'
 import { getCurrentUser } from '../../utils/getCurrentUser'
 import { useSessionTimeout } from '../../utils/useSessionTimeout'
 import { saveClinicianTemplates } from '../../utils/clinicianTemplates'
+import PatientConsentModal from '../../components/PatientConsentModal'
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -1888,6 +1889,7 @@ function Clinician() {
   const [confirmLoading, setConfirmLoading] = useState(false)
   const [lockConfirmOpen, setLockConfirmOpen] = useState(false)
   const [lockConfirmLoading, setLockConfirmLoading] = useState(false)
+  const [consentPending, setConsentPending] = useState(null)
 
   const runConfirm = async () => {
     if (!confirmDialog?.onConfirm) {return}
@@ -2134,6 +2136,25 @@ function Clinician() {
   const getMime = () => {
     const candidates = ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/webm']
     return candidates.find((x) => MediaRecorder.isTypeSupported(x)) || ''
+  }
+
+  const requestRecording = (v, mode = 'primary') => {
+    if (mode === 'primary' && active) { return }
+    if (mode === 'additional' && (active || addRec)) { return }
+    if (v?.patient_consent_recorded) {
+      if (mode === 'additional') { startAdd(v) }
+      else { startVisit(v) }
+      return
+    }
+    setConsentPending({ visit: v, mode })
+  }
+
+  const handleConsentConfirmed = (v) => {
+    const mode = consentPending?.mode || 'primary'
+    setConsentPending(null)
+    setVisits((p) => p.map((x) => (x.id === v.id ? { ...x, patient_consent_recorded: true } : x)))
+    if (mode === 'additional') { startAdd(v) }
+    else { startVisit(v) }
   }
 
   const startVisit = async (v) => {
@@ -3664,7 +3685,7 @@ function Clinician() {
                         {v.status === 'upcoming' && (
                           <>
                             <ClinicianTooltip tip="Start audio recording for this encounter. Your scribe team will receive the audio and draft the note.">
-                              <button type="button" className="cl-schedule-cta" onClick={() => startVisit(v)} disabled={!!active} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'10px 22px', borderRadius:14, background: active ? '#94A3B8' : 'linear-gradient(135deg,#16A34A,#15803D)', color:'#fff', border:'none', fontSize:15, fontWeight:800, cursor: active ? 'not-allowed' : 'pointer', fontFamily:'inherit', boxShadow: active ? 'none' : '0 4px 16px rgba(22,163,74,0.4)', opacity: active ? 0.6 : 1 }}>
+                              <button type="button" className="cl-schedule-cta" onClick={() => requestRecording(v, 'primary')} disabled={!!active} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'10px 22px', borderRadius:14, background: active ? '#94A3B8' : 'linear-gradient(135deg,#16A34A,#15803D)', color:'#fff', border:'none', fontSize:15, fontWeight:800, cursor: active ? 'not-allowed' : 'pointer', fontFamily:'inherit', boxShadow: active ? 'none' : '0 4px 16px rgba(22,163,74,0.4)', opacity: active ? 0.6 : 1 }}>
                                 <IconMic />
                                 Record Encounter
                               </button>
@@ -3690,7 +3711,7 @@ function Clinician() {
                         {v.status === 'recording-uploaded' && (
                           <div style={{ display:'flex', gap:8, flexWrap:'wrap', justifyContent:'flex-end', alignItems:'center' }}>
                             <ClinicianTooltip tip="Add another audio recording to this encounter">
-                              <button type="button" className="cl-schedule-cta" onClick={() => startAdd(v)} disabled={!!active || !!addRec} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'10px 22px', borderRadius:14, background: (active||addRec) ? '#94A3B8' : 'linear-gradient(135deg,#16A34A,#15803D)', color:'#fff', border:'none', fontSize:15, fontWeight:800, cursor: (active||addRec) ? 'not-allowed' : 'pointer', fontFamily:'inherit', boxShadow: (active||addRec) ? 'none' : '0 4px 16px rgba(22,163,74,0.4)', opacity: (active||addRec) ? 0.6 : 1 }}>
+                              <button type="button" className="cl-schedule-cta" onClick={() => requestRecording(v, 'additional')} disabled={!!active || !!addRec} style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'10px 22px', borderRadius:14, background: (active||addRec) ? '#94A3B8' : 'linear-gradient(135deg,#16A34A,#15803D)', color:'#fff', border:'none', fontSize:15, fontWeight:800, cursor: (active||addRec) ? 'not-allowed' : 'pointer', fontFamily:'inherit', boxShadow: (active||addRec) ? 'none' : '0 4px 16px rgba(22,163,74,0.4)', opacity: (active||addRec) ? 0.6 : 1 }}>
                                 <IconMic />
                                 Additional Recording
                               </button>
@@ -3783,6 +3804,13 @@ function Clinician() {
 
       {aiVisit    && <AIModal    visit={aiVisit}    onClose={() => { setAiVisit(null); setAiVisitFromNotes(false) }} hideAudioControls={aiVisitFromNotes} showToast={showToast} />}
       {playVisit  && screen !== 'notes' && <AudioModal visitId={playVisit.id} visit={playVisit} onClose={() => setPlayVisit(null)} showToast={showToast} />}
+      {consentPending?.visit && (
+        <PatientConsentModal
+          visit={consentPending.visit}
+          onConfirmed={handleConsentConfirmed}
+          onCancel={() => setConsentPending(null)}
+        />
+      )}
       {toast      && <Toast toast={toast} />}
     </div>
   )

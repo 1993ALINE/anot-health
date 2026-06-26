@@ -390,7 +390,7 @@ if [ "$DIST_ID" = "None" ] || [ -z "$DIST_ID" ]; then
         "ForwardedValues": {
           "QueryString": true,
           "Cookies": {"Forward": "all"},
-          "Headers": {"Quantity": 4, "Items": ["Authorization", "Origin", "Content-Type", "Accept"]}
+          "Headers": {"Quantity": 5, "Items": ["Authorization", "Origin", "Content-Type", "Accept", "X-CSRF-Token"]}
         },
         "MinTTL": 0, "DefaultTTL": 0, "MaxTTL": 0
       }

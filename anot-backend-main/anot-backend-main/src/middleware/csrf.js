@@ -91,52 +91,141 @@ function isWebhookPath(req) {
   return path.startsWith('/api/webhooks')
 }
 
+function normalizeToken(raw) {
+  if (raw == null) { return null }
+  if (Array.isArray(raw)) { raw = raw[0] }
+  if (typeof raw !== 'string') { return null }
+  const trimmed = raw.trim()
+  return trimmed.length ? trimmed : null
+}
+
+function readHeaderToken(req) {
+  const raw = req.get?.(TOKEN_HEADER) ?? req.headers?.[TOKEN_HEADER]
+  return normalizeToken(raw)
+}
+
+/** All valid CSRF cookie values present on the request (primary first in production). */
+function readCsrfCookieTokens(req) {
+  const names =
+    process.env.NODE_ENV === 'production'
+      ? ['__Host-csrf_token', LEGACY_DEV_COOKIE]
+      : [LEGACY_DEV_COOKIE, '__Host-csrf_token']
+  const found = []
+  const seen = new Set()
+  for (const name of names) {
+    const token = normalizeToken(req.cookies?.[name])
+    if (isValidToken(token) && !seen.has(token)) {
+      seen.add(token)
+      found.push({ name, token })
+    }
+  }
+  return found
+}
+
+function csrfDebugLog(req, { headerToken, cookieTokens, matched }) {
+  if (process.env.NODE_ENV !== 'production') { return }
+  const cookieName = getTokenCookieName()
+  const primaryCookie = normalizeToken(req.cookies?.[cookieName])
+  console.log('[CSRF-DEBUG]', {
+    path: req.path,
+    originalUrl: req.originalUrl,
+    method: req.method,
+    cookieName,
+    cookieExists: !!primaryCookie,
+    cookieValue: primaryCookie?.substring(0, 16),
+    headerExists: !!headerToken,
+    headerValue: headerToken?.substring(0, 16),
+    matchPrimary: primaryCookie === headerToken,
+    matchedCookie: matched?.name ?? null,
+    matchAny: !!matched,
+    allCookies: Object.keys(req.cookies || {}),
+    csrfCookieTokens: cookieTokens.map((c) => ({ name: c.name, prefix: c.token.slice(0, 16) })),
+  })
+}
+
+function resolveCookieToken(req) {
+  const tokens = readCsrfCookieTokens(req)
+  if (tokens.length === 0) {
+    return { token: null, cookieName: getTokenCookieName() }
+  }
+  return { token: tokens[0].token, cookieName: tokens[0].name }
+}
+
+function validateCsrf(req) {
+  const headerToken = readHeaderToken(req)
+  const cookieTokens = readCsrfCookieTokens(req)
+  if (!isValidToken(headerToken)) {
+    return { ok: false, headerToken, cookieTokens, matched: null }
+  }
+  const matched = cookieTokens.find((c) => c.token === headerToken) ?? null
+  return { ok: !!matched, headerToken, cookieTokens, matched }
+}
+
 function csrfProtection(req, res, next) {
   const path = req.originalUrl || req.url || ''
-
-  if (CSRF_DEBUG) {
-    const cookieName = getTokenCookieName()
-    console.log('[CSRF-CHECK]', req.method, path)
-    console.log('[CSRF-CHECK] Header token:', req.headers['x-csrf-token']?.substring(0, 8))
-    console.log('[CSRF-CHECK] Cookie value:', req.cookies[cookieName]?.substring(0, 8))
-    console.log('[CSRF-CHECK] Match:', req.headers['x-csrf-token'] === req.cookies[cookieName])
-  }
 
   if (isWebhookPath(req)) {
     return next()
   }
 
-  // Do not mint CSRF cookies on arbitrary safe GETs — parallel requests without a
-  // cookie each used to generate a different token, overwriting Set-Cookie and
-  // desyncing the header (from GET /csrf-token) from the browser cookie → 403.
   if (SAFE_METHODS.has(req.method)) {
     return next()
   }
 
-  const cookieName = getTokenCookieName()
-  const cookieToken = isValidToken(req.cookies?.[cookieName])
-    ? req.cookies[cookieName]
-    : req.cookies?.[LEGACY_DEV_COOKIE]
-  const headerToken = req.get(TOKEN_HEADER)
+  const validation = validateCsrf(req)
+  const { headerToken, cookieTokens, matched, ok } = validation
 
-  if (!isValidToken(cookieToken) || !isValidToken(headerToken) || cookieToken !== headerToken) {
+  if (process.env.NODE_ENV === 'production') {
+    csrfDebugLog(req, { headerToken, cookieTokens, matched })
+  }
+
+  if (CSRF_DEBUG) {
+    const cookieName = getTokenCookieName()
+    console.log('[CSRF-CHECK]', req.method, path)
+    console.log('[CSRF-CHECK] Header token:', headerToken?.substring(0, 8))
+    console.log('[CSRF-CHECK] Cookie value:', req.cookies[cookieName]?.substring(0, 8))
+    console.log('[CSRF-CHECK] Match:', ok)
+  }
+
+  if (!ok) {
     csrfDebug('rejected mutating request', {
       method: req.method,
       path,
-      hasCookie: isValidToken(cookieToken),
+      hasCookie: cookieTokens.length > 0,
       hasHeader: isValidToken(headerToken),
-      match: isValidToken(cookieToken) && cookieToken === headerToken,
+      match: false,
+      cookieCount: cookieTokens.length,
     })
+    if (cookieTokens.length > 0 && !isValidToken(headerToken)) {
+      console.warn('[CSRF] Cookie present but X-CSRF-Token header missing — check CloudFront/proxy header forwarding')
+    } else if (cookieTokens.length > 1 && isValidToken(headerToken)) {
+      console.warn('[CSRF] Multiple CSRF cookies present; header did not match any cookie value')
+    }
     return res.status(403).json({ error: 'Invalid or missing CSRF token.' })
   }
 
-  csrfDebug('allowed mutating request', { method: req.method, path, tokenPrefix: cookieToken.slice(0, 8) })
+  csrfDebug('allowed mutating request', {
+    method: req.method,
+    path,
+    tokenPrefix: headerToken.slice(0, 8),
+    cookie: matched.name,
+  })
   return next()
 }
 
 function csrfTokenRoute(req, res) {
   const token = resolveToken(req)
   setCsrfCookie(res, token)
+  // Drop stale legacy cookie in production so dual-cookie mismatches cannot cause 403.
+  if (process.env.NODE_ENV === 'production') {
+    const opts = {
+      httpOnly: false,
+      sameSite: 'strict',
+      secure: true,
+      path: '/',
+    }
+    res.clearCookie(LEGACY_DEV_COOKIE, opts)
+  }
   res.json({ csrfToken: token, cookieName: getTokenCookieName() })
 }
 

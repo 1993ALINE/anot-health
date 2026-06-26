@@ -241,7 +241,8 @@ export const authAPI = {
       includeAuth: false,
       body: { temporaryToken },
     })
-    if (data.token && data.user) {
+    // Only persist a full session when no further login gates remain.
+    if (data.token && data.user && !data.enrollmentRequired && !data.requireMfa) {
       setSession(data.token, data.user)
     }
     return data
@@ -306,6 +307,25 @@ export const authAPI = {
       extraHeaders: { Authorization: `Bearer ${temporaryToken}` },
       body: { newPassword },
     })
+  },
+}
+
+export const mfaAPI = {
+  setupWithToken: async (temporaryToken) =>
+    apiMutate('POST', '/mfa/setup', {
+      includeAuth: false,
+      extraHeaders: { Authorization: `Bearer ${temporaryToken}` },
+    }),
+  verifyWithToken: async (temporaryToken, token) => {
+    const data = await apiMutate('POST', '/mfa/verify', {
+      includeAuth: false,
+      extraHeaders: { Authorization: `Bearer ${temporaryToken}` },
+      body: { token },
+    })
+    if (data.token && data.user) {
+      setSession(data.token, data.user)
+    }
+    return data
   },
 }
 
@@ -447,6 +467,11 @@ export const assignmentsAPI = {
 
 export const supportAPI = {
   sendMessage: async (payload) => apiMutate('POST', '/support/message', { body: payload }),
+}
+
+export const consentAPI = {
+  recordRecording: async (visitId) =>
+    apiMutate('POST', '/consent/recording', { body: { visitId } }),
 }
 
 export const audioAPI = {

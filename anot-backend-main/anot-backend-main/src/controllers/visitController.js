@@ -7,6 +7,7 @@ const { runAIPipeline } = require('../utils/aiPipeline')
 const {
   visitDurationSelect,
   visitTranscriptionStatusSelect,
+  visitPatientConsentRecordedSelect,
   visitHasDurationSeconds,
 } = require('../utils/visitSchemaCompat')
 const { getVisitForUser } = require('../utils/visitAccess')
@@ -47,10 +48,11 @@ const getVisitsByDate = async (req, res) => {
     }
 
     const durationCol = await visitDurationSelect('v')
+    const consentCol = await visitPatientConsentRecordedSelect('v')
     const result = await pool.query(
       `SELECT
          v.id, v.visit_date, v.visit_time, v.visit_type, v.status,
-         ${durationCol}, v.audio_file,
+         ${durationCol}, ${consentCol}, v.audio_file,
          p.id as patient_id, p.name as patient_name, p.mrn, p.date_of_birth,
          u.name as scribe_name, u.id as scribe_id,
          n.id as note_id, n.status as note_status,
@@ -102,10 +104,11 @@ const getAllVisits = async (req, res) => {
 
     const durationCol = await visitDurationSelect('v')
     const txStatusCol = await visitTranscriptionStatusSelect('v')
+    const consentCol = await visitPatientConsentRecordedSelect('v')
     let query = `
       SELECT
         v.id, v.visit_date, v.visit_time, v.visit_type, v.status,
-        ${durationCol}, v.audio_file, ${txStatusCol},
+        ${durationCol}, ${consentCol}, v.audio_file, ${txStatusCol},
         p.id as patient_id, p.name as patient_name, p.mrn,
         c.name as clinician_name, c.id as clinician_id,
         s.name as scribe_name, s.id as scribe_id,
@@ -525,10 +528,11 @@ const getVisitHistory = async (req, res) => {
 
     const durationCol = await visitDurationSelect('v')
     const txStatusCol = await visitTranscriptionStatusSelect('v')
+    const consentCol = await visitPatientConsentRecordedSelect('v')
     const result = await pool.query(
       `SELECT
          v.id, v.visit_date, v.visit_time, v.visit_type, v.status,
-         ${durationCol}, v.audio_file, ${txStatusCol},
+         ${durationCol}, ${consentCol}, v.audio_file, ${txStatusCol},
          p.name as patient_name, p.mrn,
          COALESCE(sb.name, s.name) as scribe_name,
          n.final_note, n.ai_draft, n.transcription, n.id as note_id,
@@ -621,10 +625,11 @@ const lockNote = async (req, res) => {
 
     const durationCol = await visitDurationSelect('v')
     const txStatusCol = await visitTranscriptionStatusSelect('v')
+    const consentCol = await visitPatientConsentRecordedSelect('v')
     const result = await pool.query(
       `SELECT
          v.id, v.visit_date, v.visit_time, v.visit_type, v.status,
-         ${durationCol}, v.audio_file, ${txStatusCol},
+         ${durationCol}, ${consentCol}, v.audio_file, ${txStatusCol},
          p.name as patient_name, p.mrn,
          COALESCE(sb.name, s.name) as scribe_name,
          n.final_note, n.ai_draft, n.transcription, n.id as note_id,

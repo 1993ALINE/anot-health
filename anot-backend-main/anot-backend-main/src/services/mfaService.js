@@ -37,9 +37,10 @@ function verifyTotp(secret, token) {
   }
 }
 
+const PHI_ROLES = new Set(['clinician', 'scribe', 'qps', 'super_admin', 'admin'])
+
 function adminRequiresMfa(role, mfaEnabled) {
-  const adminRoles = new Set(['admin', 'super_admin'])
-  return adminRoles.has(role) && !mfaEnabled
+  return PHI_ROLES.has(role) && !mfaEnabled
 }
 
 /** Resolve MFA secret from DB row — prefers encrypted column, falls back to legacy plaintext. */
@@ -56,9 +57,18 @@ function encryptMfaSecret(plainSecret) {
   return encryptString(plainSecret)
 }
 
-/** True when the account must complete MFA at login before receiving a full session. */
+/**
+ * Resolve MFA requirement at login for PHI-access roles.
+ * @returns {false|'ENROLLMENT_REQUIRED'|true}
+ *   - false — role has no PHI access (MFA not required)
+ *   - 'ENROLLMENT_REQUIRED' — PHI role without MFA enrolled
+ *   - true — PHI role with MFA enabled (TOTP challenge at login)
+ */
 function loginRequiresMfa(user) {
-  return user?.mfa_enabled === true
+  const hasPhi = PHI_ROLES.has(user?.role)
+  if (!hasPhi) return false
+  if (!user?.mfa_enabled) return 'ENROLLMENT_REQUIRED'
+  return true
 }
 
 module.exports = {
@@ -66,6 +76,7 @@ module.exports = {
   generateRecoveryCodes,
   hashRecoveryCode,
   verifyTotp,
+  PHI_ROLES,
   adminRequiresMfa,
   resolveMfaSecret,
   encryptMfaSecret,

@@ -6,6 +6,7 @@ let done = false
 const MEDIA_COLUMNS = [
     { table: 'visits', name: 'duration_seconds', ddl: `ALTER TABLE visits ADD COLUMN IF NOT EXISTS duration_seconds INTEGER` },
     { table: 'visits', name: 'transcription_status', ddl: `ALTER TABLE visits ADD COLUMN IF NOT EXISTS transcription_status VARCHAR(32)` },
+    { table: 'visits', name: 'patient_consent_recorded', ddl: `ALTER TABLE visits ADD COLUMN IF NOT EXISTS patient_consent_recorded BOOLEAN NOT NULL DEFAULT false` },
     { table: 'system_settings', name: 'deepgram_enabled', ddl: `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS deepgram_enabled BOOLEAN NOT NULL DEFAULT false` },
     { table: 'system_settings', name: 'deepgram_api_key_enc', ddl: `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS deepgram_api_key_enc TEXT` },
     { table: 'system_settings', name: 'deepgram_model', ddl: `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS deepgram_model VARCHAR(64) NOT NULL DEFAULT 'nova-2'` },

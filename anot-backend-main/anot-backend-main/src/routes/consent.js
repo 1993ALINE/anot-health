@@ -1,7 +1,11 @@
 ﻿const express = require('express')
 const router = express.Router()
 const pool = require('../config/db')
-const { protect } = require('../middleware/auth')
+const { protect, restrict } = require('../middleware/auth')
+const { auditLog, reportAuditFailure } = require('../utils/auditLogger')
+const { getVisitForUser } = require('../utils/visitAccess')
+const { ensurePatientConsentColumn } = require('../utils/visitSchemaCompat')
+const cloudWatchAudit = require('../utils/logger')
 
 const VALID_TYPES = new Set(['privacy_policy', 'terms_of_service', 'phi_processing', 'marketing'])
 
@@ -30,6 +34,63 @@ router.post('/me', protect, async (req, res) => {
     [req.user.id, consentType, consentVersion, !!granted, req.clientIp, req.get('user-agent'), now, granted ? null : new Date()]
   )
   res.json({ consent: rows[0] })
+})
+
+/** Clinician attestation that the patient authorized encounter recording. */
+router.post('/recording', protect, restrict('clinician'), async (req, res) => {
+  try {
+    const visitId = parseInt(req.body?.visitId, 10)
+    if (!Number.isInteger(visitId)) {
+      return res.status(400).json({ error: 'visitId is required.' })
+    }
+
+    await ensurePatientConsentColumn()
+
+    const visit = await getVisitForUser(visitId, req.user)
+    if (!visit) {
+      return res.status(404).json({ error: 'Visit not found or not yours.' })
+    }
+
+    const patientRow = await pool.query(
+      'SELECT name, mrn FROM patients WHERE id = $1',
+      [visit.patient_id],
+    )
+    const patient = patientRow.rows[0] || {}
+
+    await pool.query(
+      'UPDATE visits SET patient_consent_recorded = true WHERE id = $1',
+      [visitId],
+    )
+
+    const detail = `Patient recording consent recorded for ${patient.name || 'patient'} (visit ${visitId})`
+    void auditLog(
+      req.user,
+      'PATIENT_RECORDING_CONSENT',
+      'visit',
+      String(visitId),
+      detail,
+      {
+        req,
+        module_key: 'clinical',
+        action_category: 'update',
+        status: 'success',
+        metadata: {
+          patient_mrn: patient.mrn || null,
+          visit_date: visit.visit_date || null,
+        },
+      },
+    ).catch(reportAuditFailure)
+
+    cloudWatchAudit.logDataAccess(
+      req.user.id, req.user.role, 'visit', String(visitId), 'UPDATE', req.clientIp,
+      { action: 'patient_recording_consent', patient_mrn: patient.mrn || null },
+    )
+
+    res.json({ visitId, patient_consent_recorded: true })
+  } catch (err) {
+    console.error('[consent.recording]', err.message)
+    res.status(500).json({ error: 'Could not record patient consent.' })
+  }
 })
 
 module.exports = router

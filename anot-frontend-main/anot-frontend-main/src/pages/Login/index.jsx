@@ -10,6 +10,7 @@ import { hasValidSession } from '../../utils/sessionAuth'
 import PhiTrainingModal from '../../components/PhiTrainingModal'
 import PasswordChangeModal from '../../components/PasswordChangeModal'
 import MfaChallengeModal from '../../components/MfaChallengeModal'
+import MfaEnrollmentModal from '../../components/MfaEnrollmentModal'
 
 function networkErrorMessage() {
   const isLocalApi = API_BASE.includes('localhost') || API_BASE.includes('127.0.0.1')
@@ -216,6 +217,8 @@ export default function Login() {
   const [phiTrainingToken, setPhiTrainingToken] = useState(null)
   const [passwordChangeToken, setPasswordChangeToken] = useState(null)
   const [mfaToken, setMfaToken] = useState(null)
+  const [mfaEnrollmentToken, setMfaEnrollmentToken] = useState(null)
+  const [enrollmentRequired, setEnrollmentRequired] = useState(false)
   const [csrfTokenFetched, setCsrfTokenFetched] = useState(false)
   const csrfReady = phase === 'form' && csrfTokenFetched
   const reducedMotion = usePrefersReducedMotion()
@@ -282,23 +285,69 @@ export default function Login() {
     }
   }, [phase])
 
-  // Resolves a successful /auth/login response. The server returns at most one
-  // pre-session gate (a temporaryToken instead of a real session): forced
-  // password change first, then PHI training. Each is handled by a mandatory
-  // modal; only an ungated response carries a real `user` + session token.
+  const clearMfaGates = () => {
+    setMfaToken(null)
+    setMfaEnrollmentToken(null)
+    setEnrollmentRequired(false)
+  }
+
+  const openMfaEnrollment = (temporaryToken) => {
+    setMfaToken(null)
+    setEnrollmentRequired(true)
+    setMfaEnrollmentToken(temporaryToken)
+  }
+
+  const openMfaTotp = (temporaryToken) => {
+    setEnrollmentRequired(false)
+    setMfaEnrollmentToken(null)
+    setMfaToken(temporaryToken)
+  }
+
+  // Resolves a successful auth response. The server returns at most one pre-session
+  // gate per step: password change → PHI training → MFA enrollment/TOTP → full session.
   const routeAfterAuth = (data) => {
     if (data.requirePasswordChange) {
+      setPhiTrainingToken(null)
+      clearMfaGates()
       setPasswordChangeToken(data.temporaryToken)
       return
     }
     if (data.requirePhiTraining) {
+      clearMfaGates()
+      setPasswordChangeToken(null)
       setPhiTrainingToken(data.temporaryToken)
       return
     }
-    if (data.requireMfa) {
-      setMfaToken(data.temporaryToken)
+
+    const needsEnrollment = data.enrollmentRequired === true
+    const needsMfaTotp = data.requireMfa === true && !needsEnrollment
+
+    if (needsEnrollment) {
+      if (!data.temporaryToken) {
+        setError('MFA setup is required but the server did not provide a session token. Please sign in again.')
+        if (import.meta.env.DEV) {
+          console.error('[Login] enrollmentRequired without temporaryToken', data)
+        }
+        return
+      }
+      setPhiTrainingToken(null)
+      setPasswordChangeToken(null)
+      openMfaEnrollment(data.temporaryToken)
       return
     }
+
+    if (needsMfaTotp) {
+      if (!data.temporaryToken) {
+        setError('MFA verification is required but the server did not provide a session token. Please sign in again.')
+        return
+      }
+      setPhiTrainingToken(null)
+      setPasswordChangeToken(null)
+      openMfaTotp(data.temporaryToken)
+      return
+    }
+
+    clearMfaGates()
     goToDashboard(data.user)
   }
 
@@ -492,8 +541,24 @@ export default function Login() {
         <PhiTrainingModal
           temporaryToken={phiTrainingToken}
           onAcknowledged={(data) => {
+            // PHI ack is async — set enrollment state in one pass (avoid clear-then-set race).
+            if (data.enrollmentRequired === true && data.temporaryToken) {
+              setPhiTrainingToken(null)
+              openMfaEnrollment(data.temporaryToken)
+              return
+            }
             setPhiTrainingToken(null)
             routeAfterAuth(data)
+          }}
+        />
+      ) : null}
+
+      {enrollmentRequired && mfaEnrollmentToken ? (
+        <MfaEnrollmentModal
+          temporaryToken={mfaEnrollmentToken}
+          onEnrolled={(user) => {
+            clearMfaGates()
+            goToDashboard(user)
           }}
         />
       ) : null}

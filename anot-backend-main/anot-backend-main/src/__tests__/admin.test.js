@@ -22,9 +22,13 @@ describe('admin role enforcement', () => {
     expect(res.status).toHaveBeenCalledWith(403)
   })
 
-  test('adminRequiresMfa enforces MFA setup for admin accounts', () => {
+  test('adminRequiresMfa enforces MFA setup for PHI-access roles', () => {
     expect(adminRequiresMfa('super_admin', false)).toBe(true)
     expect(adminRequiresMfa('super_admin', true)).toBe(false)
+    expect(adminRequiresMfa('clinician', false)).toBe(true)
+    expect(adminRequiresMfa('scribe', false)).toBe(true)
+    expect(adminRequiresMfa('qps', false)).toBe(true)
+    expect(adminRequiresMfa('receptionist', false)).toBe(false)
   })
 })
 

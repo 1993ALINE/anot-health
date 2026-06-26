@@ -1,4 +1,4 @@
-const { checkMfaRequired, checkPhiTrainingRequired } = require('../middleware/auth')
+const { checkMfaRequired, checkMfaEnrollmentRequired, checkPhiTrainingRequired } = require('../middleware/auth')
 
 describe('auth scope gates', () => {
   test('checkMfaRequired blocks until MFA verified', () => {
@@ -8,6 +8,15 @@ describe('auth scope gates', () => {
 
     const allowed = checkMfaRequired({ requireMfa: true }, '/api/auth/verify-mfa')
     expect(allowed.ok).toBe(true)
+  })
+
+  test('checkMfaEnrollmentRequired blocks until MFA enrolled', () => {
+    const blocked = checkMfaEnrollmentRequired({ requireMfaEnrollment: true }, '/api/patients')
+    expect(blocked.ok).toBe(false)
+    expect(blocked.code).toBe('MFA_ENROLLMENT_REQUIRED')
+
+    expect(checkMfaEnrollmentRequired({ requireMfaEnrollment: true }, '/api/mfa/setup').ok).toBe(true)
+    expect(checkMfaEnrollmentRequired({ requireMfaEnrollment: true }, '/api/mfa/verify').ok).toBe(true)
   })
 
   test('checkPhiTrainingRequired blocks until training acknowledged', () => {

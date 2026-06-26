@@ -345,5 +345,6 @@ Open `https://<dist>.cloudfront.net` and log in.
 | `npm install` fails on EB referencing `anot-workspace` | The bundle must have that dependency stripped — `setup.sh` does this; for manual deploys run `npm pkg delete dependencies.anot-workspace` before zipping. |
 | Audio fails / `ffmpeg not found` | Confirm the `.ebextensions/nodejs.config` ran (check EB deploy logs); it installs a static ffmpeg into `/usr/local/bin`. |
 | Mixed-content / CORS errors in browser | Make sure the frontend was built with `VITE_API_URL=https://<dist>.cloudfront.net/api` and `CORS_ORIGINS` includes the CloudFront domain. |
+| Login returns **403** with valid CSRF cookie + header in browser | CloudFront `/api/*` must forward `X-CSRF-Token` to Elastic Beanstalk. Run `./fix-cloudfront-csrf-header.sh` (see `setup.sh` for new distributions). |
 | 404 on frontend deep links | The frontend bucket's website error document must be `index.html` (set by `setup.sh`). |
 | CloudFront returns stale assets | Invalidate: `aws cloudfront create-invalidation --distribution-id <id> --paths '/*'`. |

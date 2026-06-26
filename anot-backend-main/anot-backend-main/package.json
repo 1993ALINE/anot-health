@@ -12,7 +12,9 @@
         "seed:dev": "node scripts/seed-dev-users.js",
         "sync:rate-limit": "node scripts/sync-rate-limit-config.js",
         "migrate": "node scripts/run-migrations.js",
-        "migrate:prod": "node scripts/run-migrations.js"
+        "migrate:prod": "node scripts/run-migrations.js",
+        "retranscribe:failed": "node scripts/retranscribe-failed.js",
+        "retranscribe:failed:list": "node scripts/retranscribe-failed.js --list"
     },
     "keywords": [],
     "author": "",

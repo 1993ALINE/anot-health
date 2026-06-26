@@ -1,8 +1,9 @@
 const pool = require('../config/db')
-const { columnExists } = require('./schemaDdl')
+const { addColumnIfMissing, columnExists } = require('./schemaDdl')
 
 let hasDurationSeconds = null
 let hasTranscriptionStatus = null
+let hasPatientConsentRecorded = null
 
 async function visitDurationSelect(alias = 'v') {
   if (hasDurationSeconds === null) {
@@ -34,6 +35,32 @@ async function visitHasTranscriptionStatus() {
   return hasTranscriptionStatus
 }
 
+async function visitPatientConsentRecordedSelect(alias = 'v') {
+  if (hasPatientConsentRecorded === null) {
+    hasPatientConsentRecorded = await columnExists('visits', 'patient_consent_recorded')
+  }
+  return hasPatientConsentRecorded
+    ? `${alias}.patient_consent_recorded`
+    : `false AS patient_consent_recorded`
+}
+
+async function visitHasPatientConsentRecorded() {
+  if (hasPatientConsentRecorded === null) {
+    hasPatientConsentRecorded = await columnExists('visits', 'patient_consent_recorded')
+  }
+  return hasPatientConsentRecorded
+}
+
+/** Idempotent DDL for visits.patient_consent_recorded (local DBs without migration). */
+async function ensurePatientConsentColumn() {
+  await addColumnIfMissing(
+    'visits',
+    'patient_consent_recorded',
+    'ALTER TABLE visits ADD COLUMN IF NOT EXISTS patient_consent_recorded BOOLEAN NOT NULL DEFAULT false',
+  )
+  hasPatientConsentRecorded = true
+}
+
 /** No-op when visits.transcription_status column is missing (old local DB). */
 async function setVisitTranscriptionStatus(visitId, status) {
   if (!(await visitHasTranscriptionStatus())) return
@@ -63,8 +90,11 @@ async function claimVisitTranscription(visitId) {
 module.exports = {
   visitDurationSelect,
   visitTranscriptionStatusSelect,
+  visitPatientConsentRecordedSelect,
   visitHasDurationSeconds,
   visitHasTranscriptionStatus,
+  visitHasPatientConsentRecorded,
+  ensurePatientConsentColumn,
   setVisitTranscriptionStatus,
   claimVisitTranscription,
 }

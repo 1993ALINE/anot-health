@@ -46,7 +46,8 @@ export default function MfaChallengeModal({ temporaryToken, onVerified }) {
       if (isLikelyNetworkFailure(err)) {
         setError('Cannot reach the server. Please check your connection and try again.')
       } else if (err?.status === 401) {
-        setError('Invalid code or session expired. Please sign in again.')
+        setError('Invalid code. Check your authenticator app and try again.')
+        setCode('')
       } else {
         setError(err?.message || 'Verification failed. Please try again.')
       }

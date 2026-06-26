@@ -97,6 +97,37 @@ describe('csrf middleware (stateless double-submit)', () => {
     expect(res.statusCode).toBe(200)
   })
 
+  test('csrfProtection accepts header matching legacy cookie when dual cookies differ', () => {
+    const prev = process.env.NODE_ENV
+    process.env.NODE_ENV = 'production'
+    const host = 'a'.repeat(64)
+    const legacy = 'b'.repeat(64)
+    const req = mockReq('POST', {
+      cookies: { '__Host-csrf_token': host, csrf_token: legacy },
+      headers: { 'x-csrf-token': legacy },
+      url: '/api/auth/login',
+    })
+    const res = mockRes()
+    const next = jest.fn()
+    csrfProtection(req, res, next)
+    expect(next).toHaveBeenCalled()
+    expect(res.statusCode).toBe(200)
+    process.env.NODE_ENV = prev
+  })
+
+  test('csrfProtection accepts header with surrounding whitespace', () => {
+    const token = 'b'.repeat(64)
+    const cookieName = getTokenCookieName()
+    const req = mockReq('POST', {
+      cookies: { [cookieName]: token },
+      headers: { 'x-csrf-token': `  ${token}  ` },
+    })
+    const res = mockRes()
+    const next = jest.fn()
+    csrfProtection(req, res, next)
+    expect(next).toHaveBeenCalled()
+  })
+
   test('csrfProtection rejects missing or mismatched token', () => {
     const token = 'c'.repeat(64)
     const cookieName = getTokenCookieName()
