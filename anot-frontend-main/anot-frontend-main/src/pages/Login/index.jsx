@@ -11,6 +11,7 @@ import PhiTrainingModal from '../../components/PhiTrainingModal'
 import PasswordChangeModal from '../../components/PasswordChangeModal'
 import MfaChallengeModal from '../../components/MfaChallengeModal'
 import MfaEnrollmentModal from '../../components/MfaEnrollmentModal'
+import { resolveMfaGateFromAuthResponse } from '../../utils/jwtClaims'
 
 function networkErrorMessage() {
   const isLocalApi = API_BASE.includes('localhost') || API_BASE.includes('127.0.0.1')
@@ -319,14 +320,13 @@ export default function Login() {
       return
     }
 
-    const needsEnrollment = data.enrollmentRequired === true
-    const needsMfaTotp = data.requireMfa === true && !needsEnrollment
+    const mfaGate = resolveMfaGateFromAuthResponse(data)
 
-    if (needsEnrollment) {
+    if (mfaGate === 'enrollment') {
       if (!data.temporaryToken) {
         setError('MFA setup is required but the server did not provide a session token. Please sign in again.')
         if (import.meta.env.DEV) {
-          console.error('[Login] enrollmentRequired without temporaryToken', data)
+          console.error('[Login] MFA enrollment without temporaryToken', data)
         }
         return
       }
@@ -336,7 +336,7 @@ export default function Login() {
       return
     }
 
-    if (needsMfaTotp) {
+    if (mfaGate === 'totp') {
       if (!data.temporaryToken) {
         setError('MFA verification is required but the server did not provide a session token. Please sign in again.')
         return
@@ -541,13 +541,12 @@ export default function Login() {
         <PhiTrainingModal
           temporaryToken={phiTrainingToken}
           onAcknowledged={(data) => {
-            // PHI ack is async — set enrollment state in one pass (avoid clear-then-set race).
-            if (data.enrollmentRequired === true && data.temporaryToken) {
-              setPhiTrainingToken(null)
+            const mfaGate = resolveMfaGateFromAuthResponse(data)
+            setPhiTrainingToken(null)
+            if (mfaGate === 'enrollment' && data.temporaryToken) {
               openMfaEnrollment(data.temporaryToken)
               return
             }
-            setPhiTrainingToken(null)
             routeAfterAuth(data)
           }}
         />

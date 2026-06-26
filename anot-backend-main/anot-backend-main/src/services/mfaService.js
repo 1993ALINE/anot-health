@@ -62,13 +62,28 @@ function encryptMfaSecret(plainSecret) {
  * Resolve MFA requirement at login for PHI-access roles.
  * @returns {false|'ENROLLMENT_REQUIRED'|true}
  *   - false — role has no PHI access (MFA not required)
- *   - 'ENROLLMENT_REQUIRED' — PHI role without MFA enrolled
- *   - true — PHI role with MFA enabled (TOTP challenge at login)
+ *   - 'ENROLLMENT_REQUIRED' — PHI role without MFA fully enrolled
+ *   - true — PHI role with MFA enabled and a stored secret (TOTP at login)
  */
+function isMfaEnabledFlag(value) {
+  return value === true || value === 't' || value === 1 || value === '1'
+}
+
+function userHasStoredMfaSecret(user) {
+  if (!user) return false
+  if (user.mfa_secret_encrypted) return true
+  if (user.mfa_secret) return true
+  return false
+}
+
+function isMfaFullyEnrolled(user) {
+  return isMfaEnabledFlag(user?.mfa_enabled) && userHasStoredMfaSecret(user)
+}
+
 function loginRequiresMfa(user) {
   const hasPhi = PHI_ROLES.has(user?.role)
   if (!hasPhi) return false
-  if (!user?.mfa_enabled) return 'ENROLLMENT_REQUIRED'
+  if (!isMfaFullyEnrolled(user)) return 'ENROLLMENT_REQUIRED'
   return true
 }
 
@@ -97,6 +112,7 @@ module.exports = {
   resolveMfaSecret,
   encryptMfaSecret,
   loginRequiresMfa,
+  isMfaFullyEnrolled,
   buildOtpauthUrl,
   generateQrCodeDataUrl,
 }

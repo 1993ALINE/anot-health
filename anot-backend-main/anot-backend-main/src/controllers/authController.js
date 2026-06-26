@@ -89,6 +89,15 @@ function buildPostPasswordLoginResponse(user, req) {
     }
 
     const mfaStatus = loginRequiresMfa(user)
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[auth.login] MFA gate', {
+        userId: user.id,
+        role: user.role,
+        mfa_enabled: user.mfa_enabled,
+        hasMfaSecret: !!(user.mfa_secret_encrypted || user.mfa_secret),
+        mfaStatus,
+      })
+    }
 
     if (mfaStatus === 'ENROLLMENT_REQUIRED') {
         const temporaryToken = generateTemporaryToken(user, 'requireMfaEnrollment', '15m')
@@ -282,6 +291,15 @@ const acknowledgePhiTraining = async (req, res) => {
         ).catch(reportAuditFailure)
 
         const mfaStatus = loginRequiresMfa(fresh)
+        if (process.env.NODE_ENV !== 'production') {
+            console.log('[auth.phiTraining] MFA gate', {
+                userId: fresh.id,
+                role: fresh.role,
+                mfa_enabled: fresh.mfa_enabled,
+                hasMfaSecret: !!(fresh.mfa_secret_encrypted || fresh.mfa_secret),
+                mfaStatus,
+            })
+        }
 
         if (mfaStatus === 'ENROLLMENT_REQUIRED') {
             const temporaryToken = generateTemporaryToken(fresh, 'requireMfaEnrollment', '15m')

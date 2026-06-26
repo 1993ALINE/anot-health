@@ -48,8 +48,9 @@ describe('MFA policy helpers', () => {
   })
 
   test('loginRequiresMfa for PHI roles', () => {
-    expect(loginRequiresMfa({ role: 'clinician', mfa_enabled: true })).toBe(true)
+    expect(loginRequiresMfa({ role: 'clinician', mfa_enabled: true, mfa_secret_encrypted: 'enc' })).toBe(true)
     expect(loginRequiresMfa({ role: 'clinician', mfa_enabled: false })).toBe('ENROLLMENT_REQUIRED')
+    expect(loginRequiresMfa({ role: 'clinician', mfa_enabled: true })).toBe('ENROLLMENT_REQUIRED')
     expect(loginRequiresMfa({ role: 'scribe', mfa_enabled: false })).toBe('ENROLLMENT_REQUIRED')
     expect(loginRequiresMfa({ role: 'admin', mfa_enabled: false })).toBe('ENROLLMENT_REQUIRED')
     expect(loginRequiresMfa({ role: 'receptionist', mfa_enabled: false })).toBe(false)
