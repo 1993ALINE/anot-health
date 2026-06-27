@@ -87,10 +87,10 @@ export default function MfaEnrollmentModal({ temporaryToken, onEnrolled }) {
   const qrSrc = setup?.qrCode || null
 
   return (
-    <div style={S.overlay} role="presentation">
+    <div className="portal-modal-overlay" role="presentation">
       <div
         ref={dialogRef}
-        style={S.dialog}
+        className="portal-modal-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="mfa-enroll-title"
@@ -122,15 +122,15 @@ export default function MfaEnrollmentModal({ temporaryToken, onEnrolled }) {
         {step === 'scan' && setup ? (
           <>
             {qrSrc ? (
-              <div style={S.qrWrap}>
+              <div className="portal-modal__qr" style={S.qrWrap}>
                 <img src={qrSrc} alt="QR code for authenticator app" width={200} height={200} style={S.qr} />
               </div>
             ) : (
-              <p style={S.error} role="alert">QR code unavailable — use the manual key below.</p>
+              <p className="portal-modal__error" style={S.error} role="alert">QR code unavailable — use the manual key below.</p>
             )}
             <p style={S.hint}>
               Can&apos;t scan? Enter this key manually:{' '}
-              <code style={S.secret}>{setup.secret}</code>
+              <code className="portal-modal__secret" style={S.secret}>{setup.secret}</code>
             </p>
             {setup.recoveryCodes?.length ? (
               <div style={S.recovery}>
@@ -144,6 +144,7 @@ export default function MfaEnrollmentModal({ temporaryToken, onEnrolled }) {
             ) : null}
             <button
               type="button"
+              className="portal-modal__btn portal-modal__btn--indigo"
               style={S.button}
               onClick={() => {
                 setStep('confirm')
@@ -161,6 +162,7 @@ export default function MfaEnrollmentModal({ temporaryToken, onEnrolled }) {
             <input
               ref={inputRef}
               id="mfa-enroll-code"
+              className="portal-modal__input"
               type="text"
               inputMode="numeric"
               autoComplete="one-time-code"
@@ -177,9 +179,14 @@ export default function MfaEnrollmentModal({ temporaryToken, onEnrolled }) {
               aria-invalid={!!error}
             />
             {error ? (
-              <p style={S.error} role="alert">{error}</p>
+              <p className="portal-modal__error" style={S.error} role="alert">{error}</p>
             ) : null}
-            <button type="submit" style={S.button} disabled={submitting || code.length !== 6}>
+            <button
+              type="submit"
+              className="portal-modal__btn portal-modal__btn--indigo"
+              style={S.button}
+              disabled={submitting || code.length !== 6}
+            >
               {submitting ? 'Verifying…' : 'Complete setup and sign in'}
             </button>
           </form>

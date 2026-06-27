@@ -53,16 +53,25 @@ export default function PatientConsentModal({ visit, onConfirmed, onCancel }) {
   const patientLabel = visit?.patient_name || 'this patient'
 
   const modal = (
-    <div style={S.overlay} role="presentation" onClick={() => !submitting && onCancel?.()}>
+    <div className="portal-modal-overlay" role="presentation" onClick={() => !submitting && onCancel?.()}>
       <div
         ref={dialogRef}
-        style={S.dialog}
+        className="portal-modal-dialog"
         role="dialog"
         aria-modal="true"
         aria-labelledby="patient-consent-title"
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
+        <button
+          type="button"
+          className="portal-modal__close"
+          aria-label="Close consent dialog"
+          disabled={submitting}
+          onClick={() => onCancel?.()}
+        >
+          ×
+        </button>
         <div style={S.header}>
           <div style={S.badge} aria-hidden>
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -92,6 +101,7 @@ export default function PatientConsentModal({ visit, onConfirmed, onCancel }) {
         <label style={S.checkboxRow}>
           <input
             type="checkbox"
+            className="portal-modal__checkbox"
             checked={checked}
             onChange={(e) => {
               setChecked(e.target.checked)
@@ -103,9 +113,10 @@ export default function PatientConsentModal({ visit, onConfirmed, onCancel }) {
           <span>Patient authorizes recording</span>
         </label>
 
-        <div style={S.actions}>
+        <div className="portal-modal__actions" style={S.actions}>
           <button
             type="button"
+            className="portal-modal__btn portal-modal__btn--ghost"
             onClick={() => onCancel?.()}
             disabled={submitting}
             style={S.cancelButton}
@@ -114,6 +125,7 @@ export default function PatientConsentModal({ visit, onConfirmed, onCancel }) {
           </button>
           <button
             type="button"
+            className="portal-modal__btn portal-modal__btn--primary"
             onClick={handleConfirm}
             disabled={!checked || submitting}
             style={{
@@ -133,25 +145,6 @@ export default function PatientConsentModal({ visit, onConfirmed, onCancel }) {
 }
 
 const S = {
-  overlay: {
-    position: 'fixed',
-    inset: 0,
-    background: 'rgba(15, 23, 42, 0.72)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10000,
-    padding: 16,
-  },
-  dialog: {
-    background: '#fff',
-    borderRadius: 12,
-    maxWidth: 460,
-    width: '100%',
-    padding: '28px 24px',
-    boxShadow: '0 24px 48px rgba(0,0,0,0.18)',
-    outline: 'none',
-  },
   header: { display: 'flex', gap: 14, marginBottom: 16 },
   badge: {
     width: 44,
