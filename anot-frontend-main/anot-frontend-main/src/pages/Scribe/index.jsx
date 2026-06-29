@@ -422,7 +422,6 @@ function Scribe() {
       confirmText: 'Log out',
       onConfirm: async () => {
         await authAPI.logout()
-        navigate('/login', { replace: true })
       },
     })
   }, [screen, isDirty, navigate])

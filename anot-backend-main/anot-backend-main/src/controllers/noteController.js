@@ -9,6 +9,31 @@ const { addColumnIfMissing } = require('../utils/schemaDdl')
 
 const NOTE_STATUSES = new Set(['draft', 'pending', 'submitted', 'uploaded'])
 
+async function logPhiBulkRead(req, resourceType, count, filters = {}) {
+  void auditLog(
+    req.user,
+    'PHI_BULK_READ',
+    resourceType,
+    null,
+    `Bulk read ${count} ${resourceType} record(s)`,
+    {
+      req,
+      module_key: 'clinical',
+      action_category: 'read',
+      metadata: { count, ...filters },
+    },
+  ).catch(reportAuditFailure)
+  cloudWatchAudit.logDataAccess(
+    req.user.id,
+    req.user.role,
+    resourceType,
+    'bulk',
+    'LIST',
+    req.clientIp,
+    { count, ...filters },
+  )
+}
+
 // Columns backing the "Upload to EHR" action. The note `status` lifecycle
 // (draft → submitted → uploaded/graded) is separate from the EHR push, so we
 // track the EHR upload independently via these idempotent columns.
@@ -89,6 +114,7 @@ const getMyNotes = async (req, res) => {
        ORDER BY n.created_at DESC`,
       [req.user.id]
     )
+    await logPhiBulkRead(req, 'note', result.rows.length, { scope: 'scribe_my_notes' })
     res.status(200).json({ notes: result.rows })
   } catch (err) {
         sendHttpError(res, 500, err, { context: 'undefined', req })
@@ -131,6 +157,11 @@ const getAllNotes = async (req, res) => {
     query += ' ORDER BY n.created_at DESC'
 
     const result = await pool.query(query, params)
+    await logPhiBulkRead(req, 'note', result.rows.length, {
+      scope: 'admin_qps_all_notes',
+      provider_id: provider_id || null,
+      status: status || null,
+    })
     res.status(200).json({ notes: result.rows })
   } catch (err) {
         sendHttpError(res, 500, err, { context: 'undefined', req })
@@ -158,6 +189,7 @@ const getClinicianNotes = async (req, res) => {
        ORDER BY n.updated_at DESC`,
       [req.user.id]
     )
+    await logPhiBulkRead(req, 'note', result.rows.length, { scope: 'clinician_review' })
     res.status(200).json({ notes: result.rows })
   } catch (err) {
         sendHttpError(res, 500, err, { context: 'undefined', req })
@@ -186,6 +218,7 @@ const getMyGrades = async (req, res) => {
        ORDER BY g.created_at DESC`,
       [req.user.id]
     )
+    await logPhiBulkRead(req, 'grade', result.rows.length, { scope: 'scribe_my_grades' })
     res.status(200).json({ grades: result.rows })
   } catch (err) {
         sendHttpError(res, 500, err, { context: 'undefined', req })
@@ -606,4 +639,5 @@ const submitGrade = async (req, res) => {
 module.exports = {
   getNoteByVisit, getMyNotes, getAllNotes, getClinicianNotes,
   getMyGrades, saveDraft, submitNote, updateNoteContent, requestEdit, uploadToEHR, submitGrade,
+  logPhiBulkRead,
 }

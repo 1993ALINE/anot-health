@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { authAPI } from '../services/api'
-import { clearSession } from '../utils/sessionAuth'
+import { purgeClientPhiStorage, clearSession } from '../utils/sessionAuth'
 import SessionWarningModal from '../components/SessionWarningModal'
 
 /**
@@ -29,17 +29,18 @@ const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart', 'cl
 async function handleLogout() {
   try {
     if (authAPI && typeof authAPI.logout === 'function') {
-      await authAPI.logout()
+      await authAPI.logout({ reload: false })
     }
   } catch {
     /* ignore — still clear local session and redirect */
   }
   try {
     clearSession()
+    await purgeClientPhiStorage()
   } catch {
     /* ignore storage access errors */
   }
-  window.location.href = '/login'
+  window.location.replace('/login')
 }
 
 function clearSessionTimers(timeoutId, warningId, heartbeatId) {

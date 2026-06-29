@@ -1290,7 +1290,6 @@ function Admin() {
             tone: 'danger',
             onConfirm: async () => {
                 await authAPI.logout()
-                navigate('/login', { replace: true })
             },
         })
     }

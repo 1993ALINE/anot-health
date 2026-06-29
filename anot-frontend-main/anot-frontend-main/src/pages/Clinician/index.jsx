@@ -1904,7 +1904,6 @@ function Clinician() {
       confirmText: 'Log out',
       onConfirm: async () => {
         await authAPI.logout()
-        navigate('/login', { replace: true })
       },
     })
   }

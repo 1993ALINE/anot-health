@@ -1,6 +1,52 @@
 const { sendHttpError } = require('../utils/errorMessages')
 const pool = require('../config/db')
 const { auditLog, reportAuditFailure } = require('../utils/auditLogger')
+const cloudWatchAudit = require('../utils/logger')
+const { deleteAudio, dbPathToKey } = require('../services/s3Storage')
+
+const UPLOAD_PATH_RE = /^\/uploads\/[\w.\-]+$/
+
+function collectAudioPathsFromVisits(rows) {
+    const paths = []
+    for (const row of rows) {
+        const raw = row.audio_file
+        if (!raw) continue
+        for (const rel of String(raw).split(',').map((s) => s.trim()).filter(Boolean)) {
+            if (UPLOAD_PATH_RE.test(rel)) paths.push(rel)
+        }
+    }
+    return paths
+}
+
+async function purgePatientAudioFromS3(audioPaths, req, patientId) {
+    for (const rel of audioPaths) {
+        const key = dbPathToKey(rel)
+        await deleteAudio(key)
+        await auditLog(
+            req.user,
+            'PHI_AUDIO_DELETED',
+            'audio',
+            key,
+            `Deleted S3 audio during patient erasure (patient id ${patientId})`,
+            {
+                req,
+                module_key: 'clinical',
+                action_category: 'delete',
+                status: 'success',
+                metadata: { patient_id: patientId, s3_key: key, audio_path: rel },
+            },
+        ).catch(reportAuditFailure)
+        cloudWatchAudit.logDataAccess(
+            req.user.id,
+            req.user.role,
+            'audio',
+            key,
+            'DELETE',
+            req.clientIp,
+            { patient_id: patientId, reason: 'patient_erasure' },
+        )
+    }
+}
 
 // ─── GET ALL PATIENTS ─────────────────────────────────────────────────────────
 
@@ -159,6 +205,12 @@ const deletePatient = async (req, res) => {
             return res.status(404).json({ error: 'Patient not found.' })
         }
 
+        const visitAudio = await pool.query(
+            'SELECT audio_file FROM visits WHERE patient_id = $1',
+            [patientId],
+        )
+        const audioPaths = collectAudioPathsFromVisits(visitAudio.rows)
+
         const client = await pool.connect()
         try {
             await client.query('BEGIN')
@@ -177,13 +229,22 @@ const deletePatient = async (req, res) => {
             client.release()
         }
 
+        // Best-effort S3 purge after DB commit — same pattern as visit deletion.
+        await purgePatientAudioFromS3(audioPaths, req, patientId)
+
         await auditLog(
             req.user,
             'PATIENT_DELETED',
             'patient',
             String(patientId),
             `Deleted patient record (id ${patientId})`,
-            { req, module_key: 'clinical', action_category: 'delete', status: 'success' },
+            {
+                req,
+                module_key: 'clinical',
+                action_category: 'delete',
+                status: 'success',
+                metadata: { patient_id: patientId, audio_files_purged: audioPaths.length },
+            },
         ).catch(reportAuditFailure)
 
         res.status(204).send()
@@ -192,4 +253,4 @@ const deletePatient = async (req, res) => {
     }
 }
 
-module.exports = { getAllPatients, createPatient, getPatient, deletePatient }
+module.exports = { getAllPatients, createPatient, getPatient, deletePatient, collectAudioPathsFromVisits }

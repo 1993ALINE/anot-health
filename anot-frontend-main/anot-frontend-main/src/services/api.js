@@ -7,6 +7,8 @@ import {
   clearSession,
   setStoredUser,
   clearAppCaches,
+  purgeClientPhiStorage,
+  performSecureLogout,
   purgeExpiredSession,
   hasValidSession,
 } from '../utils/sessionAuth'
@@ -254,7 +256,7 @@ export const authAPI = {
     }
     return data
   },
-  logout: async () => {
+  logout: async ({ reload = true } = {}) => {
     try {
       await apiMutate('POST', '/auth/logout')
     } catch {
@@ -262,7 +264,10 @@ export const authAPI = {
     }
     clearSession()
     clearCsrfToken()
-    await clearAppCaches()
+    await purgeClientPhiStorage()
+    if (reload && typeof globalThis.location !== 'undefined') {
+      globalThis.location.replace('/login')
+    }
   },
   getCurrentUser: () => {
     const user = readStoredUser()

@@ -149,3 +149,23 @@ export async function getQueueCounts() {
     failed: queue.filter((i) => i.status === 'failed').length,
   }
 }
+
+export async function destroyOfflinePhiDatabase() {
+  if (typeof indexedDB === 'undefined') {
+    return
+  }
+  try {
+    await clearQueue()
+  } catch {
+    /* queue may not exist yet */
+  }
+  dbPromise = null
+  return new Promise((resolve) => {
+    const request = indexedDB.deleteDatabase(DB_NAME)
+    request.onsuccess = () => resolve(true)
+    request.onerror = () => resolve(false)
+    request.onblocked = () => resolve(false)
+  })
+}
+
+export { DB_NAME }

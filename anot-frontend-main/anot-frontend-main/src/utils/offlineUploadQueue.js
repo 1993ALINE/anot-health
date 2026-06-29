@@ -62,6 +62,16 @@ export function pendingUploadCount() {
   return queue.length
 }
 
+/** Wipe in-memory PHI blobs (call on logout / idle timeout). */
+export function clearPendingUploads() {
+  for (const item of queue) {
+    if (item.blob) {
+      item.blob = null
+    }
+  }
+  queue.length = 0
+}
+
 export function installOfflineUploadFlush(flushFn) {
   const run = () => {
     flushFn().catch(() => {})

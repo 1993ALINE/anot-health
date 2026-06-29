@@ -70,3 +70,33 @@ export async function clearAppCaches() {
     /* ignore */
   }
 }
+
+/**
+ * HIPAA: purge all client-side PHI caches (IndexedDB, in-memory upload queue).
+ * Call before ending a session on shared clinical workstations.
+ */
+export async function purgeClientPhiStorage() {
+  try {
+    const { destroyOfflinePhiDatabase } = await import('./offlineAudioQueue.js')
+    await destroyOfflinePhiDatabase()
+  } catch {
+    /* ignore — IndexedDB may be unavailable */
+  }
+  try {
+    const { clearPendingUploads } = await import('./offlineUploadQueue.js')
+    clearPendingUploads()
+  } catch {
+    /* ignore */
+  }
+  await clearAppCaches()
+}
+
+/**
+ * End session locally and hard-navigate to login so in-memory PHI is wiped.
+ * @param {{ redirectTo?: string }} [options]
+ */
+export async function performSecureLogout({ redirectTo = '/login' } = {}) {
+  clearSession()
+  await purgeClientPhiStorage()
+  globalThis.location.replace(redirectTo)
+}

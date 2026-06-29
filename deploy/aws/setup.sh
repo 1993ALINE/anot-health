@@ -4,10 +4,10 @@
 #
 # Provisions everything needed to run Anot on AWS and deploys both apps:
 #   1. S3 bucket for audio files (durable storage / backups).
-#   2. RDS PostgreSQL (free-tier db.t3.micro, single-AZ, 20 GB) + security group.
+#   2. RDS PostgreSQL (free-tier db.t3.micro, Multi-AZ when available, 20 GB) + security group.
 #   3. Secrets stored in SSM Parameter Store (SecureString).
 #   4. IAM roles for Elastic Beanstalk (instance profile + service role).
-#   5. Backend deployed to Elastic Beanstalk (Node.js, SingleInstance, t3.micro).
+#   5. Backend deployed to Elastic Beanstalk (Node.js, LoadBalanced, min 2 instances).
 #   6. Frontend built and deployed to S3 + CloudFront.
 #      The same CloudFront distribution also fronts the backend at /api/*, so the
 #      whole app is served over one HTTPS origin (no mixed-content, no CORS pain).
@@ -150,7 +150,7 @@ if ! aws rds describe-db-instances --db-instance-identifier "$DB_INSTANCE_ID" >/
     --db-name "$DB_NAME" \
     --vpc-security-group-ids "$DB_SG_ID" \
     --no-publicly-accessible \
-    --no-multi-az \
+    --multi-az \
     --backup-retention-period 7 \
     --storage-encrypted \
     --no-auto-minor-version-upgrade >/dev/null
@@ -162,6 +162,7 @@ else
   aws rds modify-db-instance \
     --db-instance-identifier "$DB_INSTANCE_ID" \
     --deletion-protection \
+    --multi-az \
     --apply-immediately >/dev/null 2>&1 || true
 fi
 
@@ -173,15 +174,14 @@ log "RDS endpoint: $DB_HOST"
 log "Writing secrets to SSM Parameter Store under ${SSM_PREFIX}/ ..."
 if ssm_exists "$SSM_PREFIX/JWT_SECRET"; then echo "  JWT_SECRET exists; keeping."; else ssm_put "$SSM_PREFIX/JWT_SECRET" "$(openssl rand -base64 48)"; fi
 if ssm_exists "$SSM_PREFIX/SETTINGS_ENCRYPTION_KEY"; then echo "  SETTINGS_ENCRYPTION_KEY exists; keeping."; else ssm_put "$SSM_PREFIX/SETTINGS_ENCRYPTION_KEY" "$(openssl rand -hex 32)"; fi
+ssm_put "$SSM_PREFIX/DB_PASSWORD"                      "$DB_PASSWORD"
 ssm_put "$SSM_PREFIX/ANTHROPIC_API_KEY"            "${ANTHROPIC_API_KEY:-REPLACE_ME}"
 ssm_put "$SSM_PREFIX/DEEPGRAM_WEBHOOK_SECRET"      "${DEEPGRAM_WEBHOOK_SECRET:-REPLACE_ME}"
 ssm_put "$SSM_PREFIX/DB_HOST"                      "$DB_HOST"
 [ -n "$ANTHROPIC_API_KEY" ] || warn "ANTHROPIC_API_KEY not provided — placeholder stored. Update with: aws ssm put-parameter --name ${SSM_PREFIX}/ANTHROPIC_API_KEY --type SecureString --overwrite --value sk-ant-..."
 
-JWT_SECRET="$(ssm_get "$SSM_PREFIX/JWT_SECRET")"
-SETTINGS_ENCRYPTION_KEY="$(ssm_get "$SSM_PREFIX/SETTINGS_ENCRYPTION_KEY")"
-ANTHROPIC_KEY_VAL="$(ssm_get "$SSM_PREFIX/ANTHROPIC_API_KEY")"
-DEEPGRAM_VAL="$(ssm_get "$SSM_PREFIX/DEEPGRAM_WEBHOOK_SECRET")"
+# Secrets live in SSM only — never inject into EB environment properties (HIPAA).
+# Non-secret config (DB host/name/user, USE_SSM) is set on EB below.
 
 # ── 4. IAM roles for Elastic Beanstalk ───────────────────────────────────────
 log "Ensuring Elastic Beanstalk IAM roles..."
@@ -266,10 +266,12 @@ aws elasticbeanstalk create-application-version \
 OPTS_FILE="$(mktemp)"
 cat > "$OPTS_FILE" <<JSON
 [
-  {"Namespace":"aws:elasticbeanstalk:environment","OptionName":"EnvironmentType","Value":"SingleInstance"},
+  {"Namespace":"aws:elasticbeanstalk:environment","OptionName":"EnvironmentType","Value":"LoadBalanced"},
   {"Namespace":"aws:elasticbeanstalk:environment","OptionName":"ServiceRole","Value":"$EB_SERVICE_ROLE"},
   {"Namespace":"aws:autoscaling:launchconfiguration","OptionName":"IamInstanceProfile","Value":"$EB_INSTANCE_PROFILE"},
   {"Namespace":"aws:ec2:instances","OptionName":"InstanceTypes","Value":"$EB_INSTANCE_TYPE"},
+  {"Namespace":"aws:autoscaling:asg","OptionName":"MinSize","Value":"2"},
+  {"Namespace":"aws:autoscaling:asg","OptionName":"MaxSize","Value":"4"},
   {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"NODE_ENV","Value":"production"},
   {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"USE_SSM","Value":"true"},
   {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"SSM_PREFIX","Value":"$SSM_PREFIX"},
@@ -278,12 +280,10 @@ cat > "$OPTS_FILE" <<JSON
   {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"DB_PORT","Value":"5432"},
   {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"DB_NAME","Value":"$DB_NAME"},
   {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"DB_USER","Value":"$DB_USER"},
-  {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"DB_PASSWORD","Value":"$DB_PASSWORD"},
-  {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"JWT_SECRET","Value":"$JWT_SECRET"},
+  {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"DB_SSL","Value":"true"},
   {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"JWT_EXPIRES_IN","Value":"8h"},
-  {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"SETTINGS_ENCRYPTION_KEY","Value":"$SETTINGS_ENCRYPTION_KEY"},
-  {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"ANTHROPIC_API_KEY","Value":"$ANTHROPIC_KEY_VAL"},
-  {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"DEEPGRAM_WEBHOOK_SECRET","Value":"$DEEPGRAM_VAL"}
+  {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"S3_AUDIO_BUCKET","Value":"$AUDIO_BUCKET"},
+  {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"AWS_REGION","Value":"$AWS_REGION"}
 ]
 JSON
 
@@ -435,6 +435,15 @@ cat > "$CORS_OPTS" <<JSON
 [{"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"CORS_ORIGINS","Value":"https://$DIST_DOMAIN"}]
 JSON
 aws elasticbeanstalk update-environment --environment-name "$EB_ENV" --option-settings "file://$CORS_OPTS" >/dev/null
+
+# ── 10. CloudWatch alarms (production monitoring) ─────────────────────────────
+if [ -x scripts/setup-alarms.sh ]; then
+  log "Configuring CloudWatch alarms..."
+  EB_ENV_NAME="$EB_ENV" AWS_REGION="$AWS_REGION" ./scripts/setup-alarms.sh \
+    || warn "Alarm setup failed — run scripts/setup-alarms.sh manually after confirming SNS subscription."
+else
+  warn "scripts/setup-alarms.sh not found — configure CloudWatch alarms manually."
+fi
 
 # ── Done ─────────────────────────────────────────────────────────────────────
 warn "Remember to apply DB migrations from $BACKEND_DIR/migrations/ (see README step 'Database migrations')."

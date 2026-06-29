@@ -1,4 +1,5 @@
 import PortalGuide from './PortalGuide'
+import LogoutButton from './LogoutButton'
 
 export default function PortalSidebarFooter({
   userName = 'User',
@@ -15,16 +16,20 @@ export default function PortalSidebarFooter({
 
         <div className="adm-sidebar-footer__actions" role="group" aria-label="Account actions">
           <PortalGuide role={role} className="portal-guide-trigger--footer" />
-          <button type="button" className="adm-sidebar-footer__btn adm-sidebar-footer__btn--signout" onClick={onLogout}>
-            <span className="adm-sidebar-footer__btn-ico" aria-hidden>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <polyline points="16 17 21 12 16 7" />
-                <line x1="21" y1="12" x2="9" y2="12" />
-              </svg>
-            </span>
-            Sign out
-          </button>
+          {onLogout ? (
+            <button type="button" className="adm-sidebar-footer__btn adm-sidebar-footer__btn--signout" onClick={onLogout}>
+              <span className="adm-sidebar-footer__btn-ico" aria-hidden>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <polyline points="16 17 21 12 16 7" />
+                  <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
+              </span>
+              Sign out
+            </button>
+          ) : (
+            <LogoutButton />
+          )}
         </div>
       </div>
     </div>
