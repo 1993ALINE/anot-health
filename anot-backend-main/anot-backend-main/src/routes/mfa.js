@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken')
 const router = express.Router()
 const pool = require('../config/db')
 const { protect } = require('../middleware/auth')
+const { setSessionCookie } = require('../utils/sessionCookie')
 const { auditLog, reportAuditFailure } = require('../utils/auditLogger')
 const {
   generateSecret,
@@ -93,9 +94,10 @@ router.post('/verify', protect, async (req, res) => {
       'MFA enrolled at login for PHI access',
       { req, module_key: 'authentication', status: 'success', action_category: 'authentication' }
     ).catch(reportAuditFailure)
+    const sessionToken = issueSessionToken(fresh)
+    setSessionCookie(res, sessionToken)
     return res.json({
       mfaEnabled: true,
-      token: issueSessionToken(fresh),
       user: toAuthUser(fresh),
     })
   }

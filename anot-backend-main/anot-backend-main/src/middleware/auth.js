@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken')
 const pool = require('../config/db')
+const { readSessionCookieToken } = require('../utils/sessionCookie')
 
 // ─── SESSION REVOCATION CACHE ──────────────────────────────────────────────────
 // A valid JWT alone is not enough: an account may have been deactivated, or its
@@ -37,12 +38,18 @@ function invalidateUserAuthCache(userId) {
     userCheckCache.delete(Number(userId))
 }
 
-/**
- * Extract Bearer token from Authorization header
- */
 function extractBearerToken(authHeader) {
     if (!authHeader || !authHeader.startsWith('Bearer ')) return null
     return authHeader.split(' ')[1]
+}
+
+/**
+ * Extract Bearer token from Authorization header, or HttpOnly session cookie.
+ */
+function extractAuthToken(req) {
+    const fromCookie = readSessionCookieToken(req)
+    if (fromCookie) return fromCookie
+    return extractBearerToken(req.headers.authorization)
 }
 
 /**
@@ -150,7 +157,7 @@ function sendAuthFailure(res, result) {
 // This middleware protects routes that require login
 const protect = async (req, res, next) => {
     try {
-        const token = extractBearerToken(req.headers.authorization)
+        const token = extractAuthToken(req)
         if (!token) {
             return res.status(401).json({ error: 'Not authorized. No token provided.' })
         }
@@ -209,6 +216,7 @@ module.exports = {
   restrict,
   invalidateUserAuthCache,
   extractBearerToken,
+  extractAuthToken,
   verifyJwtToken,
   validateUserAuthState,
   checkPasswordChangeRequired,

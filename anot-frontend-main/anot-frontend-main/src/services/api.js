@@ -8,6 +8,7 @@ import {
   setStoredUser,
   clearAppCaches,
   purgeExpiredSession,
+  hasValidSession,
 } from '../utils/sessionAuth'
 
 purgeExpiredSession()
@@ -64,18 +65,16 @@ export function isLikelyNetworkFailure(err) {
 const BASE_URL = API_BASE
 
 /**
- * Get auth token from session storage (1h TTL; cleared when browser closes).
+ * @deprecated Token is HttpOnly cookie — use hasValidSession() instead.
  */
 const getAuthToken = () => getToken()
 /**
  * Build request headers for API calls.
+ * Session JWT is sent via HttpOnly cookie (credentials: include).
+ * Bearer Authorization is only added when explicitly passed in extraHeaders (login gates).
  */
 function buildRequestHeaders(includeAuth = true, extraHeaders = {}) {
   const h = { 'Content-Type': 'application/json', ...extraHeaders }
-  if (includeAuth) {
-    const token = getAuthToken()
-    if (token) {h['Authorization'] = `Bearer ${token}`}
-  }
   return h
 }
 
@@ -224,11 +223,9 @@ export const authAPI = {
       includeAuth: false,
       body: { email, password },
     })
-    // Only persist a session when the server issued a real token. Gated logins
-    // (e.g. requirePhiTraining / requirePasswordChange) return a temporaryToken
-    // instead — the caller drives the follow-up step before a session exists.
-    if (data.token && data.user) {
-      setSession(data.token, data.user)
+    // Persist session when login completes (HttpOnly cookie set by server).
+    if (data.user && !data.temporaryToken && !data.requireMfa && !data.requirePhiTraining && !data.requirePasswordChange) {
+      setSession(data.user)
     }
     return data
   },
@@ -242,44 +239,42 @@ export const authAPI = {
       body: { temporaryToken },
     })
     // Only persist a full session when no further login gates remain.
-    if (data.token && data.user && !data.enrollmentRequired && !data.requireMfa) {
-      setSession(data.token, data.user)
+    if (data.user && !data.enrollmentRequired && !data.requireMfa && !data.temporaryToken) {
+      setSession(data.user)
     }
     return data
   },
-  verifyMfaLogin: async (temporaryToken, token) => {
+  verifyMfaLogin: async (temporaryToken, token, recoveryCode) => {
     const data = await apiMutate('POST', '/auth/verify-mfa', {
       includeAuth: false,
-      body: { temporaryToken, token },
+      body: { temporaryToken, token, recoveryCode },
     })
-    if (data.token && data.user) {
-      setSession(data.token, data.user)
+    if (data.user) {
+      setSession(data.user)
     }
     return data
   },
   logout: async () => {
-    const t = getAuthToken()
-    const authHeaders = headers()
+    try {
+      await apiMutate('POST', '/auth/logout')
+    } catch {
+      /* ignore — clear local state regardless */
+    }
     clearSession()
     clearCsrfToken()
     await clearAppCaches()
-    if (t) {
-      try {
-        await apiMutate('POST', '/auth/logout', { extraHeaders: authHeaders })
-      } catch {
-        /* ignore — local session already cleared */
-      }
-    }
   },
   getCurrentUser: () => {
     const user = readStoredUser()
     return Object.keys(user).length ? user : null
   },
-  isLoggedIn: () => !!getAuthToken(),
+  isLoggedIn: () => hasValidSession(),
   /** Validates the session and refreshes cached user from the server. */
   getMe: async () => {
     const data = await apiFetch('/auth/me')
-    if (data.user && getAuthToken()) { setStoredUser(data.user) }
+    if (data.user) {
+      setSession(data.user)
+    }
     return data
   },
   updateMe: async ({ name, email, phone, avatar_data_url, personal_info }) => {
@@ -322,8 +317,8 @@ export const mfaAPI = {
       extraHeaders: { Authorization: `Bearer ${temporaryToken}` },
       body: { token },
     })
-    if (data.token && data.user) {
-      setSession(data.token, data.user)
+    if (data.user) {
+      setSession(data.user)
     }
     return data
   },

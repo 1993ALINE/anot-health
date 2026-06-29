@@ -9,7 +9,9 @@ const cloudWatchAudit = require('../utils/logger')
 const { ensureUserProfileSchema } = require('../utils/ensureUserProfileSchema')
 const { sendHttpError } = require('../utils/errorMessages')
 const { incrementTokenVersion } = require('../utils/tokenVersion')
-const { verifyTotp, resolveMfaSecret, loginRequiresMfa } = require('../services/mfaService')
+const { verifyTotp, resolveMfaSecret, loginRequiresMfa, hashRecoveryCode, verifyRecoveryCode } = require('../services/mfaService')
+const { setSessionCookie, clearSessionCookie } = require('../utils/sessionCookie')
+const { isLocked, lockoutMessage, recordFailedLogin, resetFailedLogins } = require('../services/accountLockout')
 
 function roleToStaffModule(role) {
     const m = {
@@ -57,7 +59,7 @@ const generateTemporaryToken = (user, claim, expiresIn = '15m') => {
 }
 
 /** Issue full session or the next mandatory gate after password verification. */
-function buildPostPasswordLoginResponse(user, req) {
+function buildPostPasswordLoginResponse(user, req, res) {
     if (user.force_password_change) {
         const temporaryToken = generateTemporaryToken(user, 'require_password_change')
         void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_PASSWORD_CHANGE_REQUIRED', 'auth', String(user.id), 'Login requires password change', { req, module_key: 'authentication', status: 'warning', action_category: 'authentication' }).catch(reportAuditFailure)
@@ -135,20 +137,30 @@ function buildPostPasswordLoginResponse(user, req) {
     }
 
     const token = generateToken(user)
+    setSessionCookie(res, token)
     void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_SUCCESS', 'auth', String(user.id), 'Signed in successfully', { req, module_key: 'authentication', status: 'success', action_category: 'authentication' }).catch(reportAuditFailure)
     cloudWatchAudit.logLogin(user.id, user.email, user.role, req.clientIp, 'success')
     return {
         status: 200,
         body: {
             message: 'Login successful',
-            token,
             user: toAuthUser(user),
         },
     }
 }
 
+/** Issue full session: HttpOnly cookie + user payload (no token in JSON body). */
+function respondFullSession(res, user, extra = {}) {
+    const token = generateToken(user)
+    setSessionCookie(res, token)
+    return res.status(200).json({
+        message: extra.message || 'Login successful',
+        user: toAuthUser(user),
+        ...extra,
+    })
+}
+
 // Shape of the user object returned to the client on a successful session start.
-// Shared by login and the PHI-training acknowledgment so both stay in sync.
 const toAuthUser = (user) => ({
     id:        user.id,
     name:      user.name,
@@ -208,7 +220,13 @@ const login = async (req, res) => {
         if (role && user.role !== role) {
             void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_FAILED', 'auth', String(user.id), 'Authentication failed', { req, module_key: 'authentication', status: 'failed', action_category: 'authentication', metadata: { stage: 'role_mismatch' } }).catch(reportAuditFailure)
             cloudWatchAudit.logLogin(user.id, attemptedEmail, user.role, req.clientIp, 'failure')
+            await recordFailedLogin(user.id)
             return res.status(401).json(INVALID)
+        }
+
+        if (isLocked(user)) {
+            void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_FAILED', 'auth', String(user.id), 'Account locked', { req, module_key: 'authentication', status: 'failed', action_category: 'authentication', metadata: { stage: 'locked' } }).catch(reportAuditFailure)
+            return res.status(429).json({ error: lockoutMessage(user) })
         }
 
         const passwordMatch = await bcrypt.compare(password, user.password)
@@ -216,11 +234,17 @@ const login = async (req, res) => {
         if (!passwordMatch) {
             void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_FAILED', 'auth', String(user.id), 'Authentication failed', { req, module_key: 'authentication', status: 'failed', action_category: 'authentication', metadata: { stage: 'password' } }).catch(reportAuditFailure)
             cloudWatchAudit.logLogin(user.id, attemptedEmail, user.role, req.clientIp, 'failure')
+            const lockState = await recordFailedLogin(user.id)
+            if (lockState?.locked_until && new Date(lockState.locked_until) > new Date()) {
+                return res.status(429).json({ error: lockoutMessage({ locked_until: lockState.locked_until }) })
+            }
             return res.status(401).json(INVALID)
         }
 
+        await resetFailedLogins(user.id)
+
         // Pre-session gates: forced password change → PHI training → MFA → full session.
-        const { status, body } = buildPostPasswordLoginResponse(user, req)
+        const { status, body } = buildPostPasswordLoginResponse(user, req, res)
         return res.status(status).json(body)
     } catch (err) {
         sendHttpError(res, 500, err, { context: 'auth.login', req })
@@ -325,10 +349,10 @@ const acknowledgePhiTraining = async (req, res) => {
         }
 
         const token = generateToken(fresh)
+        setSessionCookie(res, token)
 
         res.status(200).json({
             message: 'PHI training acknowledged.',
-            token,
             user: toAuthUser(fresh),
         })
     } catch (err) {
@@ -561,6 +585,7 @@ const logout = async (req, res) => {
         const emailRow = await pool.query('SELECT email FROM users WHERE id = $1', [req.user.id])
         cloudWatchAudit.logLogout(req.user.id, emailRow.rows[0]?.email || null, req.clientIp)
         clearCsrfCookie(res)
+        clearSessionCookie(res)
         res.status(204).send()
     } catch (err) {
         sendHttpError(res, 500, err, { context: 'auth.logout', req })
@@ -575,9 +600,9 @@ const verifyMfaLogin = async (req, res) => {
     try {
         await ensureUserProfileSchema()
 
-        const { temporaryToken, token: totpCode } = req.body || {}
-        if (!temporaryToken || !totpCode) {
-            return res.status(400).json({ error: 'MFA token and authenticator code are required.' })
+        const { temporaryToken, token: totpCode, recoveryCode } = req.body || {}
+        if (!temporaryToken || (!totpCode && !recoveryCode)) {
+            return res.status(400).json({ error: 'MFA token and authenticator or recovery code are required.' })
         }
 
         let decoded
@@ -601,7 +626,14 @@ const verifyMfaLogin = async (req, res) => {
         }
 
         const secret = resolveMfaSecret(user)
-        if (!secret || !verifyTotp(secret, totpCode)) {
+        let mfaOk = false
+        if (recoveryCode) {
+            mfaOk = await verifyRecoveryCode(user, recoveryCode, pool)
+        } else if (secret && verifyTotp(secret, totpCode)) {
+            mfaOk = true
+        }
+
+        if (!mfaOk) {
             void auditLog(
                 { id: user.id, name: user.name, role: user.role },
                 'MFA_LOGIN_FAILED',
@@ -623,11 +655,11 @@ const verifyMfaLogin = async (req, res) => {
         ).catch(reportAuditFailure)
 
         const sessionToken = generateToken(user)
+        setSessionCookie(res, sessionToken)
         cloudWatchAudit.logLogin(user.id, user.email, user.role, req.clientIp, 'success')
 
         res.status(200).json({
             message: 'MFA verified. Login successful.',
-            token: sessionToken,
             user: toAuthUser(user),
         })
     } catch (err) {

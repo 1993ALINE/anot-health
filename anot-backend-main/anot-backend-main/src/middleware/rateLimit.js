@@ -4,6 +4,7 @@ const rateLimit = require('express-rate-limit')
 
 let loginLimiter = null
 let apiLimiter = null
+let mfaVerifyLimiter = null
 let redisClient = null
 
 const PUBLIC_API_PATHS = new Set([
@@ -76,6 +77,20 @@ function createLoginLimiter(store) {
   })
 }
 
+function createMfaVerifyLimiter(store) {
+  const windowMs = parsePositiveInt(process.env.RATE_LIMIT_MFA_WINDOW_MS, 15 * 60 * 1000)
+  const max = parsePositiveInt(process.env.RATE_LIMIT_MFA_MAX, 10)
+  return rateLimit({
+    ...buildLimiterOptions({ windowMs, max }, store),
+    skipSuccessfulRequests: true,
+    message: { error: 'Too many MFA attempts. Please try again later.' },
+    handler(req, res, _next, options) {
+      console.warn(`[rate-limit] MFA verify limit exceeded: ${req.ip}`)
+      res.status(options.statusCode).json(options.message)
+    },
+  })
+}
+
 function createApiLimiter(store) {
   const cfg = getRateLimitConfig().api
 
@@ -121,6 +136,7 @@ async function initRateLimiters() {
   const store = await createRedisStore('anot:rl:')
   loginLimiter = createLoginLimiter(store)
   apiLimiter = createApiLimiter(store)
+  mfaVerifyLimiter = createMfaVerifyLimiter(store)
   if (store) {
     console.log('[rate-limit] Using Redis-backed rate limiting')
   } else {
@@ -132,6 +148,11 @@ async function initRateLimiters() {
 function getLoginLimiter() {
   if (!loginLimiter) { loginLimiter = createLoginLimiter(null) }
   return loginLimiter
+}
+
+function getMfaVerifyLimiter() {
+  if (!mfaVerifyLimiter) { mfaVerifyLimiter = createMfaVerifyLimiter(null) }
+  return mfaVerifyLimiter
 }
 
 function getApiLimiter() {
@@ -147,4 +168,5 @@ module.exports = {
   initRateLimiters,
   get loginLimiter() { return getLoginLimiter() },
   get apiLimiter() { return getApiLimiter() },
+  get mfaVerifyLimiter() { return getMfaVerifyLimiter() },
 }

@@ -26,6 +26,31 @@ function hashRecoveryCode(code) {
   return crypto.createHash('sha256').update(String(code)).digest('hex')
 }
 
+/** Verify and consume a one-time recovery code at login. */
+async function verifyRecoveryCode(user, plainCode, pool) {
+  if (!user?.id || !plainCode) return false
+  let hashes = user.mfa_recovery_codes
+  if (typeof hashes === 'string') {
+    try { hashes = JSON.parse(hashes) } catch { return false }
+  }
+  if (!Array.isArray(hashes) || hashes.length === 0) return false
+
+  const submitted = hashRecoveryCode(String(plainCode).trim().toUpperCase())
+  const idx = hashes.findIndex((h) => h === submitted)
+  if (idx < 0) return false
+
+  const remaining = hashes.filter((_, i) => i !== idx)
+  await pool.query(
+    'UPDATE users SET mfa_recovery_codes = $1 WHERE id = $2',
+    [JSON.stringify(remaining), user.id],
+  )
+  await pool.query(
+    'INSERT INTO mfa_recovery_code_usage (user_id, code_hash) VALUES ($1, $2)',
+    [user.id, submitted],
+  )
+  return true
+}
+
 /** RFC 6238 TOTP verification against the user's base32 secret. */
 function verifyTotp(secret, token) {
   if (!secret || !/^\d{6}$/.test(String(token))) {
@@ -106,6 +131,7 @@ module.exports = {
   generateSecret,
   generateRecoveryCodes,
   hashRecoveryCode,
+  verifyRecoveryCode,
   verifyTotp,
   PHI_ROLES,
   adminRequiresMfa,

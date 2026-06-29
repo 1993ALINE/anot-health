@@ -122,9 +122,9 @@ The platform is ready for use with real doctors and patient data.
 
 - [ ] Confirm executed BAA PDFs (AWS, Deepgram, Anthropic) are stored in the compliance file
 - [ ] Replace the governing-law placeholder in TERMS_OF_SERVICE.md and obtain legal review
-- [ ] Apply the S3 audio lifecycle rule (90-day expiry) so the retention promise holds true
-- [ ] Add per-account lockout after repeated failed attempts
-- [ ] Add magic-byte file upload validation
-- [ ] Implement per-patient data deletion endpoint
+- [x] Apply the S3 audio lifecycle rule (90-day expiry) so the retention promise holds true
+- [x] Add per-account lockout after repeated failed attempts
+- [x] Add magic-byte file upload validation
+- [x] Implement per-patient data deletion endpoint
 - [ ] Set environment-specific SENTRY_DSN
-- [ ] Add outbound rate limiting/concurrency caps for Deepgram and Anthropic
+- [x] Add outbound rate limiting/concurrency caps for Deepgram and Anthropic

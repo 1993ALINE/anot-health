@@ -1,66 +1,54 @@
-/** Session-scoped auth storage with 1h TTL (interim until HttpOnly cookies). */
+/** HttpOnly cookie session — user profile cached client-side; JWT never in JS storage. */
 
-const TOKEN_KEY = 'token'
 const USER_KEY = 'user'
-const EXPIRY_KEY = 'token_expires_at'
-const SESSION_TTL_MS = 60 * 60 * 1000
+const SESSION_ACTIVE_KEY = 'session_active'
 
 function clearLegacyLocalStorage() {
   try {
-    localStorage.removeItem(TOKEN_KEY)
-    localStorage.removeItem(USER_KEY)
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+    sessionStorage.removeItem('token')
+    sessionStorage.removeItem('token_expires_at')
   } catch {
     /* ignore */
   }
 }
 
-/** Remove expired session; migrate away from legacy localStorage tokens. */
 export function purgeExpiredSession() {
   clearLegacyLocalStorage()
-  try {
-    const expiry = sessionStorage.getItem(EXPIRY_KEY)
-    if (expiry && Date.now() > Number(expiry)) {
-      clearSession()
-    }
-  } catch {
-    /* ignore */
-  }
 }
 
-export function setSession(token, user) {
-  sessionStorage.setItem(TOKEN_KEY, token)
+export function setSession(user) {
+  if (!user) return
   sessionStorage.setItem(USER_KEY, JSON.stringify(user))
-  sessionStorage.setItem(EXPIRY_KEY, String(Date.now() + SESSION_TTL_MS))
+  sessionStorage.setItem(SESSION_ACTIVE_KEY, '1')
   clearLegacyLocalStorage()
 }
 
 export function clearSession() {
-  sessionStorage.removeItem(TOKEN_KEY)
   sessionStorage.removeItem(USER_KEY)
-  sessionStorage.removeItem(EXPIRY_KEY)
+  sessionStorage.removeItem(SESSION_ACTIVE_KEY)
   clearLegacyLocalStorage()
 }
 
+/** @deprecated Auth token is HttpOnly cookie — not readable from JS. */
 export function getToken() {
-  purgeExpiredSession()
-  return sessionStorage.getItem(TOKEN_KEY)
+  return null
 }
 
 export function getStoredUserRaw() {
-  purgeExpiredSession()
   return sessionStorage.getItem(USER_KEY)
 }
 
 export function setStoredUser(user) {
-  if (!getToken()) { return }
+  if (!hasValidSession()) return
   sessionStorage.setItem(USER_KEY, JSON.stringify(user))
 }
 
 export function hasValidSession() {
-  return !!getToken()
+  return sessionStorage.getItem(SESSION_ACTIVE_KEY) === '1' && !!getStoredUserRaw()
 }
 
-/** Clear service worker / Cache API storage on logout (PHI must not persist). */
 export async function clearAppCaches() {
   try {
     if ('caches' in globalThis) {

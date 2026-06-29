@@ -159,6 +159,10 @@ if ! aws rds describe-db-instances --db-instance-identifier "$DB_INSTANCE_ID" >/
 else
   echo "  instance already exists; ensuring it is available..."
   aws rds wait db-instance-available --db-instance-identifier "$DB_INSTANCE_ID"
+  aws rds modify-db-instance \
+    --db-instance-identifier "$DB_INSTANCE_ID" \
+    --deletion-protection \
+    --apply-immediately >/dev/null 2>&1 || true
 fi
 
 DB_HOST="$(aws rds describe-db-instances --db-instance-identifier "$DB_INSTANCE_ID" \

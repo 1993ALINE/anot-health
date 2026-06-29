@@ -144,4 +144,52 @@ const getPatient = async (req, res) => {
     }
 }
 
-module.exports = { getAllPatients, createPatient, getPatient }
+// ─── DELETE PATIENT (HIPAA right to erasure — admin only) ─────────────────────
+
+const deletePatient = async (req, res) => {
+    try {
+        const { id } = req.params
+        const patientId = parseInt(id, 10)
+        if (!Number.isFinite(patientId)) {
+            return res.status(400).json({ error: 'Invalid patient id.' })
+        }
+
+        const existing = await pool.query('SELECT id, name, mrn FROM patients WHERE id = $1', [patientId])
+        if (!existing.rows[0]) {
+            return res.status(404).json({ error: 'Patient not found.' })
+        }
+
+        const client = await pool.connect()
+        try {
+            await client.query('BEGIN')
+            const visitIds = await client.query('SELECT id FROM visits WHERE patient_id = $1', [patientId])
+            const ids = visitIds.rows.map((r) => r.id)
+            if (ids.length > 0) {
+                await client.query('DELETE FROM notes WHERE visit_id = ANY($1::int[])', [ids])
+                await client.query('DELETE FROM visits WHERE patient_id = $1', [patientId])
+            }
+            await client.query('DELETE FROM patients WHERE id = $1', [patientId])
+            await client.query('COMMIT')
+        } catch (txErr) {
+            await client.query('ROLLBACK')
+            throw txErr
+        } finally {
+            client.release()
+        }
+
+        await auditLog(
+            req.user,
+            'PATIENT_DELETED',
+            'patient',
+            String(patientId),
+            `Deleted patient record (id ${patientId})`,
+            { req, module_key: 'clinical', action_category: 'delete', status: 'success' },
+        ).catch(reportAuditFailure)
+
+        res.status(204).send()
+    } catch (err) {
+        sendHttpError(res, 500, err, { context: 'patient.delete', req })
+    }
+}
+
+module.exports = { getAllPatients, createPatient, getPatient, deletePatient }

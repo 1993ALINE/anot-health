@@ -1,5 +1,6 @@
 ﻿const fs = require('fs')
 const path = require('path')
+const { withOutboundSlot } = require('../utils/outboundConcurrency')
 const { loadAiSettings, useDeepgram, defaultRuntimeSettings } = require('./aiSettings')
 const { isReachableWebhookUrl } = require('../utils/webhookReachability')
 
@@ -23,7 +24,7 @@ async function fetchWithTimeout(url, options, timeoutMs) {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
   try {
-    return await fetch(url, { ...options, signal: controller.signal })
+    return await withOutboundSlot(() => fetch(url, { ...options, signal: controller.signal }))
   } catch (err) {
     if (err?.name === 'AbortError') {
       const e = new Error(`Deepgram request timed out after ${timeoutMs}ms`)

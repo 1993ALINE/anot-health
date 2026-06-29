@@ -4,7 +4,7 @@ const router = express.Router()
 const { login, register, getMe, updateMe, changePassword, logout, acknowledgePhiTraining, verifyMfaLogin } = require('../controllers/authController')
 const { protect, restrict } = require('../middleware/auth')
 const { loadAdminPortalModuleKeys } = require('../middleware/adminPortalModules')
-const { loginLimiter } = require('../middleware/rateLimit')
+const { loginLimiter, mfaVerifyLimiter } = require('../middleware/rateLimit')
 
 // Slightly stricter on password change since the actor is already authenticated
 // (mostly to slow down a stolen-token brute force of the *current* password).
@@ -26,7 +26,7 @@ router.post('/login', loginLimiter, login)
 router.post('/acknowledge-phi-training', loginLimiter, acknowledgePhiTraining)
 
 // POST /api/auth/verify-mfa — completes the MFA gate after password verification.
-router.post('/verify-mfa', loginLimiter, verifyMfaLogin)
+router.post('/verify-mfa', mfaVerifyLimiter, verifyMfaLogin)
 
 // POST /api/auth/register (admin only)
 router.post('/register', protect, loadAdminPortalModuleKeys, restrict('admin', 'super_admin'), register)

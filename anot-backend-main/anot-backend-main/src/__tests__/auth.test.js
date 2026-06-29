@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken')
 const {
   extractBearerToken,
+  extractAuthToken,
   verifyJwtToken,
   validateUserAuthState,
   checkPasswordChangeRequired,
@@ -19,6 +20,18 @@ describe('auth helpers', () => {
   test('extractBearerToken returns null when header missing', () => {
     expect(extractBearerToken(undefined)).toBeNull()
     expect(extractBearerToken('Basic xyz')).toBeNull()
+  })
+
+  test('extractAuthToken prefers HttpOnly session cookie over Bearer', () => {
+    const req = {
+      cookies: { anot_session: 'cookie-jwt' },
+      headers: { authorization: 'Bearer header-jwt' },
+    }
+    expect(extractAuthToken(req)).toBe('cookie-jwt')
+  })
+
+  test('extractAuthToken falls back to Bearer when no cookie', () => {
+    expect(extractAuthToken({ cookies: {}, headers: { authorization: 'Bearer abc' } })).toBe('abc')
   })
 
   test('verifyJwtToken rejects expired tokens', () => {

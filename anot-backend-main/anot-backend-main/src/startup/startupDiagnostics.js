@@ -232,6 +232,18 @@ async function runStartupDiagnostics(opts = {}) {
     throw new Error('MFA_BYPASS not allowed in production')
   }
 
+  if (process.env.NODE_ENV === 'production') {
+    const encKey = process.env.SETTINGS_ENCRYPTION_KEY?.trim()
+    if (!encKey || encKey.length < 32) {
+      throw new Error(
+        'SETTINGS_ENCRYPTION_KEY must be set in production (≥32 chars). Store in SSM /anot/prod/SETTINGS_ENCRYPTION_KEY.',
+      )
+    }
+    if (!process.env.SENTRY_DSN?.trim()) {
+      console.warn('[startup] ⚠ SENTRY_DSN not set — error monitoring disabled in production.')
+    }
+  }
+
   console.log('[startup] ✅ Environment validation passed')
 }
 
