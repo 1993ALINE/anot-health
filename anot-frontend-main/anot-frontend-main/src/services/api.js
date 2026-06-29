@@ -67,19 +67,19 @@ const BASE_URL = API_BASE
 /**
  * @deprecated Token is HttpOnly cookie — use hasValidSession() instead.
  */
-const getAuthToken = () => getToken()
+const _getAuthToken = () => getToken()
 /**
  * Build request headers for API calls.
  * Session JWT is sent via HttpOnly cookie (credentials: include).
  * Bearer Authorization is only added when explicitly passed in extraHeaders (login gates).
  */
-function buildRequestHeaders(includeAuth = true, extraHeaders = {}) {
+function buildRequestHeaders(_includeAuth = true, extraHeaders = {}) {
   const h = { 'Content-Type': 'application/json', ...extraHeaders }
   return h
 }
 
 /** @deprecated Use buildRequestHeaders — kept for existing call sites. */
-const headers = buildRequestHeaders
+const _headers = buildRequestHeaders
 
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 

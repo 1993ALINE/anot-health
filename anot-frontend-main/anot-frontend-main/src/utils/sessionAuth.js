@@ -19,7 +19,9 @@ export function purgeExpiredSession() {
 }
 
 export function setSession(user) {
-  if (!user) return
+  if (!user) {
+    return
+  }
   sessionStorage.setItem(USER_KEY, JSON.stringify(user))
   sessionStorage.setItem(SESSION_ACTIVE_KEY, '1')
   clearLegacyLocalStorage()
@@ -41,7 +43,9 @@ export function getStoredUserRaw() {
 }
 
 export function setStoredUser(user) {
-  if (!hasValidSession()) return
+  if (!hasValidSession()) {
+    return
+  }
   sessionStorage.setItem(USER_KEY, JSON.stringify(user))
 }
 
