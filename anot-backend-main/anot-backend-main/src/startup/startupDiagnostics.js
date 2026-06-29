@@ -228,6 +228,10 @@ async function runStartupDiagnostics(opts = {}) {
     throw new Error(envCheck.message)
   }
 
+  if (process.env.NODE_ENV === 'production' && process.env.MFA_BYPASS) {
+    throw new Error('MFA_BYPASS not allowed in production')
+  }
+
   console.log('[startup] ✅ Environment validation passed')
 }
 

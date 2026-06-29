@@ -80,13 +80,7 @@ function isMfaFullyEnrolled(user) {
   return isMfaEnabledFlag(user?.mfa_enabled) && userHasStoredMfaSecret(user)
 }
 
-function isMfaBypassEnabled() {
-  const v = process.env.MFA_BYPASS
-  return v === 'true' || v === '1'
-}
-
 function loginRequiresMfa(user) {
-  if (isMfaBypassEnabled()) return false
   const hasPhi = PHI_ROLES.has(user?.role)
   if (!hasPhi) return false
   if (!isMfaFullyEnrolled(user)) return 'ENROLLMENT_REQUIRED'

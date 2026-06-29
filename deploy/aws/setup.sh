@@ -102,6 +102,12 @@ aws s3api put-public-access-block --bucket "$AUDIO_BUCKET" \
 aws s3api put-bucket-encryption --bucket "$AUDIO_BUCKET" \
   --server-side-encryption-configuration \
   '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}' >/dev/null
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+aws s3api put-bucket-lifecycle-configuration \
+  --bucket "$AUDIO_BUCKET" \
+  --lifecycle-configuration "file://${SCRIPT_DIR}/s3-audio-lifecycle.json" \
+  --region "$AWS_REGION" >/dev/null
+log "Applied 90-day audio lifecycle policy to s3://$AUDIO_BUCKET"
 
 # ── 2. RDS PostgreSQL + security group ───────────────────────────────────────
 log "Ensuring RDS security group '$DB_SG_NAME'..."
@@ -145,7 +151,7 @@ if ! aws rds describe-db-instances --db-instance-identifier "$DB_INSTANCE_ID" >/
     --vpc-security-group-ids "$DB_SG_ID" \
     --no-publicly-accessible \
     --no-multi-az \
-    --backup-retention-period 0 \
+    --backup-retention-period 7 \
     --storage-encrypted \
     --no-auto-minor-version-upgrade >/dev/null
   log "Waiting for RDS to become available (this can take ~5-10 minutes)..."
