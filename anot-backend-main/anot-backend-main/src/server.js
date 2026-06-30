@@ -5,7 +5,7 @@
 // are deferred into bootstrap() below — after secrets are in place. See
 // src/config/loadSecrets.js for the full rationale.
 const loadSecrets = require('./config/loadSecrets')
-const { runStartupDiagnostics } = require('./startup/startupDiagnostics')
+const { validateStartupConfig } = require('./startup/startupDiagnostics')
 
 // ─── PROCESS-LEVEL ERROR HANDLERS (register before bootstrap) ─────────────────
 // Log fatal async errors so EB/CloudWatch captures the cause instead of a silent
@@ -36,18 +36,19 @@ async function bootstrap() {
 
   const Sentry       = require('@sentry/node')
   const express      = require('express')
+  const compression  = require('compression')
   const cors         = require('cors')
   const helmet       = require('helmet')
   const cookieParser = require('cookie-parser')
   const { initRateLimiters, getRateLimitConfig } = require('./middleware/rateLimit')
   const errorHandler = require('./middleware/errorHandler')
 
-  await runStartupDiagnostics({ secretsResult })
+  await validateStartupConfig({ secretsResult })
 
   // ./config/db opens the PostgreSQL Pool the moment it is required, so this
   // line must stay AFTER await loadSecrets() and env validation above.
-  const { verifyDatabaseConnection } = require('./config/db')
-  await verifyDatabaseConnection()
+  const pool = require('./config/db')
+  await pool.verifyDatabaseConnection()
 
   const loggingMiddleware = require('./middleware/logging')
   const { initCloudWatch } = require('./utils/logger')
@@ -57,6 +58,24 @@ async function bootstrap() {
   const { encryptPlaintextMfaSecrets } = require('./startup/encryptMfaSecrets')
 
   const app = express()
+
+  // ─── HEALTH CHECK (first — no auth, CSRF, or rate limiting) ────────────────
+  // EB enhanced health and CloudFront probes hit these before the app is fully warm.
+
+  let lastDbHealth = { ok: true, checkedAt: Date.now() }
+
+  app.get('/api/health', (_req, res) => {
+    res.status(200).json({
+      status: 'healthy',
+      db: lastDbHealth.ok ? 'ok' : 'degraded',
+      uptime: Math.floor(process.uptime()),
+    })
+  })
+
+  app.get('/', (_req, res) => {
+    res.status(200).json({ status: 'healthy' })
+  })
+
   const { correlationIdMiddleware } = require('./middleware/correlationId')
   app.use(correlationIdMiddleware)
 
@@ -77,6 +96,7 @@ async function bootstrap() {
 
   // ─── SECURITY HEADERS ────────────────────────────────────────────────────────
 
+  app.use(compression())
   app.use(helmet({
     contentSecurityPolicy: {
       directives: {
@@ -208,16 +228,6 @@ async function bootstrap() {
   app.use('/api/webhooks', require('./routes/webhooks'))
   app.use('/api', csrfProtection)
 
-  // ─── HEALTH CHECK ────────────────────────────────────────────────────────────
-
-  app.get('/', (req, res) => {
-    res.json({ status: 'ok' })
-  })
-
-  app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok' })
-  })
-
   // ─── ROUTES ──────────────────────────────────────────────────────────────────
   app.use('/api', require('./routes/openapi'))
 
@@ -300,6 +310,45 @@ async function bootstrap() {
       // shipping is disabled or AWS isn't configured (e.g. Railway).
       initCloudWatch().catch((err) => console.error('[CloudWatch] Init failed:', err.message))
     })
+
+    // Periodic DB health probe — keeps lastDbHealth fresh for /api/health.
+    const HEALTH_CHECK_INTERVAL_MS = parseInt(process.env.HEALTH_CHECK_INTERVAL_MS || '60000', 10)
+    const healthTimer = setInterval(async () => {
+      try {
+        await pool.query('SELECT 1 AS ok')
+        lastDbHealth = { ok: true, checkedAt: Date.now() }
+      } catch (err) {
+        lastDbHealth = { ok: false, checkedAt: Date.now() }
+        console.error('[health] Periodic database check failed:', err.message)
+      }
+    }, HEALTH_CHECK_INTERVAL_MS)
+    if (typeof healthTimer.unref === 'function') healthTimer.unref()
+
+    let shuttingDown = false
+    const gracefulShutdown = (signal) => {
+      if (shuttingDown) return
+      shuttingDown = true
+      console.log(`[shutdown] Received ${signal} — closing HTTP server and DB pool…`)
+      clearInterval(healthTimer)
+      server.close(() => {
+        pool.end()
+          .then(() => {
+            console.log('[shutdown] Clean exit')
+            process.exit(0)
+          })
+          .catch((err) => {
+            console.error('[shutdown] Pool close error:', err.message)
+            process.exit(1)
+          })
+      })
+      setTimeout(() => {
+        console.error('[shutdown] Forced exit after 30s')
+        process.exit(1)
+      }, 30000).unref()
+    }
+
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'))
 
     server.on('error', (err) => {
       console.error('[FATAL] Server listen error:', err.message)

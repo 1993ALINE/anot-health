@@ -69,9 +69,8 @@ async function main() {
     const upd = await pool.query(
       `UPDATE users
           SET mfa_enabled = false,
-              mfa_secret = NULL,
-              mfa_secret_encrypted = NULL,
-              mfa_recovery_codes = '[]'::jsonb
+              mfa_method = NULL,
+              mfa_destination = NULL
         WHERE role = ANY($1::text[])`,
       [PHI_ROLES],
     )
@@ -88,14 +87,14 @@ async function main() {
     const stillEnabled = await pool.query(
       `SELECT COUNT(*)::int AS n FROM users WHERE mfa_enabled = true`,
     )
-    const leftoverSecrets = await pool.query(
+    const leftoverDest = await pool.query(
       `SELECT COUNT(*)::int AS n
          FROM users
-        WHERE mfa_secret IS NOT NULL OR mfa_secret_encrypted IS NOT NULL`,
+        WHERE mfa_destination IS NOT NULL`,
     )
 
     console.log(`Users with mfa_enabled=true: ${stillEnabled.rows[0].n}`)
-    console.log(`Users with MFA secrets remaining: ${leftoverSecrets.rows[0].n}`)
+    console.log(`Users with MFA destination remaining: ${leftoverDest.rows[0].n}`)
 
     if (stillEnabled.rows[0].n === 0) {
       console.log('VERIFY OK: all users have mfa_enabled = false')

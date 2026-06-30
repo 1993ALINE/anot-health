@@ -21,13 +21,13 @@ describe('jwtClaims', () => {
     })).toBe('enrollment')
   })
 
-  test('resolveMfaGateFromAuthResponse routes TOTP from requireMfa claim', () => {
+  test('resolveMfaGateFromAuthResponse routes code challenge from requireMfa claim', () => {
     const token = fakeJwt({ requireMfa: true })
     expect(resolveMfaGateFromAuthResponse({
       requireMfa: true,
       enrollmentRequired: false,
       temporaryToken: token,
-    })).toBe('totp')
+    })).toBe('code')
   })
 
   test('resolveMfaGateFromAuthResponse falls back to enrollmentRequired flag', () => {

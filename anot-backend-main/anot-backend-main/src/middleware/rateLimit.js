@@ -8,6 +8,7 @@ let mfaVerifyLimiter = null
 let redisClient = null
 
 const PUBLIC_API_PATHS = new Set([
+  '/health',
   '/admin/health',
 ])
 

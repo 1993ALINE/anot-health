@@ -9,7 +9,7 @@ const cloudWatchAudit = require('../utils/logger')
 const { ensureUserProfileSchema } = require('../utils/ensureUserProfileSchema')
 const { sendHttpError } = require('../utils/errorMessages')
 const { incrementTokenVersion } = require('../utils/tokenVersion')
-const { verifyTotp, resolveMfaSecret, loginRequiresMfa, hashRecoveryCode, verifyRecoveryCode } = require('../services/mfaService')
+const { loginRequiresMfa, issueAndSendCode, verifyMfaCode, maskDestination, isMfaFullyEnrolled } = require('../services/mfaService')
 const { setSessionCookie, clearSessionCookie } = require('../utils/sessionCookie')
 const { isLocked, lockoutMessage, recordFailedLogin, resetFailedLogins } = require('../services/accountLockout')
 
@@ -59,7 +59,7 @@ const generateTemporaryToken = (user, claim, expiresIn = '15m') => {
 }
 
 /** Issue full session or the next mandatory gate after password verification. */
-function buildPostPasswordLoginResponse(user, req, res) {
+async function buildPostPasswordLoginResponse(user, req, res) {
     if (user.force_password_change) {
         const temporaryToken = generateTemporaryToken(user, 'require_password_change')
         void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_PASSWORD_CHANGE_REQUIRED', 'auth', String(user.id), 'Login requires password change', { req, module_key: 'authentication', status: 'warning', action_category: 'authentication' }).catch(reportAuditFailure)
@@ -97,7 +97,7 @@ function buildPostPasswordLoginResponse(user, req, res) {
         userId: user.id,
         role: user.role,
         mfa_enabled: user.mfa_enabled,
-        hasMfaSecret: !!(user.mfa_secret_encrypted || user.mfa_secret),
+        mfa_method: user.mfa_method,
         mfaStatus,
       })
     }
@@ -120,18 +120,33 @@ function buildPostPasswordLoginResponse(user, req, res) {
     }
 
     if (mfaStatus === true) {
-        const temporaryToken = generateTemporaryToken(user, 'requireMfa', '5m')
+        const temporaryToken = generateTemporaryToken(user, 'requireMfa', '10m')
         void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_MFA_REQUIRED', 'auth', String(user.id), 'Login requires MFA verification', { req, module_key: 'authentication', status: 'warning', action_category: 'authentication' }).catch(reportAuditFailure)
         cloudWatchAudit.logLogin(user.id, user.email, user.role, req.clientIp, 'success')
+
+        let mfaDelivery = { sent: false }
+        try {
+            mfaDelivery = await issueAndSendCode(pool, user, 'login')
+        } catch (sendErr) {
+            console.error('[auth.login] MFA code send failed:', sendErr.message)
+        }
+
+        const channel = user.mfa_method === 'sms' ? 'phone' : 'email'
         return {
             status: 200,
             body: {
                 success: true,
                 userId: user.id,
                 requireMfa: true,
+                mfaRequired: true,
                 enrollmentRequired: false,
                 temporaryToken,
-                message: 'Enter your authenticator code',
+                mfaMethod: user.mfa_method,
+                mfaDestinationMasked: maskDestination(user.mfa_method, user.mfa_destination),
+                codeSent: mfaDelivery.sent === true,
+                message: mfaDelivery.sent
+                    ? `Enter the 6-digit code sent to your ${channel}.`
+                    : 'MFA is required but the verification code could not be sent. Use Resend code or contact your administrator.',
             },
         }
     }
@@ -244,7 +259,7 @@ const login = async (req, res) => {
         await resetFailedLogins(user.id)
 
         // Pre-session gates: forced password change → PHI training → MFA → full session.
-        const { status, body } = buildPostPasswordLoginResponse(user, req, res)
+        const { status, body } = await buildPostPasswordLoginResponse(user, req, res)
         return res.status(status).json(body)
     } catch (err) {
         sendHttpError(res, 500, err, { context: 'auth.login', req })
@@ -321,7 +336,7 @@ const acknowledgePhiTraining = async (req, res) => {
                 userId: fresh.id,
                 role: fresh.role,
                 mfa_enabled: fresh.mfa_enabled,
-                hasMfaSecret: !!(fresh.mfa_secret_encrypted || fresh.mfa_secret),
+                mfa_method: fresh.mfa_method,
                 mfaStatus,
             })
         }
@@ -338,13 +353,27 @@ const acknowledgePhiTraining = async (req, res) => {
         }
 
         if (mfaStatus === true) {
-            const temporaryToken = generateTemporaryToken(fresh, 'requireMfa', '5m')
+            const temporaryToken = generateTemporaryToken(fresh, 'requireMfa', '10m')
+            let mfaDelivery = { sent: false }
+            try {
+                mfaDelivery = await issueAndSendCode(pool, fresh, 'login')
+            } catch (sendErr) {
+                console.error('[auth.phiTraining] MFA code send failed:', sendErr.message)
+            }
+            const channel = fresh.mfa_method === 'sms' ? 'phone' : 'email'
             return res.status(200).json({
                 message: 'PHI training acknowledged.',
                 userId: fresh.id,
                 requireMfa: true,
+                mfaRequired: true,
                 enrollmentRequired: false,
                 temporaryToken,
+                mfaMethod: fresh.mfa_method,
+                mfaDestinationMasked: maskDestination(fresh.mfa_method, fresh.mfa_destination),
+                codeSent: mfaDelivery.sent === true,
+                infoMessage: mfaDelivery.sent
+                    ? `Enter the 6-digit code sent to your ${channel}.`
+                    : 'MFA is required but the verification code could not be sent. Use Resend code or contact your administrator.',
             })
         }
 
@@ -594,15 +623,19 @@ const logout = async (req, res) => {
 
 // ─── VERIFY MFA AT LOGIN ──────────────────────────────────────────────────────
 // Exchanges the short-lived requireMfa temporaryToken (issued after password
-// verification) for a full 1h session JWT after TOTP succeeds.
+// verification) for a full session JWT after the one-time code succeeds.
 
 const verifyMfaLogin = async (req, res) => {
     try {
         await ensureUserProfileSchema()
 
-        const { temporaryToken, token: totpCode, recoveryCode } = req.body || {}
-        if (!temporaryToken || (!totpCode && !recoveryCode)) {
-            return res.status(400).json({ error: 'MFA token and authenticator or recovery code are required.' })
+        const { temporaryToken, token, code, recoveryCode } = req.body || {}
+        const submittedCode = code || token
+        if (!temporaryToken || !submittedCode) {
+            return res.status(400).json({ error: 'MFA token and verification code are required.' })
+        }
+        if (recoveryCode) {
+            return res.status(400).json({ error: 'Recovery codes are no longer supported. Use your email or SMS code.' })
         }
 
         let decoded
@@ -621,19 +654,12 @@ const verifyMfaLogin = async (req, res) => {
         if (!user || user.status !== 'active') {
             return res.status(401).json({ error: 'Account is unavailable. Please contact your administrator.' })
         }
-        if (!user.mfa_enabled) {
+        if (!isMfaFullyEnrolled(user)) {
             return res.status(403).json({ error: 'MFA is not enabled for this account.' })
         }
 
-        const secret = resolveMfaSecret(user)
-        let mfaOk = false
-        if (recoveryCode) {
-            mfaOk = await verifyRecoveryCode(user, recoveryCode, pool)
-        } else if (secret && verifyTotp(secret, totpCode)) {
-            mfaOk = true
-        }
-
-        if (!mfaOk) {
+        const verifyResult = await verifyMfaCode(pool, user.id, 'login', submittedCode)
+        if (!verifyResult.ok) {
             void auditLog(
                 { id: user.id, name: user.name, role: user.role },
                 'MFA_LOGIN_FAILED',
@@ -642,7 +668,8 @@ const verifyMfaLogin = async (req, res) => {
                 'Invalid MFA code at login',
                 { req, module_key: 'authentication', status: 'failed', action_category: 'authentication' }
             ).catch(reportAuditFailure)
-            return res.status(401).json({ error: 'Invalid authenticator code.' })
+            const status = verifyResult.locked ? 429 : 401
+            return res.status(status).json({ error: verifyResult.error })
         }
 
         void auditLog(

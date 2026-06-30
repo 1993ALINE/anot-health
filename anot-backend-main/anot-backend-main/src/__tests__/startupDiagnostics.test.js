@@ -73,9 +73,29 @@ describe('startupDiagnostics', () => {
 
   it('runStartupDiagnostics passes with valid local env', async () => {
     process.env.NODE_ENV = 'development'
+    process.env.USE_SSM = 'false'
     process.env.JWT_SECRET = 'test-jwt-secret-at-least-32-characters-long'
     process.env.DATABASE_URL = 'postgresql://u:p@127.0.0.1:5432/anot_dev'
+    process.env.SMTP_HOST = 'smtp.example.com'
+    process.env.SMTP_USER = 'mfa@example.com'
+    process.env.SMTP_PASS = 'secret'
     await expect(runStartupDiagnostics()).resolves.toBeUndefined()
+  })
+
+  it('runStartupDiagnostics fails in production when no MFA delivery channel is configured', async () => {
+    process.env.NODE_ENV = 'production'
+    process.env.USE_SSM = 'false'
+    process.env.JWT_SECRET = 'test-jwt-secret-at-least-32-characters-long'
+    process.env.DATABASE_URL = 'postgresql://u:p@127.0.0.1:5432/anot'
+    process.env.SETTINGS_ENCRYPTION_KEY = 'a'.repeat(32)
+    delete process.env.SMTP_HOST
+    delete process.env.SMTP_USER
+    delete process.env.SMTP_PASS
+    delete process.env.SENDGRID_API_KEY
+    delete process.env.TWILIO_ACCOUNT_SID
+    delete process.env.TWILIO_AUTH_TOKEN
+    delete process.env.TWILIO_PHONE_NUMBER
+    await expect(runStartupDiagnostics()).rejects.toThrow(/No MFA delivery channel/)
   })
 
   it('runStartupDiagnostics fails when USE_SSM=true loads nothing in production', async () => {
@@ -83,6 +103,10 @@ describe('startupDiagnostics', () => {
     process.env.USE_SSM = 'true'
     process.env.JWT_SECRET = 'test-jwt-secret-at-least-32-characters-long'
     process.env.DATABASE_URL = 'postgresql://u:p@127.0.0.1:5432/anot'
+    process.env.SETTINGS_ENCRYPTION_KEY = 'a'.repeat(32)
+    process.env.SMTP_HOST = 'smtp.example.com'
+    process.env.SMTP_USER = 'mfa@example.com'
+    process.env.SMTP_PASS = 'secret'
     await expect(
       runStartupDiagnostics({ secretsResult: { loaded: [], source: 'ssm' } }),
     ).rejects.toThrow(/no parameters were loaded/)

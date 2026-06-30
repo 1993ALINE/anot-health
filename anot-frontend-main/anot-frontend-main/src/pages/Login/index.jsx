@@ -219,6 +219,7 @@ export default function Login() {
   const [passwordChangeToken, setPasswordChangeToken] = useState(null)
   const [mfaToken, setMfaToken] = useState(null)
   const [mfaEnrollmentToken, setMfaEnrollmentToken] = useState(null)
+  const [mfaChallengeMeta, setMfaChallengeMeta] = useState({ method: null, destinationMasked: null })
   const [enrollmentRequired, setEnrollmentRequired] = useState(false)
   const [csrfTokenFetched, setCsrfTokenFetched] = useState(false)
   const csrfReady = phase === 'form' && csrfTokenFetched
@@ -289,18 +290,24 @@ export default function Login() {
   const clearMfaGates = () => {
     setMfaToken(null)
     setMfaEnrollmentToken(null)
+    setMfaChallengeMeta({ method: null, destinationMasked: null })
     setEnrollmentRequired(false)
   }
 
   const openMfaEnrollment = (temporaryToken) => {
     setMfaToken(null)
+    setMfaChallengeMeta({ method: null, destinationMasked: null })
     setEnrollmentRequired(true)
     setMfaEnrollmentToken(temporaryToken)
   }
 
-  const openMfaTotp = (temporaryToken) => {
+  const openMfaCode = (temporaryToken, meta = {}) => {
     setEnrollmentRequired(false)
     setMfaEnrollmentToken(null)
+    setMfaChallengeMeta({
+      method: meta.mfaMethod || null,
+      destinationMasked: meta.mfaDestinationMasked || null,
+    })
     setMfaToken(temporaryToken)
   }
 
@@ -336,14 +343,14 @@ export default function Login() {
       return
     }
 
-    if (mfaGate === 'totp') {
+    if (mfaGate === 'code') {
       if (!data.temporaryToken) {
         setError('MFA verification is required but the server did not provide a session token. Please sign in again.')
         return
       }
       setPhiTrainingToken(null)
       setPasswordChangeToken(null)
-      openMfaTotp(data.temporaryToken)
+      openMfaCode(data.temporaryToken, data)
       return
     }
 
@@ -565,8 +572,11 @@ export default function Login() {
       {mfaToken ? (
         <MfaChallengeModal
           temporaryToken={mfaToken}
+          mfaMethod={mfaChallengeMeta.method}
+          mfaDestinationMasked={mfaChallengeMeta.destinationMasked}
           onVerified={(user) => {
             setMfaToken(null)
+            setMfaChallengeMeta({ method: null, destinationMasked: null })
             goToDashboard(user)
           }}
         />

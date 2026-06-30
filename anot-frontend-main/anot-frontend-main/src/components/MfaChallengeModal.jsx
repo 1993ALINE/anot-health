@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
-import { authAPI, isLikelyNetworkFailure } from '../services/api'
+import { authAPI, isLikelyNetworkFailure, mfaAPI } from '../services/api'
 
 /**
  * MFA verification gate at login.
- * Shown when the server responds with `requireMfa: true` after password (and
- * optional PHI training) verification. Mandatory — no dismiss without TOTP.
+ * User enters the 6-digit code sent via email or SMS.
  */
-export default function MfaChallengeModal({ temporaryToken, onVerified }) {
+export default function MfaChallengeModal({ temporaryToken, mfaMethod, mfaDestinationMasked, onVerified }) {
   const [code, setCode] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [resending, setResending] = useState(false)
   const [error, setError] = useState('')
+  const [maskedDest, setMaskedDest] = useState(mfaDestinationMasked || '')
   const dialogRef = useRef(null)
   const inputRef = useRef(null)
 
@@ -31,10 +32,27 @@ export default function MfaChallengeModal({ temporaryToken, onVerified }) {
     }
   }, [])
 
+  const channelLabel = mfaMethod === 'sms' ? 'phone' : 'email'
+
+  const handleResend = async () => {
+    setResending(true)
+    setError('')
+    try {
+      const data = await mfaAPI.sendCodeWithToken(temporaryToken)
+      if (data.destinationMasked) {
+        setMaskedDest(data.destinationMasked)
+      }
+    } catch (err) {
+      setError(err?.message || 'Could not resend code.')
+    } finally {
+      setResending(false)
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (submitting || !/^\d{6}$/.test(code.trim())) {
-      setError('Enter the 6-digit code from your authenticator app.')
+      setError('Enter the 6-digit verification code.')
       return
     }
     setSubmitting(true)
@@ -46,7 +64,7 @@ export default function MfaChallengeModal({ temporaryToken, onVerified }) {
       if (isLikelyNetworkFailure(err)) {
         setError('Cannot reach the server. Please check your connection and try again.')
       } else if (err?.status === 401) {
-        setError('Invalid code. Check your authenticator app and try again.')
+        setError('Invalid code. Check your email or phone and try again.')
         setCode('')
       } else {
         setError(err?.message || 'Verification failed. Please try again.')
@@ -74,12 +92,15 @@ export default function MfaChallengeModal({ temporaryToken, onVerified }) {
           </div>
           <div>
             <h2 id="mfa-title" style={S.title}>Two-factor authentication</h2>
-            <p style={S.subtitle}>Enter the 6-digit code from your authenticator app.</p>
+            <p style={S.subtitle}>
+              Enter the 6-digit code sent to your {channelLabel}
+              {maskedDest ? ` (${maskedDest})` : ''}.
+            </p>
           </div>
         </div>
 
         <form onSubmit={handleSubmit}>
-          <label htmlFor="mfa-code" style={S.label}>Authenticator code</label>
+          <label htmlFor="mfa-code" style={S.label}>Verification code</label>
           <input
             ref={inputRef}
             id="mfa-code"
@@ -102,6 +123,15 @@ export default function MfaChallengeModal({ temporaryToken, onVerified }) {
           {error ? (
             <p style={S.error} role="alert">{error}</p>
           ) : null}
+
+          <button
+            type="button"
+            style={S.resendBtn}
+            onClick={handleResend}
+            disabled={resending || submitting}
+          >
+            {resending ? 'Sending…' : 'Resend code'}
+          </button>
 
           <button type="submit" style={S.button} disabled={submitting || code.length !== 6}>
             {submitting ? 'Verifying…' : 'Verify and continue'}
@@ -159,9 +189,21 @@ const S = {
     fontFamily: 'ui-monospace, monospace',
   },
   error: { color: '#dc2626', fontSize: 13, margin: '12px 0 0' },
+  resendBtn: {
+    width: '100%',
+    marginTop: 16,
+    padding: '10px 16px',
+    fontSize: 14,
+    fontWeight: 500,
+    color: '#4338ca',
+    background: 'transparent',
+    border: '1px solid #c7d2fe',
+    borderRadius: 8,
+    cursor: 'pointer',
+  },
   button: {
     width: '100%',
-    marginTop: 20,
+    marginTop: 12,
     padding: '12px 16px',
     fontSize: 15,
     fontWeight: 600,

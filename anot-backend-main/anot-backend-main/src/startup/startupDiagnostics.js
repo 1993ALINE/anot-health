@@ -5,6 +5,8 @@
  * Logs actionable diagnostics to EB/CloudWatch when startup fails.
  */
 
+const { getEmailTransport, getTwilioClient } = require('../services/mfaDelivery')
+
 const REQUIRED_ENV_KEYS = ['JWT_SECRET']
 
 const PRODUCTION_REQUIRED_KEYS = [
@@ -19,6 +21,12 @@ const RECOMMENDED_SSM_KEYS = [
   'ANTHROPIC_API_KEY',
   'CORS_ORIGINS',
   'SENTRY_DSN',
+  'SMTP_HOST',
+  'SMTP_USER',
+  'SMTP_PASS',
+  'TWILIO_ACCOUNT_SID',
+  'TWILIO_AUTH_TOKEN',
+  'TWILIO_PHONE_NUMBER',
 ]
 
 const MIN_JWT_SECRET_LENGTH = 32
@@ -116,6 +124,105 @@ function validateJwtSecret() {
     }
   }
   return { ok: true }
+}
+
+function isEmailDeliveryConfigured() {
+  if (process.env.SENDGRID_API_KEY?.trim()) return true
+  const host = process.env.SMTP_HOST?.trim() || process.env.EMAIL_HOST?.trim()
+  const user = process.env.SMTP_USER?.trim() || process.env.EMAIL_USER?.trim()
+  const pass = process.env.SMTP_PASS?.trim() || process.env.EMAIL_PASSWORD?.trim()
+  return !!(host && user && pass)
+}
+
+function isSmsDeliveryConfigured() {
+  return !!(
+    process.env.TWILIO_ACCOUNT_SID?.trim() &&
+    process.env.TWILIO_AUTH_TOKEN?.trim() &&
+    process.env.TWILIO_PHONE_NUMBER?.trim()
+  )
+}
+
+/**
+ * MFA codes require at least one delivery channel. Warns when misconfigured;
+ * does not block boot unless MFA_DELIVERY_REQUIRED=true (production opt-in).
+ */
+function validateMfaDeliveryConfig() {
+  const email = isEmailDeliveryConfigured()
+  const sms = isSmsDeliveryConfigured()
+
+  if (email) {
+    console.log('[startup] MFA email delivery: configured')
+  } else {
+    console.warn(
+      '[startup] ⚠ MFA email delivery not configured — set SMTP_HOST, SMTP_USER, SMTP_PASS ' +
+        '(or EMAIL_HOST, EMAIL_USER, EMAIL_PASSWORD, or SENDGRID_API_KEY).',
+    )
+  }
+
+  if (sms) {
+    console.log('[startup] MFA SMS delivery: configured')
+  } else {
+    console.warn(
+      '[startup] ⚠ MFA SMS delivery not configured — set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER.',
+    )
+  }
+
+  if (!email && !sms) {
+    const msg =
+      'No MFA delivery channel is configured. Login MFA codes cannot be sent until email or SMS is set up.'
+    const strict = String(process.env.MFA_DELIVERY_REQUIRED || '').toLowerCase() === 'true'
+    if (strict || process.env.NODE_ENV === 'production') {
+      return { ok: false, message: msg, email, sms }
+    }
+    console.warn(`[startup] ⚠ ${msg} (Set MFA_DELIVERY_REQUIRED=false to allow boot in production without MFA delivery.)`)
+  }
+
+  return { ok: true, email, sms }
+}
+
+/** Verify SMTP credentials with a lightweight connection check (nodemailer verify). */
+async function verifySmtpConnection() {
+  if (!isEmailDeliveryConfigured()) {
+    return { ok: false, skipped: true }
+  }
+
+  const transport = getEmailTransport()
+  if (!transport) {
+    return { ok: false, message: 'Email transport could not be created from SMTP_* / EMAIL_* env vars.' }
+  }
+
+  try {
+    await transport.verify()
+    console.log('[startup] ✅ SMTP connection verified')
+    return { ok: true }
+  } catch (err) {
+    const msg = `SMTP connection failed: ${err.message}`
+    console.error(`[startup] ❌ ${msg}`)
+    return { ok: false, message: msg }
+  }
+}
+
+/** Verify Twilio credentials by fetching the account record. */
+async function verifyTwilioCredentials() {
+  if (!isSmsDeliveryConfigured()) {
+    return { ok: false, skipped: true }
+  }
+
+  const client = getTwilioClient()
+  if (!client) {
+    return { ok: false, message: 'Twilio client could not be created from TWILIO_* env vars.' }
+  }
+
+  const sid = process.env.TWILIO_ACCOUNT_SID?.trim()
+  try {
+    await client.api.accounts(sid).fetch()
+    console.log('[startup] ✅ Twilio credentials verified')
+    return { ok: true }
+  } catch (err) {
+    const msg = `Twilio credential check failed: ${err.message}`
+    console.error(`[startup] ❌ ${msg}`)
+    return { ok: false, message: msg }
+  }
 }
 
 function validateRequiredEnv() {
@@ -228,6 +335,39 @@ async function runStartupDiagnostics(opts = {}) {
     throw new Error(envCheck.message)
   }
 
+  const mfaDeliveryCheck = validateMfaDeliveryConfig()
+  if (!mfaDeliveryCheck.ok) {
+    throw new Error(mfaDeliveryCheck.message)
+  }
+
+  if (mfaDeliveryCheck.email && process.env.NODE_ENV === 'production') {
+    const smtpCheck = await verifySmtpConnection()
+    if (!smtpCheck.ok && !smtpCheck.skipped) {
+      const strict = String(process.env.MFA_DELIVERY_VERIFY_STRICT || '').toLowerCase() === 'true'
+      if (strict) {
+        throw new Error(smtpCheck.message || 'SMTP connection verification failed.')
+      }
+      console.warn(
+        `[startup] ⚠ ${smtpCheck.message || 'SMTP connection verification failed.'} ` +
+          'MFA email codes will fail until credentials are fixed. Set MFA_DELIVERY_VERIFY_STRICT=true to block boot.',
+      )
+    }
+  }
+
+  if (mfaDeliveryCheck.sms && process.env.NODE_ENV === 'production') {
+    const twilioCheck = await verifyTwilioCredentials()
+    if (!twilioCheck.ok && !twilioCheck.skipped) {
+      const strict = String(process.env.MFA_DELIVERY_VERIFY_STRICT || '').toLowerCase() === 'true'
+      if (strict) {
+        throw new Error(twilioCheck.message || 'Twilio credential verification failed.')
+      }
+      console.warn(
+        `[startup] ⚠ ${twilioCheck.message || 'Twilio credential verification failed.'} ` +
+          'MFA SMS codes will fail until credentials are fixed. Set MFA_DELIVERY_VERIFY_STRICT=true to block boot.',
+      )
+    }
+  }
+
   if (process.env.NODE_ENV === 'production' && process.env.MFA_BYPASS) {
     throw new Error('MFA_BYPASS not allowed in production')
   }
@@ -247,11 +387,20 @@ async function runStartupDiagnostics(opts = {}) {
   console.log('[startup] ✅ Environment validation passed')
 }
 
+/** Alias used by server.js — same pre-flight checks before app.listen(). */
+const validateStartupConfig = runStartupDiagnostics
+
 module.exports = {
   runStartupDiagnostics,
+  validateStartupConfig,
+  verifySmtpConnection,
+  verifyTwilioCredentials,
   validateRequiredEnv,
   validateJwtSecret,
   validateDatabaseUrlFormat,
+  validateMfaDeliveryConfig,
+  isEmailDeliveryConfigured,
+  isSmsDeliveryConfigured,
   hasDatabaseConfig,
   hasDiscreteDbCredentials,
   logRuntimeInfo,

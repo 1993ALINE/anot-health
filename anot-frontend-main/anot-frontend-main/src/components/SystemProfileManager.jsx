@@ -3,6 +3,7 @@ import { authAPI } from '../services/api'
 import { useBranding } from '../services/branding'
 import PasswordStrengthMeter from './PasswordStrengthMeter'
 import { validatePassword } from '../utils/passwordPolicy'
+import MfaSettings from '../pages/Settings/MfaSettings'
 import './systemProfileManager.css'
 
 export default function SystemProfileManager({
@@ -289,6 +290,8 @@ export default function SystemProfileManager({
           </button>
         </div>
       ) : null}
+
+      <MfaSettings showToast={showToast} />
     </div>
   )
 }

@@ -246,10 +246,10 @@ export const authAPI = {
     }
     return data
   },
-  verifyMfaLogin: async (temporaryToken, token, recoveryCode) => {
+  verifyMfaLogin: async (temporaryToken, code) => {
     const data = await apiMutate('POST', '/auth/verify-mfa', {
       includeAuth: false,
-      body: { temporaryToken, token, recoveryCode },
+      body: { temporaryToken, code },
     })
     if (data.user) {
       setSession(data.user)
@@ -311,22 +311,37 @@ export const authAPI = {
 }
 
 export const mfaAPI = {
-  setupWithToken: async (temporaryToken) =>
+  getStatus: async () => apiFetch('/mfa/status'),
+  setup: async (method, destination) =>
+    apiMutate('POST', '/mfa/setup', { body: { method, destination } }),
+  setupWithToken: async (temporaryToken, method, destination) =>
     apiMutate('POST', '/mfa/setup', {
       includeAuth: false,
       extraHeaders: { Authorization: `Bearer ${temporaryToken}` },
+      body: { method, destination },
     }),
-  verifyWithToken: async (temporaryToken, token) => {
-    const data = await apiMutate('POST', '/mfa/verify', {
+  sendCode: async (purpose = 'settings') =>
+    apiMutate('POST', '/mfa/send-code', { body: { purpose } }),
+  sendCodeWithToken: async (temporaryToken) =>
+    apiMutate('POST', '/mfa/send-code', {
       includeAuth: false,
       extraHeaders: { Authorization: `Bearer ${temporaryToken}` },
-      body: { token },
+    }),
+  verifyCode: async (code, purpose) =>
+    apiMutate('POST', '/mfa/verify-code', { body: { code, purpose } }),
+  verifyWithToken: async (temporaryToken, code) => {
+    const data = await apiMutate('POST', '/mfa/verify-code', {
+      includeAuth: false,
+      extraHeaders: { Authorization: `Bearer ${temporaryToken}` },
+      body: { code },
     })
     if (data.user) {
       setSession(data.user)
     }
     return data
   },
+  disable: async (code) =>
+    apiMutate('POST', '/mfa/disable', { body: code ? { code } : {} }),
 }
 
 // ─── USERS ────────────────────────────────────────────────────────────────────

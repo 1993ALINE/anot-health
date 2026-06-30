@@ -268,3 +268,66 @@
     transition: none;
   }
 }
+
+.pm-card--nested {
+  margin: 1.25rem 1.35rem 1.35rem;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+}
+
+.pm-header--compact {
+  padding: 1rem 1.15rem 0.85rem;
+}
+
+.pm-mfa-form {
+  padding: 0 1.35rem 1.25rem;
+}
+
+.pm-mfa-status {
+  padding: 0 1.35rem 1.25rem;
+}
+
+.pm-fieldset {
+  border: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+
+.pm-radio {
+  display: block;
+  font-size: 0.9rem;
+  color: #475569;
+  margin-bottom: 0.45rem;
+  cursor: pointer;
+}
+
+.pm-hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.pm-input--code {
+  font-family: ui-monospace, monospace;
+  letter-spacing: 0.25em;
+  text-align: center;
+  max-width: 12rem;
+}
+
+.pm-actions--inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.pm-btn--ghost {
+  background: transparent;
+  color: #4338ca;
+  border: 1px solid #c7d2fe;
+}
+
+.pm-btn--danger {
+  background: #dc2626;
+  color: #fff;
+}

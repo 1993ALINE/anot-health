@@ -115,9 +115,11 @@ function checkMfaEnrollmentRequired(user, reqPath) {
         // req.path is router-relative (/setup) when protect runs on /api/mfa routes.
         const allowed =
             reqPath.includes('/mfa/setup') ||
-            reqPath.includes('/mfa/verify') ||
+            reqPath.includes('/mfa/send-code') ||
+            reqPath.includes('/mfa/verify-code') ||
             reqPath.endsWith('/setup') ||
-            reqPath.endsWith('/verify')
+            reqPath.endsWith('/send-code') ||
+            reqPath.endsWith('/verify-code')
         if (!allowed) {
             return {
                 ok: false,
@@ -134,12 +136,18 @@ function checkMfaEnrollmentRequired(user, reqPath) {
  * Check MFA verification scope (login gate)
  */
 function checkMfaRequired(user, reqPath) {
-    if (user.requireMfa === true && !reqPath.includes('/verify-mfa')) {
-        return {
-            ok: false,
-            status: 403,
-            error: 'MFA verification required before accessing other features',
-            code: 'MFA_REQUIRED',
+    if (user.requireMfa === true) {
+        const allowed =
+            reqPath.includes('/verify-mfa') ||
+            reqPath.includes('/mfa/send-code') ||
+            reqPath.endsWith('/send-code')
+        if (!allowed) {
+            return {
+                ok: false,
+                status: 403,
+                error: 'MFA verification required before accessing other features',
+                code: 'MFA_REQUIRED',
+            }
         }
     }
     return { ok: true }

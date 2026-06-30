@@ -22,7 +22,7 @@ export function decodeJwtPayload(token) {
 /**
  * Resolve which MFA gate to show after login / PHI ack.
  * Prefer JWT claims (authoritative) over response flags.
- * @returns {'enrollment'|'totp'|null}
+ * @returns {'enrollment'|'code'|null}
  */
 export function resolveMfaGateFromAuthResponse(data) {
   if (!data?.temporaryToken && !data?.requireMfa && !data?.enrollmentRequired) {
@@ -34,13 +34,13 @@ export function resolveMfaGateFromAuthResponse(data) {
     return 'enrollment'
   }
   if (claims?.requireMfa === true) {
-    return 'totp'
+    return 'code'
   }
   if (data.enrollmentRequired === true) {
     return 'enrollment'
   }
-  if (data.requireMfa === true) {
-    return 'totp'
+  if (data.requireMfa === true || data.mfaRequired === true) {
+    return 'code'
   }
   return null
 }

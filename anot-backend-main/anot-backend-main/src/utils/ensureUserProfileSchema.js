@@ -1,5 +1,6 @@
 const { addColumnIfMissing, addIndexIfMissing } = require('./schemaDdl')
 const { invalidateUserColumnCache } = require('./userColumns')
+const { ensureMfaSchema } = require('./ensureMfaSchema')
 
 let ready = false
 
@@ -15,7 +16,9 @@ const PROFILE_COLUMNS = [
     { name: 'phi_training_acknowledged_at', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS phi_training_acknowledged_at TIMESTAMPTZ' },
     { name: 'phi_training_version', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS phi_training_version INTEGER NOT NULL DEFAULT 1' },
     { name: 'token_version', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0' },
-    { name: 'mfa_secret_encrypted', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_secret_encrypted TEXT' },
+    { name: 'mfa_enabled', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT false' },
+    { name: 'mfa_method', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_method VARCHAR(10)' },
+    { name: 'mfa_destination', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_destination TEXT' },
     { name: 'failed_login_attempts', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INT NOT NULL DEFAULT 0' },
     { name: 'locked_until', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ' },
     { name: 'last_failed_login_at', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS last_failed_login_at TIMESTAMPTZ' },
@@ -37,6 +40,7 @@ async function ensureUserProfileSchema() {
     for (const idx of PROFILE_INDEXES) {
         await addIndexIfMissing(idx.name, idx.ddl)
     }
+    await ensureMfaSchema()
     invalidateUserColumnCache()
     ready = true
 }

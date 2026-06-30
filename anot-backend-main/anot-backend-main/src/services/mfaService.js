@@ -1,110 +1,82 @@
 ﻿const crypto = require('crypto')
-const QRCode = require('qrcode')
-const { authenticator } = require('otplib')
-const { encryptString, decryptString } = require('../utils/settingsEncryption')
+const { sendMfaEmail, sendMfaSms } = require('./mfaDelivery')
 
-const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
-
-authenticator.options = { window: 1 }
-
-function generateSecret(length = 20) {
-  const bytes = crypto.randomBytes(length)
-  let secret = ''
-  for (let i = 0; i < bytes.length; i++) {
-    secret += BASE32[bytes[i] % 32]
-  }
-  return secret.slice(0, 32)
-}
-
-function generateRecoveryCodes(count = 8) {
-  return Array.from({ length: count }, () =>
-    crypto.randomBytes(5).toString('hex').toUpperCase()
-  )
-}
-
-function hashRecoveryCode(code) {
-  return crypto.createHash('sha256').update(String(code)).digest('hex')
-}
-
-/** Verify and consume a one-time recovery code at login. */
-async function verifyRecoveryCode(user, plainCode, pool) {
-  if (!user?.id || !plainCode) return false
-  let hashes = user.mfa_recovery_codes
-  if (typeof hashes === 'string') {
-    try { hashes = JSON.parse(hashes) } catch { return false }
-  }
-  if (!Array.isArray(hashes) || hashes.length === 0) return false
-
-  const submitted = hashRecoveryCode(String(plainCode).trim().toUpperCase())
-  const idx = hashes.findIndex((h) => h === submitted)
-  if (idx < 0) return false
-
-  const remaining = hashes.filter((_, i) => i !== idx)
-  await pool.query(
-    'UPDATE users SET mfa_recovery_codes = $1 WHERE id = $2',
-    [JSON.stringify(remaining), user.id],
-  )
-  await pool.query(
-    'INSERT INTO mfa_recovery_code_usage (user_id, code_hash) VALUES ($1, $2)',
-    [user.id, submitted],
-  )
-  return true
-}
-
-/** RFC 6238 TOTP verification against the user's base32 secret. */
-function verifyTotp(secret, token) {
-  if (!secret || !/^\d{6}$/.test(String(token))) {
-    return false
-  }
-  try {
-    return authenticator.verify({ token: String(token), secret: String(secret) })
-  } catch {
-    return false
-  }
-}
-
+const CODE_TTL_MS = 10 * 60 * 1000
+const MAX_ATTEMPTS = 5
 const PHI_ROLES = new Set(['clinician', 'scribe', 'qps', 'super_admin', 'admin'])
+
+function generateCode() {
+  return String(crypto.randomInt(100000, 1000000))
+}
+
+function hashCode(code) {
+  return crypto.createHash('sha256').update(String(code).trim()).digest('hex')
+}
+
+function isMfaEnabledFlag(value) {
+  return value === true || value === 't' || value === 1 || value === '1'
+}
+
+function normalizeMethod(method) {
+  const m = String(method || '').toLowerCase().trim()
+  return m === 'email' || m === 'sms' ? m : null
+}
+
+function normalizeEmail(email) {
+  return String(email || '').toLowerCase().trim()
+}
+
+function normalizePhone(phone) {
+  const digits = String(phone || '').replace(/\D/g, '')
+  if (digits.length < 10) return null
+  return digits.startsWith('1') && digits.length === 11 ? `+${digits}` : `+1${digits.slice(-10)}`
+}
+
+function maskDestination(method, destination) {
+  if (!destination) return ''
+  if (method === 'email') {
+    const [local, domain] = String(destination).split('@')
+    if (!domain) return '***'
+    const maskedLocal = local.length <= 2 ? `${local[0] || ''}*` : `${local.slice(0, 2)}***`
+    return `${maskedLocal}@${domain}`
+  }
+  const digits = String(destination).replace(/\D/g, '')
+  if (digits.length < 4) return '***'
+  return `***-***-${digits.slice(-4)}`
+}
+
+function validateDestination(method, destination) {
+  const m = normalizeMethod(method)
+  if (!m) return { ok: false, error: 'MFA method must be email or sms.' }
+  if (m === 'email') {
+    const email = normalizeEmail(destination)
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return { ok: false, error: 'Enter a valid email address for MFA.' }
+    }
+    return { ok: true, method: m, destination: email }
+  }
+  const phone = normalizePhone(destination)
+  if (!phone) {
+    return { ok: false, error: 'Enter a valid phone number for SMS MFA.' }
+  }
+  return { ok: true, method: m, destination: phone }
+}
+
+function isMfaFullyEnrolled(user) {
+  return (
+    isMfaEnabledFlag(user?.mfa_enabled) &&
+    normalizeMethod(user?.mfa_method) &&
+    String(user?.mfa_destination || '').trim()
+  )
+}
 
 function adminRequiresMfa(role, mfaEnabled) {
   return PHI_ROLES.has(role) && !mfaEnabled
 }
 
-/** Resolve MFA secret from DB row — prefers encrypted column, falls back to legacy plaintext. */
-function resolveMfaSecret(row) {
-  if (!row) return null
-  if (row.mfa_secret_encrypted) {
-    return decryptString(row.mfa_secret_encrypted, 'mfa_secret')
-  }
-  return row.mfa_secret || null
-}
-
-/** Persist MFA secret encrypted at rest (AES-256-GCM). */
-function encryptMfaSecret(plainSecret) {
-  return encryptString(plainSecret)
-}
-
 /**
- * Resolve MFA requirement at login for PHI-access roles.
  * @returns {false|'ENROLLMENT_REQUIRED'|true}
- *   - false — role has no PHI access (MFA not required)
- *   - 'ENROLLMENT_REQUIRED' — PHI role without MFA fully enrolled
- *   - true — PHI role with MFA enabled and a stored secret (TOTP at login)
  */
-function isMfaEnabledFlag(value) {
-  return value === true || value === 't' || value === 1 || value === '1'
-}
-
-function userHasStoredMfaSecret(user) {
-  if (!user) return false
-  if (user.mfa_secret_encrypted) return true
-  if (user.mfa_secret) return true
-  return false
-}
-
-function isMfaFullyEnrolled(user) {
-  return isMfaEnabledFlag(user?.mfa_enabled) && userHasStoredMfaSecret(user)
-}
-
 function loginRequiresMfa(user) {
   const hasPhi = PHI_ROLES.has(user?.role)
   if (!hasPhi) return false
@@ -112,33 +84,112 @@ function loginRequiresMfa(user) {
   return true
 }
 
-/** Build standard otpauth:// URI for authenticator apps. */
-function buildOtpauthUrl(email, secret) {
-  const label = email || 'user'
-  return authenticator.keyuri(label, 'Anot', secret)
+async function invalidateActiveTokens(pool, userId, purpose) {
+  await pool.query(
+    `UPDATE mfa_tokens
+     SET consumed_at = NOW()
+     WHERE user_id = $1 AND purpose = $2 AND consumed_at IS NULL`,
+    [userId, purpose],
+  )
 }
 
-/** PNG data URL suitable for <img src={...}> (CSP img-src data:). */
-async function generateQrCodeDataUrl(otpauthUrl) {
-  return QRCode.toDataURL(otpauthUrl, {
-    errorCorrectionLevel: 'M',
-    margin: 2,
-    width: 200,
-  })
+async function createMfaToken(pool, userId, purpose) {
+  const code = generateCode()
+  const codeHash = hashCode(code)
+  const expiresAt = new Date(Date.now() + CODE_TTL_MS)
+
+  await invalidateActiveTokens(pool, userId, purpose)
+
+  await pool.query(
+    `INSERT INTO mfa_tokens (user_id, code_hash, purpose, expires_at, max_attempts)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [userId, codeHash, purpose, expiresAt, MAX_ATTEMPTS],
+  )
+
+  return { code, expiresAt }
+}
+
+async function sendCodeToUser(user, code) {
+  const method = normalizeMethod(user.mfa_method)
+  const destination = user.mfa_destination
+  if (!method || !destination) {
+    return { sent: false, reason: 'MFA destination not configured' }
+  }
+  if (method === 'email') {
+    return sendMfaEmail(destination, code)
+  }
+  return sendMfaSms(destination, code)
+}
+
+async function issueAndSendCode(pool, user, purpose) {
+  const { code } = await createMfaToken(pool, user.id, purpose)
+  const delivery = await sendCodeToUser(user, code)
+  return {
+    ...delivery,
+    destinationMasked: maskDestination(user.mfa_method, user.mfa_destination),
+    method: user.mfa_method,
+  }
+}
+
+async function verifyMfaCode(pool, userId, purpose, plainCode) {
+  if (!/^\d{6}$/.test(String(plainCode || '').trim())) {
+    return { ok: false, error: 'Invalid verification code.' }
+  }
+
+  const { rows } = await pool.query(
+    `SELECT id, code_hash, expires_at, attempts, max_attempts
+     FROM mfa_tokens
+     WHERE user_id = $1 AND purpose = $2 AND consumed_at IS NULL
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [userId, purpose],
+  )
+
+  const token = rows[0]
+  if (!token) {
+    return { ok: false, error: 'No active verification code. Request a new code.' }
+  }
+
+  if (new Date(token.expires_at) <= new Date()) {
+    return { ok: false, error: 'Verification code expired. Request a new code.', expired: true }
+  }
+
+  if (token.attempts >= token.max_attempts) {
+    return { ok: false, error: 'Too many failed attempts. Request a new code.', locked: true }
+  }
+
+  const submitted = hashCode(plainCode)
+  if (submitted !== token.code_hash) {
+    const usedAttempts = token.attempts + 1
+    await pool.query('UPDATE mfa_tokens SET attempts = attempts + 1 WHERE id = $1', [token.id])
+    const remaining = token.max_attempts - usedAttempts
+    if (remaining <= 0) {
+      return { ok: false, error: 'Too many failed attempts. Request a new code.', locked: true }
+    }
+    return { ok: false, error: 'Invalid verification code.', attemptsRemaining: remaining }
+  }
+
+  await pool.query('UPDATE mfa_tokens SET consumed_at = NOW() WHERE id = $1', [token.id])
+  return { ok: true }
 }
 
 module.exports = {
-  generateSecret,
-  generateRecoveryCodes,
-  hashRecoveryCode,
-  verifyRecoveryCode,
-  verifyTotp,
+  CODE_TTL_MS,
+  MAX_ATTEMPTS,
   PHI_ROLES,
-  adminRequiresMfa,
-  resolveMfaSecret,
-  encryptMfaSecret,
-  loginRequiresMfa,
+  generateCode,
+  hashCode,
+  normalizeMethod,
+  normalizeEmail,
+  normalizePhone,
+  maskDestination,
+  validateDestination,
   isMfaFullyEnrolled,
-  buildOtpauthUrl,
-  generateQrCodeDataUrl,
+  adminRequiresMfa,
+  loginRequiresMfa,
+  createMfaToken,
+  sendCodeToUser,
+  issueAndSendCode,
+  verifyMfaCode,
+  invalidateActiveTokens,
 }
