@@ -24,6 +24,20 @@ describe('auth scope gates', () => {
     expect(checkMfaEnrollmentRequired({ requireMfaEnrollment: true }, '/verify-code').ok).toBe(true)
   })
 
+  test('checkMfaRequired allows access when SKIP_MFA_FOR_DEMO is enabled in production', () => {
+    const prev = process.env.SKIP_MFA_FOR_DEMO
+    const prevEnv = process.env.NODE_ENV
+    process.env.SKIP_MFA_FOR_DEMO = 'true'
+    process.env.NODE_ENV = 'production'
+    try {
+      expect(checkMfaRequired({ requireMfa: true }, '/api/patients').ok).toBe(true)
+      expect(checkMfaEnrollmentRequired({ requireMfaEnrollment: true }, '/api/patients').ok).toBe(true)
+    } finally {
+      process.env.SKIP_MFA_FOR_DEMO = prev
+      process.env.NODE_ENV = prevEnv
+    }
+  })
+
   test('checkPhiTrainingRequired blocks until training acknowledged', () => {
     const blocked = checkPhiTrainingRequired({ requirePhiTraining: true })
     expect(blocked.ok).toBe(false)

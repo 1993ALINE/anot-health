@@ -12,6 +12,7 @@ const { incrementTokenVersion } = require('../utils/tokenVersion')
 const { loginRequiresMfa, issueAndSendCode, verifyMfaCode, maskDestination, isMfaFullyEnrolled } = require('../services/mfaService')
 const { setSessionCookie, clearSessionCookie } = require('../utils/sessionCookie')
 const { isLocked, lockoutMessage, recordFailedLogin, resetFailedLogins } = require('../services/accountLockout')
+const { isDemoMfaBypass } = require('../middleware/auth')
 
 function roleToStaffModule(role) {
     const m = {
@@ -87,6 +88,28 @@ async function buildPostPasswordLoginResponse(user, req, res) {
                 requirePhiTraining: true,
                 temporaryToken,
                 message: 'You must acknowledge the PHI awareness training before accessing the application.',
+            },
+        }
+    }
+
+    if (isDemoMfaBypass()) {
+        console.warn('[auth.login] SKIP_MFA_FOR_DEMO=true — issuing full session without MFA gate')
+        const token = generateToken(user)
+        setSessionCookie(res, token)
+        void auditLog(
+            { id: user.id, name: user.name, role: user.role },
+            'LOGIN_SUCCESS',
+            'auth',
+            String(user.id),
+            'Signed in successfully (demo MFA bypass)',
+            { req, module_key: 'authentication', status: 'success', action_category: 'authentication', metadata: { demo_mfa_bypass: true } },
+        ).catch(reportAuditFailure)
+        cloudWatchAudit.logLogin(user.id, user.email, user.role, req.clientIp, 'success')
+        return {
+            status: 200,
+            body: {
+                message: 'Login successful',
+                user: toAuthUser(user),
             },
         }
     }
@@ -338,6 +361,16 @@ const acknowledgePhiTraining = async (req, res) => {
                 mfa_enabled: fresh.mfa_enabled,
                 mfa_method: fresh.mfa_method,
                 mfaStatus,
+            })
+        }
+
+        if (isDemoMfaBypass()) {
+            console.warn('[auth.phiTraining] SKIP_MFA_FOR_DEMO=true — issuing full session without MFA gate')
+            const token = generateToken(fresh)
+            setSessionCookie(res, token)
+            return res.status(200).json({
+                message: 'PHI training acknowledged.',
+                user: toAuthUser(fresh),
             })
         }
 

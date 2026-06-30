@@ -6,9 +6,9 @@ import {
   setSession,
   clearSession,
   setStoredUser,
-  clearAppCaches,
+  clearAppCaches as _clearAppCaches,
   purgeClientPhiStorage,
-  performSecureLogout,
+  performSecureLogout as _performSecureLogout,
   purgeExpiredSession,
   hasValidSession,
 } from '../utils/sessionAuth'

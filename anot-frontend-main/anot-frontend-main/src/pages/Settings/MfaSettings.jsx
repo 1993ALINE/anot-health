@@ -10,8 +10,10 @@ export default function MfaSettings({ showToast }) {
   const [step, setStep] = useState('idle')
   const [submitting, setSubmitting] = useState(false)
 
-  const loadStatus = useCallback(async () => {
-    setLoading(true)
+  const loadStatus = useCallback(async ({ showSpinner = false } = {}) => {
+    if (showSpinner) {
+      setLoading(true)
+    }
     try {
       const data = await mfaAPI.getStatus()
       setStatus(data)
@@ -26,8 +28,31 @@ export default function MfaSettings({ showToast }) {
   }, [showToast])
 
   useEffect(() => {
-    void loadStatus()
-  }, [loadStatus])
+    let cancelled = false
+    ;(async () => {
+      try {
+        const data = await mfaAPI.getStatus()
+        if (cancelled) {
+          return
+        }
+        setStatus(data)
+        if (data.mfaMethod) {
+          setMethod(data.mfaMethod)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          showToast?.(err?.message || 'Could not load MFA settings.', 'error')
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false)
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [showToast])
 
   const handleSetup = async (e) => {
     e.preventDefault()
@@ -60,7 +85,7 @@ export default function MfaSettings({ showToast }) {
       setStep('idle')
       setCode('')
       setDestination('')
-      await loadStatus()
+      await loadStatus({ showSpinner: true })
       showToast?.('Two-factor authentication enabled.')
     } catch (err) {
       if (isLikelyNetworkFailure(err)) {
@@ -105,7 +130,7 @@ export default function MfaSettings({ showToast }) {
       await mfaAPI.disable(code.trim())
       setStep('idle')
       setCode('')
-      await loadStatus()
+      await loadStatus({ showSpinner: true })
       showToast?.('Two-factor authentication disabled.')
     } catch (err) {
       showToast?.(err?.message || 'Could not disable MFA.', 'error')

@@ -195,7 +195,7 @@ export default function QPSWithErrorBoundary() {
 }
 
 function QPS() {
-  const navigate    = useNavigate()
+  const _navigate    = useNavigate()
   const sidebar     = useSidebar()
   const currentUser = getCurrentUser()
   const sessionTimeoutModal = useSessionTimeout(!!currentUser && Object.keys(currentUser).length > 0)

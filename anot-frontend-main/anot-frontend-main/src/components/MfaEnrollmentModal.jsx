@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { authAPI, isLikelyNetworkFailure, mfaAPI } from '../services/api'
+import { isLikelyNetworkFailure, mfaAPI } from '../services/api'
 
 /**
  * Mandatory MFA enrollment gate at login for PHI-access roles.

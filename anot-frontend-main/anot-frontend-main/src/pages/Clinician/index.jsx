@@ -1687,7 +1687,7 @@ export default function ClinicianWithErrorBoundary() {
 }
 
 function Clinician() {
-  const navigate    = useNavigate()
+  const _navigate    = useNavigate()
   const cu          = getCurrentUser()
   const sidebar     = useSidebar()
   // An active encounter recording generates no mouse/keyboard events, so it

@@ -372,6 +372,13 @@ async function runStartupDiagnostics(opts = {}) {
     throw new Error('MFA_BYPASS not allowed in production')
   }
 
+  if (process.env.NODE_ENV === 'production' && process.env.SKIP_MFA_FOR_DEMO === 'true') {
+    console.warn(
+      '[startup] ⚠ SKIP_MFA_FOR_DEMO=true — MFA enrollment/verification gates are disabled for demo. ' +
+        'Remove this flag for real PHI production deployments.',
+    )
+  }
+
   if (process.env.NODE_ENV === 'production') {
     const encKey = process.env.SETTINGS_ENCRYPTION_KEY?.trim()
     if (!encKey || encKey.length < 32) {

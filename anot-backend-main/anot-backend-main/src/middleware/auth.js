@@ -38,6 +38,11 @@ function invalidateUserAuthCache(userId) {
     userCheckCache.delete(Number(userId))
 }
 
+/** Demo-only: skip MFA enrollment/verification gates when explicitly enabled in production. */
+function isDemoMfaBypass() {
+    return process.env.SKIP_MFA_FOR_DEMO === 'true' && process.env.NODE_ENV === 'production'
+}
+
 function extractBearerToken(authHeader) {
     if (!authHeader || !authHeader.startsWith('Bearer ')) return null
     return authHeader.split(' ')[1]
@@ -111,6 +116,7 @@ function checkPhiTrainingRequired(user) {
  * Check MFA enrollment scope (login gate for PHI roles without MFA)
  */
 function checkMfaEnrollmentRequired(user, reqPath) {
+    if (isDemoMfaBypass()) return { ok: true }
     if (user.requireMfaEnrollment === true) {
         // req.path is router-relative (/setup) when protect runs on /api/mfa routes.
         const allowed =
@@ -136,6 +142,7 @@ function checkMfaEnrollmentRequired(user, reqPath) {
  * Check MFA verification scope (login gate)
  */
 function checkMfaRequired(user, reqPath) {
+    if (isDemoMfaBypass()) return { ok: true }
     if (user.requireMfa === true) {
         const allowed =
             reqPath.includes('/verify-mfa') ||
@@ -231,4 +238,5 @@ module.exports = {
   checkMfaEnrollmentRequired,
   checkMfaRequired,
   checkPhiTrainingRequired,
+  isDemoMfaBypass,
 }

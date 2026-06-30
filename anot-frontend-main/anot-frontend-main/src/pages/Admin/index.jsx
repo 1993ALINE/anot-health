@@ -738,7 +738,7 @@ export default function AdminWithErrorBoundary() {
 }
 
 function Admin() {
-    const navigate = useNavigate()
+    const _navigate = useNavigate()
     const [currentUser, setCurrentUser] = useState(() => getCurrentUser())
     useEffect(() => {
         authAPI.getMe().then(() => {

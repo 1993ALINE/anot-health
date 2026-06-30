@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, useSidebarOffCanvasMode, portalSidebarAriaHidden, portalSidebarInert, ConfirmDialog, PortalSidebarBrand } from '../shared'
 import { authAPI, usersAPI, visitsAPI, notesAPI, isAbortError } from '../../services/api'
 import { useBranding } from '../../services/branding'
@@ -329,7 +328,6 @@ function ScribeSidebar({
 function Scribe() {
   useRenderRateWarning('Scribe')
 
-  const navigate    = useNavigate()
   const sidebar     = useSidebar()
   const currentUser = useMemo(() => getCurrentUser(), [])
   const sessionTimeoutModal = useSessionTimeout(!!currentUser && Object.keys(currentUser).length > 0)
@@ -424,7 +422,7 @@ function Scribe() {
         await authAPI.logout()
       },
     })
-  }, [screen, isDirty, navigate])
+  }, [screen, isDirty])
 
   const runConfirm = useCallback(async () => {
     const onConfirm = confirmDialog?.onConfirm
