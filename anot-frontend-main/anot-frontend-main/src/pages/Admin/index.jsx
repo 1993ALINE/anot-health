@@ -46,6 +46,13 @@ function displayEmail(email) {
   return email
 }
 
+const PROTECTED_SUPER_ADMIN_EMAIL = 'atiqurrahmanaline@gmail.com'
+
+function isProtectedSuperAdminEmail(email) {
+  if (!email) {return false}
+  return String(email).trim().toLowerCase() === PROTECTED_SUPER_ADMIN_EMAIL.toLowerCase()
+}
+
 /**
  * Validate admin settings form
  */
@@ -553,9 +560,10 @@ function AdminTableToolbar({ cfg, search, filter, filteredCount, refreshing, onS
 
 function AdminUserTableRow({
     u, role, roleClass, isNew, isSuperAdminViewer, semantic,
-    onEdit, onOpenModulePermissions, onReset, onToggleStatus,
+    onEdit, onOpenModulePermissions, onReset, onToggleStatus, onDelete,
 }) {
     const isSystemSuperRow = u.role === 'super_admin'
+    const canDelete = isSuperAdminViewer && !isSystemSuperRow && !isProtectedSuperAdminEmail(u.email)
     return (
         <div className={`adm-table__row adm-table__row--${roleClass}${isNew ? ' adm-table__row--new' : ''}`}>
             <div className="adm-td" data-label="Name" style={{ flex: 2 }}>
@@ -631,6 +639,16 @@ function AdminUserTableRow({
                 >
                     {u.status === 'active' ? 'Disable' : 'Enable'}
                 </button>
+                {canDelete && (
+                    <button
+                        type="button"
+                        className="adm-btn-action"
+                        style={{ color: '#b91c1c' }}
+                        onClick={() => onDelete(u)}
+                    >
+                        Delete
+                    </button>
+                )}
             </div>
         </div>
     )
@@ -651,6 +669,7 @@ function AdminUserTable({
     setResetUser,
     setResetError,
     toggleStatus,
+    onDelete,
     setAddRole,
     setShowAdd,
     setAddError,
@@ -718,6 +737,7 @@ function AdminUserTable({
                             onOpenModulePermissions={(user) => onOpenModulePermissions({ ...user })}
                             onReset={(user) => { setResetUser(user); setResetError('') }}
                             onToggleStatus={toggleStatus}
+                            onDelete={onDelete}
                         />
                     ))}
                 </div>
@@ -1232,6 +1252,27 @@ function Admin() {
         })
     }
 
+    const performDeleteUser = async (user) => {
+        try {
+            await adminAPI.deleteUser(user.id)
+            setUsers((prev) => prev.filter((u) => u.id !== user.id))
+            showToast(`${user.name} has been permanently deleted`)
+        } catch (err) {
+            showToast(err.message, 'error')
+            throw err
+        }
+    }
+
+    const requestDeleteUser = (user) => {
+        setConfirmDialog({
+            title: 'Delete user permanently',
+            message: `Are you sure you want to delete ${user.name}? This cannot be undone.`,
+            confirmText: 'Delete Permanently',
+            tone: 'danger',
+            onConfirm: () => performDeleteUser(user),
+        })
+    }
+
     // ── Reset password ────────────────────────────────
     const resetPassword = async () => {
         setResetError('')
@@ -1536,6 +1577,7 @@ function Admin() {
         setResetUser,
         setResetError,
         toggleStatus,
+        onDelete: requestDeleteUser,
         setAddRole,
         setShowAdd,
         setAddError,

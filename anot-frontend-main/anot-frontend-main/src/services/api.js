@@ -463,6 +463,7 @@ export const adminAPI = {
   },
   applyAuditRetention: async () => apiMutate('POST', '/audit/retention/apply'),
   getSystemHealth: async () => apiFetch('/admin/health'),
+  deleteUser: async (userId) => apiMutate('DELETE', `/admin/users/${userId}`),
   generateAI: async (visitId) => apiMutate('POST', `/visits/${visitId}/generate-ai`),
 }
 
