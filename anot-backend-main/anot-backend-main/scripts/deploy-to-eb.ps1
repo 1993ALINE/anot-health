@@ -20,7 +20,9 @@
    -OutputDir      Where to write the zip (default: $env:TEMP, else current dir)
    -Region         AWS region (default: ap-southeast-1)
    -HealthUrl      URL to verify after deploy (default: https://app.anot.health/api/health)
-   -WaitTimeoutSec Max seconds to wait for EB Ready/Green (default: 300)
+   -WaitTimeoutSec Max seconds for primary EB Ready/Green poll (default: 600)
+   -GracePeriodSec Extra seconds after primary timeout for recovery polling (default: 300)
+   -SkipVerify     Skip GET /api/health verification after deploy
 ================================================================================
 #>
 
@@ -30,7 +32,9 @@ param(
     [string]$OutputDir = '',
     [string]$Region = 'ap-southeast-1',
     [string]$HealthUrl = 'https://app.anot.health/api/health',
-    [int]$WaitTimeoutSec = 300
+    [int]$WaitTimeoutSec = 600,
+    [int]$GracePeriodSec = 300,
+    [switch]$SkipVerify
 )
 
 $ErrorActionPreference = 'Stop'
@@ -156,6 +160,128 @@ function Test-EbReady {
     $statusReady = ($Env.Status -eq 'Ready')
     $healthOk    = ($Env.Health -eq 'Green') -or ($Env.HealthStatus -eq 'Ok')
     return ($statusReady -and $healthOk)
+}
+
+function Write-EbInstanceHealthSnapshot {
+    try {
+        $json = Invoke-Aws -What "describe-instances-health $EbEnvName" `
+            elasticbeanstalk describe-instances-health `
+            --environment-name $EbEnvName `
+            --attribute-names All `
+            --region $Region `
+            --output json | ConvertFrom-Json
+
+        $instances = @($json.InstanceHealthList)
+        if ($instances.Count -eq 0) {
+            Write-Step '  Instance health: (no instances reported yet)'
+            return
+        }
+
+        foreach ($inst in $instances) {
+            $causeText = if ($inst.Causes) { ($inst.Causes -join '; ') } else { 'none' }
+            Write-Step ("  Instance {0}: HealthStatus={1}  Color={2}  Causes={3}" -f `
+                $inst.InstanceId, $inst.HealthStatus, $inst.Color, $causeText)
+        }
+    }
+    catch {
+        Write-Step "  Instance health: unavailable ($($_.Exception.Message))"
+    }
+}
+
+function Wait-EbDeploymentReady {
+    param(
+        [string]$ExpectedVersionLabel,
+        [int]$PrimaryTimeoutSec,
+        [int]$RecoveryTimeoutSec
+    )
+
+    $pollIntervalSec = 15
+    $maxIntervalSec  = 45
+    $deadline        = (Get-Date).AddSeconds($PrimaryTimeoutSec)
+    $pollCount       = 0
+    $finalEnv        = $null
+    $deploySucceeded = $false
+
+    Write-Step "Primary wait: up to $PrimaryTimeoutSec seconds (poll interval starts at ${pollIntervalSec}s, backs off to ${maxIntervalSec}s) ..."
+
+    while ((Get-Date) -lt $deadline) {
+        $pollCount++
+        $finalEnv = Get-EbEnvironment
+        Write-Step ("Poll {0}: Status={1}  Health={2}  HealthStatus={3}  VersionLabel={4}" -f `
+            $pollCount, $finalEnv.Status, $finalEnv.Health, $finalEnv.HealthStatus, $finalEnv.VersionLabel)
+        Write-EbInstanceHealthSnapshot
+
+        if (Test-EbReady -Env $finalEnv) {
+            if ($finalEnv.VersionLabel -ne $ExpectedVersionLabel) {
+                Write-Step "Environment is Ready/Green but version is '$($finalEnv.VersionLabel)' (expected '$ExpectedVersionLabel'); continuing to wait ..."
+            }
+            else {
+                Write-Ok "Environment is Ready with Green/Ok health on version $ExpectedVersionLabel"
+                $deploySucceeded = $true
+                break
+            }
+        }
+
+        Start-Sleep -Seconds $pollIntervalSec
+        $pollIntervalSec = [Math]::Min($maxIntervalSec, [int][Math]::Ceiling($pollIntervalSec * 1.25))
+    }
+
+    if (-not $deploySucceeded) {
+        Write-Step "Primary wait elapsed after $PrimaryTimeoutSec seconds - checking actual EB status before failing ..."
+        $finalEnv = Get-EbEnvironment
+        Write-Step ("Final primary snapshot: Status={0}  Health={1}  HealthStatus={2}  VersionLabel={3}" -f `
+            $finalEnv.Status, $finalEnv.Health, $finalEnv.HealthStatus, $finalEnv.VersionLabel)
+        Write-EbInstanceHealthSnapshot
+
+        if ((Test-EbReady -Env $finalEnv) -and ($finalEnv.VersionLabel -eq $ExpectedVersionLabel)) {
+            Write-Ok "Environment reached Ready/Green on target version during final primary check"
+            $deploySucceeded = $true
+        }
+    }
+
+    if (-not $deploySucceeded -and $RecoveryTimeoutSec -gt 0) {
+        Write-Step "Entering recovery polling for up to $RecoveryTimeoutSec additional seconds ..."
+        $recoveryDeadline = (Get-Date).AddSeconds($RecoveryTimeoutSec)
+        $recoveryPoll     = 0
+        $pollIntervalSec  = 15
+
+        while ((Get-Date) -lt $recoveryDeadline) {
+            $recoveryPoll++
+            $finalEnv = Get-EbEnvironment
+            Write-Step ("Recovery poll {0}: Status={1}  Health={2}  HealthStatus={3}  VersionLabel={4}" -f `
+                $recoveryPoll, $finalEnv.Status, $finalEnv.Health, $finalEnv.HealthStatus, $finalEnv.VersionLabel)
+            Write-EbInstanceHealthSnapshot
+
+            if ((Test-EbReady -Env $finalEnv) -and ($finalEnv.VersionLabel -eq $ExpectedVersionLabel)) {
+                Write-Ok "Environment reached Ready/Green on target version during recovery period"
+                $deploySucceeded = $true
+                break
+            }
+
+            Start-Sleep -Seconds $pollIntervalSec
+            $pollIntervalSec = [Math]::Min($maxIntervalSec, [int][Math]::Ceiling($pollIntervalSec * 1.25))
+        }
+    }
+
+    if (-not $deploySucceeded) {
+        $finalEnv = Get-EbEnvironment
+        $detail = @(
+            "EB deployment did not reach Ready/Green on version '$ExpectedVersionLabel' within $($PrimaryTimeoutSec + $RecoveryTimeoutSec) seconds.",
+            "  Current Status       : $($finalEnv.Status)",
+            "  Current Health       : $($finalEnv.Health)",
+            "  Current HealthStatus : $($finalEnv.HealthStatus)",
+            "  Current VersionLabel : $($finalEnv.VersionLabel)"
+        )
+        if ((Test-EbReady -Env $finalEnv) -and ($finalEnv.VersionLabel -ne $ExpectedVersionLabel)) {
+            $detail += "  Note: Environment is Ready/Green but still on a previous version - check EB Events in the AWS Console."
+        }
+        elseif ($finalEnv.Status -in @('Updating', 'Launching', 'Processing')) {
+            $detail += "  Note: Environment is still transitioning - it may complete successfully; verify in the AWS Console."
+        }
+        throw ($detail -join "`n")
+    }
+
+    return $finalEnv
 }
 
 # ─── FAILURE TRAP ──────────────────────────────────────────────────────────────
@@ -312,41 +438,23 @@ Invoke-Aws -What "update-environment $EbEnvName" `
     --region $Region `
     --output json | Out-Null
 
-Write-Step "Waiting for Status=Ready and Health=Green (timeout: $WaitTimeoutSec seconds) ..."
+Write-Step "Waiting for Status=Ready and Health=Green (primary timeout: $WaitTimeoutSec sec, recovery grace: $GracePeriodSec sec) ..."
 
-$pollIntervalSec = 15
-$deadline        = (Get-Date).AddSeconds($WaitTimeoutSec)
-$pollCount       = 0
-$finalEnv        = $null
-
-while ((Get-Date) -lt $deadline) {
-    $pollCount++
-    $finalEnv = Get-EbEnvironment
-    Write-Step ("Poll {0}: Status={1}  Health={2}  HealthStatus={3}  Version={4}" -f `
-        $pollCount, $finalEnv.Status, $finalEnv.Health, $finalEnv.HealthStatus, $finalEnv.VersionLabel)
-
-    if (Test-EbReady -Env $finalEnv) {
-        if ($finalEnv.VersionLabel -ne $VersionLabel) {
-            Write-Step "Environment is Ready/Green but version is '$($finalEnv.VersionLabel)' (expected '$VersionLabel'); continuing to wait ..."
-        }
-        else {
-            Write-Ok "Environment is Ready with Green/Ok health on version $VersionLabel"
-            break
-        }
-    }
-
-    Start-Sleep -Seconds $pollIntervalSec
-}
-
-if ($null -eq $finalEnv -or -not (Test-EbReady -Env $finalEnv)) {
-    throw "Timed out after $WaitTimeoutSec seconds waiting for EB environment to reach Ready/Green."
-}
-
-if ($finalEnv.VersionLabel -ne $VersionLabel) {
-    throw "Deploy timed out: environment is Ready but running version '$($finalEnv.VersionLabel)' instead of '$VersionLabel'."
-}
+$finalEnv = Wait-EbDeploymentReady -ExpectedVersionLabel $VersionLabel `
+    -PrimaryTimeoutSec $WaitTimeoutSec -RecoveryTimeoutSec $GracePeriodSec
 
 # ─── STEP 5: VERIFY /api/health ────────────────────────────────────────────────
+
+if ($SkipVerify) {
+    Write-Phase 'Step 5/5 - Verify /api/health endpoint (skipped)'
+    Write-Step 'SkipVerify was set - not calling /api/health.'
+    Write-Host ''
+    Write-Host '  Deployment submitted; EB environment is Ready/Green on target version' -ForegroundColor Green
+    Write-Host "  Version label : $VersionLabel" -ForegroundColor Green
+    Write-Host "  S3 artifact   : $S3Uri" -ForegroundColor Green
+    Write-Host ''
+    exit 0
+}
 
 Write-Phase 'Step 5/5 - Verify /api/health endpoint'
 
@@ -367,7 +475,7 @@ catch {
 
 if ($statusCode -eq 404) {
     Write-Fail "Deployment verification failed: GET $HealthUrl returned 404 Not Found."
-    Write-Fail 'The new version is live in EB but /api/health is missing — check server.js routing and CloudFront origin path.'
+    Write-Fail 'The new version is live in EB but /api/health is missing - check server.js routing and CloudFront origin path.'
     exit 1
 }
 

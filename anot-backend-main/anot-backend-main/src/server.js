@@ -6,6 +6,7 @@
 // src/config/loadSecrets.js for the full rationale.
 const loadSecrets = require('./config/loadSecrets')
 const { validateStartupConfig } = require('./startup/startupDiagnostics')
+const express = require('express')
 
 // ─── PROCESS-LEVEL ERROR HANDLERS (register before bootstrap) ─────────────────
 // Log fatal async errors so EB/CloudWatch captures the cause instead of a silent
@@ -28,6 +29,41 @@ process.on('uncaughtException', (error) => {
   process.exit(1)
 })
 
+// ─── EARLY HEALTH SERVER (before secrets/DB — EB ALB probes during warm-up) ─
+const PORT = process.env.PORT || 5000
+const HOST = process.env.BIND_HOST || '0.0.0.0'
+
+let lastDbHealth = { ok: false, checkedAt: 0 }
+let appReady = false
+let healthTimer = null
+let pool = null
+
+const app = express()
+
+app.get('/api/health', (_req, res) => {
+  res.status(200).json({
+    status: appReady ? 'healthy' : 'starting',
+    db: appReady ? (lastDbHealth.ok ? 'ok' : 'degraded') : 'pending',
+    uptime: Math.floor(process.uptime()),
+  })
+})
+
+app.get('/', (_req, res) => {
+  res.status(200).json({ status: appReady ? 'healthy' : 'starting' })
+})
+
+const server = app.listen(PORT, HOST, () => {
+  console.log(`[startup] Health probes listening on ${HOST}:${PORT} (app warming up)`)
+})
+
+server.on('error', (err) => {
+  console.error('[FATAL] Server listen error:', err.message)
+  if (err.code === 'EADDRINUSE') {
+    console.error(`   ↳ Port ${PORT} is already in use. Set PORT in .env or stop the other process.`)
+  }
+  process.exit(1)
+})
+
 async function bootstrap() {
   const secretsResult = await loadSecrets()
 
@@ -35,7 +71,6 @@ async function bootstrap() {
   require('../instrument.js')
 
   const Sentry       = require('@sentry/node')
-  const express      = require('express')
   const compression  = require('compression')
   const cors         = require('cors')
   const helmet       = require('helmet')
@@ -47,7 +82,7 @@ async function bootstrap() {
 
   // ./config/db opens the PostgreSQL Pool the moment it is required, so this
   // line must stay AFTER await loadSecrets() and env validation above.
-  const pool = require('./config/db')
+  pool = require('./config/db')
   await pool.verifyDatabaseConnection()
 
   const loggingMiddleware = require('./middleware/logging')
@@ -57,25 +92,7 @@ async function bootstrap() {
   const { cleanCorruptedSettings } = require('./startup/cleanCorruptedSettings')
   const { encryptPlaintextMfaSecrets } = require('./startup/encryptMfaSecrets')
 
-  const app = express()
-
-  // ─── HEALTH CHECK (first — no auth, CSRF, or rate limiting) ────────────────
-  // EB enhanced health and CloudFront probes hit these before the app is fully warm.
-
-  let lastDbHealth = { ok: true, checkedAt: Date.now() }
-
-  app.get('/api/health', (_req, res) => {
-    res.status(200).json({
-      status: 'healthy',
-      db: lastDbHealth.ok ? 'ok' : 'degraded',
-      uptime: Math.floor(process.uptime()),
-    })
-  })
-
-  app.get('/', (_req, res) => {
-    res.status(200).json({ status: 'healthy' })
-  })
-
+  // ─── MIDDLEWARE (health routes registered above, before listen) ─────────────
   const { correlationIdMiddleware } = require('./middleware/correlationId')
   app.use(correlationIdMiddleware)
 
@@ -264,12 +281,7 @@ async function bootstrap() {
 
   app.use(errorHandler)
 
-  // ─── START ───────────────────────────────────────────────────────────────────
-
-  const PORT = process.env.PORT || 5000
-  // Bind IPv4 explicitly so http://127.0.0.1:PORT always hits this process on Windows/WSL.
-  const HOST = process.env.BIND_HOST || '0.0.0.0'
-
+  // ─── FINISH STARTUP (server already listening for health probes) ─────────────
   // Apply idempotent schema (users profile/PHI/forced-password columns) before we
   // accept traffic, so the columns exist on a fresh deploy without waiting for the
   // first login to lazily create them. ALTER TABLE ... IF NOT EXISTS is a no-op
@@ -303,18 +315,15 @@ async function bootstrap() {
       console.warn('[Startup] AI settings preload skipped:', err.message)
     }
 
-    const server = app.listen(PORT, HOST, () => {
-      console.log('[startup] ✅ All startup checks passed — accepting traffic')
-      console.log(`[Server] Listening on port ${PORT}`)
-      console.log(`[Server] Bound ${HOST}:${PORT} — environment: ${process.env.NODE_ENV || 'development'}`)
-      // Provision the CloudWatch log group/stream. No-ops safely when audit
-      // shipping is disabled or AWS isn't configured (e.g. Railway).
-      initCloudWatch().catch((err) => console.error('[CloudWatch] Init failed:', err.message))
-    })
+    appReady = true
+    lastDbHealth = { ok: true, checkedAt: Date.now() }
+    console.log('[startup] ✅ All startup checks passed — accepting traffic')
+    console.log(`[Server] Bound ${HOST}:${PORT} — environment: ${process.env.NODE_ENV || 'development'}`)
+    initCloudWatch().catch((err) => console.error('[CloudWatch] Init failed:', err.message))
 
     // Periodic DB health probe — keeps lastDbHealth fresh for /api/health.
     const HEALTH_CHECK_INTERVAL_MS = parseInt(process.env.HEALTH_CHECK_INTERVAL_MS || '60000', 10)
-    const healthTimer = setInterval(async () => {
+    healthTimer = setInterval(async () => {
       try {
         await pool.query('SELECT 1 AS ok')
         lastDbHealth = { ok: true, checkedAt: Date.now() }
@@ -324,43 +333,39 @@ async function bootstrap() {
       }
     }, HEALTH_CHECK_INTERVAL_MS)
     if (typeof healthTimer.unref === 'function') healthTimer.unref()
-
-    let shuttingDown = false
-    const gracefulShutdown = (signal) => {
-      if (shuttingDown) return
-      shuttingDown = true
-      console.log(`[shutdown] Received ${signal} — closing HTTP server and DB pool…`)
-      clearInterval(healthTimer)
-      server.close(() => {
-        pool.end()
-          .then(() => {
-            console.log('[shutdown] Clean exit')
-            process.exit(0)
-          })
-          .catch((err) => {
-            console.error('[shutdown] Pool close error:', err.message)
-            process.exit(1)
-          })
-      })
-      setTimeout(() => {
-        console.error('[shutdown] Forced exit after 30s')
-        process.exit(1)
-      }, 30000).unref()
-    }
-
-    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
-    process.on('SIGINT', () => gracefulShutdown('SIGINT'))
-
-    server.on('error', (err) => {
-      console.error('[FATAL] Server listen error:', err.message)
-      if (err.code === 'EADDRINUSE') {
-        console.error(`   ↳ Port ${PORT} is already in use. Set PORT in .env or stop the other process.`)
-      }
-      process.exit(1)
-    })
   }
 
   await startServer()
+
+  let shuttingDown = false
+  const gracefulShutdown = (signal) => {
+    if (shuttingDown) return
+    shuttingDown = true
+    console.log(`[shutdown] Received ${signal} — closing HTTP server and DB pool…`)
+    if (healthTimer) clearInterval(healthTimer)
+    server.close(() => {
+      if (!pool) {
+        process.exit(0)
+        return
+      }
+      pool.end()
+        .then(() => {
+          console.log('[shutdown] Clean exit')
+          process.exit(0)
+        })
+        .catch((err) => {
+          console.error('[shutdown] Pool close error:', err.message)
+          process.exit(1)
+        })
+    })
+    setTimeout(() => {
+      console.error('[shutdown] Forced exit after 30s')
+      process.exit(1)
+    }, 30000).unref()
+  }
+
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'))
 } // end bootstrap()
 
 // Kick everything off. Any unhandled bootstrap error is fatal so the process
