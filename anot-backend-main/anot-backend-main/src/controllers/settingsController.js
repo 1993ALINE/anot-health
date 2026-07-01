@@ -43,7 +43,7 @@ const AI_DEFAULTS = {
   ffmpeg_enabled: false,
   ffmpeg_target_format: 'mp3',
   ffmpeg_compression: 5,
-  ffmpeg_max_upload_mb: 100,
+  ffmpeg_max_upload_mb: 500,
   ffmpeg_preprocess_before_transcribe: true,
   deepgram_timeout_ms: 30000,
 }

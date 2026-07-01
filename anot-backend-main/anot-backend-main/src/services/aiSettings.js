@@ -3,6 +3,7 @@ const { decryptString } = require('../utils/settingsEncryption')
 const { ensureMediaAndAiSchema } = require('../utils/ensureMediaSchema')
 const { mergeRowWithExtensions } = require('../utils/settingsExtensions')
 const { getSystemSettingsColumns } = require('../utils/settingsSchemaCompat')
+const { resolveFfmpegMaxUploadMb } = require('../utils/ffmpegUploadLimits')
 
 const ANTHROPIC_MODELS = new Set(['claude-haiku-4-5', 'claude-sonnet-4-5', 'claude-opus-4-5'])
 
@@ -12,13 +13,13 @@ const DEFAULTS = {
   deepgram_smart_format: true,
   deepgram_language: 'en-US',
   deepgram_webhook_url: '',
-  deepgram_auto_transcribe_on_upload: false,
+  deepgram_auto_transcribe_on_upload: true,
   anthropic_enabled: true,
   anthropic_model: 'claude-haiku-4-5',
   ffmpeg_enabled: false,
   ffmpeg_target_format: 'mp3',
   ffmpeg_compression: 5,
-  ffmpeg_max_upload_mb: 100,
+  ffmpeg_max_upload_mb: 500,
   ffmpeg_preprocess_before_transcribe: true,
   deepgram_timeout_ms: 30000,
 }
@@ -57,7 +58,7 @@ function rowToRuntime(row) {
 
   return {
     deepgram_enabled: !!row.deepgram_enabled,
-    deepgram_api_key: key,
+    deepgram_api_key: key || process.env.DEEPGRAM_API_KEY?.trim() || null,
     deepgram_model: String(row.deepgram_model || DEFAULTS.deepgram_model).slice(0, 64),
     deepgram_smart_format: !!row.deepgram_smart_format,
     deepgram_language: String(row.deepgram_language || DEFAULTS.deepgram_language).slice(0, 32),
@@ -71,7 +72,7 @@ function rowToRuntime(row) {
       ? String(row.ffmpeg_target_format).toLowerCase()
       : 'mp3',
     ffmpeg_compression: Math.max(0, Math.min(9, Number(row.ffmpeg_compression) || DEFAULTS.ffmpeg_compression)),
-    ffmpeg_max_upload_mb: Math.max(1, Math.min(500, Number(row.ffmpeg_max_upload_mb) || DEFAULTS.ffmpeg_max_upload_mb)),
+    ffmpeg_max_upload_mb: resolveFfmpegMaxUploadMb(row.ffmpeg_max_upload_mb ?? DEFAULTS.ffmpeg_max_upload_mb),
     ffmpeg_preprocess_before_transcribe: row.ffmpeg_preprocess_before_transcribe !== false,
     deepgram_timeout_ms: Math.max(5000, Math.min(300000, Number(row.deepgram_timeout_ms) || DEFAULTS.deepgram_timeout_ms)),
   }
@@ -106,10 +107,26 @@ function invalidateAiSettingsCache() {
 }
 
 function useDeepgram(settings) {
-  const enabled = settings?.deepgram_enabled
-  const hasKey = settings?.deepgram_api_key
-  const keyValid = hasKey && String(settings.deepgram_api_key).trim()
-  return !!(enabled && hasKey && keyValid)
+  const key = (settings?.deepgram_api_key || process.env.DEEPGRAM_API_KEY || '').trim()
+  if (!key) {
+    console.warn('[aiSettings] useDeepgram=false — no API key (SSM DEEPGRAM_API_KEY or Admin Settings)')
+    return false
+  }
+  if (settings?.deepgram_enabled) return true
+  // Allow SSM/env DEEPGRAM_API_KEY when admin UI key is missing or not yet enabled.
+  if (process.env.DEEPGRAM_API_KEY?.trim()) return true
+  console.warn('[aiSettings] useDeepgram=false — deepgram_enabled is off and no SSM key')
+  return false
+}
+
+async function getDeepgramKey() {
+  try {
+    const settings = await loadAiSettings()
+    return (settings.deepgram_api_key || process.env.DEEPGRAM_API_KEY || '').trim() || null
+  } catch (err) {
+    console.warn('[aiSettings] getDeepgramKey fallback:', err.message)
+    return process.env.DEEPGRAM_API_KEY?.trim() || null
+  }
 }
 
 async function getAnthropicKey() {
@@ -126,6 +143,7 @@ module.exports = {
   loadAiSettings,
   invalidateAiSettingsCache,
   useDeepgram,
+  getDeepgramKey,
   getAnthropicKey,
   defaultRuntimeSettings,
   DEFAULTS,

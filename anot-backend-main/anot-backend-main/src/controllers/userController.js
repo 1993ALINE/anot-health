@@ -1,6 +1,7 @@
 const { sendHttpError } = require('../utils/errorMessages')
 const pool = require('../config/db')
 const bcrypt = require('bcryptjs')
+const { getBcryptRounds } = require('../utils/bcryptCost')
 const { validatePassword, generateSecurePassword } = require('../utils/passwordPolicy')
 const { auditLog, reportAuditFailure } = require('../utils/auditLogger')
 const {
@@ -530,7 +531,7 @@ const resetPassword = async (req, res) => {
             return res.status(400).json({ error: 'Failed to generate temp password' })
         }
 
-        const hashed = await bcrypt.hash(tempPassword, 10)
+        const hashed = await bcrypt.hash(tempPassword, getBcryptRounds())
         const result = await pool.query(
             'UPDATE users SET password = $1, force_password_change = true WHERE id = $2 RETURNING id, name, email',
             [hashed, id]

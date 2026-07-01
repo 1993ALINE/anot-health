@@ -32,11 +32,11 @@ function getRateLimitConfig() {
   return {
     login: {
       windowMs: loginWindowMs,
-      max: parsePositiveInt(process.env.RATE_LIMIT_LOGIN_MAX, 10),
+      max: parsePositiveInt(process.env.RATE_LIMIT_LOGIN_MAX, 5),
     },
     api: {
       windowMs: apiWindowMs,
-      max: parsePositiveInt(process.env.RATE_LIMIT_API_MAX, isProduction ? 200 : 2000),
+      max: parsePositiveInt(process.env.RATE_LIMIT_API_MAX, isProduction ? 100 : 2000),
     },
   }
 }

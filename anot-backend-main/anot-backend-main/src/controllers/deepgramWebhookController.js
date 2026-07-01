@@ -24,8 +24,11 @@ const postDeepgramWebhook = async (req, res) => {
     }
     // Verify HMAC signature AND timestamp (rejects replays older than 5 min).
     if (!verifyDeepgramVisitToken(visitId, sig, ts)) {
+      console.error('[deepgram] Webhook rejected — invalid or expired signature for visit', visitId)
       return res.status(401).json({ error: 'Invalid or expired webhook signature.' })
     }
+
+    console.log('[deepgram] Webhook received for visit', visitId)
 
     const texts = extractTranscriptsFromDeepgramBody(req.body)
     if (!texts.length) {

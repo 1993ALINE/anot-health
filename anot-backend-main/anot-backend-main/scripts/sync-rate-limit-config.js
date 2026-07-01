@@ -20,7 +20,7 @@ const PREFIX = (process.env.SSM_PREFIX || '/anot/prod').replace(/\/$/, '')
 const PARAMS = [
   {
     name: 'RATE_LIMIT_LOGIN_MAX',
-    value: process.env.RATE_LIMIT_LOGIN_MAX || '10',
+    value: process.env.RATE_LIMIT_LOGIN_MAX || '5',
   },
   {
     name: 'RATE_LIMIT_LOGIN_WINDOW_MINUTES',
@@ -28,11 +28,19 @@ const PARAMS = [
   },
   {
     name: 'RATE_LIMIT_API_MAX',
-    value: process.env.RATE_LIMIT_API_MAX || '200',
+    value: process.env.RATE_LIMIT_API_MAX || '100',
   },
   {
     name: 'RATE_LIMIT_API_WINDOW_MINUTES',
     value: process.env.RATE_LIMIT_API_WINDOW_MINUTES || '1',
+  },
+  {
+    name: 'JWT_EXPIRES_IN',
+    value: process.env.JWT_EXPIRES_IN || '1h',
+  },
+  {
+    name: 'FFMPEG_MAX_UPLOAD_MB',
+    value: process.env.FFMPEG_MAX_UPLOAD_MB || '500',
   },
 ]
 

@@ -17,8 +17,9 @@ describe('fileValidation', () => {
     expect(ALLOWED_AUDIO_MIMES).toEqual(expect.arrayContaining(['audio/webm', 'audio/wav', 'audio/mp4']))
   })
 
-  test('MAX_FILE_SIZE is 100MB', () => {
-    expect(MAX_FILE_SIZE).toBe(100 * 1024 * 1024)
+  test('MAX_FILE_SIZE matches getMaxUploadBytes()', () => {
+    const { getMaxUploadBytes } = require('../utils/ffmpegUploadLimits')
+    expect(MAX_FILE_SIZE).toBe(getMaxUploadBytes())
   })
 
   test('audioFileFilter rejects disallowed MIME types', (done) => {
@@ -35,6 +36,21 @@ describe('fileValidation', () => {
       expect(ok).toBe(true)
       done()
     })
+  })
+
+  test('audioFileFilter accepts MediaRecorder MIME with codec params', (done) => {
+    const file = { mimetype: 'audio/webm;codecs=opus' }
+    audioFileFilter({}, file, (err, ok) => {
+      expect(err).toBeNull()
+      expect(ok).toBe(true)
+      expect(file.mimetype).toBe('audio/webm')
+      done()
+    })
+  })
+
+  test('verifyFileSignature accepts codec-qualified MIME', () => {
+    const webmHeader = Buffer.from([0x1a, 0x45, 0xdf, 0xa3, 0, 0, 0, 0])
+    expect(verifyFileSignature(webmHeader, 'audio/webm;codecs=opus')).toBe(true)
   })
 })
 

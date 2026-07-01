@@ -6,10 +6,10 @@
 const fs = require('fs');
 const path = require('path');
 const Bull = require('bull');
+const { resolveFfmpegMaxUploadMb } = require('../utils/ffmpegUploadLimits');
 
 // Memory limits
 const MAX_MEMORY_MB = 512; // 512MB per job
-const MAX_FILE_SIZE_MB = 100; // 100MB max file size
 
 // Create job queue
 const audioQueue = new Bull('audio-processing', {
@@ -59,8 +59,9 @@ async function checkFileSize(filePath) {
       if (err) return reject(err);
       
       const sizeMB = stats.size / (1024 * 1024);
-      if (sizeMB > MAX_FILE_SIZE_MB) {
-        return reject(new Error(`File too large: ${sizeMB.toFixed(2)}MB (max: ${MAX_FILE_SIZE_MB}MB)`));
+      const maxMb = resolveFfmpegMaxUploadMb();
+      if (sizeMB > maxMb) {
+        return reject(new Error(`File too large: ${sizeMB.toFixed(2)}MB (max: ${maxMb}MB)`));
       }
       
       resolve(stats.size);

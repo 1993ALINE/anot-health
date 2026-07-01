@@ -32,15 +32,25 @@ const { runAIPipeline, generateAINote } = require('../utils/aiPipeline')
 const { getVisitForUser } = require('../utils/visitAccess')
 const { setVisitTranscriptionStatus } = require('../utils/visitSchemaCompat')
 
+const TRANSCRIPTION_UNAVAILABLE_RE = /^\[Recording \d+: transcription unavailable\]$/i
+
+function segmentIsRealTranscript(text) {
+  const s = String(text || '').trim()
+  if (!s) return false
+  return !TRANSCRIPTION_UNAVAILABLE_RE.test(s)
+}
+
 function noteHasTranscript(transcription) {
   if (!transcription) return false
   const raw = String(transcription).trim()
   if (!raw || raw === '[]' || raw === 'null') return false
   try {
     const parsed = JSON.parse(raw)
-    if (Array.isArray(parsed)) return parsed.some((s) => String(s || '').trim().length > 0)
+    if (Array.isArray(parsed)) {
+      return parsed.some((s) => segmentIsRealTranscript(s))
+    }
   } catch {
-    return raw.length > 0
+    return segmentIsRealTranscript(raw)
   }
   return false
 }

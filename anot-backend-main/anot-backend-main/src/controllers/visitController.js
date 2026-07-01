@@ -402,11 +402,17 @@ const endVisit = async (req, res) => {
     if (visit.notFound) return res.status(404).json({ error: 'Visit not found.' })
     if (visit.noAudio)  return res.status(400).json({ error: 'Cannot end visit before any audio is uploaded.' })
 
-    res.status(200).json({ message: 'Visit ended. AI transcription starting...', visit: visit.visit })
+    res.status(200).json({
+      message: 'Visit ended. AI transcription starting...',
+      visit: { ...visit.visit, transcription_status: 'processing' },
+      transcription_status: 'processing',
+    })
 
     // Run AI pipeline in background (non-blocking)
     setImmediate(() => {
-      runAIPipeline(id, { user: req.user, req }).catch(err => console.error('Background AI error:', err.message))
+      console.log(`[transcription] endVisit triggered pipeline for visit ${id}`)
+      runAIPipeline(id, { user: req.user, req })
+        .catch((err) => console.error(`[transcription] Background AI error for visit ${id}:`, err.message))
     })
 
   } catch (err) {

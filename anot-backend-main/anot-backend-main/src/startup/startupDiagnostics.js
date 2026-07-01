@@ -6,6 +6,7 @@
  */
 
 const { getEmailTransport, getTwilioClient } = require('../services/mfaDelivery')
+const { describeUploadLimitSource } = require('../utils/ffmpegUploadLimits')
 
 const REQUIRED_ENV_KEYS = ['JWT_SECRET']
 
@@ -19,6 +20,7 @@ const RECOMMENDED_SSM_KEYS = [
   'DATABASE_URL',
   'SETTINGS_ENCRYPTION_KEY',
   'ANTHROPIC_API_KEY',
+  'DEEPGRAM_API_KEY',
   'CORS_ORIGINS',
   'SENTRY_DSN',
   'SMTP_HOST',
@@ -27,6 +29,7 @@ const RECOMMENDED_SSM_KEYS = [
   'TWILIO_ACCOUNT_SID',
   'TWILIO_AUTH_TOKEN',
   'TWILIO_PHONE_NUMBER',
+  'FFMPEG_MAX_UPLOAD_MB',
 ]
 
 const MIN_JWT_SECRET_LENGTH = 32
@@ -305,12 +308,18 @@ function logRuntimeInfo() {
   console.log(`[startup] PORT=${process.env.PORT || '5000 (default)'}`)
   console.log(`[startup] BIND_HOST=${process.env.BIND_HOST || '0.0.0.0 (default)'}`)
   console.log(`[startup] USE_SSM=${process.env.USE_SSM || 'false'}`)
+  console.log(`[startup] SKIP_MFA_FOR_DEMO=${process.env.SKIP_MFA_FOR_DEMO || '(unset)'}`)
   if (process.env.USE_SSM === 'true') {
     console.log(`[startup] SSM_PREFIX=${process.env.SSM_PREFIX || '/anot/prod'}`)
     console.log(`[startup] SSM_REGION=${process.env.SSM_REGION || process.env.AWS_REGION || 'ap-southeast-1'}`)
   }
   console.log(`[startup] Database: ${databaseConfigSummary()}`)
   console.log(`[startup] JWT_SECRET=${maskSecret(process.env.JWT_SECRET?.trim())}`)
+  const uploadLimit = describeUploadLimitSource()
+  console.log(
+    `[startup] FFMPEG_MAX_UPLOAD_MB=${uploadLimit.mb} (source: ${uploadLimit.source}` +
+      `${uploadLimit.source === 'default' ? '; env unset — DB may refine at runtime' : ''})`,
+  )
   if (process.env.DB_SSL_CA) {
     console.log(`[startup] DB_SSL_CA=${process.env.DB_SSL_CA}`)
   } else if (process.env.DB_SSL_NO_VERIFY === 'true') {
@@ -372,11 +381,8 @@ async function runStartupDiagnostics(opts = {}) {
     throw new Error('MFA_BYPASS not allowed in production')
   }
 
-  if (process.env.NODE_ENV === 'production' && process.env.SKIP_MFA_FOR_DEMO === 'true') {
-    console.warn(
-      '[startup] ⚠ SKIP_MFA_FOR_DEMO=true — MFA enrollment/verification gates are disabled for demo. ' +
-        'Remove this flag for real PHI production deployments.',
-    )
+  if (String(process.env.SKIP_MFA_FOR_DEMO || '').trim().toLowerCase() === 'true' && process.env.NODE_ENV === 'production') {
+    console.warn('[startup] ⚠ Demo mode enabled - MFA gates will be bypassed')
   }
 
   if (process.env.NODE_ENV === 'production') {

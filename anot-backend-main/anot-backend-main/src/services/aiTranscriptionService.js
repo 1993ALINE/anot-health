@@ -1,14 +1,11 @@
 ﻿const fs = require('fs')
 const path = require('path')
 const { withOutboundSlot } = require('../utils/outboundConcurrency')
-const { loadAiSettings, useDeepgram, defaultRuntimeSettings } = require('./aiSettings')
+const { loadAiSettings, useDeepgram, defaultRuntimeSettings, getDeepgramKey } = require('./aiSettings')
 const { isReachableWebhookUrl } = require('../utils/webhookReachability')
 
-// Bound every Deepgram HTTP call so a stalled connection can't hang the
-// transcription pipeline (and block the clinician) indefinitely. 30s is ample
-// for callback/async mode (Deepgram returns a request_id almost immediately);
-// override with settings.deepgram_timeout_ms for long sync transcriptions.
-const DEEPGRAM_TIMEOUT_MS = 30000
+// Deepgram HTTP timeouts scale with upload size (see calculateDeepgramTimeout).
+// Override floor via DEEPGRAM_TIMEOUT_MS or settings.deepgram_timeout_ms.
 
 // Retry transient failures (HTTP 429 rate limits, 5xx, timeouts/network blips)
 // with exponential backoff. Non-transient failures (401 auth, 400 bad request)
@@ -159,12 +156,38 @@ function buildDeepgramFetchOptions(apiKey, mimetype, audioBuffer) {
 }
 
 /**
- * Resolve Deepgram HTTP timeout from settings
+ * Scale Deepgram HTTP timeout from audio file size (MB).
+ * Base connection time + ~1s processing per MB + 30% buffer; bounded 30s–10min.
+ * DEEPGRAM_TIMEOUT_MS env sets a minimum floor when manual tuning is needed.
  */
-function resolveDeepgramTimeoutMs(settings) {
-  return Number(settings.deepgram_timeout_ms) > 0
-    ? Number(settings.deepgram_timeout_ms)
-    : DEEPGRAM_TIMEOUT_MS
+function calculateDeepgramTimeout(fileSizeMB) {
+  // Sync listen requests: base connection + ~8s processing per MB + 30% buffer.
+  // Clinical recordings compress well but Deepgram wall-clock time scales with
+  // audio duration, not just bytes — previous 1s/MB formula timed out on 15-min visits.
+  const baseMs = 120000
+  const processingMs = fileSizeMB * 8000
+  const buffer = (baseMs + processingMs) * 0.3
+  const totalMs = baseMs + processingMs + buffer
+
+  const envOverride = process.env.DEEPGRAM_TIMEOUT_MS
+  if (envOverride) {
+    return Math.max(totalMs, parseInt(envOverride, 10))
+  }
+
+  return Math.max(60000, Math.min(totalMs, 900000))
+}
+
+/**
+ * Resolve Deepgram HTTP timeout from settings and file size.
+ */
+function resolveDeepgramTimeoutMs(settings, fileSizeBytes = 0) {
+  const sizeMb = Math.max(0, Number(fileSizeBytes) || 0) / (1024 * 1024)
+  let timeoutMs = calculateDeepgramTimeout(sizeMb)
+  const settingsMin = Number(settings?.deepgram_timeout_ms)
+  if (settingsMin > 0) {
+    timeoutMs = Math.max(timeoutMs, settingsMin)
+  }
+  return timeoutMs
 }
 
 /**
@@ -238,19 +261,43 @@ async function callDeepgramWithRetries(url, fetchOptions, queryParams, timeoutMs
  * Orchestrates param building, buffer load, API call, and result parsing
  */
 async function transcribeWithDeepgram(absPath, settings, visitId) {
-  const apiKey = settings.deepgram_api_key
-  if (!apiKey) return null
+  const apiKey = settings.deepgram_api_key || (await getDeepgramKey())
+  const hasKey = !!apiKey
+  console.log('[deepgram] Starting transcription for', path.basename(absPath))
+  console.log('[deepgram] API key available:', hasKey, '| enabled:', !!settings?.deepgram_enabled)
+  if (!hasKey) {
+    console.error('[deepgram] No API key — set DEEPGRAM_API_KEY in SSM or Admin → Settings')
+    return null
+  }
 
   const mimetype = getMimeTypeFromPath(absPath) || 'audio/webm'
   const queryParams = buildDeepgramQueryParams(settings, visitId)
   const url = `https://api.deepgram.com/v1/listen?${queryParams.toString()}`
-  const timeoutMs = resolveDeepgramTimeoutMs(settings)
+  const asyncMode = queryParams.has('callback')
+  if (asyncMode) {
+    console.log('[deepgram] Async webhook mode — callback URL set for visit', visitId)
+  }
 
   const audioBuffer = await loadAudioBufferForTranscription(absPath)
-  if (!audioBuffer) return null
+  if (!audioBuffer) {
+    console.error('[deepgram] Failed to read audio file:', absPath)
+    return null
+  }
+
+  const fileSizeMB = audioBuffer.length / (1024 * 1024)
+  const timeoutMs = resolveDeepgramTimeoutMs(settings, audioBuffer.length)
+  console.log('[deepgram] File:', fileSizeMB.toFixed(2), 'MB | mimetype:', mimetype, '| timeout:', timeoutMs, 'ms')
 
   const fetchOptions = buildDeepgramFetchOptions(apiKey, mimetype, audioBuffer)
-  return callDeepgramWithRetries(url, fetchOptions, queryParams, timeoutMs)
+  const result = await callDeepgramWithRetries(url, fetchOptions, queryParams, timeoutMs)
+  if (result === '__DEFERRED__') {
+    console.log('[deepgram] Request accepted — awaiting webhook callback for visit', visitId)
+  } else if (result) {
+    console.log('[deepgram] Transcription success — length:', result.length, 'chars')
+  } else {
+    console.error('[deepgram] Transcription failed — no transcript returned')
+  }
+  return result
 }
 
 /**
@@ -273,7 +320,7 @@ async function transcribeFile(absPath, settingsOverride, visitId) {
 
   // ONLY PATH: Deepgram (primary and only service)
   if (useDeepgram(settings)) {
-    console.log('[aiTranscription] Starting transcription with Deepgram')
+    console.log(`[aiTranscription] Starting Deepgram transcription for ${path.basename(absPath)}`)
     try {
       const text = await transcribeWithDeepgram(absPath, settings, visitId)
       if (text === '__DEFERRED__') {
@@ -301,4 +348,6 @@ module.exports = {
   transcribeFile,
   useDeepgram,
   getMimeTypeFromPath,
+  calculateDeepgramTimeout,
+  resolveDeepgramTimeoutMs,
 }

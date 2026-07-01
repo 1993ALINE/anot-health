@@ -1,6 +1,6 @@
 const pool = require('../config/db')
 const { auditLog } = require('./auditLogger')
-const { loadAiSettings, getAnthropicKey } = require('../services/aiSettings')
+const { loadAiSettings, getAnthropicKey, useDeepgram } = require('../services/aiSettings')
 const { setVisitTranscriptionStatus, claimVisitTranscription } = require('./visitSchemaCompat')
 const { isReachableWebhookUrl } = require('./webhookReachability')
 const {
@@ -230,6 +230,17 @@ async function runAIPipeline(visitId, options = {}) {
     console.log(`\n🚀 Starting AI pipeline for visit ${id}`)
     const settings = await loadAiSettings()
 
+    if (!useDeepgram(settings)) {
+      console.error(`[aiPipeline] Visit ${id}: Deepgram not configured — check Admin Settings + SSM DEEPGRAM_API_KEY`)
+      await setVisitTranscriptionStatus(id, 'failed')
+      await auditLog(ctxUser, 'TRANSCRIPTION_FAILED', 'visit', String(id), 'Deepgram not configured', {
+        ...auditOpts,
+        status: 'failure',
+        metadata: { visit_id: id, reason: 'deepgram_not_configured' },
+      })
+      return
+    }
+
     const visit = await loadVisitForPipeline(id)
     if (!visit) {
       console.error(`Visit ${id} not found`)
@@ -258,7 +269,23 @@ async function runAIPipeline(visitId, options = {}) {
     console.log(`📁 Found ${audioFiles.length} audio file(s)`)
 
     const useAsyncDeepgram =
-      isReachableWebhookUrl(settings.deepgram_webhook_url) && audioFiles.length === 1
+      isReachableWebhookUrl(settings.deepgram_webhook_url) &&
+      audioFiles.length === 1 &&
+      String(process.env.DEEPGRAM_FORCE_SYNC || '').toLowerCase() !== 'true'
+
+    const webhookSecretSet = !!String(process.env.DEEPGRAM_WEBHOOK_SECRET || '').trim()
+    if (useAsyncDeepgram && !webhookSecretSet) {
+      console.warn(
+        `[aiPipeline] Visit ${id}: webhook URL configured but DEEPGRAM_WEBHOOK_SECRET is unset — ` +
+          'callbacks will be rejected. Set in SSM or use DEEPGRAM_FORCE_SYNC=true.',
+      )
+    }
+
+    if (useAsyncDeepgram) {
+      console.log(`[aiPipeline] Visit ${id}: using Deepgram async webhook mode`)
+    } else {
+      console.log(`[aiPipeline] Visit ${id}: using Deepgram sync mode (${audioFiles.length} file(s))`)
+    }
 
     const { transcriptions, successCount, anyDeferred } = await transcribeAllAudioFiles(
       audioFiles,

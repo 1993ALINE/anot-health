@@ -40,7 +40,13 @@ function invalidateUserAuthCache(userId) {
 
 /** Demo-only: skip MFA enrollment/verification gates when explicitly enabled in production. */
 function isDemoMfaBypass() {
-    return process.env.SKIP_MFA_FOR_DEMO === 'true' && process.env.NODE_ENV === 'production'
+    const skipFlag = String(process.env.SKIP_MFA_FOR_DEMO || '').trim().toLowerCase() === 'true'
+    const isProd = process.env.NODE_ENV === 'production'
+    const result = skipFlag && isProd
+    if (process.env.SKIP_MFA_FOR_DEMO) {
+        console.log('[DEBUG] isDemoMfaBypass:', result, 'SKIP_MFA_FOR_DEMO:', process.env.SKIP_MFA_FOR_DEMO, 'NODE_ENV:', process.env.NODE_ENV)
+    }
+    return result
 }
 
 function extractBearerToken(authHeader) {

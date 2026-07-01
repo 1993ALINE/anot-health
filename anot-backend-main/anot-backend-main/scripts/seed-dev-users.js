@@ -12,6 +12,7 @@
 
 require('dotenv').config()
 const bcrypt = require('bcryptjs')
+const { getBcryptRounds } = require('../src/utils/bcryptCost')
 const pool = require('../src/config/db')
 
 const DEV_ACCOUNTS = [
@@ -37,7 +38,7 @@ function assertDevSeedAllowed() {
 
 async function upsertDevUser(account) {
   const email = account.email.toLowerCase()
-  const hash = await bcrypt.hash(account.password, 10)
+  const hash = await bcrypt.hash(account.password, getBcryptRounds())
   const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email])
   if (existing.rows[0]) {
     await pool.query(

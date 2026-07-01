@@ -19,7 +19,8 @@ describe('webhook HMAC validation', () => {
     const ts = Date.now()
     const sig = signDeepgramVisitToken(visitId, ts)
     expect(verifyDeepgramVisitToken(visitId, `${sig}x`, ts)).toBe(false)
-    expect(verifyDeepgramVisitToken(visitId, sig, ts - 10 * 60 * 1000)).toBe(false)
+    // Default max age is 4 hours — 5 hours old should be rejected
+    expect(verifyDeepgramVisitToken(visitId, sig, ts - 5 * 60 * 60 * 1000)).toBe(false)
   })
 })
 

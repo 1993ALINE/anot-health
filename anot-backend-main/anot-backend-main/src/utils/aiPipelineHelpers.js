@@ -72,7 +72,7 @@ async function transcribeAudioSegment(audioPath, settings, visitId, idx, useAsyn
       console.warn(`Audio file is empty: ${audioPath}`)
       return { text: placeholder, deferred: false, success: false }
     }
-    const maxBytes = (settings.ffmpeg_max_upload_mb || 100) * 1024 * 1024
+    const maxBytes = settings.ffmpeg_max_upload_mb * 1024 * 1024
     if (fileSize > maxBytes) {
       console.warn(`Audio over limit (${settings.ffmpeg_max_upload_mb}MB): ${audioPath}`)
       return { text: placeholder, deferred: false, success: false }
@@ -85,6 +85,7 @@ async function transcribeAudioSegment(audioPath, settings, visitId, idx, useAsyn
     const text = await transcribeFile(transcribePath, settings, useAsyncDeepgram ? visitId : undefined)
     if (text === '__DEFERRED__') return { text: null, deferred: true, success: false }
     if (text) return { text, deferred: false, success: true }
+    console.warn(`[transcription] Segment ${idx + 1} failed for visit ${visitId} — Deepgram returned no text`)
     return { text: placeholder, deferred: false, success: false }
   } catch (e) {
     console.error(`Transcription segment error for visit ${visitId}:`, e.message)

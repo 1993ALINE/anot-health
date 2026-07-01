@@ -9,7 +9,7 @@ const { getPublicErrorMessage, logServerError } = require('../utils/errorMessage
 const { runAIPipeline } = require('../utils/aiPipeline')
 const { getVisitForUser } = require('../utils/visitAccess')
 const { visitHasPatientConsentRecorded } = require('../utils/visitSchemaCompat')
-const { loadAiSettings, defaultRuntimeSettings } = require('../services/aiSettings')
+const { loadAiSettings, defaultRuntimeSettings, useDeepgram } = require('../services/aiSettings')
 const { getAudioStream, dbPathToKey } = require('../services/s3Storage')
 const cloudWatchAudit = require('../utils/logger')
 
@@ -48,7 +48,7 @@ async function resolveUploadTarget(req, file) {
   }
 
   const maxBytes = Math.min(
-    (settings.ffmpeg_max_upload_mb || 100) * 1024 * 1024,
+    settings.ffmpeg_max_upload_mb * 1024 * 1024,
     MAX_FILE_SIZE,
   )
   const filename = buildAudioFilename(visitId, file.mimetype)
@@ -77,15 +77,31 @@ function handleMulterError(err, req, res, next) {
   return res.status(500).json({ error: getPublicErrorMessage(500, err) })
 }
 
+async function queueVisitTranscription(visitId, user, req, source = 'upload') {
+  console.log(`[transcription] Starting pipeline for visit ${visitId} (${source})`)
+  setImmediate(() => {
+    runAIPipeline(visitId, { user, req })
+      .then(() => console.log(`[transcription] Pipeline finished for visit ${visitId}`))
+      .catch((err) => console.error(`[transcription] Failed for visit ${visitId}:`, err.message))
+  })
+}
+
 async function maybeAutoTranscribe(visitId, user, req) {
   try {
-    const s = await loadAiSettings()
-    if (!s.deepgram_auto_transcribe_on_upload) return
-    setImmediate(() => {
-      runAIPipeline(visitId, { user, req }).catch((err) => console.error('Auto-transcribe error:', err.message))
-    })
+    const settings = await loadAiSettings()
+    if (!settings.deepgram_auto_transcribe_on_upload) {
+      console.log(`[transcription] Auto-transcribe disabled in settings — skipping visit ${visitId}`)
+      return false
+    }
+    if (!useDeepgram(settings)) {
+      console.warn(`[transcription] Deepgram not configured — skipping auto-transcribe for visit ${visitId}`)
+      return false
+    }
+    await queueVisitTranscription(visitId, user, req, 'upload')
+    return true
   } catch (e) {
-    console.warn('maybeAutoTranscribe:', e.message)
+    console.warn('[transcription] maybeAutoTranscribe:', e.message)
+    return false
   }
 }
 
@@ -148,12 +164,15 @@ router.post('/:visitId', protect, restrict('clinician'), upload.single('audio'),
     validateAudioUpload(req)
     const { audioPath, filename } = uploadAudioToStorage(req)
     await appendAudioPathToVisit(visitId, audioPath, 'recording-uploaded')
+    console.log('[audio] Upload complete for visit:', visitId, 's3Key:', audioPath, 'size:', req.file.size)
 
     res.status(200).json({
       message: 'Audio uploaded successfully.',
       audio_file: audioPath,
       filename,
       size: req.file.size,
+      transcription_status: 'processing',
+      transcription_queued: true,
     })
 
     cloudWatchAudit.logDataAccess(
@@ -162,6 +181,7 @@ router.post('/:visitId', protect, restrict('clinician'), upload.single('audio'),
     )
 
     await maybeAutoTranscribe(visitId, req.user, req)
+    console.log('[audio] Transcription queue finished for visit:', visitId)
   } catch (err) {
     handleAudioUploadError(res, err, req)
   }
@@ -186,8 +206,9 @@ router.post('/:visitId/append', protect, restrict('clinician'), upload.single('a
     )
 
     setImmediate(() => {
-      console.log(`Re-running AI pipeline for visit ${visitId} after additional recording`)
-      runAIPipeline(visitId, { user: req.user, req }).catch((err) => console.error('AI re-run error:', err.message))
+      console.log(`[transcription] Re-running AI pipeline for visit ${visitId} after additional recording`)
+      runAIPipeline(visitId, { user: req.user, req })
+        .catch((err) => console.error(`[transcription] AI re-run error for visit ${visitId}:`, err.message))
     })
   } catch (err) {
     handleAudioUploadError(res, err, req)

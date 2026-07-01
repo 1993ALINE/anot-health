@@ -1,4 +1,5 @@
 const bcrypt = require('bcryptjs')
+const { getBcryptRounds } = require('../utils/bcryptCost')
 const jwt = require('jsonwebtoken')
 const pool = require('../config/db')
 const { validatePassword, generateSecurePassword } = require('../utils/passwordPolicy')
@@ -92,7 +93,8 @@ async function buildPostPasswordLoginResponse(user, req, res) {
         }
     }
 
-    if (isDemoMfaBypass()) {
+    const demoBypass = isDemoMfaBypass()
+    if (demoBypass) {
         console.warn('[auth.login] SKIP_MFA_FOR_DEMO=true — issuing full session without MFA gate')
         const token = generateToken(user)
         setSessionCookie(res, token)
@@ -478,7 +480,7 @@ const register = async (req, res) => {
         }
 
         // Hash the password
-        const hashedPassword = await bcrypt.hash(password, 10)
+        const hashedPassword = await bcrypt.hash(password, getBcryptRounds())
 
         // Insert new user. A generated temp password forces a rotation on first
         // login; an admin-chosen password does not.
@@ -623,7 +625,7 @@ const changePassword = async (req, res) => {
             }
         }
 
-        const hashed = await bcrypt.hash(newPassword, 10)
+        const hashed = await bcrypt.hash(newPassword, getBcryptRounds())
 
         // Always clear the forced-change flag once a new password is set.
         await pool.query('UPDATE users SET password = $1, force_password_change = false WHERE id = $2', [hashed, req.user.id])

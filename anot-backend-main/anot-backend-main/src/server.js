@@ -245,6 +245,7 @@ async function bootstrap() {
   const { enforceAdminMfa } = require('./middleware/enforceAdminMfa')
   app.use('/api/admin', enforceAdminMfa)
   app.use('/api/consent',     require('./routes/consent'))
+  app.use('/api/admin',       require('./routes/admin'))
   app.use('/api/admin',       require('./routes/health'))
 
   // ─── 404 HANDLER ─────────────────────────────────────────────────────────────

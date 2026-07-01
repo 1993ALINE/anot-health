@@ -3,6 +3,7 @@
  */
 
 const multer = require('multer')
+const { getMaxUploadBytes } = require('../utils/ffmpegUploadLimits')
 
 const ALLOWED_AUDIO_MIMES = [
   'audio/webm',
@@ -18,7 +19,13 @@ const ALLOWED_AUDIO_MIMES = [
   'audio/opus',
 ]
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024
+const MAX_FILE_SIZE = getMaxUploadBytes()
+
+/** Strip codec params (`audio/webm;codecs=opus` → `audio/webm`). */
+function normalizeMimeType(mimetype) {
+  if (!mimetype || typeof mimetype !== 'string') { return '' }
+  return mimetype.split(';')[0].trim().toLowerCase()
+}
 
 const AUDIO_SIGNATURES = {
   'audio/webm': [[0x1a, 0x45, 0xdf, 0xa3]],
@@ -35,7 +42,8 @@ const AUDIO_SIGNATURES = {
 }
 
 function verifyFileSignature(buffer, mimetype) {
-  const signatures = AUDIO_SIGNATURES[mimetype]
+  const base = normalizeMimeType(mimetype)
+  const signatures = AUDIO_SIGNATURES[base]
   if (!signatures || !buffer || buffer.length < 4) {
     return false
   }
@@ -48,12 +56,14 @@ function verifyFileSignature(buffer, mimetype) {
 }
 
 function audioFileFilter(req, file, cb) {
-  if (!ALLOWED_AUDIO_MIMES.includes(file.mimetype)) {
+  const base = normalizeMimeType(file.mimetype)
+  if (!ALLOWED_AUDIO_MIMES.includes(base)) {
     return cb(
       Object.assign(new Error(`Invalid file type: ${file.mimetype}.`), { status: 400 }),
       false,
     )
   }
+  file.mimetype = base
   cb(null, true)
 }
 
@@ -95,4 +105,5 @@ module.exports = {
   ALLOWED_AUDIO_MIMES,
   MAX_FILE_SIZE,
   verifyFileSignature,
+  normalizeMimeType,
 }

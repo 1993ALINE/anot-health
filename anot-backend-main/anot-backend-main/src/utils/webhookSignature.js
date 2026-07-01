@@ -1,9 +1,10 @@
 const crypto = require('crypto')
 
 // Reject signatures older than this window to defeat replay of captured URLs
-// (§164.312(c) integrity). Overridable for ops if long async transcriptions
-// legitimately call back later than the default.
-const MAX_AGE_MS = Number(process.env.DEEPGRAM_WEBHOOK_MAX_AGE_MS) || 5 * 60 * 1000
+// (§164.312(c) integrity). Default 4 hours — Deepgram async callbacks for
+// long clinical recordings (15–60 min) often arrive well after the 5-minute
+// window that caused silent webhook rejections. Override via DEEPGRAM_WEBHOOK_MAX_AGE_MS.
+const MAX_AGE_MS = Number(process.env.DEEPGRAM_WEBHOOK_MAX_AGE_MS) || 4 * 60 * 60 * 1000
 
 // Dedicated webhook secret. Never fall back to JWT_SECRET (key reuse). Fail
 // closed in production; dev gets a clearly-labelled placeholder.
