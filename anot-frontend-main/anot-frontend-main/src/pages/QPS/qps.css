@@ -213,6 +213,117 @@
     box-shadow: 0 4px 18px color-mix(in srgb, var(--brand-primary) 6%, transparent);
 }
 
+/* Note review — full-width 50/50 grid (Final Note + Grade) */
+.qps-portal .sf-note-workspace {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    max-width: none;
+    padding: 0;
+    overflow: hidden;
+}
+
+.qps-portal .sf-note-workspace__top {
+    flex-shrink: 0;
+    padding: 12px 20px 0;
+}
+
+.qps-portal .qps-note-detail-container {
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+    padding: 20px;
+    background: #f5f5f5;
+    box-sizing: border-box;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.qps-portal .qps-note-detail {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    width: 100%;
+    max-width: 1400px;
+    margin: 0 auto;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.qps-portal .qps-note-detail > .final-note-panel,
+.qps-portal .qps-note-detail > .grade-panel {
+    min-height: 0;
+    height: 100%;
+    background: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.qps-portal .qps-note-detail > .final-note-panel .sf-note-panel__body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    max-height: 600px;
+    padding: 20px;
+}
+
+.qps-portal .qps-note-detail > .grade-panel .sf-note-panel__body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    max-height: 600px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.qps-portal .qps-note-detail > .final-note-panel .sf-textarea {
+    min-height: 320px;
+    width: 100%;
+    box-sizing: border-box;
+    line-height: 1.55;
+}
+
+.qps-portal .qps-note-detail > .grade-panel .sf-textarea-field {
+    flex: 1;
+    min-height: 120px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+@media (max-width: 1024px) {
+    .qps-portal .qps-note-detail {
+        grid-template-columns: 1fr;
+        overflow-y: auto;
+    }
+
+    .qps-portal .qps-note-detail > .final-note-panel,
+    .qps-portal .qps-note-detail > .grade-panel {
+        height: auto;
+        min-height: 300px;
+    }
+
+    .qps-portal .qps-note-detail > .final-note-panel .sf-note-panel__body,
+    .qps-portal .qps-note-detail > .grade-panel .sf-note-panel__body {
+        max-height: none;
+    }
+}
+
+@media (max-width: 768px) {
+    .qps-portal .qps-note-detail-container {
+        padding: 16px;
+    }
+
+    .qps-portal .qps-note-detail {
+        gap: 16px;
+    }
+}
+
 .qps-panel-empty {
     padding: 1.25rem 0.25rem;
     text-align: center;

@@ -1,12 +1,12 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
-import { useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, useSidebarOffCanvasMode, portalSidebarAriaHidden, portalSidebarInert, ConfirmDialog, PortalSidebarBrand } from '../shared'
+import { useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, useSidebarOffCanvasMode, portalSidebarAriaHidden, portalSidebarInert, ConfirmDialog, PortalSidebarBrand, parseTranscriptionBlocks } from '../shared'
 import { authAPI, usersAPI, visitsAPI, notesAPI, isAbortError } from '../../services/api'
 import { useBranding } from '../../services/branding'
 import SystemProfileManager from '../../components/SystemProfileManager'
 import PortalAudioPlayer from '../../components/PortalAudioPlayer'
 import ScribeFinalNoteEditor from '../../components/ScribeFinalNoteEditor'
 import NoteWorkspacePanel from '../../components/NoteWorkspacePanel'
-import { cleanAiDraftForDisplay } from '../../utils/aiDraftFormat'
+import AiDraftReadonly from '../../components/AiDraftReadonly'
 import { useRenderRateWarning } from '../../utils/useRenderRateWarning'
 import PortalSidebarFooter from '../../components/PortalSidebarFooter'
 import ErrorBoundary, { PortalCrashFallback } from '../../components/ErrorBoundary'
@@ -419,7 +419,11 @@ function Scribe() {
         : 'You will need to sign in again to use Anot.',
       confirmText: 'Log out',
       onConfirm: async () => {
-        await authAPI.logout()
+        try {
+          await authAPI.logout({ reload: true })
+        } catch {
+          globalThis.location.replace('/login')
+        }
       },
     })
   }, [screen, isDirty])
@@ -1354,6 +1358,8 @@ function Scribe() {
         ? grades.find((g) => String(g.note_id) === String(noteId))
         : null
     const finalNoteText = note?.final_note || viewingMyNote.final_note || ''
+    const aiDraftText = note?.ai_draft || viewingMyNote.ai_draft || ''
+    const transcriptionRaw = note?.transcription || viewingMyNote.transcription || ''
     const submittedRaw = note?.updated_at || viewingMyNote.updated_at
     const submittedLabel = submittedRaw ? fmtDisplayDate(submittedRaw) : '—'
     const statusLabel = viewingMyNote.status === 'uploaded' ? 'Graded' : 'Submitted'
@@ -1423,10 +1429,28 @@ function Scribe() {
               </header>
               {loadingNote ? (
                 <div className="scribe-note-readonly__loading">Loading note…</div>
-              ) : finalNoteText ? (
-                <ScribeFinalNoteEditor value={finalNoteText} onChange={() => {}} readOnly className="scribe-note-readonly__sections" />
               ) : (
-                <div className="scribe-note-readonly__empty">No final note content available.</div>
+                <div className="scribe-note-readonly__panels">
+                  <NoteWorkspacePanel title="Transcription" allowExpand={false} badges={<span className="badge badge-gray">Read-only</span>}>
+                    {transcriptionRaw ? (
+                      parseTranscriptionBlocks(transcriptionRaw).map((block, i) => (
+                        <div key={i} className="sf-transcript-block">{block}</div>
+                      ))
+                    ) : (
+                      <div style={{ padding: 12, color: '#64748B', fontSize: 13 }}>No transcript available.</div>
+                    )}
+                  </NoteWorkspacePanel>
+                  <NoteWorkspacePanel title="AI Draft" allowExpand={false} badges={<span className="badge badge-gray">Read-only</span>}>
+                    <AiDraftReadonly aiDraft={aiDraftText} />
+                  </NoteWorkspacePanel>
+                  <NoteWorkspacePanel title="Final Note" allowExpand={false} badges={<span className="badge badge-green">Submitted</span>}>
+                    {finalNoteText ? (
+                      <ScribeFinalNoteEditor value={finalNoteText} onChange={() => {}} readOnly className="scribe-note-readonly__sections" />
+                    ) : (
+                      <div className="scribe-note-readonly__empty">No final note content available.</div>
+                    )}
+                  </NoteWorkspacePanel>
+                </div>
               )}
               {grade ? (
                 <footer className="scribe-note-readonly__grade">
@@ -1580,16 +1604,7 @@ function Scribe() {
           >
             {loadingNote ? <div style={{ padding: 12, color: '#64748B', fontSize: 13 }}>Loading...</div> :
              note?.ai_draft ? (
-              note.ai_draft.startsWith('[AI draft unavailable') ? (
-                <div className="scribe-ai-draft-unavailable">{note.ai_draft}</div>
-              ) : (
-                <ScribeFinalNoteEditor
-                  value={cleanAiDraftForDisplay(note.ai_draft)}
-                  onChange={() => {}}
-                  readOnly
-                  className="scribe-ai-draft-readonly"
-                />
-              )
+              <AiDraftReadonly aiDraft={note.ai_draft} />
             ) : (
               <div style={{ padding: 16, color: '#64748B', fontSize: 13, lineHeight: 1.7 }}>
                 <div style={{ fontSize: 24, marginBottom: 8 }}>🤖</div>

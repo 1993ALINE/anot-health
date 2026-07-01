@@ -363,25 +363,21 @@ export function SfAccountMenu({
             <div className="sf-account-menu__items">
                 {typeof onViewProfile === 'function' ? (
                     <button type="button" className="sf-account-menu__item" role="menuitem" onClick={() => run(onViewProfile)}>
-                        <span className="sf-account-menu__ico" aria-hidden>ðŸ‘¤</span>
                         <span>{variant === 'clinician' ? 'Profile' : 'View profile'}</span>
                     </button>
                 ) : null}
                 {typeof onSettings === 'function' ? (
                     <button type="button" className="sf-account-menu__item" role="menuitem" onClick={() => run(onSettings)}>
-                        <span className="sf-account-menu__ico" aria-hidden>âš™ï¸</span>
                         <span>Settings</span>
                     </button>
                 ) : null}
                 {typeof onProfilePreview === 'function' ? (
                     <button type="button" className="sf-account-menu__item" role="menuitem" onClick={() => run(onProfilePreview)}>
-                        <span className="sf-account-menu__ico" aria-hidden>ðŸ“‹</span>
                         <span>Profile preview</span>
                     </button>
                 ) : null}
                 {typeof onChangePhoto === 'function' ? (
                     <button type="button" className="sf-account-menu__item" role="menuitem" onClick={() => run(onChangePhoto)}>
-                        <span className="sf-account-menu__ico" aria-hidden>ðŸ“·</span>
                         <span>Change photo</span>
                     </button>
                 ) : null}
@@ -389,7 +385,6 @@ export function SfAccountMenu({
                     <>
                         <div className="sf-account-menu__sep" role="separator" />
                         <button type="button" className="sf-account-menu__item sf-account-menu__item--danger" role="menuitem" onClick={() => run(onLogout)}>
-                            <span className="sf-account-menu__ico" aria-hidden>ðŸšª</span>
                             <span>{variant === 'clinician' ? 'Sign Out' : 'Log out'}</span>
                         </button>
                     </>
@@ -467,7 +462,7 @@ export function ConfirmDialog({ dialog, loading = false, onDismiss, onConfirm })
             >
                 <div className="adm-confirm-head">
                     <div className={`adm-confirm-head__icon ${tone === 'danger' ? 'is-danger' : 'is-primary'}`} aria-hidden>
-                        {tone === 'danger' ? 'âš ' : 'âœ“'}
+                        {tone === 'danger' ? '!' : '\u2713'}
                     </div>
                     <div>
                         <div id="sf-confirm-title" className="adm-modal__title adm-modal__title--confirm">
@@ -484,7 +479,7 @@ export function ConfirmDialog({ dialog, loading = false, onDismiss, onConfirm })
                         onClick={onConfirm}
                         disabled={loading}
                     >
-                        {loading ? 'Please waitâ€¦' : dialog.confirmText || 'Confirm'}
+                        {loading ? 'Please wait\u2026' : dialog.confirmText || 'Confirm'}
                     </button>
                     <button type="button" className="adm-btn-ghost adm-btn-ghost--modal-action" onClick={onDismiss} disabled={loading}>
                         {dialog.cancelText || 'Cancel'}

@@ -7,7 +7,7 @@ import PortalAudioPlayer from '../../components/PortalAudioPlayer'
 import NoteWorkspacePanel from '../../components/NoteWorkspacePanel'
 import PortalSidebarFooter from '../../components/PortalSidebarFooter'
 import { fmtAppointmentTime } from '../../utils/timeFormat'
-import { parseTranscriptionBlocks, useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, useSidebarOffCanvasMode, portalSidebarAriaHidden, portalSidebarInert, ConfirmDialog, PortalSidebarBrand } from '../shared'
+import { useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, useSidebarOffCanvasMode, portalSidebarAriaHidden, portalSidebarInert, ConfirmDialog, PortalSidebarBrand } from '../shared'
 import ErrorBoundary, { PortalCrashFallback } from '../../components/ErrorBoundary'
 import { getCurrentUser } from '../../utils/getCurrentUser'
 import { useSessionTimeout } from '../../utils/useSessionTimeout'
@@ -229,7 +229,11 @@ function QPS() {
       message: 'You will need to sign in again to use Anot.',
       confirmText: 'Log out',
       onConfirm: async () => {
-        await authAPI.logout()
+        try {
+          await authAPI.logout({ reload: true })
+        } catch {
+          globalThis.location.replace('/login')
+        }
       },
     })
   }
@@ -785,28 +789,13 @@ function QPS() {
             />
           </div>
 
-          <div className="sf-note-workspace__panels">
-            <NoteWorkspacePanel
-              title="Transcription"
-              badges={<span className="badge badge-gray">Read-only</span>}
-            >
-              {selectedNote?.transcription ? (
-                parseTranscriptionBlocks(selectedNote.transcription).map((block, i) => (
-                  <div key={i} className="sf-transcript-block">{block}</div>
-                ))
-              ) : (
-                <div className="qps-panel-empty" role="status">
-                  <div className="qps-panel-empty__icon" aria-hidden>🎙</div>
-                  <div className="qps-panel-empty__title">Transcription pending</div>
-                  <div>Will appear after AI processing.</div>
-                </div>
-              )}
-            </NoteWorkspacePanel>
-
-            <NoteWorkspacePanel
-              title="Final Note"
-              badges={<span className="badge badge-blue">by {scribeName}</span>}
-            >
+          <div className="qps-note-detail-container">
+            <div className="qps-note-detail">
+              <NoteWorkspacePanel
+                title="Final Note"
+                className="final-note-panel"
+                badges={<span className="badge badge-blue">by {scribeName}</span>}
+              >
               {selectedNote?.final_note ? (
                 <textarea className="sf-textarea sf-textarea-readonly" value={selectedNote.final_note} readOnly />
               ) : (
@@ -818,9 +807,10 @@ function QPS() {
               )}
             </NoteWorkspacePanel>
 
-            <NoteWorkspacePanel
-              title="Grade & Comment"
-              badges={
+              <NoteWorkspacePanel
+                title="Grade & Comment"
+                className="grade-panel"
+                badges={
                 <span className={`badge ${overallScore >= 90 ? 'badge-green' : overallScore >= 75 ? 'badge-amber' : 'badge-red'}`}>
                   Score: {overallScore}
                 </span>
@@ -879,6 +869,7 @@ function QPS() {
                 {isGraded && <span style={{ fontSize: 12, color: '#047857', fontWeight: 500, marginLeft: 'auto' }}>✓ Already graded</span>}
               </div>
             </NoteWorkspacePanel>
+            </div>
           </div>
         </div>
 

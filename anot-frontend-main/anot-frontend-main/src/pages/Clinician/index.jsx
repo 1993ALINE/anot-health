@@ -6,6 +6,12 @@ import SystemProfileManager from '../../components/SystemProfileManager'
 import PortalSidebarFooter from '../../components/PortalSidebarFooter'
 import { useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, useSidebarOffCanvasMode, portalSidebarAriaHidden, portalSidebarInert, ConfirmDialog, PortalSidebarBrand } from '../shared'
 import { queueAudioUpload, flushPendingAudioUploads, installOfflineUploadFlush } from '../../utils/offlineUploadQueue'
+import {
+  formatUploadError,
+  normalizeAudioBlob,
+  uploadWithRetry,
+  validateAudioBlobSize,
+} from '../../utils/audioUpload'
 import './clinician.css'
 import './clinician-redesign.css'
 import '../portalErrorBoundary.css'
@@ -1741,6 +1747,7 @@ function Clinician() {
   const [paused, setPaused]         = useState(false)
   const [timer, setTimer]           = useState(0)
   const [uploading, setUploading]   = useState(false)
+  const [uploadStatus, setUploadStatus] = useState('')
   const [addRec, setAddRec]         = useState(null)
   const [addTimer, setAddTimer]     = useState(0)
   const [addPaused, setAddPaused]   = useState(false)
@@ -1903,7 +1910,11 @@ function Clinician() {
       message: 'You will need to sign in again to use Anot.',
       confirmText: 'Log out',
       onConfirm: async () => {
-        await authAPI.logout()
+        try {
+          await authAPI.logout({ reload: true })
+        } catch {
+          globalThis.location.replace('/login')
+        }
       },
     })
   }
@@ -2195,6 +2206,53 @@ function Clinician() {
   }
 
   /**
+   * Upload a recording blob with validation, retry, and detailed errors.
+   */
+  const uploadRecordingBlob = async (visitId, chunks, mimeType, mode = 'primary') => {
+    const raw = new Blob(chunks, { type: mimeType || 'audio/webm' })
+    const blob = normalizeAudioBlob(raw)
+    const sizeCheck = validateAudioBlobSize(blob)
+    if (!sizeCheck.ok) {
+      throw Object.assign(new Error(sizeCheck.error), { status: 413 })
+    }
+
+    setUploadStatus('Uploading audio…')
+    const uploadFn = mode === 'append'
+      ? () => visitsAPI.appendAudio(visitId, blob)
+      : () => visitsAPI.uploadAudio(visitId, blob)
+
+    try {
+      return await uploadWithRetry(uploadFn, {
+        onRetry: (attempt, err) => {
+          console.error('[audio upload] retry', {
+            attempt,
+            visitId,
+            mode,
+            size: blob.size,
+            type: blob.type,
+            status: err?.status,
+            message: err?.message,
+          })
+          setUploadStatus(`Upload failed (${formatUploadError(err)}). Retrying (${attempt + 1}/3)…`)
+        },
+      })
+    } catch (err) {
+      console.error('[audio upload] failed', {
+        visitId,
+        mode,
+        size: blob.size,
+        type: blob.type,
+        status: err?.status,
+        message: err?.message,
+        code: err?.code,
+      })
+      throw err
+    } finally {
+      setUploadStatus('')
+    }
+  }
+
+  /**
    * Stop recorder and upload remaining audio blob
    */
   const processRemainingAudio = (rec, visitId) => new Promise((resolve) => {
@@ -2206,15 +2264,14 @@ function Clinician() {
       let uploadQueued = false
       if (cRef.current.length > 0) {
         try {
-          const b = new Blob(cRef.current, { type: rec.mimeType || 'audio/webm' })
-          await visitsAPI.uploadAudio(visitId, b)
-        } catch {
+          await uploadRecordingBlob(visitId, cRef.current, rec.mimeType, 'primary')
+        } catch (err) {
           try {
-            const b = new Blob(cRef.current, { type: rec.mimeType || 'audio/webm' })
+            const b = normalizeAudioBlob(new Blob(cRef.current, { type: rec.mimeType || 'audio/webm' }))
             await queueAudioUpload({ visitId, blob: b, mode: 'primary', durationSeconds: timer })
             uploadQueued = true
           } catch {
-            showToast('Upload failed. Check your connection and try again.', 'error')
+            showToast(formatUploadError(err), 'error')
           }
         }
       }
@@ -2247,6 +2304,7 @@ function Clinician() {
               ...v,
               ...(vr || {}),
               status: vr?.status ?? 'recording-uploaded',
+              transcription_status: endData.transcription_status || vr?.transcription_status || 'processing',
               patient_name: v.patient_name,
               duration_seconds: vr?.duration_seconds ?? duration,
             }
@@ -2254,7 +2312,7 @@ function Clinician() {
       )
     )
     if (screen === 'notes') {loadHistory()}
-    showToast(`✓ Encounter ended — preparing note for ${patientName}`)
+    showToast(`✓ Encounter ended — transcription in progress for ${patientName}`)
   }
 
   /**
@@ -2320,16 +2378,15 @@ function Clinician() {
         arRef.current.onstop = async () => {
           if (acRef.current.length > 0) {
             try {
-              const b = new Blob(acRef.current, { type: arRef.current.mimeType || 'audio/webm' })
-              await visitsAPI.appendAudio(vid, b)
+              await uploadRecordingBlob(vid, acRef.current, arRef.current.mimeType, 'append')
               showToast('✓ Additional recording uploaded')
-            } catch {
+            } catch (err) {
               try {
-                const b = new Blob(acRef.current, { type: arRef.current.mimeType || 'audio/webm' })
+                const b = normalizeAudioBlob(new Blob(acRef.current, { type: arRef.current.mimeType || 'audio/webm' }))
                 await queueAudioUpload({ visitId: vid, blob: b, mode: 'append' })
                 showToast('Upload failed — recording is saved in this tab and will retry automatically. Keep this tab open.', 'error')
               } catch {
-                showToast('Upload failed', 'error')
+                showToast(formatUploadError(err), 'error')
               }
             }
           }
@@ -3408,7 +3465,7 @@ function Clinician() {
 
               {uploading && (
                 <div className="sf-notif sf-notif-green" style={{ borderRadius: 10, marginBottom: 14 }}>
-                  ⏳ Uploading audio...
+                  ⏳ {uploadStatus || 'Uploading audio…'}
                 </div>
               )}
 

@@ -1289,7 +1289,11 @@ function Admin() {
             confirmText: 'Sign out',
             tone: 'danger',
             onConfirm: async () => {
-                await authAPI.logout()
+                try {
+                    await authAPI.logout({ reload: true })
+                } catch {
+                    globalThis.location.replace('/login')
+                }
             },
         })
     }

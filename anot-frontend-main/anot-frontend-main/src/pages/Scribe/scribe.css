@@ -420,6 +420,19 @@
   white-space: pre-wrap;
 }
 
+.scribe-portal .scribe-note-readonly__panels {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+@media (max-width: 1024px) {
+  .scribe-portal .scribe-note-readonly__panels {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── Profile page ──────────────────────────────────────── */
 .scribe-portal .scribe-profile-card .pm-actions {
   justify-content: stretch;

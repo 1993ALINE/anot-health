@@ -12,6 +12,7 @@ import {
   purgeExpiredSession,
   hasValidSession,
 } from '../utils/sessionAuth'
+import { extensionForMime, normalizeAudioBlob, normalizeAudioMime } from '../utils/audioUpload'
 
 purgeExpiredSession()
 
@@ -185,6 +186,7 @@ const CLIENT_STATUS_MESSAGES = {
   401: 'Authentication failed',
   403: 'Access denied',
   404: 'Resource not found',
+  413: 'Request too large',
   429: 'Too many requests',
   500: 'Something went wrong',
   503: 'Service temporarily unavailable',
@@ -387,15 +389,19 @@ export const visitsAPI = {
   deleteVisit: async (id) => apiMutate('DELETE', `/visits/${id}`),
   lockNote: async (id) => apiMutate('POST', `/visits/${id}/lock-note`),
   uploadAudio: async (visitId, audioBlob) => {
+    const normalized = normalizeAudioBlob(audioBlob)
+    const mime = normalizeAudioMime(normalized.type)
+    const ext = extensionForMime(mime)
     const formData = new FormData()
-    const ext = audioBlob.type?.includes('mp4') ? 'mp4' : audioBlob.type?.includes('ogg') ? 'ogg' : 'webm'
-    formData.append('audio', audioBlob, `visit_${visitId}_${Date.now()}.${ext}`)
+    formData.append('audio', normalized, `visit_${visitId}_${Date.now()}.${ext}`)
     return apiMutate('POST', `/audio/${visitId}`, { body: formData })
   },
   appendAudio: async (visitId, audioBlob) => {
+    const normalized = normalizeAudioBlob(audioBlob)
+    const mime = normalizeAudioMime(normalized.type)
+    const ext = extensionForMime(mime)
     const formData = new FormData()
-    const ext = audioBlob.type?.includes('mp4') ? 'mp4' : audioBlob.type?.includes('ogg') ? 'ogg' : 'webm'
-    formData.append('audio', audioBlob, `visit_${visitId}_extra_${Date.now()}.${ext}`)
+    formData.append('audio', normalized, `visit_${visitId}_extra_${Date.now()}.${ext}`)
     return apiMutate('POST', `/audio/${visitId}/append`, { body: formData })
   },
   uploadAudioFile: async (visitId, file) => {
