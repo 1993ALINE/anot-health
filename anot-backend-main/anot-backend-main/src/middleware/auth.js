@@ -31,22 +31,11 @@ async function getUserAuthState(userId) {
 
 /**
  * Drop the cached auth state for a user so a deactivation / role change takes
- * effect immediately instead of after the 60s TTL. Safe to call with a number
+ * effect immediately instead of after the 10s TTL. Safe to call with a number
  * or string id. Exported for callers like the admin user controller.
  */
 function invalidateUserAuthCache(userId) {
     userCheckCache.delete(Number(userId))
-}
-
-/** Demo-only: skip MFA enrollment/verification gates when explicitly enabled in production. */
-function isDemoMfaBypass() {
-    const skipFlag = String(process.env.SKIP_MFA_FOR_DEMO || '').trim().toLowerCase() === 'true'
-    const isProd = process.env.NODE_ENV === 'production'
-    const result = skipFlag && isProd
-    if (process.env.SKIP_MFA_FOR_DEMO) {
-        console.log('[DEBUG] isDemoMfaBypass:', result, 'SKIP_MFA_FOR_DEMO:', process.env.SKIP_MFA_FOR_DEMO, 'NODE_ENV:', process.env.NODE_ENV)
-    }
-    return result
 }
 
 function extractBearerToken(authHeader) {
@@ -122,7 +111,6 @@ function checkPhiTrainingRequired(user) {
  * Check MFA enrollment scope (login gate for PHI roles without MFA)
  */
 function checkMfaEnrollmentRequired(user, reqPath) {
-    if (isDemoMfaBypass()) return { ok: true }
     if (user.requireMfaEnrollment === true) {
         // req.path is router-relative (/setup) when protect runs on /api/mfa routes.
         const allowed =
@@ -148,7 +136,6 @@ function checkMfaEnrollmentRequired(user, reqPath) {
  * Check MFA verification scope (login gate)
  */
 function checkMfaRequired(user, reqPath) {
-    if (isDemoMfaBypass()) return { ok: true }
     if (user.requireMfa === true) {
         const allowed =
             reqPath.includes('/verify-mfa') ||
@@ -244,5 +231,4 @@ module.exports = {
   checkMfaEnrollmentRequired,
   checkMfaRequired,
   checkPhiTrainingRequired,
-  isDemoMfaBypass,
 }

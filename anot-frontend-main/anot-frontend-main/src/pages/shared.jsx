@@ -491,5 +491,3 @@ export function ConfirmDialog({ dialog, loading = false, onDismiss, onConfirm })
 
     return typeof document !== 'undefined' ? createPortal(modal, document.body) : null
 }
-
-export { ConfidenceBadge } from '../components/ConfidenceBadge'

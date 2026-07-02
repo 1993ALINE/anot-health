@@ -1,5 +1,4 @@
-﻿const { extractConfidence } = require('../utils/transcriptionConfidence')
-const { loadAiSettings, useDeepgram, defaultRuntimeSettings } = require('./aiSettings')
+﻿const { loadAiSettings, useDeepgram, defaultRuntimeSettings } = require('./aiSettings')
 
 /**
  * Validate transcription request inputs
