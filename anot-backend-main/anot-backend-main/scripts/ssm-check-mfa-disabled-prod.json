@@ -1,0 +1,7 @@
+{
+  "commands": [
+    "grep -n 'isMfaDisabled\\|MFA_DISABLED\\|function loginRequiresMfa' -A 6 /var/app/current/src/services/mfaService.js | head -30",
+    "printenv MFA_DISABLED || echo MFA_DISABLED_not_set",
+    "cat /opt/elasticbeanstalk/deployment/env | grep MFA || echo no_MFA_in_eb_env"
+  ]
+}

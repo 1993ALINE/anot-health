@@ -1,0 +1,5 @@
+{
+  "commands": [
+    "cd /var/app/current && USE_SSM=true node reset-stuck-idle.js 2>&1 | tr -cd '\\11\\12\\15\\40-\\176'"
+  ]
+}

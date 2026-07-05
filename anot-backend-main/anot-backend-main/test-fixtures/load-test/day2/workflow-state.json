@@ -1,0 +1,161 @@
+{
+  "day": "2026-07-04",
+  "visits": [
+    {
+      "patientId": 310,
+      "visitId": 403,
+      "name": "Robert Chen",
+      "mrn": "DAY2-20260704-001",
+      "complaint": "hypertension follow-up"
+    },
+    {
+      "patientId": 311,
+      "visitId": 404,
+      "name": "Maria Santos",
+      "mrn": "DAY2-20260704-002",
+      "complaint": "type 2 diabetes management"
+    },
+    {
+      "patientId": 312,
+      "visitId": 405,
+      "name": "James Wilson",
+      "mrn": "DAY2-20260704-003",
+      "complaint": "chronic lower back pain"
+    },
+    {
+      "patientId": 313,
+      "visitId": 406,
+      "name": "Linda Park",
+      "mrn": "DAY2-20260704-004",
+      "complaint": "persistent cough and wheezing"
+    },
+    {
+      "patientId": 314,
+      "visitId": 407,
+      "name": "David Okonkwo",
+      "mrn": "DAY2-20260704-005",
+      "complaint": "migraine headaches"
+    }
+  ],
+  "phase": "done",
+  "upload": {
+    "uploaded": 10,
+    "uploadMinutes": 2
+  },
+  "transcription": {
+    "completed": 5,
+    "failed": 0,
+    "drafts": 5
+  },
+  "scribeResults": [
+    {
+      "visitId": 403,
+      "noteId": 126,
+      "status": "submitted"
+    },
+    {
+      "visitId": 404,
+      "noteId": 127,
+      "status": "submitted"
+    },
+    {
+      "visitId": 405,
+      "noteId": 128,
+      "status": "submitted"
+    },
+    {
+      "visitId": 406,
+      "noteId": 129,
+      "status": "submitted"
+    },
+    {
+      "visitId": 407,
+      "noteId": 130,
+      "status": "submitted"
+    }
+  ],
+  "grades": [
+    {
+      "id": 11,
+      "note_id": 126,
+      "qps_id": 10,
+      "accuracy": 92,
+      "completeness": 88,
+      "terminology": 90,
+      "formatting": 87,
+      "overall_score": 89,
+      "comment": "Day 2 quality review - hypertension follow-up",
+      "created_at": "2026-07-04T18:07:22.314Z"
+    },
+    {
+      "id": 12,
+      "note_id": 127,
+      "qps_id": 10,
+      "accuracy": 89,
+      "completeness": 91,
+      "terminology": 86,
+      "formatting": 90,
+      "overall_score": 89,
+      "comment": "Day 2 quality review - type 2 diabetes management",
+      "created_at": "2026-07-04T18:07:22.766Z"
+    },
+    {
+      "id": 13,
+      "note_id": 128,
+      "qps_id": 10,
+      "accuracy": 94,
+      "completeness": 87,
+      "terminology": 93,
+      "formatting": 88,
+      "overall_score": 91,
+      "comment": "Day 2 quality review - chronic lower back pain",
+      "created_at": "2026-07-04T18:07:23.273Z"
+    },
+    {
+      "id": 14,
+      "note_id": 129,
+      "qps_id": 10,
+      "accuracy": 85,
+      "completeness": 92,
+      "terminology": 88,
+      "formatting": 91,
+      "overall_score": 89,
+      "comment": "Day 2 quality review - persistent cough and wheezing",
+      "created_at": "2026-07-04T18:07:23.729Z"
+    },
+    {
+      "id": 15,
+      "note_id": 130,
+      "qps_id": 10,
+      "accuracy": 91,
+      "completeness": 89,
+      "terminology": 87,
+      "formatting": 93,
+      "overall_score": 90,
+      "comment": "Day 2 quality review - migraine headaches",
+      "created_at": "2026-07-04T18:07:24.207Z"
+    }
+  ],
+  "locked": [
+    {
+      "visitId": 403,
+      "locked": true
+    },
+    {
+      "visitId": 404,
+      "locked": true
+    },
+    {
+      "visitId": 405,
+      "locked": true
+    },
+    {
+      "visitId": 406,
+      "locked": true
+    },
+    {
+      "visitId": 407,
+      "locked": true
+    }
+  ]
+}

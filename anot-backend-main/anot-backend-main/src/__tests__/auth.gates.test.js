@@ -1,6 +1,20 @@
 const { checkMfaRequired, checkMfaEnrollmentRequired, checkPhiTrainingRequired } = require('../middleware/auth')
 
 describe('auth scope gates', () => {
+  const savedMfaDisabled = process.env.MFA_DISABLED
+
+  beforeEach(() => {
+    delete process.env.MFA_DISABLED
+  })
+
+  afterAll(() => {
+    if (savedMfaDisabled === undefined) {
+      delete process.env.MFA_DISABLED
+    } else {
+      process.env.MFA_DISABLED = savedMfaDisabled
+    }
+  })
+
   test('checkMfaRequired blocks until MFA verified', () => {
     const blocked = checkMfaRequired({ requireMfa: true }, '/api/patients')
     expect(blocked.ok).toBe(false)
@@ -22,20 +36,6 @@ describe('auth scope gates', () => {
     expect(checkMfaEnrollmentRequired({ requireMfaEnrollment: true }, '/setup').ok).toBe(true)
     expect(checkMfaEnrollmentRequired({ requireMfaEnrollment: true }, '/send-code').ok).toBe(true)
     expect(checkMfaEnrollmentRequired({ requireMfaEnrollment: true }, '/verify-code').ok).toBe(true)
-  })
-
-  test('checkMfaRequired allows access when SKIP_MFA_FOR_DEMO is enabled in production', () => {
-    const prev = process.env.SKIP_MFA_FOR_DEMO
-    const prevEnv = process.env.NODE_ENV
-    process.env.SKIP_MFA_FOR_DEMO = 'true'
-    process.env.NODE_ENV = 'production'
-    try {
-      expect(checkMfaRequired({ requireMfa: true }, '/api/patients').ok).toBe(true)
-      expect(checkMfaEnrollmentRequired({ requireMfaEnrollment: true }, '/api/patients').ok).toBe(true)
-    } finally {
-      process.env.SKIP_MFA_FOR_DEMO = prev
-      process.env.NODE_ENV = prevEnv
-    }
   })
 
   test('checkPhiTrainingRequired blocks until training acknowledged', () => {

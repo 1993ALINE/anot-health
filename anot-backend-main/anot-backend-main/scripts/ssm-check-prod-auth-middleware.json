@@ -1,0 +1,7 @@
+{
+  "commands": [
+    "grep -n isMfaDisabled /var/app/current/src/middleware/auth.js | head -5",
+    "grep -n MFA_DISABLED /var/app/current/src/controllers/authController.js | head -5",
+    "head -1 /var/app/current/package.json"
+  ]
+}

@@ -3,6 +3,7 @@ const { setVisitTranscriptionStatus } = require('../utils/visitSchemaCompat')
 const { auditLog } = require('../utils/auditLogger')
 const { verifyDeepgramVisitToken } = require('../utils/webhookSignature')
 const { extractTranscriptsFromDeepgramBody } = require('../utils/deepgramPayload')
+const { completeJobFromWebhook } = require('../services/deepgramService')
 const { persistTranscriptionAndDraft } = require('../utils/aiPipeline')
 
 const WEBHOOK_USER = { name: 'Deepgram Webhook', role: 'system' }
@@ -29,6 +30,8 @@ const postDeepgramWebhook = async (req, res) => {
     }
 
     console.log('[deepgram] Webhook received for visit', visitId)
+
+    completeJobFromWebhook(visitId, req.body)
 
     const texts = extractTranscriptsFromDeepgramBody(req.body)
     if (!texts.length) {

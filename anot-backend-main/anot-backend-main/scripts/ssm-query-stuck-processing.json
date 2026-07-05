@@ -1,0 +1,6 @@
+{
+  "commands": [
+    "cd /var/app/current",
+    "USE_SSM=true node -e \"require('./src/config/loadSecrets').loadSecrets().then(async()=>{delete require.cache[require.resolve('./src/config/db')];const pool=require('./src/config/db');const r=await pool.query(\\\"SELECT id, transcription_status, status FROM visits WHERE transcription_status='processing' ORDER BY id\\\");console.log('COUNT:',r.rowCount);console.log('IDS:',r.rows.map(x=>x.id).join(','));console.log(JSON.stringify(r.rows,null,2));await pool.end();}).catch(e=>{console.error(e);process.exit(1)})\""
+  ]
+}

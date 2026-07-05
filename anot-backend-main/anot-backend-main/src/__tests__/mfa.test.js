@@ -158,6 +158,20 @@ describe('MFA one-time codes', () => {
 })
 
 describe('MFA policy helpers', () => {
+  const savedMfaDisabled = process.env.MFA_DISABLED
+
+  beforeEach(() => {
+    delete process.env.MFA_DISABLED
+  })
+
+  afterAll(() => {
+    if (savedMfaDisabled === undefined) {
+      delete process.env.MFA_DISABLED
+    } else {
+      process.env.MFA_DISABLED = savedMfaDisabled
+    }
+  })
+
   test('adminRequiresMfa for PHI roles without MFA enabled', () => {
     expect(adminRequiresMfa('admin', false)).toBe(true)
     expect(adminRequiresMfa('admin', true)).toBe(false)
@@ -176,5 +190,18 @@ describe('MFA policy helpers', () => {
     expect(loginRequiresMfa({ role: 'clinician', mfa_enabled: false })).toBe('ENROLLMENT_REQUIRED')
     expect(loginRequiresMfa({ role: 'clinician', mfa_enabled: true })).toBe('ENROLLMENT_REQUIRED')
     expect(loginRequiresMfa({ role: 'receptionist', mfa_enabled: false })).toBe(false)
+  })
+
+  test('loginRequiresMfa skips all gates when MFA_DISABLED=true', () => {
+    process.env.MFA_DISABLED = 'true'
+    const enrolled = {
+      role: 'clinician',
+      mfa_enabled: true,
+      mfa_method: 'email',
+      mfa_destination: 'doc@clinic.org',
+    }
+    expect(loginRequiresMfa(enrolled)).toBe(false)
+    expect(loginRequiresMfa({ role: 'clinician', mfa_enabled: false })).toBe(false)
+    expect(adminRequiresMfa('clinician', false)).toBe(false)
   })
 })

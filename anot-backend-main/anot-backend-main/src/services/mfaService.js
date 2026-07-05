@@ -5,6 +5,16 @@ const CODE_TTL_MS = 10 * 60 * 1000
 const MAX_ATTEMPTS = 5
 const PHI_ROLES = new Set(['clinician', 'scribe', 'qps', 'super_admin', 'admin'])
 
+/** When true, MFA enrollment/verification gates are skipped (login + protected routes). */
+function isMfaDisabled() {
+  const raw = process.env.MFA_DISABLED
+  const disabled = String(raw || '').trim().toLowerCase() === 'true'
+  if (!disabled) {
+    console.log('[mfaService.isMfaDisabled] MFA_DISABLED:', raw, '→ gates active')
+  }
+  return disabled
+}
+
 function generateCode() {
   return String(crypto.randomInt(100000, 1000000))
 }
@@ -71,6 +81,7 @@ function isMfaFullyEnrolled(user) {
 }
 
 function adminRequiresMfa(role, mfaEnabled) {
+  if (isMfaDisabled()) return false
   return PHI_ROLES.has(role) && !mfaEnabled
 }
 
@@ -78,9 +89,17 @@ function adminRequiresMfa(role, mfaEnabled) {
  * @returns {false|'ENROLLMENT_REQUIRED'|true}
  */
 function loginRequiresMfa(user) {
+  if (isMfaDisabled()) {
+    console.log('[mfaService.loginRequiresMfa] MFA bypass active — skipping MFA for', user?.email || user?.id)
+    return false
+  }
   const hasPhi = PHI_ROLES.has(user?.role)
   if (!hasPhi) return false
-  if (!isMfaFullyEnrolled(user)) return 'ENROLLMENT_REQUIRED'
+  if (!isMfaFullyEnrolled(user)) {
+    console.log('[mfaService.loginRequiresMfa] enrollment required for', user?.email || user?.id, { role: user?.role })
+    return 'ENROLLMENT_REQUIRED'
+  }
+  console.log('[mfaService.loginRequiresMfa] verification required for', user?.email || user?.id)
   return true
 }
 
@@ -192,4 +211,5 @@ module.exports = {
   issueAndSendCode,
   verifyMfaCode,
   invalidateActiveTokens,
+  isMfaDisabled,
 }

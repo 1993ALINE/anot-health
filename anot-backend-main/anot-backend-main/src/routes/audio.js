@@ -89,7 +89,7 @@ async function queueVisitTranscription(visitId, user, req, source = 'upload') {
 async function maybeAutoTranscribe(visitId, user, req) {
   try {
     const settings = await loadAiSettings()
-    if (!settings.deepgram_auto_transcribe_on_upload) {
+    if (!settings.transcribe_auto_transcribe_on_upload) {
       console.log(`[transcription] Auto-transcribe disabled in settings — skipping visit ${visitId}`)
       return false
     }

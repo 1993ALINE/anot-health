@@ -1,0 +1,6 @@
+{
+  "commands": [
+    "printenv NODE_ENV USE_SSM SSM_PREFIX S3_AUDIO_BUCKET 2>/dev/null | sort",
+    "grep -i 'S3_AUDIO\\|useTranscribe=false\\|TRANSCRIPTION_FAILED\\|transcribe_not_configured' /var/log/web.stdout.log 2>/dev/null | tail -15 | tr -cd '\\11\\12\\15\\40-\\176'"
+  ]
+}

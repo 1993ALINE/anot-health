@@ -31,7 +31,7 @@
         "@aws-sdk/client-ssm": "^3.1068.0",
         "@aws-sdk/lib-storage": "^3.1075.0",
         "@aws-sdk/s3-request-presigner": "^3.1065.0",
-        "@deepgram/sdk": "^3.13.0",
+        "@deepgram/sdk": "^5.5.0",
         "@sentry/node": "^10.56.0",
         "bcryptjs": "^3.0.3",
         "bull": "^4.16.5",

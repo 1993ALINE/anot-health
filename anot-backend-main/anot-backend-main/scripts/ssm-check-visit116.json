@@ -1,0 +1,5 @@
+{
+  "commands": [
+    "grep '116-1783049540124\\|Empty transcript\\|Failed to read\\|Success.*116\\|transcribe.*116' /var/log/web.stdout.log 2>/dev/null | tr -cd '\\11\\12\\15\\40-\\176'"
+  ]
+}

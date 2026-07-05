@@ -7,6 +7,7 @@
 
 const { getEmailTransport, getTwilioClient } = require('../services/mfaDelivery')
 const { describeUploadLimitSource } = require('../utils/ffmpegUploadLimits')
+const { getAudioBucket, resolveAudioBucketConfig } = require('../services/s3Storage')
 
 const REQUIRED_ENV_KEYS = ['JWT_SECRET']
 
@@ -21,6 +22,7 @@ const RECOMMENDED_SSM_KEYS = [
   'SETTINGS_ENCRYPTION_KEY',
   'ANTHROPIC_API_KEY',
   'DEEPGRAM_API_KEY',
+  'S3_AUDIO_BUCKET',
   'CORS_ORIGINS',
   'SENTRY_DSN',
   'SMTP_HOST',
@@ -150,6 +152,14 @@ function isSmsDeliveryConfigured() {
  * does not block boot unless MFA_DELIVERY_REQUIRED=true (production opt-in).
  */
 function validateMfaDeliveryConfig() {
+  if (String(process.env.MFA_DISABLED || '').trim().toLowerCase() === 'true') {
+    console.warn(
+      '[startup] ⚠ MFA_DISABLED=true — MFA enrollment/verification gates are disabled. ' +
+        'Do not use with real PHI in production.',
+    )
+    return { ok: true, email: false, sms: false, disabled: true }
+  }
+
   const email = isEmailDeliveryConfigured()
   const sms = isSmsDeliveryConfigured()
 
@@ -308,11 +318,15 @@ function logRuntimeInfo() {
   console.log(`[startup] PORT=${process.env.PORT || '5000 (default)'}`)
   console.log(`[startup] BIND_HOST=${process.env.BIND_HOST || '0.0.0.0 (default)'}`)
   console.log(`[startup] USE_SSM=${process.env.USE_SSM || 'false'}`)
-  console.log(`[startup] SKIP_MFA_FOR_DEMO=${process.env.SKIP_MFA_FOR_DEMO || '(unset)'}`)
   if (process.env.USE_SSM === 'true') {
     console.log(`[startup] SSM_PREFIX=${process.env.SSM_PREFIX || '/anot/prod'}`)
     console.log(`[startup] SSM_REGION=${process.env.SSM_REGION || process.env.AWS_REGION || 'ap-southeast-1'}`)
   }
+  const bucketCfg = resolveAudioBucketConfig()
+  console.log(
+    `[startup] S3_AUDIO_BUCKET=${bucketCfg.bucket} ` +
+      `(source=${bucketCfg.source}, process.env.S3_AUDIO_BUCKET=${process.env.S3_AUDIO_BUCKET ? 'set' : 'unset'})`,
+  )
   console.log(`[startup] Database: ${databaseConfigSummary()}`)
   console.log(`[startup] JWT_SECRET=${maskSecret(process.env.JWT_SECRET?.trim())}`)
   const uploadLimit = describeUploadLimitSource()
@@ -349,7 +363,7 @@ async function runStartupDiagnostics(opts = {}) {
     throw new Error(mfaDeliveryCheck.message)
   }
 
-  if (mfaDeliveryCheck.email && process.env.NODE_ENV === 'production') {
+  if (mfaDeliveryCheck.email && process.env.NODE_ENV === 'production' && !mfaDeliveryCheck.disabled) {
     const smtpCheck = await verifySmtpConnection()
     if (!smtpCheck.ok && !smtpCheck.skipped) {
       const strict = String(process.env.MFA_DELIVERY_VERIFY_STRICT || '').toLowerCase() === 'true'
@@ -363,7 +377,7 @@ async function runStartupDiagnostics(opts = {}) {
     }
   }
 
-  if (mfaDeliveryCheck.sms && process.env.NODE_ENV === 'production') {
+  if (mfaDeliveryCheck.sms && process.env.NODE_ENV === 'production' && !mfaDeliveryCheck.disabled) {
     const twilioCheck = await verifyTwilioCredentials()
     if (!twilioCheck.ok && !twilioCheck.skipped) {
       const strict = String(process.env.MFA_DELIVERY_VERIFY_STRICT || '').toLowerCase() === 'true'
@@ -381,8 +395,12 @@ async function runStartupDiagnostics(opts = {}) {
     throw new Error('MFA_BYPASS not allowed in production')
   }
 
-  if (String(process.env.SKIP_MFA_FOR_DEMO || '').trim().toLowerCase() === 'true' && process.env.NODE_ENV === 'production') {
-    console.warn('[startup] ⚠ Demo mode enabled - MFA gates will be bypassed')
+  if (String(process.env.SKIP_MFA_FOR_DEMO || '').trim().toLowerCase() === 'true') {
+    throw new Error('SKIP_MFA_FOR_DEMO is no longer supported — use MFA_DISABLED=true instead')
+  }
+
+  if (process.env.NODE_ENV === 'production' && String(process.env.MFA_DISABLED || '').trim().toLowerCase() === 'true') {
+    console.warn('[startup] ⚠ MFA_DISABLED=true in production — two-factor authentication is off')
   }
 
   if (process.env.NODE_ENV === 'production') {
@@ -390,6 +408,11 @@ async function runStartupDiagnostics(opts = {}) {
     if (!encKey || encKey.length < 32) {
       throw new Error(
         'SETTINGS_ENCRYPTION_KEY must be set in production (≥32 chars). Store in SSM /anot/prod/SETTINGS_ENCRYPTION_KEY.',
+      )
+    }
+    if (!getAudioBucket()) {
+      throw new Error(
+        'S3 audio bucket must be configured in production. Set S3_AUDIO_BUCKET in EB env or SSM /anot/prod/S3_AUDIO_BUCKET.',
       )
     }
     if (!process.env.SENTRY_DSN?.trim()) {

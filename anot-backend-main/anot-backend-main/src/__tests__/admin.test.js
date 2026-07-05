@@ -23,6 +23,7 @@ describe('admin role enforcement', () => {
   })
 
   test('adminRequiresMfa enforces MFA setup for PHI-access roles', () => {
+    delete process.env.MFA_DISABLED
     expect(adminRequiresMfa('super_admin', false)).toBe(true)
     expect(adminRequiresMfa('super_admin', true)).toBe(false)
     expect(adminRequiresMfa('clinician', false)).toBe(true)

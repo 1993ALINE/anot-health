@@ -1,0 +1,6 @@
+{
+  "commands": [
+    "tail -20 /tmp/retry-stuck-day1.log 2>/dev/null | tr -cd '\\11\\12\\15\\40-\\176' || echo no-log",
+    "ps aux | grep retry-stuck-day1 | grep -v grep | tr -cd '\\11\\12\\15\\40-\\176' || echo not-running"
+  ]
+}

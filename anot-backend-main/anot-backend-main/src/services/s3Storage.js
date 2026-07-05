@@ -17,7 +17,27 @@ const {
 const { Upload } = require('@aws-sdk/lib-storage')
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner')
 
-const AUDIO_BUCKET = process.env.S3_AUDIO_BUCKET || 'anot-audio-625242092266'
+/** Default prod bucket — override with S3_AUDIO_BUCKET (EB env or SSM). */
+const DEFAULT_AUDIO_BUCKET = 'anot-audio-625242092266'
+
+/**
+ * Resolve the audio bucket at call time (after loadSecrets / SSM hydration).
+ * Do not cache at module load — process.env.S3_AUDIO_BUCKET may arrive from SSM after require().
+ */
+function getAudioBucket() {
+  const fromEnv = String(process.env.S3_AUDIO_BUCKET || '').trim()
+  return fromEnv || DEFAULT_AUDIO_BUCKET
+}
+
+/** For startup diagnostics: bucket value + whether it came from env or default. */
+function resolveAudioBucketConfig() {
+  const fromEnv = String(process.env.S3_AUDIO_BUCKET || '').trim()
+  if (fromEnv) {
+    return { bucket: fromEnv, source: 'env' }
+  }
+  return { bucket: DEFAULT_AUDIO_BUCKET, source: 'default' }
+}
+
 const AWS_REGION = process.env.AWS_REGION || 'ap-southeast-1'
 const SIGNED_URL_TTL_SECONDS = 900 // 15 minutes — PHI-safe presign window
 
@@ -34,7 +54,7 @@ function dbPathToKey(dbPath) {
 
 async function uploadAudio(key, buffer, contentType) {
   await s3.send(new PutObjectCommand({
-    Bucket: AUDIO_BUCKET,
+    Bucket: getAudioBucket(),
     Key: key,
     Body: buffer,
     ContentType: contentType,
@@ -47,7 +67,7 @@ async function uploadAudioStream(key, stream, contentType) {
   const upload = new Upload({
     client: s3,
     params: {
-      Bucket: AUDIO_BUCKET,
+      Bucket: getAudioBucket(),
       Key: key,
       Body: stream,
       ContentType: contentType,
@@ -62,7 +82,7 @@ async function uploadAudioStream(key, stream, contentType) {
 
 /** Presigned GET URL, valid 15 minutes. */
 async function getSignedAudioUrl(key) {
-  const command = new GetObjectCommand({ Bucket: AUDIO_BUCKET, Key: key })
+  const command = new GetObjectCommand({ Bucket: getAudioBucket(), Key: key })
   return getSignedUrl(s3, command, { expiresIn: SIGNED_URL_TTL_SECONDS })
 }
 
@@ -71,7 +91,7 @@ async function getSignedAudioUrl(key) {
  * @returns {Promise<{ body: import('stream').Readable, contentType?: string, contentLength?: number, contentRange?: string, acceptRanges?: string, statusCode: number }>}
  */
 async function getAudioStream(key, rangeHeader) {
-  const params = { Bucket: AUDIO_BUCKET, Key: key }
+  const params = { Bucket: getAudioBucket(), Key: key }
   if (rangeHeader) {
     params.Range = rangeHeader
   }
@@ -95,7 +115,7 @@ async function getAudioStream(key, rangeHeader) {
 async function downloadAudioToTemp(key) {
   const ext = path.extname(key) || '.webm'
   const tmpPath = path.join(os.tmpdir(), `anot_s3_${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`)
-  const res = await s3.send(new GetObjectCommand({ Bucket: AUDIO_BUCKET, Key: key }))
+  const res = await s3.send(new GetObjectCommand({ Bucket: getAudioBucket(), Key: key }))
   await pipeline(res.Body, fs.createWriteStream(tmpPath))
   return tmpPath
 }
@@ -103,14 +123,19 @@ async function downloadAudioToTemp(key) {
 /** Best-effort delete (visit deletion cleanup). */
 async function deleteAudio(key) {
   try {
-    await s3.send(new DeleteObjectCommand({ Bucket: AUDIO_BUCKET, Key: key }))
+    await s3.send(new DeleteObjectCommand({ Bucket: getAudioBucket(), Key: key }))
   } catch (err) {
     console.warn(`[s3Storage] Failed to delete ${key}:`, err.message)
   }
 }
 
 module.exports = {
-  AUDIO_BUCKET,
+  getAudioBucket,
+  resolveAudioBucketConfig,
+  /** @deprecated Use getAudioBucket() — reads process.env at call time. */
+  get AUDIO_BUCKET() {
+    return getAudioBucket()
+  },
   dbPathToKey,
   uploadAudio,
   uploadAudioStream,

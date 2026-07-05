@@ -10,11 +10,9 @@ const cloudWatchAudit = require('../utils/logger')
 const { ensureUserProfileSchema } = require('../utils/ensureUserProfileSchema')
 const { sendHttpError } = require('../utils/errorMessages')
 const { incrementTokenVersion } = require('../utils/tokenVersion')
-const { loginRequiresMfa, issueAndSendCode, verifyMfaCode, maskDestination, isMfaFullyEnrolled } = require('../services/mfaService')
+const { loginRequiresMfa, issueAndSendCode, verifyMfaCode, maskDestination, isMfaFullyEnrolled, PHI_ROLES } = require('../services/mfaService')
 const { setSessionCookie, clearSessionCookie } = require('../utils/sessionCookie')
 const { isLocked, lockoutMessage, recordFailedLogin, resetFailedLogins } = require('../services/accountLockout')
-const { isDemoMfaBypass } = require('../middleware/auth')
-
 function roleToStaffModule(role) {
     const m = {
         admin: 'admins',
@@ -93,39 +91,16 @@ async function buildPostPasswordLoginResponse(user, req, res) {
         }
     }
 
-    const demoBypass = isDemoMfaBypass()
-    if (demoBypass) {
-        console.warn('[auth.login] SKIP_MFA_FOR_DEMO=true — issuing full session without MFA gate')
-        const token = generateToken(user)
-        setSessionCookie(res, token)
-        void auditLog(
-            { id: user.id, name: user.name, role: user.role },
-            'LOGIN_SUCCESS',
-            'auth',
-            String(user.id),
-            'Signed in successfully (demo MFA bypass)',
-            { req, module_key: 'authentication', status: 'success', action_category: 'authentication', metadata: { demo_mfa_bypass: true } },
-        ).catch(reportAuditFailure)
-        cloudWatchAudit.logLogin(user.id, user.email, user.role, req.clientIp, 'success')
-        return {
-            status: 200,
-            body: {
-                message: 'Login successful',
-                user: toAuthUser(user),
-            },
-        }
-    }
-
     const mfaStatus = loginRequiresMfa(user)
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('[auth.login] MFA gate', {
-        userId: user.id,
-        role: user.role,
-        mfa_enabled: user.mfa_enabled,
-        mfa_method: user.mfa_method,
-        mfaStatus,
-      })
-    }
+    console.log('[auth.buildPostPasswordLoginResponse] MFA gate', {
+      MFA_DISABLED: process.env.MFA_DISABLED,
+      mfaBypass: mfaStatus === false && PHI_ROLES.has(user.role),
+      userId: user.id,
+      role: user.role,
+      mfa_enabled: user.mfa_enabled,
+      mfa_method: user.mfa_method,
+      mfaStatus,
+    })
 
     if (mfaStatus === 'ENROLLMENT_REQUIRED') {
         const temporaryToken = generateTemporaryToken(user, 'requireMfaEnrollment', '15m')
@@ -224,6 +199,7 @@ const needsPhiTraining = (user) =>
 
 const login = async (req, res) => {
     try {
+        console.log('[auth.login] MFA_DISABLED:', process.env.MFA_DISABLED, 'NODE_ENV:', process.env.NODE_ENV)
         await ensureUserProfileSchema()
 
         const { email, password, role } = req.body
@@ -356,25 +332,15 @@ const acknowledgePhiTraining = async (req, res) => {
         ).catch(reportAuditFailure)
 
         const mfaStatus = loginRequiresMfa(fresh)
-        if (process.env.NODE_ENV !== 'production') {
-            console.log('[auth.phiTraining] MFA gate', {
-                userId: fresh.id,
-                role: fresh.role,
-                mfa_enabled: fresh.mfa_enabled,
-                mfa_method: fresh.mfa_method,
-                mfaStatus,
-            })
-        }
-
-        if (isDemoMfaBypass()) {
-            console.warn('[auth.phiTraining] SKIP_MFA_FOR_DEMO=true — issuing full session without MFA gate')
-            const token = generateToken(fresh)
-            setSessionCookie(res, token)
-            return res.status(200).json({
-                message: 'PHI training acknowledged.',
-                user: toAuthUser(fresh),
-            })
-        }
+        console.log('[auth.phiTraining] MFA gate', {
+            MFA_DISABLED: process.env.MFA_DISABLED,
+            mfaBypass: mfaStatus === false && PHI_ROLES.has(fresh.role),
+            userId: fresh.id,
+            role: fresh.role,
+            mfa_enabled: fresh.mfa_enabled,
+            mfa_method: fresh.mfa_method,
+            mfaStatus,
+        })
 
         if (mfaStatus === 'ENROLLMENT_REQUIRED') {
             const temporaryToken = generateTemporaryToken(fresh, 'requireMfaEnrollment', '15m')

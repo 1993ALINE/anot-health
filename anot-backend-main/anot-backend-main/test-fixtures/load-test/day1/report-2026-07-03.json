@@ -1,0 +1,31 @@
+{
+  "day": "2026-07-03",
+  "generatedAt": "2026-07-03T14:46:00Z",
+  "totalVisits": 80,
+  "visitIds": [122,123,124,125,126,132,138,144,150,156,162,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180,181,182,183,184,185,186,187,188,189,190,191,192,193,194,363,364,365,366,367,368,369,370,371,372,373,374,375,376,377,378,379,380,381,382,383,384,385,386,387,388,389,390,391,392,393,394,395,396,397,398,399,400,401,402],
+  "note": "40 original Day-1 visits (2026-07-03) + 40 follow-up visits created (363-402) to reach 80",
+  "audioFilesGenerated": 80,
+  "totalAudioDurationMinutes": 800,
+  "uploadSuccess": 80,
+  "uploadFailed": 0,
+  "uploadErrors": ["Visit 380 initial upload failed (504 CSRF); retried successfully"],
+  "uploadMinutes": 15,
+  "lastKnownTranscriptionCompleted": 54,
+  "lastKnownTranscriptionProcessing": 26,
+  "lastKnownTranscriptionFailed": 0,
+  "lastKnownClaudeNotes": 54,
+  "processingVisitIds": [189,190,191,193,363,365,366,368,373,374,376,378,379,383,384,385,386,387,388,389,390,391,392,393,394,395],
+  "transcriptionMinutes": 45,
+  "estimatedCostDeepgram": 3.2,
+  "estimatedCostClaude": 0.22,
+  "estimatedCostTotal": 3.42,
+  "systemStableAtEnd": false,
+  "ebHealth": "Red / Severe",
+  "apiHealth": "503 Service Unavailable",
+  "readyForDays2to5": false,
+  "blockers": [
+    "26 transcriptions stuck in processing (likely multi-instance Deepgram job/webhook race under concurrent load)",
+    "Production API returned 503 after ~80 concurrent 10-min transcriptions",
+    "EB environment health degraded to Red/Severe"
+  ]
+}

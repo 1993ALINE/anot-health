@@ -88,6 +88,7 @@ describe('startupDiagnostics', () => {
     process.env.JWT_SECRET = 'test-jwt-secret-at-least-32-characters-long'
     process.env.DATABASE_URL = 'postgresql://u:p@127.0.0.1:5432/anot'
     process.env.SETTINGS_ENCRYPTION_KEY = 'a'.repeat(32)
+    delete process.env.MFA_DISABLED
     delete process.env.SMTP_HOST
     delete process.env.SMTP_USER
     delete process.env.SMTP_PASS

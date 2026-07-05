@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken')
 const pool = require('../config/db')
 const { readSessionCookieToken } = require('../utils/sessionCookie')
+const { isMfaDisabled } = require('../services/mfaService')
 
 // ─── SESSION REVOCATION CACHE ──────────────────────────────────────────────────
 // A valid JWT alone is not enough: an account may have been deactivated, or its
@@ -111,7 +112,9 @@ function checkPhiTrainingRequired(user) {
  * Check MFA enrollment scope (login gate for PHI roles without MFA)
  */
 function checkMfaEnrollmentRequired(user, reqPath) {
-    if (user.requireMfaEnrollment === true) {
+  if (isMfaDisabled()) return { ok: true }
+  if (user.requireMfaEnrollment === true) {
+    console.log('[auth.checkMfaEnrollmentRequired] blocking path', reqPath, 'MFA_DISABLED:', process.env.MFA_DISABLED)
         // req.path is router-relative (/setup) when protect runs on /api/mfa routes.
         const allowed =
             reqPath.includes('/mfa/setup') ||
@@ -136,7 +139,9 @@ function checkMfaEnrollmentRequired(user, reqPath) {
  * Check MFA verification scope (login gate)
  */
 function checkMfaRequired(user, reqPath) {
-    if (user.requireMfa === true) {
+  if (isMfaDisabled()) return { ok: true }
+  if (user.requireMfa === true) {
+    console.log('[auth.checkMfaRequired] blocking path', reqPath, 'MFA_DISABLED:', process.env.MFA_DISABLED)
         const allowed =
             reqPath.includes('/verify-mfa') ||
             reqPath.includes('/mfa/send-code') ||

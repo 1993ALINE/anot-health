@@ -1,8 +1,9 @@
 ﻿const pool = require('../config/db')
-const { adminRequiresMfa } = require('../services/mfaService')
+const { adminRequiresMfa, isMfaDisabled } = require('../services/mfaService')
 
 async function enforceAdminMfa(req, res, next) {
-  if (!req.user) return next()
+  if (!req.user || isMfaDisabled()) return next()
+  console.log('[enforceAdminMfa] checking MFA enrollment, MFA_DISABLED:', process.env.MFA_DISABLED)
   try {
     const { rows } = await pool.query(
       'SELECT role, mfa_enabled FROM users WHERE id = $1',

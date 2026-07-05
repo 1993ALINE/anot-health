@@ -1,0 +1,5 @@
+{
+  "commands": [
+    "grep '115-1783049\\|visit 115\\|Visit 115' /var/log/web.stdout.log 2>/dev/null | tail -50 | tr -cd '\\11\\12\\15\\40-\\176'"
+  ]
+}

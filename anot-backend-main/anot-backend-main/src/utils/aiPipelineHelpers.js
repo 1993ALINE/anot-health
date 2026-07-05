@@ -47,14 +47,24 @@ ASSESSMENT & PLAN (A&P):
 }
 
 /**
- * Transcribe a single audio segment
+ * Transcribe a single audio segment via Deepgram Nova-3 Medical.
  */
-async function transcribeAudioSegment(audioPath, settings, visitId, idx, useAsyncDeepgram) {
+async function transcribeAudioSegment(audioPath, settings, visitId, idx) {
   const placeholder = `[Recording ${idx + 1}: transcription unavailable]`
 
   if (!/^\/uploads\/[\w.\-]+$/.test(audioPath)) {
     console.warn(`Skipping invalid audio path for visit ${visitId}: ${audioPath}`)
-    return { text: placeholder, deferred: false, success: false }
+    return { text: placeholder, success: false }
+  }
+
+  const needsFfmpeg = settings.ffmpeg_enabled && settings.ffmpeg_preprocess_before_transcribe
+
+  if (!needsFfmpeg) {
+    console.log(`🎙 Transcribing from S3: ${path.basename(audioPath)}`)
+    const text = await transcribeFile(null, settings, visitId, { fromS3: true, s3Path: audioPath })
+    if (text) return { text, success: true }
+    console.warn(`[transcription] Segment ${idx + 1} failed for visit ${visitId} — Deepgram returned no text`)
+    return { text: placeholder, success: false }
   }
 
   let fullPath
@@ -62,7 +72,7 @@ async function transcribeAudioSegment(audioPath, settings, visitId, idx, useAsyn
     fullPath = await downloadAudioToTemp(dbPathToKey(audioPath))
   } catch (e) {
     console.warn(`Audio not found in S3 for visit ${visitId} (${audioPath}):`, e.message)
-    return { text: placeholder, deferred: false, success: false }
+    return { text: placeholder, success: false }
   }
 
   let tempPaths = [fullPath]
@@ -70,26 +80,25 @@ async function transcribeAudioSegment(audioPath, settings, visitId, idx, useAsyn
     const fileSize = fs.statSync(fullPath).size
     if (fileSize === 0) {
       console.warn(`Audio file is empty: ${audioPath}`)
-      return { text: placeholder, deferred: false, success: false }
+      return { text: placeholder, success: false }
     }
     const maxBytes = settings.ffmpeg_max_upload_mb * 1024 * 1024
     if (fileSize > maxBytes) {
       console.warn(`Audio over limit (${settings.ffmpeg_max_upload_mb}MB): ${audioPath}`)
-      return { text: placeholder, deferred: false, success: false }
+      return { text: placeholder, success: false }
     }
 
     const proc = await processAudioForTranscription(fullPath, settings)
     const transcribePath = proc.path
     tempPaths = tempPaths.concat(proc.tempPaths || [])
     console.log(`🎙 Transcribing: ${path.basename(transcribePath)} (${Math.round(fileSize / 1024)}KB source)`)
-    const text = await transcribeFile(transcribePath, settings, useAsyncDeepgram ? visitId : undefined)
-    if (text === '__DEFERRED__') return { text: null, deferred: true, success: false }
-    if (text) return { text, deferred: false, success: true }
+    const text = await transcribeFile(transcribePath, settings, visitId)
+    if (text) return { text, success: true }
     console.warn(`[transcription] Segment ${idx + 1} failed for visit ${visitId} — Deepgram returned no text`)
-    return { text: placeholder, deferred: false, success: false }
+    return { text: placeholder, success: false }
   } catch (e) {
     console.error(`Transcription segment error for visit ${visitId}:`, e.message)
-    return { text: placeholder, deferred: false, success: false }
+    return { text: placeholder, success: false }
   } finally {
     await unlinkTempPaths(tempPaths)
   }
@@ -98,22 +107,17 @@ async function transcribeAudioSegment(audioPath, settings, visitId, idx, useAsyn
 /**
  * Transcribe all audio files for a visit
  */
-async function transcribeAllAudioFiles(audioFiles, settings, visitId, useAsyncDeepgram) {
+async function transcribeAllAudioFiles(audioFiles, settings, visitId) {
   const transcriptions = []
   let successCount = 0
-  let anyDeferred = false
 
   for (let idx = 0; idx < audioFiles.length; idx++) {
-    const result = await transcribeAudioSegment(audioFiles[idx], settings, visitId, idx, useAsyncDeepgram)
-    if (result.deferred) {
-      anyDeferred = true
-      continue
-    }
+    const result = await transcribeAudioSegment(audioFiles[idx], settings, visitId, idx)
     transcriptions.push(result.text)
     if (result.success) successCount++
   }
 
-  return { transcriptions, successCount, anyDeferred }
+  return { transcriptions, successCount }
 }
 
 module.exports = {

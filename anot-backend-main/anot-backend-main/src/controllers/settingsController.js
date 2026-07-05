@@ -1,8 +1,20 @@
+const fs = require('fs')
+const path = require('path')
 const { getPublicErrorMessage, sendHttpError } = require('../utils/errorMessages')
 const pool = require('../config/db')
 const cloudWatchAudit = require('../utils/logger')
 const { encryptString } = require('../utils/settingsEncryption')
-const { invalidateAiSettingsCache } = require('../services/aiSettings')
+const { invalidateAiSettingsCache, normalizeDeepgramModel, loadAiSettings } = require('../services/aiSettings')
+const {
+  normalizeTranscribeLanguage,
+  parseCustomVocabulary,
+} = require('../utils/deepgramSettingsUtils')
+const {
+  buildBaselineListenOptions,
+  buildListenOptions,
+  transcribeLocalFileDetailed,
+  resolveDeepgramApiKey,
+} = require('../services/deepgramService')
 const { ensureMediaAndAiSchema } = require('../utils/ensureMediaSchema')
 const { addColumnIfMissing, columnExists } = require('../utils/schemaDdl')
 const { getSystemSettingsColumns, updateSystemSettingsRow, invalidateSettingsColumnCache } = require('../utils/settingsSchemaCompat')
@@ -33,11 +45,12 @@ const DEFAULT_SETTINGS = {
 const ANTHROPIC_MODELS = new Set(['claude-haiku-4-5', 'claude-sonnet-4-5', 'claude-opus-4-5'])
 
 const AI_DEFAULTS = {
-  deepgram_enabled: false,
-  deepgram_model: 'nova-2',
-  deepgram_language: 'en-US',
-  deepgram_webhook_url: '',
-  deepgram_auto_transcribe_on_upload: false,
+  transcribe_enabled: false,
+  transcribe_language: 'en-US',
+  transcribe_medical_specialty: 'PRIMARYCARE',
+  transcribe_show_speaker_labels: true,
+  transcribe_auto_transcribe_on_upload: true,
+  deepgram_model: 'nova-3-medical',
   anthropic_enabled: true,
   anthropic_model: 'claude-haiku-4-5',
   ffmpeg_enabled: false,
@@ -45,11 +58,17 @@ const AI_DEFAULTS = {
   ffmpeg_compression: 5,
   ffmpeg_max_upload_mb: 500,
   ffmpeg_preprocess_before_transcribe: true,
-  deepgram_timeout_ms: 30000,
+  transcribe_timeout_ms: 300000,
+  deepgram_profanity_filter: false,
+  deepgram_punctuate: true,
+  deepgram_numerals: true,
+  deepgram_redact_pii: false,
+  deepgram_remove_filler_words: true,
+  deepgram_custom_vocabulary: [],
 }
 
-const MIN_DEEPGRAM_TIMEOUT_SEC = 5
-const MAX_DEEPGRAM_TIMEOUT_SEC = 300
+const MIN_TRANSCRIBE_TIMEOUT_SEC = 60
+const MAX_TRANSCRIBE_TIMEOUT_SEC = 900
 
 let initialized = false
 
@@ -135,17 +154,26 @@ function mapBaseSettings(row) {
   }
 }
 
+const TRANSCRIBE_SPECIALTIES = new Set(['PRIMARYCARE', 'CARDIOLOGY', 'NEUROLOGY', 'ONCOLOGY', 'RADIOLOGY', 'UROLOGY'])
+
 function mapAiSettings(row) {
-  const enc = row.deepgram_api_key_enc
   const anthropicEnc = row.anthropic_api_key_enc
   const model = String(row.anthropic_model || AI_DEFAULTS.anthropic_model).trim()
+  const specialty = String(row.transcribe_medical_specialty || AI_DEFAULTS.transcribe_medical_specialty).trim().toUpperCase()
+  const deepgramModelIn = String(row.deepgram_model || AI_DEFAULTS.deepgram_model).trim()
+  const timeoutMs = Number(row.transcribe_timeout_ms ?? row.deepgram_timeout_ms) || AI_DEFAULTS.transcribe_timeout_ms
   return {
-    deepgram_enabled: !!row.deepgram_enabled,
-    deepgram_api_key_set: !!(enc && String(enc).length > 0),
-    deepgram_model: row.deepgram_model || AI_DEFAULTS.deepgram_model,
-    deepgram_language: row.deepgram_language || AI_DEFAULTS.deepgram_language,
-    deepgram_webhook_url: row.deepgram_webhook_url != null ? String(row.deepgram_webhook_url) : '',
-    deepgram_auto_transcribe_on_upload: !!row.deepgram_auto_transcribe_on_upload,
+    transcribe_enabled: row.transcribe_enabled != null ? !!row.transcribe_enabled : !!row.deepgram_enabled,
+    transcribe_language: normalizeTranscribeLanguage(
+      row.transcribe_language || row.deepgram_language,
+      AI_DEFAULTS.transcribe_language,
+    ),
+    transcribe_medical_specialty: TRANSCRIBE_SPECIALTIES.has(specialty) ? specialty : AI_DEFAULTS.transcribe_medical_specialty,
+    deepgram_model: normalizeDeepgramModel(deepgramModelIn),
+    transcribe_show_speaker_labels: row.transcribe_show_speaker_labels !== false,
+    transcribe_auto_transcribe_on_upload: row.transcribe_auto_transcribe_on_upload != null
+      ? !!row.transcribe_auto_transcribe_on_upload
+      : !!row.deepgram_auto_transcribe_on_upload,
     anthropic_api_key_set: !!(anthropicEnc && String(anthropicEnc).length > 0),
     anthropic_enabled: row.anthropic_enabled !== false,
     anthropic_model: ANTHROPIC_MODELS.has(model) ? model : AI_DEFAULTS.anthropic_model,
@@ -156,7 +184,13 @@ function mapAiSettings(row) {
     ffmpeg_compression: row.ffmpeg_compression != null ? Number(row.ffmpeg_compression) : AI_DEFAULTS.ffmpeg_compression,
     ffmpeg_max_upload_mb: row.ffmpeg_max_upload_mb != null ? Number(row.ffmpeg_max_upload_mb) : AI_DEFAULTS.ffmpeg_max_upload_mb,
     ffmpeg_preprocess_before_transcribe: row.ffmpeg_preprocess_before_transcribe !== false,
-    deepgram_timeout_seconds: Math.round((Number(row.deepgram_timeout_ms) || AI_DEFAULTS.deepgram_timeout_ms) / 1000),
+    transcribe_timeout_seconds: Math.round(timeoutMs / 1000),
+    deepgram_profanity_filter: !!row.deepgram_profanity_filter,
+    deepgram_punctuate: row.deepgram_punctuate !== false,
+    deepgram_numerals: row.deepgram_numerals !== false,
+    deepgram_redact_pii: !!row.deepgram_redact_pii,
+    deepgram_remove_filler_words: row.deepgram_remove_filler_words !== false,
+    deepgram_custom_vocabulary: parseCustomVocabulary(row.deepgram_custom_vocabulary),
   }
 }
 
@@ -220,47 +254,31 @@ const updateSettings = async (req, res) => {
       if (Number.isFinite(n)) { audit_retention_days = clampAuditRetentionDays(n) }
     }
 
-    // ── API keys: encrypted at rest in system_settings (NOT SSM) ─────────────
-    // Admins rotate Deepgram/Anthropic keys via Settings UI without redeploy.
-    // SETTINGS_ENCRYPTION_KEY (from SSM at boot) decrypts blobs at runtime.
-    // See docs/ADMIN_SETTINGS_ARCHITECTURE.md.
-    let deepgram_api_key_enc = cur.deepgram_api_key_enc || null
-    let newDeepgramKeySaved = false
-    if (payload.deepgram_clear_api_key === true) {
-      deepgram_api_key_enc = null
-    } else if (payload.deepgram_api_key != null && String(payload.deepgram_api_key).trim()) {
-      deepgram_api_key_enc = encryptString(String(payload.deepgram_api_key).trim())
-      if (!deepgram_api_key_enc) {
-        return res.status(500).json({ error: getPublicErrorMessage(500, new Error('encryption failed')) })
-      }
-      newDeepgramKeySaved = true
-    }
-
-    const deepgram_webhook_raw =
-      payload.deepgram_webhook_url !== undefined ? cleanStr(payload.deepgram_webhook_url, 2000) : String(cur.deepgram_webhook_url || '')
-    if (deepgram_webhook_raw && !/^https?:\/\/.+/i.test(deepgram_webhook_raw)) {
-      return res.status(400).json({ error: 'Deepgram webhook URL must be http(s).' })
-    }
-
-    let deepgram_enabled =
-      payload.deepgram_enabled !== undefined ? !!payload.deepgram_enabled : !!cur.deepgram_enabled
-    if (payload.deepgram_clear_api_key === true) {
-      deepgram_enabled = false
-    } else if (newDeepgramKeySaved) {
-      deepgram_enabled = true
-    }
-    const deepgram_model =
+    // ── Transcribe + Anthropic settings ─────────────────────────────────────
+    const transcribe_enabled =
+      payload.transcribe_enabled !== undefined ? !!payload.transcribe_enabled : (cur.transcribe_enabled != null ? !!cur.transcribe_enabled : !!cur.deepgram_enabled)
+    const transcribe_language =
+      payload.transcribe_language !== undefined
+        ? normalizeTranscribeLanguage(cleanStr(payload.transcribe_language, 32), AI_DEFAULTS.transcribe_language)
+        : normalizeTranscribeLanguage(cur.transcribe_language || cur.deepgram_language, AI_DEFAULTS.transcribe_language)
+    const specialtyIn =
+      payload.transcribe_medical_specialty !== undefined
+        ? cleanStr(payload.transcribe_medical_specialty, 32).toUpperCase()
+        : String(cur.transcribe_medical_specialty || AI_DEFAULTS.transcribe_medical_specialty).toUpperCase()
+    const transcribe_medical_specialty = TRANSCRIBE_SPECIALTIES.has(specialtyIn) ? specialtyIn : AI_DEFAULTS.transcribe_medical_specialty
+    const deepgramModelIn =
       payload.deepgram_model !== undefined
-        ? cleanStr(payload.deepgram_model, 64) || AI_DEFAULTS.deepgram_model
-        : cur.deepgram_model || AI_DEFAULTS.deepgram_model
-    const deepgram_language =
-      payload.deepgram_language !== undefined
-        ? cleanStr(payload.deepgram_language, 32) || AI_DEFAULTS.deepgram_language
-        : cur.deepgram_language || AI_DEFAULTS.deepgram_language
-    const deepgram_auto_transcribe_on_upload =
-      payload.deepgram_auto_transcribe_on_upload !== undefined
-        ? !!payload.deepgram_auto_transcribe_on_upload
-        : !!cur.deepgram_auto_transcribe_on_upload
+        ? cleanStr(payload.deepgram_model, 64)
+        : String(cur.deepgram_model || AI_DEFAULTS.deepgram_model)
+    const deepgram_model = normalizeDeepgramModel(deepgramModelIn)
+    const transcribe_show_speaker_labels =
+      payload.transcribe_show_speaker_labels !== undefined
+        ? !!payload.transcribe_show_speaker_labels
+        : cur.transcribe_show_speaker_labels !== false
+    const transcribe_auto_transcribe_on_upload =
+      payload.transcribe_auto_transcribe_on_upload !== undefined
+        ? !!payload.transcribe_auto_transcribe_on_upload
+        : (cur.transcribe_auto_transcribe_on_upload != null ? !!cur.transcribe_auto_transcribe_on_upload : !!cur.deepgram_auto_transcribe_on_upload)
 
     let anthropic_api_key_enc = cur.anthropic_api_key_enc || null
     let newAnthropicKeySaved = false
@@ -304,24 +322,50 @@ const updateSettings = async (req, res) => {
         ? !!payload.ffmpeg_preprocess_before_transcribe
         : cur.ffmpeg_preprocess_before_transcribe !== false
 
-    let deepgram_timeout_ms = Number(cur.deepgram_timeout_ms) || AI_DEFAULTS.deepgram_timeout_ms
-    if (payload.deepgram_timeout_seconds != null && payload.deepgram_timeout_seconds !== '') {
-      const sec = parseInt(String(payload.deepgram_timeout_seconds), 10)
+    const deepgram_profanity_filter =
+      payload.deepgram_profanity_filter !== undefined
+        ? !!payload.deepgram_profanity_filter
+        : !!cur.deepgram_profanity_filter
+    const deepgram_punctuate =
+      payload.deepgram_punctuate !== undefined
+        ? !!payload.deepgram_punctuate
+        : cur.deepgram_punctuate !== false
+    const deepgram_numerals =
+      payload.deepgram_numerals !== undefined
+        ? !!payload.deepgram_numerals
+        : cur.deepgram_numerals !== false
+    const deepgram_redact_pii =
+      payload.deepgram_redact_pii !== undefined
+        ? !!payload.deepgram_redact_pii
+        : !!cur.deepgram_redact_pii
+    const deepgram_remove_filler_words =
+      payload.deepgram_remove_filler_words !== undefined
+        ? !!payload.deepgram_remove_filler_words
+        : cur.deepgram_remove_filler_words !== false
+    const deepgram_custom_vocabulary = parseCustomVocabulary(
+      payload.deepgram_custom_vocabulary !== undefined
+        ? payload.deepgram_custom_vocabulary
+        : cur.deepgram_custom_vocabulary,
+    )
+
+    let transcribe_timeout_ms = Number(cur.transcribe_timeout_ms ?? cur.deepgram_timeout_ms) || AI_DEFAULTS.transcribe_timeout_ms
+    if (payload.transcribe_timeout_seconds != null && payload.transcribe_timeout_seconds !== '') {
+      const sec = parseInt(String(payload.transcribe_timeout_seconds), 10)
       if (Number.isFinite(sec)) {
-        const clamped = Math.max(MIN_DEEPGRAM_TIMEOUT_SEC, Math.min(MAX_DEEPGRAM_TIMEOUT_SEC, sec))
-        deepgram_timeout_ms = clamped * 1000
+        const clamped = Math.max(MIN_TRANSCRIBE_TIMEOUT_SEC, Math.min(MAX_TRANSCRIBE_TIMEOUT_SEC, sec))
+        transcribe_timeout_ms = clamped * 1000
       }
     }
 
     const columnSet = await getSystemSettingsColumns()
     const packedSocial = packSocialLinksForSave(userSocial, {
       audit_retention_days,
-      deepgram_enabled,
-      deepgram_api_key_enc,
+      transcribe_enabled,
+      transcribe_language,
+      transcribe_medical_specialty,
+      transcribe_show_speaker_labels,
+      transcribe_auto_transcribe_on_upload,
       deepgram_model,
-      deepgram_language,
-      deepgram_webhook_url: deepgram_webhook_raw || '',
-      deepgram_auto_transcribe_on_upload,
       anthropic_enabled,
       anthropic_api_key_enc,
       anthropic_model,
@@ -330,7 +374,13 @@ const updateSettings = async (req, res) => {
       ffmpeg_compression,
       ffmpeg_max_upload_mb,
       ffmpeg_preprocess_before_transcribe,
-      deepgram_timeout_ms,
+      transcribe_timeout_ms,
+      deepgram_profanity_filter,
+      deepgram_punctuate,
+      deepgram_numerals,
+      deepgram_redact_pii,
+      deepgram_remove_filler_words,
+      deepgram_custom_vocabulary,
     }, columnSet)
 
     const result = await updateSystemSettingsRow({
@@ -348,12 +398,12 @@ const updateSettings = async (req, res) => {
       secondary_color,
       system_description: system_description || null,
       audit_retention_days,
-      deepgram_enabled,
-      deepgram_api_key_enc,
+      transcribe_enabled,
+      transcribe_language,
+      transcribe_medical_specialty,
+      transcribe_show_speaker_labels,
+      transcribe_auto_transcribe_on_upload,
       deepgram_model,
-      deepgram_language,
-      deepgram_webhook_url: deepgram_webhook_raw || '',
-      deepgram_auto_transcribe_on_upload,
       anthropic_enabled,
       anthropic_api_key_enc,
       anthropic_model,
@@ -362,7 +412,13 @@ const updateSettings = async (req, res) => {
       ffmpeg_compression,
       ffmpeg_max_upload_mb,
       ffmpeg_preprocess_before_transcribe,
-      deepgram_timeout_ms,
+      transcribe_timeout_ms,
+      deepgram_profanity_filter,
+      deepgram_punctuate,
+      deepgram_numerals,
+      deepgram_redact_pii,
+      deepgram_remove_filler_words,
+      deepgram_custom_vocabulary,
     })
 
     invalidateAiSettingsCache()
@@ -374,11 +430,13 @@ const updateSettings = async (req, res) => {
     const trackedNext = {
       system_name, system_email, phone, address, footer_text, support_contact, system_description,
       primary_color, secondary_color, audit_retention_days,
-      deepgram_enabled, deepgram_model, deepgram_language,
-      deepgram_webhook_url: deepgram_webhook_raw || '', deepgram_auto_transcribe_on_upload,
+      transcribe_enabled, transcribe_language, transcribe_medical_specialty, deepgram_model,
+      transcribe_show_speaker_labels, transcribe_auto_transcribe_on_upload,
+      deepgram_profanity_filter, deepgram_punctuate, deepgram_numerals,
+      deepgram_redact_pii, deepgram_remove_filler_words, deepgram_custom_vocabulary,
       anthropic_enabled, anthropic_model,
       ffmpeg_enabled, ffmpeg_target_format, ffmpeg_compression, ffmpeg_max_upload_mb,
-      ffmpeg_preprocess_before_transcribe, deepgram_timeout_ms,
+      ffmpeg_preprocess_before_transcribe, transcribe_timeout_ms,
     }
     const norm = (v) => (v === null || v === undefined ? '' : String(v))
     for (const [name, nextVal] of Object.entries(trackedNext)) {
@@ -386,10 +444,6 @@ const updateSettings = async (req, res) => {
       if (norm(prevVal) !== norm(nextVal)) {
         cloudWatchAudit.logSettingChange(req.user.id, req.user.role, name, norm(prevVal), norm(nextVal), req.clientIp)
       }
-    }
-    if (newDeepgramKeySaved || payload.deepgram_clear_api_key === true) {
-      cloudWatchAudit.logSettingChange(req.user.id, req.user.role, 'deepgram_api_key',
-        cur.deepgram_api_key_enc ? 'set' : 'unset', deepgram_api_key_enc ? 'set' : 'cleared', req.clientIp)
     }
     if (newAnthropicKeySaved || payload.anthropic_clear_api_key === true) {
       cloudWatchAudit.logSettingChange(req.user.id, req.user.role, 'anthropic_api_key',
@@ -422,22 +476,26 @@ const getTranscriptionSettings = async (req, res) => {
     await ensureSettingsTable()
     await ensureMediaAndAiSchema()
     const result = await pool.query(
-      `SELECT deepgram_timeout_ms, deepgram_enabled, deepgram_model, deepgram_language,
-              deepgram_auto_transcribe_on_upload, ffmpeg_max_upload_mb
+      `SELECT transcribe_timeout_ms, transcribe_enabled, transcribe_language,
+              transcribe_medical_specialty, transcribe_auto_transcribe_on_upload,
+              deepgram_timeout_ms, deepgram_enabled, deepgram_language, deepgram_auto_transcribe_on_upload,
+              ffmpeg_max_upload_mb
        FROM system_settings WHERE id = 1`,
     )
     const row = result.rows[0] || {}
-    const timeoutMs = Number(row.deepgram_timeout_ms) || AI_DEFAULTS.deepgram_timeout_ms
+    const timeoutMs = Number(row.transcribe_timeout_ms ?? row.deepgram_timeout_ms) || AI_DEFAULTS.transcribe_timeout_ms
     res.status(200).json({
       settings: {
-        deepgram_timeout_seconds: Math.max(
-          MIN_DEEPGRAM_TIMEOUT_SEC,
-          Math.min(MAX_DEEPGRAM_TIMEOUT_SEC, Math.round(timeoutMs / 1000)),
+        transcribe_timeout_seconds: Math.max(
+          MIN_TRANSCRIBE_TIMEOUT_SEC,
+          Math.min(MAX_TRANSCRIBE_TIMEOUT_SEC, Math.round(timeoutMs / 1000)),
         ),
-        deepgram_enabled: !!row.deepgram_enabled,
-        deepgram_model: row.deepgram_model || AI_DEFAULTS.deepgram_model,
-        deepgram_language: row.deepgram_language || AI_DEFAULTS.deepgram_language,
-        deepgram_auto_transcribe_on_upload: !!row.deepgram_auto_transcribe_on_upload,
+        transcribe_enabled: row.transcribe_enabled != null ? !!row.transcribe_enabled : !!row.deepgram_enabled,
+        transcribe_language: row.transcribe_language || row.deepgram_language || AI_DEFAULTS.transcribe_language,
+        transcribe_medical_specialty: row.transcribe_medical_specialty || AI_DEFAULTS.transcribe_medical_specialty,
+        transcribe_auto_transcribe_on_upload: row.transcribe_auto_transcribe_on_upload != null
+          ? !!row.transcribe_auto_transcribe_on_upload
+          : !!row.deepgram_auto_transcribe_on_upload,
         ffmpeg_max_upload_mb: row.ffmpeg_max_upload_mb != null ? Number(row.ffmpeg_max_upload_mb) : AI_DEFAULTS.ffmpeg_max_upload_mb,
       },
     })
@@ -451,38 +509,162 @@ const updateTranscriptionSettings = async (req, res) => {
     await ensureSettingsTable()
     await ensureMediaAndAiSchema()
     const payload = req.body?.settings != null ? req.body.settings : req.body
-    const cur = (await pool.query('SELECT deepgram_timeout_ms FROM system_settings WHERE id = 1')).rows[0] || {}
+    const cur = (await pool.query('SELECT transcribe_timeout_ms, deepgram_timeout_ms FROM system_settings WHERE id = 1')).rows[0] || {}
 
-    let deepgram_timeout_ms = Number(cur.deepgram_timeout_ms) || AI_DEFAULTS.deepgram_timeout_ms
-    if (payload.deepgram_timeout_seconds != null && payload.deepgram_timeout_seconds !== '') {
-      const sec = parseInt(String(payload.deepgram_timeout_seconds), 10)
+    let transcribe_timeout_ms = Number(cur.transcribe_timeout_ms ?? cur.deepgram_timeout_ms) || AI_DEFAULTS.transcribe_timeout_ms
+    if (payload.transcribe_timeout_seconds != null && payload.transcribe_timeout_seconds !== '') {
+      const sec = parseInt(String(payload.transcribe_timeout_seconds), 10)
       if (Number.isFinite(sec)) {
-        const clamped = Math.max(MIN_DEEPGRAM_TIMEOUT_SEC, Math.min(MAX_DEEPGRAM_TIMEOUT_SEC, sec))
-        deepgram_timeout_ms = clamped * 1000
+        const clamped = Math.max(MIN_TRANSCRIBE_TIMEOUT_SEC, Math.min(MAX_TRANSCRIBE_TIMEOUT_SEC, sec))
+        transcribe_timeout_ms = clamped * 1000
       }
     }
 
     await pool.query(
-      `UPDATE system_settings SET deepgram_timeout_ms = $1, updated_at = NOW() WHERE id = 1`,
-      [deepgram_timeout_ms],
+      `UPDATE system_settings SET transcribe_timeout_ms = $1, updated_at = NOW() WHERE id = 1`,
+      [transcribe_timeout_ms],
     )
     invalidateAiSettingsCache()
 
     cloudWatchAudit.logSettingChange(
       req.user.id,
       req.user.role,
-      'deepgram_timeout_ms',
-      cur.deepgram_timeout_ms,
-      deepgram_timeout_ms,
+      'transcribe_timeout_ms',
+      cur.transcribe_timeout_ms ?? cur.deepgram_timeout_ms,
+      transcribe_timeout_ms,
       req.clientIp,
     )
 
     res.status(200).json({
       message: 'Transcription settings updated.',
-      settings: { deepgram_timeout_seconds: Math.round(deepgram_timeout_ms / 1000) },
+      settings: { transcribe_timeout_seconds: Math.round(transcribe_timeout_ms / 1000) },
     })
   } catch (err) {
     sendHttpError(res, 500, err, { context: 'settings.updateTranscription', req })
+  }
+}
+
+function resolveDeepgramSampleAudioPath() {
+  const fixturesDir = path.join(__dirname, '..', '..', 'test-fixtures', 'deepgram')
+  const candidates = ['test-e2e-speech.wav', 'test-probe.wav']
+  for (const name of candidates) {
+    const abs = path.join(fixturesDir, name)
+    if (fs.existsSync(abs)) return abs
+  }
+  return null
+}
+
+function mergeDeepgramTestSettings(base, overrides = {}) {
+  return {
+    ...base,
+    transcribe_language: overrides.transcribe_language != null
+      ? normalizeTranscribeLanguage(overrides.transcribe_language, base.transcribe_language)
+      : base.transcribe_language,
+    deepgram_model: overrides.deepgram_model != null
+      ? normalizeDeepgramModel(String(overrides.deepgram_model))
+      : base.deepgram_model,
+    transcribe_show_speaker_labels: overrides.transcribe_show_speaker_labels != null
+      ? !!overrides.transcribe_show_speaker_labels
+      : base.transcribe_show_speaker_labels,
+    deepgram_profanity_filter: overrides.deepgram_profanity_filter != null
+      ? !!overrides.deepgram_profanity_filter
+      : base.deepgram_profanity_filter,
+    deepgram_punctuate: overrides.deepgram_punctuate != null
+      ? !!overrides.deepgram_punctuate
+      : base.deepgram_punctuate,
+    deepgram_numerals: overrides.deepgram_numerals != null
+      ? !!overrides.deepgram_numerals
+      : base.deepgram_numerals,
+    deepgram_redact_pii: overrides.deepgram_redact_pii != null
+      ? !!overrides.deepgram_redact_pii
+      : base.deepgram_redact_pii,
+    deepgram_remove_filler_words: overrides.deepgram_remove_filler_words != null
+      ? !!overrides.deepgram_remove_filler_words
+      : base.deepgram_remove_filler_words,
+    deepgram_custom_vocabulary: overrides.deepgram_custom_vocabulary != null
+      ? parseCustomVocabulary(overrides.deepgram_custom_vocabulary)
+      : base.deepgram_custom_vocabulary,
+  }
+}
+
+function computeConfidenceImprovement(baseline, advanced) {
+  if (baseline == null || advanced == null) return null
+  if (baseline <= 0) return null
+  return Math.round(((advanced - baseline) / baseline) * 1000) / 10
+}
+
+const testDeepgramAdvancedSettings = async (req, res) => {
+  try {
+    await ensureSettingsTable()
+    const saved = await loadAiSettings()
+    const apiKey = resolveDeepgramApiKey(saved)
+    if (!apiKey) {
+      return res.status(400).json({ error: 'Deepgram API key is not configured.' })
+    }
+
+    const samplePath = resolveDeepgramSampleAudioPath()
+    if (!samplePath) {
+      return res.status(500).json({ error: 'Sample audio fixture is not available on the server.' })
+    }
+
+    const overrides = req.body?.settings && typeof req.body.settings === 'object' ? req.body.settings : req.body || {}
+    const advancedSettings = mergeDeepgramTestSettings(saved, overrides)
+    advancedSettings.deepgram_api_key = apiKey
+    advancedSettings.transcribe_enabled = true
+
+    const baselineOptions = buildBaselineListenOptions(advancedSettings, null)
+    const advancedOptions = buildListenOptions(advancedSettings, null)
+
+    const [baselineResult, advancedResult] = await Promise.all([
+      transcribeLocalFileDetailed(samplePath, advancedSettings, 0, 0, baselineOptions),
+      transcribeLocalFileDetailed(samplePath, advancedSettings, 0, 0, advancedOptions),
+    ])
+
+    if (!baselineResult && !advancedResult) {
+      return res.status(502).json({ error: 'Deepgram test transcription failed. Check API key and network connectivity.' })
+    }
+
+    const baselineConfidence = baselineResult?.confidence ?? null
+    const advancedConfidence = advancedResult?.confidence ?? null
+    const improvementPercent = computeConfidenceImprovement(baselineConfidence, advancedConfidence)
+
+    res.status(200).json({
+      message: 'Deepgram advanced settings test completed.',
+      sampleAudio: path.basename(samplePath),
+      currentSettings: {
+        transcribe_language: advancedSettings.transcribe_language,
+        deepgram_model: advancedSettings.deepgram_model,
+        transcribe_show_speaker_labels: advancedSettings.transcribe_show_speaker_labels,
+        deepgram_profanity_filter: advancedSettings.deepgram_profanity_filter,
+        deepgram_punctuate: advancedSettings.deepgram_punctuate,
+        deepgram_numerals: advancedSettings.deepgram_numerals,
+        deepgram_redact_pii: advancedSettings.deepgram_redact_pii,
+        deepgram_remove_filler_words: advancedSettings.deepgram_remove_filler_words,
+        deepgram_custom_vocabulary: advancedSettings.deepgram_custom_vocabulary,
+      },
+      baseline: {
+        transcript: baselineResult?.transcript || '',
+        confidence: baselineConfidence,
+        options: baselineOptions,
+      },
+      advanced: {
+        transcript: advancedResult?.transcript || '',
+        confidence: advancedConfidence,
+        options: advancedOptions,
+      },
+      accuracy: {
+        baselineConfidence,
+        advancedConfidence,
+        improvementPercent,
+        summary: improvementPercent == null
+          ? 'Confidence comparison unavailable for this sample (silent or empty audio).'
+          : improvementPercent >= 0
+            ? `Advanced settings improved confidence by ${improvementPercent}%.`
+            : `Advanced settings changed confidence by ${improvementPercent}%.`,
+      },
+    })
+  } catch (err) {
+    sendHttpError(res, 500, err, { context: 'settings.testDeepgramAdvanced', req })
   }
 }
 
@@ -492,5 +674,6 @@ module.exports = {
   getTranscriptionSettings,
   updateTranscriptionSettings,
   updateSettings,
+  testDeepgramAdvancedSettings,
   ensureSettingsTable,
 }
