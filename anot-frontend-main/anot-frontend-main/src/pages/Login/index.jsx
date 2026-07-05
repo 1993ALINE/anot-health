@@ -9,9 +9,6 @@ import { useReleaseSplash } from '../../splash/useReleaseSplash'
 import { hasValidSession } from '../../utils/sessionAuth'
 import PhiTrainingModal from '../../components/PhiTrainingModal'
 import PasswordChangeModal from '../../components/PasswordChangeModal'
-import MfaChallengeModal from '../../components/MfaChallengeModal'
-import MfaEnrollmentModal from '../../components/MfaEnrollmentModal'
-import { resolveMfaGateFromAuthResponse } from '../../utils/jwtClaims'
 
 function networkErrorMessage() {
   const isLocalApi = API_BASE.includes('localhost') || API_BASE.includes('127.0.0.1')
@@ -217,10 +214,6 @@ export default function Login() {
   const [error, setError] = useState('')
   const [phiTrainingToken, setPhiTrainingToken] = useState(null)
   const [passwordChangeToken, setPasswordChangeToken] = useState(null)
-  const [mfaToken, setMfaToken] = useState(null)
-  const [mfaEnrollmentToken, setMfaEnrollmentToken] = useState(null)
-  const [mfaChallengeMeta, setMfaChallengeMeta] = useState({ method: null, destinationMasked: null })
-  const [enrollmentRequired, setEnrollmentRequired] = useState(false)
   const [csrfTokenFetched, setCsrfTokenFetched] = useState(false)
   const csrfReady = phase === 'form' && csrfTokenFetched
   const reducedMotion = usePrefersReducedMotion()
@@ -287,74 +280,20 @@ export default function Login() {
     }
   }, [phase])
 
-  const clearMfaGates = () => {
-    setMfaToken(null)
-    setMfaEnrollmentToken(null)
-    setMfaChallengeMeta({ method: null, destinationMasked: null })
-    setEnrollmentRequired(false)
-  }
-
-  const openMfaEnrollment = (temporaryToken) => {
-    setMfaToken(null)
-    setMfaChallengeMeta({ method: null, destinationMasked: null })
-    setEnrollmentRequired(true)
-    setMfaEnrollmentToken(temporaryToken)
-  }
-
-  const openMfaCode = (temporaryToken, meta = {}) => {
-    setEnrollmentRequired(false)
-    setMfaEnrollmentToken(null)
-    setMfaChallengeMeta({
-      method: meta.mfaMethod || null,
-      destinationMasked: meta.mfaDestinationMasked || null,
-    })
-    setMfaToken(temporaryToken)
-  }
-
   // Resolves a successful auth response. The server returns at most one pre-session
-  // gate per step: password change → PHI training → MFA enrollment/TOTP → full session.
+  // gate per step: password change → PHI training → full session.
   const routeAfterAuth = (data) => {
     if (data.requirePasswordChange) {
       setPhiTrainingToken(null)
-      clearMfaGates()
       setPasswordChangeToken(data.temporaryToken)
       return
     }
     if (data.requirePhiTraining) {
-      clearMfaGates()
       setPasswordChangeToken(null)
       setPhiTrainingToken(data.temporaryToken)
       return
     }
 
-    const mfaGate = resolveMfaGateFromAuthResponse(data)
-
-    if (mfaGate === 'enrollment') {
-      if (!data.temporaryToken) {
-        setError('MFA setup is required but the server did not provide a session token. Please sign in again.')
-        if (import.meta.env.DEV) {
-          console.error('[Login] MFA enrollment without temporaryToken', data)
-        }
-        return
-      }
-      setPhiTrainingToken(null)
-      setPasswordChangeToken(null)
-      openMfaEnrollment(data.temporaryToken)
-      return
-    }
-
-    if (mfaGate === 'code') {
-      if (!data.temporaryToken) {
-        setError('MFA verification is required but the server did not provide a session token. Please sign in again.')
-        return
-      }
-      setPhiTrainingToken(null)
-      setPasswordChangeToken(null)
-      openMfaCode(data.temporaryToken, data)
-      return
-    }
-
-    clearMfaGates()
     goToDashboard(data.user)
   }
 
@@ -548,36 +487,8 @@ export default function Login() {
         <PhiTrainingModal
           temporaryToken={phiTrainingToken}
           onAcknowledged={(data) => {
-            const mfaGate = resolveMfaGateFromAuthResponse(data)
             setPhiTrainingToken(null)
-            if (mfaGate === 'enrollment' && data.temporaryToken) {
-              openMfaEnrollment(data.temporaryToken)
-              return
-            }
             routeAfterAuth(data)
-          }}
-        />
-      ) : null}
-
-      {enrollmentRequired && mfaEnrollmentToken ? (
-        <MfaEnrollmentModal
-          temporaryToken={mfaEnrollmentToken}
-          onEnrolled={(user) => {
-            clearMfaGates()
-            goToDashboard(user)
-          }}
-        />
-      ) : null}
-
-      {mfaToken ? (
-        <MfaChallengeModal
-          temporaryToken={mfaToken}
-          mfaMethod={mfaChallengeMeta.method}
-          mfaDestinationMasked={mfaChallengeMeta.destinationMasked}
-          onVerified={(user) => {
-            setMfaToken(null)
-            setMfaChallengeMeta({ method: null, destinationMasked: null })
-            goToDashboard(user)
           }}
         />
       ) : null}

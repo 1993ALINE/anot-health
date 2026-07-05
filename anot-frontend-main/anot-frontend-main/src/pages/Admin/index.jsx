@@ -67,9 +67,6 @@ function validateSettingsForm(form) {
         if (!value) {continue}
         if (!/^https?:\/\/.+/i.test(value)) {return `Enter a valid URL for ${key.replace('_url', '').replace('_', ' ')}.`}
     }
-    if (form.deepgram_enabled && !form.deepgram_api_key_set && !form.deepgram_api_key?.trim()) {
-        return 'Deepgram is enabled but no API key is saved. Enter a key or turn Deepgram off.'
-    }
     if (form.anthropic_enabled && !form.anthropic_api_key_set && !form.anthropic_api_key?.trim()) {
         return 'AI note generation is enabled but no Anthropic API key is saved. Enter a key or turn it off.'
     }
@@ -101,12 +98,22 @@ function buildSettingsPayload(form) {
             x_url: form.x_url.trim(),
         },
         audit_retention_days: Math.max(2190, Math.min(Number(form.audit_retention_days) || 2555, 3650)),
-        deepgram_enabled: !!form.deepgram_enabled,
-        deepgram_model: form.deepgram_model?.trim() || 'nova-2',
-        deepgram_language: form.deepgram_language?.trim() || 'en-US',
-        deepgram_webhook_url: form.deepgram_webhook_url?.trim() || '',
-        deepgram_auto_transcribe_on_upload: !!form.deepgram_auto_transcribe_on_upload,
-        deepgram_timeout_seconds: Math.max(5, Math.min(Number(form.deepgram_timeout_seconds) || 30, 300)),
+        transcribe_enabled: !!form.transcribe_enabled,
+        transcribe_language: form.transcribe_language?.trim() || 'en-US',
+        transcribe_medical_specialty: form.transcribe_medical_specialty || 'PRIMARYCARE',
+        deepgram_model: form.deepgram_model || 'nova-3-medical',
+        transcribe_show_speaker_labels: !!form.transcribe_show_speaker_labels,
+        transcribe_auto_transcribe_on_upload: !!form.transcribe_auto_transcribe_on_upload,
+        transcribe_timeout_seconds: Math.max(60, Math.min(Number(form.transcribe_timeout_seconds) || 300, 900)),
+        deepgram_profanity_filter: !!form.deepgram_profanity_filter,
+        deepgram_punctuate: form.deepgram_punctuate !== false,
+        deepgram_numerals: form.deepgram_numerals !== false,
+        deepgram_redact_pii: !!form.deepgram_redact_pii,
+        deepgram_remove_filler_words: form.deepgram_remove_filler_words !== false,
+        deepgram_custom_vocabulary: String(form.deepgram_custom_vocabulary_text || '')
+            .split(/[\n,]+/)
+            .map((term) => term.trim())
+            .filter(Boolean),
         anthropic_enabled: !!form.anthropic_enabled,
         anthropic_model: form.anthropic_model || 'claude-haiku-4-5',
         ffmpeg_enabled: !!form.ffmpeg_enabled,
@@ -115,8 +122,6 @@ function buildSettingsPayload(form) {
         ffmpeg_max_upload_mb: Math.max(1, Math.min(500, Number(form.ffmpeg_max_upload_mb) || 100)),
         ffmpeg_preprocess_before_transcribe: !!form.ffmpeg_preprocess_before_transcribe,
     }
-    if (form.deepgram_api_key?.trim()) {payload.deepgram_api_key = form.deepgram_api_key.trim()}
-    if (form.deepgram_clear_api_key) {payload.deepgram_clear_api_key = true}
     if (form.anthropic_api_key?.trim()) {payload.anthropic_api_key = form.anthropic_api_key.trim()}
     if (form.anthropic_clear_api_key) {payload.anthropic_clear_api_key = true}
     return payload
@@ -214,6 +219,35 @@ const MODULE_META = {
     'system-profile': { tagline: 'Manage your profile identity and security settings.' },
 }
 
+const DEEPGRAM_MODEL_OPTIONS = [
+    { value: 'nova-3-medical', label: 'Nova-3 Medical (Recommended)' },
+    { value: 'nova-3', label: 'Nova-3' },
+    { value: 'nova-2', label: 'Nova-2' },
+]
+
+const DEEPGRAM_LANGUAGE_OPTIONS = [
+    { value: 'en-US', label: 'English (US)' },
+    { value: 'en-GB', label: 'English (UK)' },
+    { value: 'en-AU', label: 'English (Australia)' },
+]
+
+function formatCustomVocabularyText(raw) {
+    if (Array.isArray(raw)) {
+        return raw.join('\n')
+    }
+    if (typeof raw === 'string' && raw.trim()) {
+        try {
+            const parsed = JSON.parse(raw)
+            if (Array.isArray(parsed)) {
+                return parsed.join('\n')
+            }
+        } catch {
+            return raw
+        }
+    }
+    return ''
+}
+
 const DEFAULT_SETTINGS_FORM = {
     system_name: 'Anot',
     system_email: '',
@@ -233,15 +267,19 @@ const DEFAULT_SETTINGS_FORM = {
     secondary_color: '#7B61FF',
     system_description: 'Clinical documentation platform',
     audit_retention_days: 2555,
-    deepgram_enabled: false,
-    deepgram_api_key: '',
-    deepgram_api_key_set: false,
-    deepgram_clear_api_key: false,
-    deepgram_model: 'nova-2',
-    deepgram_language: 'en-US',
-    deepgram_webhook_url: '',
-    deepgram_auto_transcribe_on_upload: false,
-    deepgram_timeout_seconds: 30,
+    transcribe_enabled: false,
+    transcribe_language: 'en-US',
+    transcribe_medical_specialty: 'PRIMARYCARE',
+    deepgram_model: 'nova-3-medical',
+    transcribe_show_speaker_labels: true,
+    transcribe_auto_transcribe_on_upload: true,
+    transcribe_timeout_seconds: 300,
+    deepgram_profanity_filter: false,
+    deepgram_punctuate: true,
+    deepgram_numerals: true,
+    deepgram_redact_pii: false,
+    deepgram_remove_filler_words: true,
+    deepgram_custom_vocabulary_text: '',
     anthropic_api_key: '',
     anthropic_api_key_set: false,
     anthropic_clear_api_key: false,
@@ -825,6 +863,8 @@ function Admin() {
     const [settingsLoading, setSettingsLoading] = useState(false)
     const [settingsSaving, setSettingsSaving] = useState(false)
     const [settingsError, setSettingsError] = useState('')
+    const [deepgramTestLoading, setDeepgramTestLoading] = useState(false)
+    const [deepgramTestResult, setDeepgramTestResult] = useState(null)
 
     const toggleAdminModuleKey = useCallback((key) => {
         setEditUser((prev) => {
@@ -855,13 +895,19 @@ function Admin() {
             linkedin_url: social.linkedin_url || '',
             instagram_url: social.instagram_url || '',
             x_url: social.x_url || '',
-            deepgram_api_key: '',
-            deepgram_clear_api_key: false,
-            deepgram_api_key_set: raw?.deepgram_api_key_set,
-            deepgram_enabled: raw?.deepgram_enabled ?? false,
-            deepgram_model: raw?.deepgram_model ?? 'nova-2',
-            deepgram_language: raw?.deepgram_language ?? 'en-US',
-            deepgram_timeout_seconds: raw?.deepgram_timeout_seconds ?? 30,
+            transcribe_enabled: raw?.transcribe_enabled ?? raw?.deepgram_enabled ?? false,
+            transcribe_language: raw?.transcribe_language ?? raw?.deepgram_language ?? 'en-US',
+            transcribe_medical_specialty: raw?.transcribe_medical_specialty ?? 'PRIMARYCARE',
+            deepgram_model: raw?.deepgram_model ?? 'nova-3-medical',
+            transcribe_show_speaker_labels: raw?.transcribe_show_speaker_labels !== false,
+            transcribe_auto_transcribe_on_upload: raw?.transcribe_auto_transcribe_on_upload ?? raw?.deepgram_auto_transcribe_on_upload ?? true,
+            transcribe_timeout_seconds: raw?.transcribe_timeout_seconds ?? raw?.deepgram_timeout_seconds ?? 300,
+            deepgram_profanity_filter: !!raw?.deepgram_profanity_filter,
+            deepgram_punctuate: raw?.deepgram_punctuate !== false,
+            deepgram_numerals: raw?.deepgram_numerals !== false,
+            deepgram_redact_pii: !!raw?.deepgram_redact_pii,
+            deepgram_remove_filler_words: raw?.deepgram_remove_filler_words !== false,
+            deepgram_custom_vocabulary_text: formatCustomVocabularyText(raw?.deepgram_custom_vocabulary),
             anthropic_api_key: '',
             anthropic_clear_api_key: false,
             anthropic_api_key_set: raw?.anthropic_api_key_set,
@@ -1077,6 +1123,31 @@ function Admin() {
             showToast(err.message || 'Failed to save settings.', 'error')
         } finally {
             setSettingsSaving(false)
+        }
+    }
+
+    const testDeepgramAdvancedSettings = async () => {
+        try {
+            setDeepgramTestLoading(true)
+            setDeepgramTestResult(null)
+            const payload = buildSettingsPayload(settingsForm)
+            const data = await settingsAPI.testDeepgramAdvanced({
+                transcribe_language: payload.transcribe_language,
+                deepgram_model: payload.deepgram_model,
+                transcribe_show_speaker_labels: payload.transcribe_show_speaker_labels,
+                deepgram_profanity_filter: payload.deepgram_profanity_filter,
+                deepgram_punctuate: payload.deepgram_punctuate,
+                deepgram_numerals: payload.deepgram_numerals,
+                deepgram_redact_pii: payload.deepgram_redact_pii,
+                deepgram_remove_filler_words: payload.deepgram_remove_filler_words,
+                deepgram_custom_vocabulary: payload.deepgram_custom_vocabulary,
+            })
+            setDeepgramTestResult(data)
+            showToast('Deepgram test completed')
+        } catch (err) {
+            showToast(err.message || 'Deepgram test failed.', 'error')
+        } finally {
+            setDeepgramTestLoading(false)
         }
     }
 
@@ -2110,52 +2181,161 @@ function Admin() {
                                     <div className="adm-form-card">
                                         <div className="adm-form-card__title">AI &amp; media services</div>
                                         <p className="adm-settings-note" style={{ marginBottom: 16 }}>
-                                            Deepgram and Anthropic API keys are stored encrypted in the database (AES-256-GCM), not in SSM — so admins can rotate them here without a redeploy. Rate limits are managed separately via SSM (<code>/anot/prod/RATE_LIMIT_*</code>). See <code>docs/ADMIN_SETTINGS_ARCHITECTURE.md</code>.
+                                            Deepgram Nova-3 Medical uses a Deepgram API key (<code>DEEPGRAM_API_KEY</code> on the server or saved encrypted below). Anthropic API keys are stored encrypted in the database (AES-256-GCM), not in SSM — so admins can rotate them here without a redeploy. Rate limits are managed separately via SSM (<code>/anot/prod/RATE_LIMIT_*</code>). See <code>docs/ADMIN_SETTINGS_ARCHITECTURE.md</code>.
                                         </p>
-                                        <div className="adm-form-card__title" style={{ fontSize: 15, marginTop: 8 }}>Deepgram (transcription)</div>
+                                        <div className="adm-form-card__title" style={{ fontSize: 15, marginTop: 8 }}>Deepgram Nova-3 Medical (transcription)</div>
                                         <div className="adm-form-grid">
                                             <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>
                                                 <label className="adm-form-label">
-                                                    <input type="checkbox" checked={!!settingsForm.deepgram_enabled} onChange={(e) => handleSettingInput('deepgram_enabled', e.target.checked)} /> Enable Deepgram when API key is configured
+                                                    <input type="checkbox" checked={!!settingsForm.transcribe_enabled} onChange={(e) => handleSettingInput('transcribe_enabled', e.target.checked)} /> Enable Deepgram Nova-3 Medical
                                                 </label>
-                                            </div>
-                                            <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>
-                                                <label className="adm-form-label" title="Encrypted at rest in the database. Enter a new value to rotate; leave blank to keep the saved key.">API key {settingsForm.deepgram_api_key_set ? <span style={{ color: '#059669' }}>(saved — encrypted in DB)</span> : null}</label>
-                                                <input className="adm-input" type="password" autoComplete="new-password" placeholder={settingsForm.deepgram_api_key_set ? 'Leave blank to keep existing key' : 'Enter Deepgram API key'}
-                                                    value={settingsForm.deepgram_api_key} onChange={(e) => handleSettingInput('deepgram_api_key', e.target.value)} />
-                                            </div>
-                                            <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>
-                                                <label className="adm-form-label">
-                                                    <input type="checkbox" checked={!!settingsForm.deepgram_clear_api_key} onChange={(e) => handleSettingInput('deepgram_clear_api_key', e.target.checked)} /> Remove stored API key on save
-                                                </label>
+                                                <p className="adm-settings-note" style={{ marginTop: 8 }}>Requires <code>DEEPGRAM_API_KEY</code>, <code>USE_DEEPGRAM=true</code>, and audio in S3.</p>
                                             </div>
                                             <div className="adm-form-group">
                                                 <label className="adm-form-label">Model</label>
-                                                <input className="adm-input" value={settingsForm.deepgram_model} onChange={(e) => handleSettingInput('deepgram_model', e.target.value)} placeholder="nova-2" />
+                                                <select className="adm-input" value={settingsForm.deepgram_model} onChange={(e) => handleSettingInput('deepgram_model', e.target.value)}>
+                                                    {DEEPGRAM_MODEL_OPTIONS.map(({ value, label }) => (
+                                                        <option key={value} value={value}>{label}</option>
+                                                    ))}
+                                                </select>
                                             </div>
                                             <div className="adm-form-group">
-                                                <label className="adm-form-label">Language</label>
-                                                <input className="adm-input" value={settingsForm.deepgram_language} onChange={(e) => handleSettingInput('deepgram_language', e.target.value)} placeholder="en-US" />
-                                            </div>
-                                            <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>
-                                                <label className="adm-form-label">Webhook callback URL (optional)</label>
-                                                <input className="adm-input" value={settingsForm.deepgram_webhook_url} onChange={(e) => handleSettingInput('deepgram_webhook_url', e.target.value)} placeholder="https://your-api.example.com/api/webhooks/deepgram" />
-                                                <p className="adm-settings-note" style={{ marginTop: 8 }}>
-                                                    When set, single-recording visits use Deepgram async callback; append <code>?visit_id=…&amp;sig=…</code> is automatic. Verify with <code>DEEPGRAM_WEBHOOK_SECRET</code> (or <code>JWT_SECRET</code>). Multi-file visits stay synchronous.
-                                                </p>
+                                                <label className="adm-form-label">Medical specialty</label>
+                                                <select className="adm-input" value={settingsForm.transcribe_medical_specialty} onChange={(e) => handleSettingInput('transcribe_medical_specialty', e.target.value)}>
+                                                    <option value="PRIMARYCARE">Primary care</option>
+                                                    <option value="CARDIOLOGY">Cardiology</option>
+                                                    <option value="NEUROLOGY">Neurology</option>
+                                                    <option value="ONCOLOGY">Oncology</option>
+                                                    <option value="RADIOLOGY">Radiology</option>
+                                                    <option value="UROLOGY">Urology</option>
+                                                </select>
                                             </div>
                                             <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>
                                                 <label className="adm-form-label">
-                                                    <input type="checkbox" checked={!!settingsForm.deepgram_auto_transcribe_on_upload} onChange={(e) => handleSettingInput('deepgram_auto_transcribe_on_upload', e.target.checked)} /> Auto-transcribe when primary recording is uploaded
+                                                    <input type="checkbox" checked={!!settingsForm.transcribe_auto_transcribe_on_upload} onChange={(e) => handleSettingInput('transcribe_auto_transcribe_on_upload', e.target.checked)} /> Auto-transcribe when primary recording is uploaded
                                                 </label>
                                             </div>
                                             <div className="adm-form-group">
                                                 <label className="adm-form-label">Transcription timeout (seconds)</label>
-                                                <input className="adm-input" type="number" min={5} max={300} value={settingsForm.deepgram_timeout_seconds}
-                                                    onChange={(e) => handleSettingInput('deepgram_timeout_seconds', e.target.value)} />
-                                                <p className="adm-settings-note" style={{ marginTop: 8 }}>Deepgram HTTP timeout (5–300 seconds). Default 30.</p>
+                                                <input className="adm-input" type="number" min={60} max={900} value={settingsForm.transcribe_timeout_seconds}
+                                                    onChange={(e) => handleSettingInput('transcribe_timeout_seconds', e.target.value)} />
+                                                <p className="adm-settings-note" style={{ marginTop: 8 }}>Job poll timeout (60–900 seconds). Default 300. Long recordings may need 600+.</p>
                                             </div>
                                         </div>
+
+                                        <div className="adm-form-card__title" style={{ fontSize: 15, marginTop: 20 }}>Deepgram → Advanced Settings</div>
+                                        <p className="adm-settings-note" style={{ marginBottom: 12 }}>
+                                            Tune Nova-3 Medical for your practice. Changes apply to new transcriptions after you save settings.
+                                        </p>
+                                        <div className="adm-form-grid">
+                                            <div className="adm-form-group">
+                                                <label className="adm-form-label">Language</label>
+                                                <select className="adm-input" value={settingsForm.transcribe_language} onChange={(e) => handleSettingInput('transcribe_language', e.target.value)}>
+                                                    {DEEPGRAM_LANGUAGE_OPTIONS.map(({ value, label }) => (
+                                                        <option key={value} value={value}>{label}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div className="adm-form-group">
+                                                <label className="adm-form-label">Numbers format</label>
+                                                <select
+                                                    className="adm-input"
+                                                    value={settingsForm.deepgram_numerals ? 'digits' : 'words'}
+                                                    onChange={(e) => handleSettingInput('deepgram_numerals', e.target.value === 'digits')}
+                                                >
+                                                    <option value="digits">Digits (e.g. 2026)</option>
+                                                    <option value="words">Words (e.g. twenty twenty-six)</option>
+                                                </select>
+                                            </div>
+                                            <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>
+                                                <label className="adm-form-label">
+                                                    <input type="checkbox" checked={!!settingsForm.transcribe_show_speaker_labels} onChange={(e) => handleSettingInput('transcribe_show_speaker_labels', e.target.checked)} /> Diarization — identify multiple speakers
+                                                </label>
+                                            </div>
+                                            <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>
+                                                <label className="adm-form-label">
+                                                    <input type="checkbox" checked={!!settingsForm.deepgram_punctuate} onChange={(e) => handleSettingInput('deepgram_punctuate', e.target.checked)} /> Punctuation and capitalization
+                                                </label>
+                                            </div>
+                                            <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>
+                                                <label className="adm-form-label">
+                                                    <input type="checkbox" checked={!!settingsForm.deepgram_profanity_filter} onChange={(e) => handleSettingInput('deepgram_profanity_filter', e.target.checked)} /> Profanity filter
+                                                </label>
+                                            </div>
+                                            <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>
+                                                <label className="adm-form-label">
+                                                    <input type="checkbox" checked={!!settingsForm.deepgram_remove_filler_words} onChange={(e) => handleSettingInput('deepgram_remove_filler_words', e.target.checked)} /> Remove filler words (um, uh, like)
+                                                </label>
+                                            </div>
+                                            <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>
+                                                <label className="adm-form-label">
+                                                    <input type="checkbox" checked={!!settingsForm.deepgram_redact_pii} onChange={(e) => handleSettingInput('deepgram_redact_pii', e.target.checked)} /> Redact PII (phone numbers, emails, SSN)
+                                                </label>
+                                            </div>
+                                            <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>
+                                                <label className="adm-form-label">Custom vocabulary</label>
+                                                <textarea
+                                                    className="adm-input adm-textarea"
+                                                    rows={4}
+                                                    placeholder={'Dr. Smith\nSunrise Clinic\nlaparoscopic cholecystectomy'}
+                                                    value={settingsForm.deepgram_custom_vocabulary_text}
+                                                    onChange={(e) => handleSettingInput('deepgram_custom_vocabulary_text', e.target.value)}
+                                                />
+                                                <p className="adm-settings-note" style={{ marginTop: 8 }}>
+                                                    One term per line — doctor names, clinic names, procedure names, and other practice-specific terms.
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        <div className="adm-settings-actions" style={{ marginTop: 12, marginBottom: 8 }}>
+                                            <button
+                                                type="button"
+                                                className="adm-btn-ghost"
+                                                onClick={testDeepgramAdvancedSettings}
+                                                disabled={deepgramTestLoading || !settingsForm.transcribe_enabled}
+                                            >
+                                                {deepgramTestLoading ? 'Testing sample audio…' : 'Test with sample audio'}
+                                            </button>
+                                            {!settingsForm.transcribe_enabled && (
+                                                <p className="adm-settings-note" style={{ marginTop: 8 }}>Enable Deepgram above to run a sample transcription test.</p>
+                                            )}
+                                        </div>
+
+                                        {deepgramTestResult && (
+                                            <div className="adm-form-card" style={{ marginTop: 12, background: '#f8fafc' }}>
+                                                <div className="adm-form-card__title" style={{ fontSize: 14 }}>Sample audio test results</div>
+                                                <p className="adm-settings-note" style={{ marginBottom: 10 }}>
+                                                    Sample: <code>{deepgramTestResult.sampleAudio}</code>
+                                                    {deepgramTestResult.accuracy?.summary ? ` — ${deepgramTestResult.accuracy.summary}` : null}
+                                                </p>
+                                                <div className="adm-form-grid">
+                                                    <div className="adm-form-group">
+                                                        <label className="adm-form-label">Baseline confidence</label>
+                                                        <div className="adm-input" style={{ background: '#fff' }}>
+                                                            {(deepgramTestResult.accuracy?.baselineConfidence ?? null) !== null
+                                                                ? `${Math.round(deepgramTestResult.accuracy.baselineConfidence * 1000) / 10}%`
+                                                                : 'N/A'}
+                                                        </div>
+                                                    </div>
+                                                    <div className="adm-form-group">
+                                                        <label className="adm-form-label">Advanced confidence</label>
+                                                        <div className="adm-input" style={{ background: '#fff' }}>
+                                                            {(deepgramTestResult.accuracy?.advancedConfidence ?? null) !== null
+                                                                ? `${Math.round(deepgramTestResult.accuracy.advancedConfidence * 1000) / 10}%`
+                                                                : 'N/A'}
+                                                        </div>
+                                                    </div>
+                                                    <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>
+                                                        <label className="adm-form-label">Baseline transcript</label>
+                                                        <textarea className="adm-input adm-textarea" rows={3} readOnly value={deepgramTestResult.baseline?.transcript || '(empty)'} />
+                                                    </div>
+                                                    <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>
+                                                        <label className="adm-form-label">Advanced transcript</label>
+                                                        <textarea className="adm-input adm-textarea" rows={3} readOnly value={deepgramTestResult.advanced?.transcript || '(empty)'} />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
                                         <div className="adm-form-card__title" style={{ fontSize: 15, marginTop: 20 }}>Anthropic (AI note generation)</div>
                                         <div className="adm-form-grid">
                                             <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>

@@ -6,7 +6,7 @@ const REFRESH_INTERVAL_MS = 30 * 1000
 
 const COMPONENT_META = [
   { key: 'database', label: 'Database' },
-  { key: 'deepgram', label: 'Deepgram' },
+  { key: 'deepgram', label: 'Deepgram Nova-3 Medical' },
   { key: 'anthropic', label: 'Anthropic' },
   { key: 's3', label: 'S3' },
 ]

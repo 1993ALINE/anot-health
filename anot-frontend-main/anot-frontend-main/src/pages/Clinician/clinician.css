@@ -618,7 +618,8 @@
   display: inline-flex;
   align-items: center;
   margin: 0 0 16px;
-  padding: 0;
+  padding: 8px 0;
+  min-height: 44px;
   border: none;
   background: transparent;
   color: #4f46e5;
@@ -676,7 +677,8 @@
 .cl-notes-btn-lock {
   border: none;
   border-radius: 8px;
-  padding: 8px 16px;
+  padding: 10px 16px;
+  min-height: 44px;
   background: #16a34a;
   color: #fff;
   font-size: 14px;
@@ -687,6 +689,29 @@
 
 .cl-notes-btn-lock:hover {
   background: #15803d;
+}
+
+@media (max-width: 768px) {
+  .cl-note-detail-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .cl-note-detail-actions {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .cl-note-detail-actions .btn,
+  .cl-note-detail-actions .cl-notes-btn-lock {
+    width: 100%;
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  .cl-note-detail-back {
+    font-size: 15px;
+  }
 }
 
 .cl-lock-confirm-overlay {
@@ -770,12 +795,59 @@
 @media (max-width: 768px) {
   .cl-audio-modal-overlay {
     padding: 0 !important;
+    align-items: flex-end !important;
   }
 
   .cl-audio-modal {
     margin: 0 !important;
     border-radius: 20px 20px 0 0 !important;
-    padding: 20px 16px !important;
+    padding: 20px 16px max(20px, env(safe-area-inset-bottom, 0px)) !important;
+    max-height: 92dvh;
+    overflow-y: auto;
+  }
+
+  .cl-audio-modal__header {
+    margin-bottom: 16px !important;
+  }
+
+  .cl-audio-modal__header-close {
+    min-width: 44px !important;
+    min-height: 44px !important;
+    padding: 10px 14px !important;
+  }
+
+  .cl-audio-modal__tabs,
+  .cl-audio-modal__rec-tabs {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .cl-audio-modal__tab,
+  .cl-audio-modal__rec-tab {
+    min-height: 44px !important;
+    padding: 10px 16px !important;
+    font-size: 14px !important;
+  }
+
+  .cl-audio-modal__controls {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 14px !important;
+  }
+
+  .cl-audio-modal__transport {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+  }
+
+  .cl-audio-modal__skip {
+    min-width: 44px !important;
+    min-height: 44px !important;
+    padding: 10px 16px !important;
+    font-size: 14px !important;
   }
 
   .cl-audio-modal button:not(.cl-audio-modal__play) {
@@ -786,6 +858,31 @@
   .cl-audio-modal .cl-audio-modal__play {
     width: 60px !important;
     height: 60px !important;
+  }
+
+  .cl-audio-modal__progress {
+    width: 100%;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    padding: 12px 0;
+  }
+
+  .cl-audio-modal__progress-track {
+    width: 100%;
+    height: 8px !important;
+    border-radius: 4px;
+  }
+
+  .cl-audio-modal__footer {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+
+  .cl-audio-modal__footer button {
+    width: 100%;
+    min-height: 44px;
+    margin-left: 0 !important;
   }
 }
 
@@ -2464,13 +2561,15 @@
   }
 
   .adm-shell.cl-clinician-shell.sf-portal .sf-sidebar.sf-sidebar--rich.adm-sidebar.cl-sidebar {
-    width: 100vw;
-    max-width: 100vw;
+    width: min(280px, 88vw);
+    max-width: min(280px, 88vw);
     transform: translateX(-100%);
+    pointer-events: none;
   }
 
   .adm-shell.cl-clinician-shell.sf-portal .sf-sidebar.sf-sidebar--rich.adm-sidebar.cl-sidebar.open {
     transform: translateX(0);
+    pointer-events: auto;
     box-shadow: 16px 0 40px rgba(15, 23, 42, 0.18);
   }
 
@@ -2975,5 +3074,41 @@
 
 .cl-audio-queue-panel__delete {
   padding: 4px 10px !important;
+}
+
+.cl-visit-encounter-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #4260e9;
+  background: #eef2ff;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.patient-visit-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.patient-visit-tabs__tab {
+  padding: 6px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 2px solid #e2e8f0;
+  background: #fff;
+  color: #64748b;
+  font-family: inherit;
+}
+
+.patient-visit-tabs__tab.is-active {
+  background: linear-gradient(135deg, #4260e9, #7b61ff);
+  color: #fff;
+  border-color: #4260e9;
 }
 

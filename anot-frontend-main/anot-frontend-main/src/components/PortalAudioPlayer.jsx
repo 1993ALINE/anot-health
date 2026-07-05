@@ -282,7 +282,7 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
     setCurrentTime(t)
   }
 
-  const timeAtProgressX = (trackEl, clientX) => {
+  const seekFromClientX = (trackEl, clientX) => {
     const audio = audioRef.current
     if (!audio || !trackEl) {return null}
     const dur = audio.duration
@@ -296,8 +296,21 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
   const seek = (e) => {
     const audio = audioRef.current
     if (!audio || resolvedStatus !== 'ready') {return}
-    const hit = timeAtProgressX(e.currentTarget, e.clientX)
+    const hit = seekFromClientX(e.currentTarget, e.clientX)
     if (!hit) {return}
+    audio.currentTime = hit.time
+    setProgress(hit.pct)
+    setCurrentTime(hit.time)
+  }
+
+  const seekFromTouch = (e) => {
+    const audio = audioRef.current
+    if (!audio || resolvedStatus !== 'ready') {return}
+    const touch = e.changedTouches?.[0] || e.touches?.[0]
+    if (!touch) {return}
+    const hit = seekFromClientX(e.currentTarget, touch.clientX)
+    if (!hit) {return}
+    e.preventDefault()
     audio.currentTime = hit.time
     setProgress(hit.pct)
     setCurrentTime(hit.time)
@@ -305,7 +318,7 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
 
   const handleProgressMouseMove = (e) => {
     if (resolvedStatus !== 'ready') {return}
-    const hit = timeAtProgressX(e.currentTarget, e.clientX)
+    const hit = seekFromClientX(e.currentTarget, e.clientX)
     if (!hit) {return}
     setScrubHover({ time: hit.time, pct: hit.pct })
   }
@@ -377,6 +390,7 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
           <div
             className="sf-progress-track sf-progress-track--interactive"
             onClick={canPlay ? seek : undefined}
+            onTouchEnd={canPlay ? seekFromTouch : undefined}
             onMouseMove={canPlay ? handleProgressMouseMove : undefined}
             onMouseLeave={canPlay ? handleProgressMouseLeave : undefined}
             role={canPlay ? 'slider' : undefined}

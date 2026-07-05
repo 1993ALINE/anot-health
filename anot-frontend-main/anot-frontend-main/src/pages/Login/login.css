@@ -736,6 +736,17 @@
     font-size: 0.875rem;
   }
 
+  /* 16px prevents iOS auto-zoom on input focus */
+  .login-page__input {
+    font-size: 16px;
+    min-height: 48px;
+  }
+
+  .login-page__submit {
+    min-height: 48px;
+    font-size: 1rem;
+  }
+
   .login-page__toggle-pass {
     display: inline-flex;
     align-items: center;

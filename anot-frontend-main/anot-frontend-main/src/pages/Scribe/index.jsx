@@ -4,6 +4,7 @@ import { authAPI, usersAPI, visitsAPI, notesAPI, isAbortError } from '../../serv
 import { useBranding } from '../../services/branding'
 import SystemProfileManager from '../../components/SystemProfileManager'
 import PortalAudioPlayer from '../../components/PortalAudioPlayer'
+import PatientVisitTabs from '../../components/PatientVisitTabs'
 import ScribeFinalNoteEditor from '../../components/ScribeFinalNoteEditor'
 import NoteWorkspacePanel from '../../components/NoteWorkspacePanel'
 import AiDraftReadonly from '../../components/AiDraftReadonly'
@@ -13,6 +14,14 @@ import ErrorBoundary, { PortalCrashFallback } from '../../components/ErrorBounda
 import PortalCalendarDayPreview from '../../components/PortalCalendarDayPreview'
 import { scribeDayPreviewRows } from '../../components/scribeDayPreviewRows'
 import { fmtAppointmentTime } from '../../utils/timeFormat'
+import {
+  groupVisitsByPatient,
+  getSiblingVisits,
+  getPatientVisitIndex,
+  getPatientVisitTotal,
+  visitEncounterShortLabel,
+  visitEncounterTabLabel,
+} from '../../utils/visitEncounterUtils'
 import { getCurrentUser } from '../../utils/getCurrentUser'
 import { useSessionTimeout } from '../../utils/useSessionTimeout'
 import './scribe.css'
@@ -360,6 +369,16 @@ function Scribe() {
   const [confirmLoading, setConfirmLoading]         = useState(false)
   const [noteRefreshing, setNoteRefreshing]         = useState(false)
   const [dayStats, setDayStats]                   = useState({})
+
+  const recordingsByPatient = useMemo(
+    () => groupVisitsByPatient(recordings),
+    [recordings],
+  )
+
+  const selectedPatientVisits = useMemo(() => {
+    if (!selectedRec?.patient_id) return []
+    return getSiblingVisits(selectedRec, recordingsByPatient)
+  }, [selectedRec, recordingsByPatient])
 
   const [baseline, setBaseline] = useState({ visitId: null, final: '', tx: '' })
   const [recordingsError, setRecordingsError] = useState(null)
@@ -739,6 +758,16 @@ function Scribe() {
       setScreen('note')
     }
     if (screen === 'note' && isDirty && selectedRec?.id !== rec.id) {
+      leaveNoteScreen(go)
+      return
+    }
+    go()
+  }
+
+  const switchPatientVisit = (rec) => {
+    if (!rec || rec.id === selectedRec?.id) return
+    const go = () => openRecording(rec)
+    if (screen === 'note' && isDirty) {
       leaveNoteScreen(go)
       return
     }
@@ -1326,13 +1355,19 @@ function Scribe() {
               const effectiveStatus = ['submitted','uploaded'].includes(rec.note_status) ? rec.note_status : rec.status
               const s    = STATUS_CFG[effectiveStatus] || { label: effectiveStatus, cls: 'badge-gray' }
               const isDone = ['submitted','uploaded'].includes(effectiveStatus)
+              const visitIdx = getPatientVisitIndex(rec, recordingsByPatient)
+              const visitTotal = getPatientVisitTotal(rec, recordingsByPatient)
+              const encounterLabel = visitEncounterShortLabel(rec, visitIdx, visitTotal)
               return (
                 <div key={rec.id} className="sf-row">
                   <div className="sf-row-left">
                     <span style={{ fontSize: 22 }}>🎙</span>
                     <div>
                       <div className="sf-row-name">{rec.patient_name}</div>
-                      <div className="sf-row-meta">{rec.mrn} · {rec.visit_type} · {fmtTime(rec.visit_time)} · {fmtDuration(rec.duration_seconds)}</div>
+                      <div className="sf-row-meta">
+                        {encounterLabel ? `${encounterLabel} · ` : ''}
+                        {rec.mrn} · {rec.visit_type} · {fmtTime(rec.visit_time)} · {fmtDuration(rec.duration_seconds)}
+                      </div>
                     </div>
                   </div>
                   <div className="sf-row-right">
@@ -1529,6 +1564,15 @@ function Scribe() {
 
         <div className="sf-note-workspace">
           <div className="sf-note-workspace__top">
+            {selectedPatientVisits.length > 1 ? (
+              <PatientVisitTabs
+                visits={selectedPatientVisits}
+                activeVisitId={selectedRec?.id}
+                onSelect={switchPatientVisit}
+                getLabel={(v, idx) => visitEncounterTabLabel(v, idx, fmtTime)}
+                className="patient-visit-tabs--scribe"
+              />
+            ) : null}
             <PortalAudioPlayer
               visitId={selectedRec?.id}
               durationSecs={selectedRec?.duration_seconds || 0}

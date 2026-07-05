@@ -1102,3 +1102,33 @@
     z-index: 1002 !important;
   }
 }
+
+/* Multi-visit tabs (same patient, multiple encounters) */
+.patient-visit-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.patient-visit-tabs--scribe {
+  padding: 0 4px 4px;
+}
+
+.patient-visit-tabs__tab {
+  padding: 6px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 2px solid #e2e8f0;
+  background: #fff;
+  color: #64748b;
+  font-family: inherit;
+}
+
+.patient-visit-tabs__tab.is-active {
+  background: linear-gradient(135deg, #4260e9, #7b61ff);
+  color: #fff;
+  border-color: #4260e9;
+}
