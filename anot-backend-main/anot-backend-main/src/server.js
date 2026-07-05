@@ -21,7 +21,7 @@ function logFatal(label, err) {
 
 process.on('unhandledRejection', (reason) => {
   logFatal('Unhandled Rejection', reason)
-  process.exit(1)
+  // Keep serving traffic — async transcription/S3 failures must not crash the whole process.
 })
 
 process.on('uncaughtException', (error) => {
@@ -34,6 +34,7 @@ const PORT = process.env.PORT || 5000
 const HOST = process.env.BIND_HOST || '0.0.0.0'
 
 let lastDbHealth = { ok: false, checkedAt: 0 }
+let lastDependencyHealth = { status: 'starting', components: null, checkedAt: 0 }
 let appReady = false
 let healthTimer = null
 let pool = null
@@ -41,10 +42,25 @@ let pool = null
 const app = express()
 
 app.get('/api/health', (_req, res) => {
-  res.status(200).json({
-    status: appReady ? 'healthy' : 'starting',
-    db: appReady ? (lastDbHealth.ok ? 'ok' : 'degraded') : 'pending',
-    uptime: Math.floor(process.uptime()),
+  const uptime = Math.floor(process.uptime())
+  if (!appReady) {
+    return res.status(200).json({
+      status: 'starting',
+      db: 'pending',
+      uptime,
+    })
+  }
+
+  const depStatus = lastDependencyHealth.status || (lastDbHealth.ok ? 'healthy' : 'degraded')
+  const httpStatus = depStatus === 'critical' ? 503 : 200
+
+  res.status(httpStatus).json({
+    status: depStatus,
+    db: lastDbHealth.ok ? 'ok' : 'degraded',
+    s3: lastDependencyHealth.components?.s3?.status || 'unknown',
+    deepgram: lastDependencyHealth.components?.deepgram?.status || 'unknown',
+    connections: lastDependencyHealth.components?.database?.connections ?? null,
+    uptime,
   })
 })
 
@@ -87,6 +103,8 @@ async function bootstrap() {
 
   const loggingMiddleware = require('./middleware/logging')
   const { initCloudWatch } = require('./utils/logger')
+  const { getDependencyHealth } = require('./utils/dependencyHealth')
+  const { requestTimeoutMiddleware, longRunningSocketTimeoutMiddleware } = require('./middleware/requestTimeout')
   const { ensureUserProfileSchema } = require('./utils/ensureUserProfileSchema')
   const { loadAiSettings } = require('./services/aiSettings')
   const { cleanCorruptedSettings } = require('./startup/cleanCorruptedSettings')
@@ -95,6 +113,8 @@ async function bootstrap() {
   // ─── MIDDLEWARE (health routes registered above, before listen) ─────────────
   const { correlationIdMiddleware } = require('./middleware/correlationId')
   app.use(correlationIdMiddleware)
+  app.use(longRunningSocketTimeoutMiddleware())
+  app.use(requestTimeoutMiddleware())
 
   // Don't advertise the framework.
   app.disable('x-powered-by')
@@ -316,20 +336,36 @@ async function bootstrap() {
     }
 
     appReady = true
-    lastDbHealth = { ok: true, checkedAt: Date.now() }
+    try {
+      const dep = await getDependencyHealth(pool, { force: true })
+      lastDependencyHealth = { status: dep.status, components: dep.components, checkedAt: Date.now() }
+      lastDbHealth = { ok: dep.components.database?.status === 'ok', checkedAt: Date.now() }
+    } catch {
+      lastDbHealth = { ok: true, checkedAt: Date.now() }
+      lastDependencyHealth = { status: 'healthy', components: null, checkedAt: Date.now() }
+    }
     console.log('[startup] ✅ All startup checks passed — accepting traffic')
     console.log(`[Server] Bound ${HOST}:${PORT} — environment: ${process.env.NODE_ENV || 'development'}`)
     initCloudWatch().catch((err) => console.error('[CloudWatch] Init failed:', err.message))
 
-    // Periodic DB health probe — keeps lastDbHealth fresh for /api/health.
+    // Periodic dependency health probe — keeps /api/health accurate for ALB.
     const HEALTH_CHECK_INTERVAL_MS = parseInt(process.env.HEALTH_CHECK_INTERVAL_MS || '60000', 10)
     healthTimer = setInterval(async () => {
       try {
-        await pool.query('SELECT 1 AS ok')
-        lastDbHealth = { ok: true, checkedAt: Date.now() }
+        const dep = await getDependencyHealth(pool)
+        lastDependencyHealth = {
+          status: dep.status,
+          components: dep.components,
+          checkedAt: Date.now(),
+        }
+        lastDbHealth = {
+          ok: dep.components.database?.status === 'ok',
+          checkedAt: Date.now(),
+        }
       } catch (err) {
         lastDbHealth = { ok: false, checkedAt: Date.now() }
-        console.error('[health] Periodic database check failed:', err.message)
+        lastDependencyHealth = { status: 'critical', components: null, checkedAt: Date.now() }
+        console.error('[health] Periodic dependency check failed:', err.message)
       }
     }, HEALTH_CHECK_INTERVAL_MS)
     if (typeof healthTimer.unref === 'function') healthTimer.unref()

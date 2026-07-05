@@ -181,8 +181,8 @@ async function resolveStuckTranscription(visitId, visit) {
   }
 
   // Only reset a stuck 'processing' state when no pipeline has started recently —
-  // avoids racing an in-flight Deepgram/Anthropic job.
-  const STUCK_MS = 15 * 60 * 1000
+  // avoids racing an in-flight Deepgram/Anthropic job. Default 30 min for long audio.
+  const STUCK_MS = parseInt(process.env.TRANSCRIPTION_STUCK_MS || process.env.MAX_POLL_WAIT || '1800000', 10)
   const started = await pool.query(
     `SELECT created_at FROM audit_logs
      WHERE entity_type = 'visit' AND entity_id = $1 AND action = 'TRANSCRIPTION_STARTED'

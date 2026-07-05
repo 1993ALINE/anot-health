@@ -16,6 +16,9 @@ const {
 } = require('@aws-sdk/client-s3')
 const { Upload } = require('@aws-sdk/lib-storage')
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner')
+const { withRetry } = require('../utils/retry')
+
+const S3_MAX_RETRIES = parseInt(process.env.S3_MAX_RETRIES || '3', 10)
 
 /** Default prod bucket — override with S3_AUDIO_BUCKET (EB env or SSM). */
 const DEFAULT_AUDIO_BUCKET = 'anot-audio-625242092266'
@@ -52,14 +55,21 @@ function dbPathToKey(dbPath) {
   return String(dbPath).replace(/^\//, '')
 }
 
+async function s3SendWithRetry(command, label) {
+  return withRetry(
+    () => s3.send(command),
+    { maxAttempts: S3_MAX_RETRIES, label: `S3 ${label}`, baseDelayMs: 500 },
+  )
+}
+
 async function uploadAudio(key, buffer, contentType) {
-  await s3.send(new PutObjectCommand({
+  await s3SendWithRetry(new PutObjectCommand({
     Bucket: getAudioBucket(),
     Key: key,
     Body: buffer,
     ContentType: contentType,
     ServerSideEncryption: 'AES256',
-  }))
+  }), 'PutObject')
 }
 
 /** Stream upload via S3 multipart — no in-memory buffering of the full file. */
@@ -83,7 +93,10 @@ async function uploadAudioStream(key, stream, contentType) {
 /** Presigned GET URL, valid 15 minutes. */
 async function getSignedAudioUrl(key) {
   const command = new GetObjectCommand({ Bucket: getAudioBucket(), Key: key })
-  return getSignedUrl(s3, command, { expiresIn: SIGNED_URL_TTL_SECONDS })
+  return withRetry(
+    () => getSignedUrl(s3, command, { expiresIn: SIGNED_URL_TTL_SECONDS }),
+    { maxAttempts: S3_MAX_RETRIES, label: 'S3 presign', baseDelayMs: 300 },
+  )
 }
 
 /**
@@ -95,7 +108,7 @@ async function getAudioStream(key, rangeHeader) {
   if (rangeHeader) {
     params.Range = rangeHeader
   }
-  const res = await s3.send(new GetObjectCommand(params))
+  const res = await s3SendWithRetry(new GetObjectCommand(params), 'GetObject')
   const statusCode = rangeHeader && res.ContentRange ? 206 : 200
   return {
     body: res.Body,
@@ -115,7 +128,7 @@ async function getAudioStream(key, rangeHeader) {
 async function downloadAudioToTemp(key) {
   const ext = path.extname(key) || '.webm'
   const tmpPath = path.join(os.tmpdir(), `anot_s3_${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`)
-  const res = await s3.send(new GetObjectCommand({ Bucket: getAudioBucket(), Key: key }))
+  const res = await s3SendWithRetry(new GetObjectCommand({ Bucket: getAudioBucket(), Key: key }), 'GetObject-download')
   await pipeline(res.Body, fs.createWriteStream(tmpPath))
   return tmpPath
 }

@@ -68,7 +68,7 @@ const AI_DEFAULTS = {
 }
 
 const MIN_TRANSCRIBE_TIMEOUT_SEC = 60
-const MAX_TRANSCRIBE_TIMEOUT_SEC = 900
+const MAX_TRANSCRIBE_TIMEOUT_SEC = 1800
 
 let initialized = false
 

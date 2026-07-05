@@ -7,9 +7,25 @@ const { extractConfidence } = require('../utils/transcriptionConfidence')
 const { parseCustomVocabulary } = require('../utils/deepgramSettingsUtils')
 const { appendDeepgramVisitQuery } = require('../utils/webhookSignature')
 const { isReachableWebhookUrl } = require('../utils/webhookReachability')
+const { withRetry } = require('../utils/retry')
+const { createCircuitBreaker } = require('../utils/circuitBreaker')
+const { withOutboundSlot } = require('../utils/outboundConcurrency')
 
-const POLL_INTERVAL_MS = 3000
-const POLL_INTERVAL_MAX_MS = 10000
+const DEEPGRAM_MAX_RETRIES = parseInt(process.env.DEEPGRAM_MAX_RETRIES || '5', 10)
+const deepgramCircuit = createCircuitBreaker('deepgram', {
+  failureThreshold: parseInt(process.env.DEEPGRAM_CIRCUIT_FAILURES || '5', 10),
+  resetMs: parseInt(process.env.DEEPGRAM_CIRCUIT_RESET_MS || '30000', 10),
+})
+
+const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL || process.env.TRANSCRIPTION_POLL_INTERVAL_MS || '10000', 10)
+const POLL_INTERVAL_MAX_MS = Math.max(POLL_INTERVAL_MS, 10000)
+
+/** Max Deepgram job wait — 30 minutes for long clinical recordings. */
+const MAX_TRANSCRIBE_TIMEOUT_MS = parseInt(
+  process.env.TRANSCRIPTION_TIMEOUT || process.env.MAX_POLL_WAIT || '1800000',
+  10,
+)
+const MAX_DEEPGRAM_SDK_TIMEOUT_SEC = Math.ceil(MAX_TRANSCRIBE_TIMEOUT_MS / 1000)
 
 const DEEPGRAM_MODELS = new Set(['nova-3-medical', 'nova-3', 'nova-2'])
 
@@ -33,7 +49,7 @@ function resolveDeepgramModel(settings) {
 
 /**
  * Scale job poll timeout from audio file size (MB).
- * Base 2 min + ~10s per MB + 30% buffer; bounded 60s–15min.
+ * Base 2 min + ~10s per MB + 30% buffer; bounded 60s–30min.
  */
 function calculateTranscribeTimeout(fileSizeMB) {
   const baseMs = 120000
@@ -46,7 +62,7 @@ function calculateTranscribeTimeout(fileSizeMB) {
     return Math.max(totalMs, parseInt(envOverride, 10))
   }
 
-  return Math.max(60000, Math.min(totalMs, 900000))
+  return Math.max(60000, Math.min(totalMs, MAX_TRANSCRIBE_TIMEOUT_MS))
 }
 
 function resolveTranscribeTimeoutMs(settings, fileSizeBytes = 0) {
@@ -120,11 +136,25 @@ function parseDeepgramOutput(body) {
 async function unwrapDeepgramResponse(response) {
   if (response == null) return null
   if (typeof response === 'object' && response.results != null) return response
+  if (typeof response.bodyUsed === 'boolean' && response.bodyUsed) {
+    return response.data ?? response.result ?? response
+  }
   if (typeof response.json === 'function') {
     try {
-      return await response.json()
+      const cloned = typeof response.clone === 'function' ? response.clone() : response
+      return await cloned.json()
+    } catch (err) {
+      if (response.data) return response.data
+      if (response.result) return response.result
+      throw err
+    }
+  }
+  if (typeof response.text === 'function' && typeof response.json !== 'function') {
+    const text = await response.text()
+    try {
+      return JSON.parse(text)
     } catch {
-      /* fall through */
+      return { raw: text }
     }
   }
   if (typeof response.then === 'function') {
@@ -132,6 +162,10 @@ async function unwrapDeepgramResponse(response) {
     return unwrapDeepgramResponse(resolved)
   }
   return response
+}
+
+function getDeepgramCircuitStatus() {
+  return deepgramCircuit.status()
 }
 
 function resolveRequestId(body, fallbackPrefix = 'dg') {
@@ -173,21 +207,30 @@ async function startTranscription(params) {
   })
 
   try {
-    let response
-    if (type === 'url') {
-      response = await client.listen.v1.media.transcribeUrl(
-        { url, ...options },
-        { timeoutInSeconds: Math.min(timeoutSec, 900) },
-      )
-    } else {
-      response = await client.listen.v1.media.transcribeFile(
-        createReadStream(filePath),
-        options,
-        { timeoutInSeconds: Math.min(timeoutSec, 900) },
-      )
-    }
+    const started = await deepgramCircuit.exec(() => withOutboundSlot(() => withRetry(async () => {
+      let response
+      if (type === 'url') {
+        response = await client.listen.v1.media.transcribeUrl(
+          { url, ...options },
+          { timeoutInSeconds: Math.min(timeoutSec, MAX_DEEPGRAM_SDK_TIMEOUT_SEC) },
+        )
+      } else {
+        response = await client.listen.v1.media.transcribeFile(
+          createReadStream(filePath),
+          options,
+          { timeoutInSeconds: Math.min(timeoutSec, MAX_DEEPGRAM_SDK_TIMEOUT_SEC) },
+        )
+      }
+      const body = await unwrapDeepgramResponse(response)
+      return { body, response }
+    }, {
+      maxAttempts: DEEPGRAM_MAX_RETRIES,
+      label: `Deepgram visit ${visitId}`,
+      baseDelayMs: 1000,
+      maxDelayMs: 30000,
+    })))
 
-    const body = await unwrapDeepgramResponse(response)
+    const body = started.body
     const requestId = resolveRequestId(body, `visit-${visitId}`)
 
     if (callbackUrl) {
@@ -220,7 +263,11 @@ async function startTranscription(params) {
 
     return { requestId, async: false, transcript, confidence: extractConfidence(body).overall, rawBody: body }
   } catch (err) {
-    console.error('[deepgram] startTranscription failed:', err.message)
+    if (err.code === 'CIRCUIT_OPEN') {
+      console.error('[deepgram] Circuit breaker open — skipping transcription for visit', visitId)
+    } else {
+      console.error('[deepgram] startTranscription failed:', err.message)
+    }
     return null
   }
 }
@@ -386,6 +433,7 @@ module.exports = {
   resolveDeepgramModel,
   buildListenOptions,
   buildBaselineListenOptions,
+  getDeepgramCircuitStatus,
   /** @deprecated tests only — prefer parseDeepgramOutput */
   parseTranscribeOutput: parseDeepgramOutput,
 }

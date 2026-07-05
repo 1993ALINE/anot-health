@@ -352,6 +352,8 @@ try {
     $tarArgs = @(
         '-a', '-c', '-f', $ZipPath,
         '--exclude', 'node_modules',
+        '--exclude', 'scripts/node_modules',
+        '--exclude', 'test-fixtures',
         '--exclude', '.git',
         '--exclude', 'dist',
         '--exclude', 'coverage',

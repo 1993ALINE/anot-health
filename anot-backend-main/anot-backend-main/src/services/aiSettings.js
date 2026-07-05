@@ -129,7 +129,7 @@ function readTranscribeSettings(row) {
 
         5000,
 
-        Math.min(900000, Number(row.transcribe_timeout_ms) || DEFAULTS.transcribe_timeout_ms),
+        Math.min(1800000, Number(row.transcribe_timeout_ms) || DEFAULTS.transcribe_timeout_ms),
 
       ),
 
@@ -164,7 +164,7 @@ function readTranscribeSettings(row) {
 
       5000,
 
-      Math.min(900000, Number(row.deepgram_timeout_ms) || DEFAULTS.transcribe_timeout_ms),
+        Math.min(1800000, Number(row.deepgram_timeout_ms) || DEFAULTS.transcribe_timeout_ms),
 
     ),
 

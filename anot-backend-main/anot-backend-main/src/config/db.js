@@ -102,11 +102,14 @@ const sslEnabled =
   !!process.env.DB_SSL_CA ||
   process.env.DB_SSL_NO_VERIFY === 'true'
 
+const DB_POOL_MAX = parseInt(process.env.DB_POOL_MAX || '10', 10)
+
 const pool = new Pool(
   useUrl
     ? {
         connectionString: stripSslParams(process.env.DATABASE_URL),
         ssl: buildSslConfig(),
+        max: DB_POOL_MAX,
         connectionTimeoutMillis: 10000,
         idleTimeoutMillis: 30000,
       }
@@ -116,6 +119,7 @@ const pool = new Pool(
         database: process.env.DB_NAME,
         user:     process.env.DB_USER,
         password: process.env.DB_PASSWORD,
+        max: DB_POOL_MAX,
         connectionTimeoutMillis: 10000,
         idleTimeoutMillis: 30000,
         ...(sslEnabled ? { ssl: buildSslConfig() } : {}),
