@@ -8,7 +8,7 @@ on:
 
 jobs:
   backend-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     defaults:
       run:
         working-directory: anot-backend-main/anot-backend-main
@@ -30,7 +30,7 @@ jobs:
       - run: npm test --if-present
 
   frontend-tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     defaults:
       run:
         working-directory: anot-frontend-main/anot-frontend-main

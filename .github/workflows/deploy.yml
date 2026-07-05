@@ -12,7 +12,7 @@ on:
 jobs:
   test:
     name: test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     defaults:
       run:
         working-directory: anot-backend-main/anot-backend-main
@@ -45,7 +45,7 @@ jobs:
 
   deploy-frontend:
     name: deploy-frontend
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: [test]
     if: github.ref == 'refs/heads/main'
     continue-on-error: true
