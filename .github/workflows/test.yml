@@ -17,15 +17,12 @@ jobs:
       JWT_SECRET: ci-test-jwt-secret-minimum-32-characters-long
     steps:
       - uses: actions/checkout@v5
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: '22.x'
           check-latest: true
           cache: 'npm'
           cache-dependency-path: anot-backend-main/anot-backend-main/package-lock.json
-      - name: Verify Node version
-        run: node --version && npm --version
       - run: npm ci
       - run: npm test --if-present
 
@@ -36,15 +33,12 @@ jobs:
         working-directory: anot-frontend-main/anot-frontend-main
     steps:
       - uses: actions/checkout@v5
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: '22.x'
           check-latest: true
           cache: 'npm'
           cache-dependency-path: anot-frontend-main/anot-frontend-main/package-lock.json
-      - name: Verify Node version
-        run: node --version && npm --version
       - run: npm ci
       - run: npm run lint --if-present
       - run: npm test --if-present
