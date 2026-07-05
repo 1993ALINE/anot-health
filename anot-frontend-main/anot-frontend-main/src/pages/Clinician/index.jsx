@@ -935,7 +935,7 @@ function AudioModalHeader({ count, onClose, visitLabel }) {
 }
 
 function AudioVisitTabs({ visits, activeVisitId, onSelect, fmtTime }) {
-  if (!visits || visits.length <= 1) return null
+  if (!visits || visits.length <= 1) { return null }
   return (
     <div className="cl-audio-modal__tabs patient-visit-tabs patient-visit-tabs--modal" style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
       {visits.map((v, i) => (
@@ -1022,7 +1022,7 @@ function AudioModal({ visitId, visit, siblingVisits, onClose, showToast, fmtTime
 
   useEffect(() => {
     setActiveVisit(visit)
-  }, [visit?.id])
+  }, [visit])
 
   const [count, setCount]   = useState(1)
   const [idx, setIdx]       = useState(0)
@@ -1088,7 +1088,7 @@ function AudioModal({ visitId, visit, siblingVisits, onClose, showToast, fmtTime
     const a = aRef.current
     if (!a || status !== 'ready' || !dur) {return}
     const clientX = e.changedTouches?.[0]?.clientX ?? e.touches?.[0]?.clientX ?? e.clientX
-    if (clientX == null) {return}
+    if (clientX === null || clientX === undefined) {return}
     const rect = e.currentTarget.getBoundingClientRect()
     a.currentTime = Math.max(0, Math.min(dur, Math.round(((clientX - rect.left) / (rect.width || 1)) * dur)))
   }

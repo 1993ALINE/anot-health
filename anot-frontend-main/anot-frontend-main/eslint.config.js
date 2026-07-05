@@ -27,6 +27,24 @@ export default defineConfig([
     },
   },
   {
+    files: ['**/__tests__/**/*.{js,jsx}', '**/*.test.{js,jsx}'],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+        ...(globals.vitest || {}),
+        describe: 'readonly',
+        it: 'readonly',
+        expect: 'readonly',
+        beforeEach: 'readonly',
+        afterEach: 'readonly',
+        beforeAll: 'readonly',
+        afterAll: 'readonly',
+        vi: 'readonly',
+      },
+    },
+  },
+  {
     files: ['src/pages/shared.jsx'],
     rules: { 'react-refresh/only-export-components': 'off' },
   },

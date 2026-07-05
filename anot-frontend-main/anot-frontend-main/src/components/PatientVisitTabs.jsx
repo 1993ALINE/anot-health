@@ -4,7 +4,7 @@ import { memo } from 'react'
  * Switch between multiple visits for the same patient (e.g. Visit 1 | Visit 2).
  */
 function PatientVisitTabs({ visits, activeVisitId, onSelect, getLabel, className = '' }) {
-  if (!visits || visits.length <= 1) return null
+  if (!visits || visits.length <= 1) { return null }
 
   return (
     <div className={`patient-visit-tabs${className ? ` ${className}` : ''}`} role="tablist" aria-label="Patient visits">

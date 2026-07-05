@@ -376,7 +376,7 @@ function Scribe() {
   )
 
   const selectedPatientVisits = useMemo(() => {
-    if (!selectedRec?.patient_id) return []
+    if (!selectedRec?.patient_id) { return [] }
     return getSiblingVisits(selectedRec, recordingsByPatient)
   }, [selectedRec, recordingsByPatient])
 
@@ -765,7 +765,7 @@ function Scribe() {
   }
 
   const switchPatientVisit = (rec) => {
-    if (!rec || rec.id === selectedRec?.id) return
+    if (!rec || rec.id === selectedRec?.id) { return }
     const go = () => openRecording(rec)
     if (screen === 'note' && isDirty) {
       leaveNoteScreen(go)
