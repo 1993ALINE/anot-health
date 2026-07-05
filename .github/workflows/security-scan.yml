@@ -14,8 +14,8 @@ jobs:
       matrix:
         project: [backend, frontend]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v4.1
+      - uses: actions/setup-node@v4.0
         with:
           node-version: '22'
       - name: Backend audit
@@ -34,7 +34,7 @@ jobs:
   secret-scan:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.1
         with:
           fetch-depth: 0
       - name: Gitleaks scan

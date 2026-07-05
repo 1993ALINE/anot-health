@@ -16,11 +16,14 @@ jobs:
     defaults:
       run:
         working-directory: anot-backend-main/anot-backend-main
+    env:
+      NODE_ENV: test
+      JWT_SECRET: ci-test-jwt-secret-minimum-32-characters-long
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v4.0
         with:
           node-version: '22'
           cache: npm
@@ -43,10 +46,10 @@ jobs:
     if: github.ref == 'refs/heads/main'
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v4.0
         with:
           node-version: '22'
           cache: npm
