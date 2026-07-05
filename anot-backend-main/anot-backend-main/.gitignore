@@ -12,3 +12,6 @@ src/uploads/
 *.zip
 *.tar.gz
 coverage/
+test-fixtures/deepgram/*.wav
+test-fixtures/deepgram/*.mp3
+
