@@ -15,3 +15,7 @@ coverage/
 test-fixtures/deepgram/*.wav
 test-fixtures/deepgram/*.mp3
 
+
+test-fixtures/deepgram/
+test-fixtures/load-test/
+
