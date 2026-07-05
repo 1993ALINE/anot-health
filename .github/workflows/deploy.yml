@@ -25,12 +25,9 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version-file: '.nvmrc'
+          node-version: '22'
           cache: npm
           cache-dependency-path: anot-backend-main/anot-backend-main/package-lock.json
-
-      - name: Verify Node.js 22
-        run: node -v | grep -E '^v22\.'
 
       - name: Install dependencies
         run: npm ci
@@ -54,12 +51,9 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version-file: '.nvmrc'
+          node-version: '22'
           cache: npm
           cache-dependency-path: anot-frontend-main/anot-frontend-main/package-lock.json
-
-      - name: Verify Node.js 22
-        run: node -v | grep -E '^v22\.'
 
       - name: Build frontend
         working-directory: anot-frontend-main/anot-frontend-main
