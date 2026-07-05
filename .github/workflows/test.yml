@@ -20,9 +20,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: npm
+          node-version: '22.x'
+          check-latest: true
+          cache: 'npm'
           cache-dependency-path: anot-backend-main/anot-backend-main/package-lock.json
+      - name: Verify Node version
+        run: node --version && npm --version
       - run: npm ci
       - run: npm test --if-present
 
@@ -36,9 +39,12 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: npm
+          node-version: '22.x'
+          check-latest: true
+          cache: 'npm'
           cache-dependency-path: anot-frontend-main/anot-frontend-main/package-lock.json
+      - name: Verify Node version
+        run: node --version && npm --version
       - run: npm ci
       - run: npm run lint --if-present
       - run: npm test --if-present
