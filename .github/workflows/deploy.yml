@@ -1,4 +1,4 @@
-﻿# Automated tests on every push to main. Backend production deploy is manual:
+# Automated tests on every push to main. Backend production deploy is manual:
 #   cd anot-backend-main\anot-backend-main
 #   powershell -File scripts\deploy-to-eb.ps1
 # See docs/CI_CD_PIPELINE.md and docs/DEPLOYMENT_RUNBOOK.md
@@ -21,23 +21,14 @@ jobs:
       JWT_SECRET: ci-test-jwt-secret-minimum-32-characters-long
     steps:
       - uses: actions/checkout@v5
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: '22.x'
           check-latest: true
           cache: 'npm'
           cache-dependency-path: anot-backend-main/anot-backend-main/package-lock.json
-
-      - name: Verify Node version
-        run: node --version && npm --version
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run unit tests
-        run: npm test
+      - run: npm ci
+      - run: npm test
 
   # deploy-backend disabled — use manual deploy to avoid AWS OIDC / EB automation issues.
   # Manual backend deploy: powershell scripts/deploy-to-eb.ps1
@@ -51,18 +42,12 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v5
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: '22.x'
           check-latest: true
           cache: 'npm'
           cache-dependency-path: anot-frontend-main/anot-frontend-main/package-lock.json
-
-      - name: Verify Node version
-        run: node --version && npm --version
-
       - name: Build frontend
         working-directory: anot-frontend-main/anot-frontend-main
         env:
@@ -70,7 +55,6 @@ jobs:
         run: |
           npm ci
           npm run build
-
       - name: Deployment note
         run: |
           echo "Frontend build succeeded. Upload dist/ to S3/CloudFront or connect Vercel for static hosting."

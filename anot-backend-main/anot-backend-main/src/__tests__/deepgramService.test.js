@@ -1,4 +1,14 @@
-const path = require('path')
+jest.mock('fs', () => {
+  const actual = jest.requireActual('fs')
+  const { Readable } = require('stream')
+  return {
+    ...actual,
+    createReadStream: jest.fn(() => {
+      const stream = new Readable({ read() { this.push(null) } })
+      return stream
+    }),
+  }
+})
 
 jest.mock('@deepgram/sdk', () => ({
   DeepgramClient: jest.fn().mockImplementation(() => ({
@@ -40,10 +50,9 @@ describe('deepgramService', () => {
   }
 
   test('startTranscription sync path completes job', async () => {
-    const fixture = path.join(__dirname, '..', '..', 'test-fixtures', 'deepgram', 'test-probe.wav')
     const started = await startTranscription({
       type: 'file',
-      filePath: fixture,
+      filePath: '/tmp/ci-mock-audio.wav',
       settings,
       visitId: 99,
       fileSizeBytes: 1024,
