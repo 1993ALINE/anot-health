@@ -104,7 +104,7 @@ function buildSettingsPayload(form) {
         deepgram_model: form.deepgram_model || 'nova-3-medical',
         transcribe_show_speaker_labels: !!form.transcribe_show_speaker_labels,
         transcribe_auto_transcribe_on_upload: !!form.transcribe_auto_transcribe_on_upload,
-        transcribe_timeout_seconds: Math.max(60, Math.min(Number(form.transcribe_timeout_seconds) || 300, 900)),
+        transcribe_timeout_seconds: Math.max(60, Math.min(Number(form.transcribe_timeout_seconds) || 300, 1800)),
         deepgram_profanity_filter: !!form.deepgram_profanity_filter,
         deepgram_punctuate: form.deepgram_punctuate !== false,
         deepgram_numerals: form.deepgram_numerals !== false,
@@ -2217,7 +2217,7 @@ function Admin() {
                                             </div>
                                             <div className="adm-form-group">
                                                 <label className="adm-form-label">Transcription timeout (seconds)</label>
-                                                <input className="adm-input" type="number" min={60} max={900} value={settingsForm.transcribe_timeout_seconds}
+                                                <input className="adm-input" type="number" min={60} max={1800} value={settingsForm.transcribe_timeout_seconds}
                                                     onChange={(e) => handleSettingInput('transcribe_timeout_seconds', e.target.value)} />
                                                 <p className="adm-settings-note" style={{ marginTop: 8 }}>Job poll timeout (60–900 seconds). Default 300. Long recordings may need 600+.</p>
                                             </div>

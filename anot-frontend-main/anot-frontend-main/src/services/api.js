@@ -122,6 +122,12 @@ export async function apiFetch(path, {
   const url = path.startsWith('http') ? path : `${BASE_URL}${path}`
   const upper = String(method).toUpperCase()
   const isFormData = body instanceof FormData
+  // POST/PUT/PATCH with Content-Type: application/json but no body triggers 411 on
+  // strict proxies (nginx/ALB). Always send {} so Content-Length is set.
+  const effectiveBody =
+    MUTATING_METHODS.has(upper) && !isFormData && (body === null || body === undefined)
+      ? {}
+      : body
 
   const run = async (forceRefresh) => {
     const hdrs = await buildApiHeaders(upper, includeAuth, extraHeaders, { forceRefresh })
@@ -135,14 +141,14 @@ export async function apiFetch(path, {
     }
     if (isFormData) { delete hdrs['Content-Type'] }
     const opts = { method: upper, credentials: 'include', headers: hdrs }
-    if (body !== null && body !== undefined && upper !== 'GET' && upper !== 'HEAD') {
-      opts.body = isFormData || typeof body === 'string' ? body : JSON.stringify(body)
+    if (effectiveBody !== null && effectiveBody !== undefined && upper !== 'GET' && upper !== 'HEAD') {
+      opts.body = isFormData || typeof effectiveBody === 'string' ? effectiveBody : JSON.stringify(effectiveBody)
     }
     if (signal) { opts.signal = signal }
     return fetch(url, opts)
   }
 
-  let res = await run(false)
+  let res = await fetchWith411Retry(run)
   if (res.status === 403 && MUTATING_METHODS.has(upper)) {
     const peek = parseResponseBody(await res.clone().text(), res)
     if (isCsrfError(peek)) {
@@ -186,10 +192,29 @@ const CLIENT_STATUS_MESSAGES = {
   401: 'Authentication failed',
   403: 'Access denied',
   404: 'Resource not found',
+  411: 'Request missing content length',
   413: 'Request too large',
   429: 'Too many requests',
   500: 'Something went wrong',
   503: 'Service temporarily unavailable',
+}
+
+const FETCH_411_MAX_RETRIES = 3
+const FETCH_411_BACKOFF_MS = 5000
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** Retry fetch when intermediaries return 411 Length Required (empty JSON POST body). */
+async function fetchWith411Retry(run) {
+  let res = await run(false)
+  for (let attempt = 1; res.status === 411 && attempt < FETCH_411_MAX_RETRIES; attempt++) {
+    console.warn(`[API] 411 Length Required — retry ${attempt}/${FETCH_411_MAX_RETRIES}`)
+    await sleep(FETCH_411_BACKOFF_MS * attempt)
+    res = await run(false)
+  }
+  return res
 }
 
 function sanitizeClientError(data, res) {
@@ -410,9 +435,9 @@ export const visitsAPI = {
     return apiMutate('POST', `/audio/${visitId}`, { body: formData })
   },
   /** Queue server-side transcription + AI draft (HTTP 202). */
-  runTranscription: async (visitId) => apiMutate('POST', `/visits/${visitId}/transcribe`),
+  runTranscription: async (visitId) => apiMutate('POST', `/visits/${visitId}/transcribe`, { body: {} }),
   /** Regenerate AI draft from saved transcriptions (HTTP 200). */
-  generateDraft: async (visitId) => apiMutate('POST', `/visits/${visitId}/generate-draft`),
+  generateDraft: async (visitId) => apiMutate('POST', `/visits/${visitId}/generate-draft`, { body: {} }),
 }
 
 // ─── NOTES ────────────────────────────────────────────────────────────────────
@@ -464,7 +489,7 @@ export const adminAPI = {
   applyAuditRetention: async () => apiMutate('POST', '/audit/retention/apply'),
   getSystemHealth: async () => apiFetch('/admin/health'),
   deleteUser: async (userId) => apiMutate('DELETE', `/admin/users/${userId}`),
-  generateAI: async (visitId) => apiMutate('POST', `/visits/${visitId}/generate-ai`),
+  generateAI: async (visitId) => apiMutate('POST', `/visits/${visitId}/generate-ai`, { body: {} }),
 }
 
 export const settingsAPI = {

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authAPI, visitsAPI, patientsAPI, notesAPI, audioAPI, settingsAPI, isAbortError } from '../../services/api'
+import { POLL_INTERVAL_MS } from '../../services/transcriptionService'
 import { useBranding } from '../../services/branding'
 import SystemProfileManager from '../../components/SystemProfileManager'
 import PortalSidebarFooter from '../../components/PortalSidebarFooter'
@@ -1285,7 +1286,7 @@ function AIModal({ visit, onClose, showToast, hideAudioControls = false }) {
 
   useEffect(() => {
     if (note?.transcription_status !== 'processing') {return}
-    const t = setInterval(() => { void loadNoteData({ silent: true }) }, 4000)
+    const t = setInterval(() => { void loadNoteData({ silent: true }) }, POLL_INTERVAL_MS)
     return () => clearInterval(t)
   }, [note?.transcription_status, loadNoteData])
 

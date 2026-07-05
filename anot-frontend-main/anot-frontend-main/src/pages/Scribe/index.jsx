@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, useSidebarOffCanvasMode, portalSidebarAriaHidden, portalSidebarInert, ConfirmDialog, PortalSidebarBrand, parseTranscriptionBlocks } from '../shared'
 import { authAPI, usersAPI, visitsAPI, notesAPI, isAbortError } from '../../services/api'
+import { POLL_INTERVAL_MS } from '../../services/transcriptionService'
 import { useBranding } from '../../services/branding'
 import SystemProfileManager from '../../components/SystemProfileManager'
 import PortalAudioPlayer from '../../components/PortalAudioPlayer'
@@ -740,7 +741,7 @@ function Scribe() {
     if (st !== 'processing') {return undefined}
     const timer = setInterval(() => {
       void loadNote(selectedRec.id, { mergeOnly: true })
-    }, 15000)
+    }, POLL_INTERVAL_MS)
     return () => clearInterval(timer)
   }, [screen, selectedRec?.id, selectedRec?.transcription_status, note?.transcription_status, loadNote])
 
