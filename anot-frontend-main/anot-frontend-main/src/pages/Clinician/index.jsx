@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authAPI, visitsAPI, patientsAPI, notesAPI, audioAPI, settingsAPI, isAbortError } from '../../services/api'
-import { POLL_INTERVAL_MS } from '../../services/transcriptionService'
+import { POLL_INTERVAL_MS, getTranscription } from '../../services/transcriptionService'
 import { useBranding } from '../../services/branding'
 import SystemProfileManager from '../../components/SystemProfileManager'
 import PortalSidebarFooter from '../../components/PortalSidebarFooter'
@@ -12,6 +12,7 @@ import {
   normalizeAudioBlob,
   uploadWithRetry,
   validateAudioBlobSize,
+  LONG_RECORDING_WARN_SECONDS,
 } from '../../utils/audioUpload'
 import {
   groupVisitsByPatient,
@@ -1140,8 +1141,8 @@ const NOTE_DRAFT_SECTIONS = [
  */
 async function fetchVisitNote(visitId, { silent = false } = {}) {
   try {
-    const d = await notesAPI.getByVisit(visitId)
-    return d.note
+    const note = await getTranscription(visitId)
+    return note || null
   } catch {
     if (!silent) {return null}
     return undefined
@@ -1285,10 +1286,11 @@ function AIModal({ visit, onClose, showToast, hideAudioControls = false }) {
   }, [loadNoteData])
 
   useEffect(() => {
-    if (note?.transcription_status !== 'processing') {return}
+    const txSt = note?.transcription_status || visit?.transcription_status
+    if (txSt !== 'processing') {return}
     const t = setInterval(() => { void loadNoteData({ silent: true }) }, POLL_INTERVAL_MS)
     return () => clearInterval(t)
-  }, [note?.transcription_status, loadNoteData])
+  }, [note?.transcription_status, visit?.transcription_status, loadNoteData])
 
   const runTx = async () => {
     try {
@@ -1874,6 +1876,7 @@ function Clinician() {
 
   const tRef  = useRef(null), mRef  = useRef(null), cRef  = useRef([])
   const atRef = useRef(null), arRef = useRef(null), acRef = useRef([])
+  const longRecWarnRef = useRef(false)
   const visitsAbortRef = useRef(null)
   const historyAbortRef = useRef(null)
 
@@ -1904,6 +1907,15 @@ function Clinician() {
       historyAbortRef.current?.abort()
     }
   }, [])
+
+  useEffect(() => {
+    if (!active || timer < LONG_RECORDING_WARN_SECONDS || longRecWarnRef.current) { return }
+    longRecWarnRef.current = true
+    showToast(
+      'Recording exceeds 30 minutes. Upload and transcription may take longer — consider ending the visit or splitting very long encounters.',
+      'warning',
+    )
+  }, [active, timer, showToast])
 
   const scheduleDays = useMemo(() => [-2, -1, 0, 1, 2].map((d) => weekCenterOff + d), [weekCenterOff])
 
@@ -2352,6 +2364,7 @@ function Clinician() {
     setPaused(false)
     cRef.current = []
     mRef.current = null
+    longRecWarnRef.current = false
   }
 
   /**
@@ -2581,15 +2594,16 @@ function Clinician() {
 
   const openNoteDetail = async (visitRow) => {
     try {
-      const d = await notesAPI.getByVisit(visitRow.id)
+      const note = await getTranscription(visitRow.id)
       sidebar.close()
       setReview({
         ...visitRow,
-        final_note: d.note?.final_note,
-        note_id: d.note?.id,
-        scribe_name: d.note?.scribe_name || visitRow.scribe_name,
-        note_status: d.note?.status ?? visitRow.note_status,
-        locked_at: d.note?.locked_at ?? visitRow.locked_at,
+        final_note: note?.final_note ?? visitRow.final_note,
+        note_id: note?.id ?? visitRow.note_id,
+        scribe_name: note?.scribe_name || visitRow.scribe_name,
+        note_status: note?.status ?? visitRow.note_status,
+        locked_at: note?.locked_at ?? visitRow.locked_at,
+        transcription_status: note?.transcription_status ?? visitRow.transcription_status,
       })
     } catch {
       showToast('Failed to load note', 'error')

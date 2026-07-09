@@ -33,7 +33,8 @@ Set on Elastic Beanstalk:
 | `/anot/prod/SETTINGS_ENCRYPTION_KEY` | `SETTINGS_ENCRYPTION_KEY` | SecureString | AES-256-GCM for DB-stored API keys |
 | `/anot/prod/DB_PASSWORD` | `DB_PASSWORD` | SecureString | PostgreSQL password |
 | `/anot/prod/DB_HOST` | `DB_HOST` | String | RDS endpoint (optional if set in EB) |
-| `/anot/prod/DEEPGRAM_WEBHOOK_SECRET` | `DEEPGRAM_WEBHOOK_SECRET` | SecureString | Webhook HMAC verification |
+| `/anot/prod/S3_AUDIO_BUCKET` | `S3_AUDIO_BUCKET` | String | S3 bucket for audio uploads |
+| `/anot/prod/DEEPGRAM_API_KEY` | `DEEPGRAM_API_KEY` | SecureString | Deepgram Nova-3 Medical API key |
 
 ## Rate limits (ops-managed, not in DB)
 
@@ -41,17 +42,20 @@ Synced via `node scripts/sync-rate-limit-config.js`:
 
 | SSM path | Default |
 |----------|---------|
-| `/anot/prod/RATE_LIMIT_LOGIN_MAX` | `10` |
+| `/anot/prod/RATE_LIMIT_LOGIN_MAX` | `5` |
 | `/anot/prod/RATE_LIMIT_LOGIN_WINDOW_MINUTES` | `15` |
-| `/anot/prod/RATE_LIMIT_API_MAX` | `200` |
+| `/anot/prod/RATE_LIMIT_API_MAX` | `100` |
 | `/anot/prod/RATE_LIMIT_API_WINDOW_MINUTES` | `1` |
+| `/anot/prod/FFMPEG_MAX_UPLOAD_MB` | `500` |
+
+`FFMPEG_MAX_UPLOAD_MB` overrides the DB admin setting and caps audio upload size (nginx + Multer). Supports ~1-hour recordings at typical bitrates.
 
 ## NOT stored in SSM (by design)
 
 | Secret | Storage | Why |
 |--------|---------|-----|
-| Deepgram API key | Encrypted DB (`system_settings`) | Admin self-service rotation via Settings UI |
-| Anthropic API key | Encrypted DB | Same — no deploy/restart to rotate |
+| Deepgram API key | SSM (`DEEPGRAM_API_KEY`) or encrypted DB | Nova-3 Medical transcription |
+| Anthropic API key | Encrypted DB | Admin self-service rotation via Settings UI |
 
 See [ADMIN_SETTINGS_ARCHITECTURE.md](./ADMIN_SETTINGS_ARCHITECTURE.md).
 

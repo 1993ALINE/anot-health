@@ -1,6 +1,7 @@
 /**
  * Transcription status polling for long-running Deepgram jobs (30+ minute audio).
- * Polls GET /api/notes/visit/:visitId which includes transcription_status.
+ * Polls GET /api/visits for transcription_status (works before a note row exists).
+ * Fetches full note via GET /api/notes/visit/:visitId once transcription completes.
  */
 import { notesAPI, visitsAPI, isAbortError } from './api'
 
@@ -32,10 +33,36 @@ function withTimeout(promise, ms) {
   return promise(controller.signal).finally(() => clearTimeout(timer))
 }
 
-/** Fetch transcription note for a visit (GET — no body, no Content-Length issues). */
+/** Visit-level transcription status (note row may not exist yet). */
+async function getVisitTranscriptionStatus(visitId, signal) {
+  const data = await visitsAPI.getAll(null, null, signal)
+  const visit = (data?.visits || []).find((v) => String(v.id) === String(visitId))
+  if (!visit) {
+    const err = new Error('Visit not found')
+    err.status = 404
+    throw err
+  }
+  return visit
+}
+
+/** Fetch note for a visit; falls back to visit-level status when note row is absent. */
 export async function getTranscription(visitId, signal) {
-  const data = await notesAPI.getByVisit(visitId, signal)
-  return data?.note ?? data
+  try {
+    const data = await notesAPI.getByVisit(visitId, signal)
+    return data?.note ?? data
+  } catch (err) {
+    if (err?.status !== 404) {throw err}
+    const visit = await getVisitTranscriptionStatus(visitId, signal)
+    return {
+      visit_id: parseInt(visitId, 10),
+      transcription_status: visit.transcription_status || 'unknown',
+      status: 'pending',
+      transcription: null,
+      ai_draft: null,
+      final_note: null,
+      audio_file: visit.audio_file,
+    }
+  }
 }
 
 /**
@@ -51,14 +78,15 @@ export async function pollTranscriptionStatus(visitId, {
 
   while (Date.now() - startTime < maxWaitTime) {
     try {
-      const note = await withTimeout(
-        (signal) => getTranscription(visitId, signal),
+      const visit = await withTimeout(
+        (signal) => getVisitTranscriptionStatus(visitId, signal),
         POLL_REQUEST_TIMEOUT_MS,
       )
-      const status = note?.transcription_status || 'unknown'
-      onProgress?.({ status, note })
+      const status = visit.transcription_status || 'unknown'
+      onProgress?.({ status, note: null })
 
       if (status === 'completed') {
+        const note = await getTranscription(visitId)
         return { status: 'completed', note }
       }
       if (status === 'failed') {
@@ -68,7 +96,6 @@ export async function pollTranscriptionStatus(visitId, {
       await sleep(pollInterval)
     } catch (error) {
       if (isAbortError(error)) {
-        // Per-request timeout — retry on next loop iteration
         console.warn('[transcription] Poll request timed out, retrying…')
         await sleep(5000)
         continue

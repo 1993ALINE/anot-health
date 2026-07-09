@@ -133,6 +133,27 @@ async function downloadAudioToTemp(key) {
   return tmpPath
 }
 
+/**
+ * Download an S3 object to a buffer in memory (used by batch transcription).
+ * @returns {Promise<Buffer>} audio buffer
+ */
+async function getAudioBuffer(key) {
+  try {
+    const res = await s3SendWithRetry(new GetObjectCommand({ Bucket: getAudioBucket(), Key: key }), 'GetObject-buffer')
+    
+    // Stream to buffer
+    const chunks = []
+    for await (const chunk of res.Body) {
+      chunks.push(chunk)
+    }
+    
+    return Buffer.concat(chunks)
+  } catch (error) {
+    console.error(`[s3Storage] Failed to get audio buffer for ${key}:`, error)
+    throw error
+  }
+}
+
 /** Best-effort delete (visit deletion cleanup). */
 async function deleteAudio(key) {
   try {
@@ -155,5 +176,6 @@ module.exports = {
   getSignedAudioUrl,
   getAudioStream,
   downloadAudioToTemp,
+  getAudioBuffer,
   deleteAudio,
 }

@@ -344,6 +344,16 @@ async function bootstrap() {
       lastDbHealth = { ok: true, checkedAt: Date.now() }
       lastDependencyHealth = { status: 'healthy', components: null, checkedAt: Date.now() }
     }
+    
+    // Start transcription polling service for batch cost optimization
+    try {
+      const transcriptionPolling = require('./services/transcriptionPollingService')
+      transcriptionPolling.startPolling()
+      console.log('[startup] ✅ Transcription polling service started')
+    } catch (err) {
+      console.warn('[startup] Transcription polling service failed to start:', err.message)
+    }
+    
     console.log('[startup] ✅ All startup checks passed — accepting traffic')
     console.log(`[Server] Bound ${HOST}:${PORT} — environment: ${process.env.NODE_ENV || 'development'}`)
     initCloudWatch().catch((err) => console.error('[CloudWatch] Init failed:', err.message))

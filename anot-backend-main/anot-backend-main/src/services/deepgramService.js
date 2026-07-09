@@ -27,6 +27,9 @@ const MAX_TRANSCRIBE_TIMEOUT_MS = parseInt(
 )
 const MAX_DEEPGRAM_SDK_TIMEOUT_SEC = Math.ceil(MAX_TRANSCRIBE_TIMEOUT_MS / 1000)
 
+/** Deepgram pre-recorded API hard limit (2 GB). */
+const DEEPGRAM_MAX_FILE_BYTES = 2 * 1024 * 1024 * 1024
+
 const DEEPGRAM_MODELS = new Set(['nova-3-medical', 'nova-3', 'nova-2'])
 
 /** In-memory async job store — populated by sync responses or webhook callbacks. */
@@ -196,7 +199,12 @@ async function startTranscription(params) {
 
   const client = new DeepgramClient({ apiKey })
   const options = optionsOverride || buildListenOptions(settings, callbackUrl)
-  const timeoutSec = Math.ceil(resolveTranscribeTimeoutMs(settings, params.fileSizeBytes || 0) / 1000)
+  const fileSizeBytes = params.fileSizeBytes || 0
+  if (fileSizeBytes > DEEPGRAM_MAX_FILE_BYTES) {
+    console.error('[deepgram] File exceeds Deepgram 2 GB limit:', fileSizeBytes, 'bytes')
+    return null
+  }
+  const timeoutSec = Math.ceil(resolveTranscribeTimeoutMs(settings, fileSizeBytes) / 1000)
 
   console.log('[deepgram] Starting job', {
     visitId,

@@ -52,6 +52,7 @@ EBEXT_DIR="${EBEXT_DIR:-deploy/aws/ebextensions/.ebextensions}"
 
 # Optional provider keys — read from env if present, else placeholders are stored.
 ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"
+DEEPGRAM_API_KEY="${DEEPGRAM_API_KEY:-}"
 DEEPGRAM_WEBHOOK_SECRET="${DEEPGRAM_WEBHOOK_SECRET:-}"
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -176,9 +177,11 @@ if ssm_exists "$SSM_PREFIX/JWT_SECRET"; then echo "  JWT_SECRET exists; keeping.
 if ssm_exists "$SSM_PREFIX/SETTINGS_ENCRYPTION_KEY"; then echo "  SETTINGS_ENCRYPTION_KEY exists; keeping."; else ssm_put "$SSM_PREFIX/SETTINGS_ENCRYPTION_KEY" "$(openssl rand -hex 32)"; fi
 ssm_put "$SSM_PREFIX/DB_PASSWORD"                      "$DB_PASSWORD"
 ssm_put "$SSM_PREFIX/ANTHROPIC_API_KEY"            "${ANTHROPIC_API_KEY:-REPLACE_ME}"
+ssm_put "$SSM_PREFIX/DEEPGRAM_API_KEY"            "${DEEPGRAM_API_KEY:-REPLACE_ME}"
 ssm_put "$SSM_PREFIX/DEEPGRAM_WEBHOOK_SECRET"      "${DEEPGRAM_WEBHOOK_SECRET:-REPLACE_ME}"
 ssm_put "$SSM_PREFIX/DB_HOST"                      "$DB_HOST"
 [ -n "$ANTHROPIC_API_KEY" ] || warn "ANTHROPIC_API_KEY not provided — placeholder stored. Update with: aws ssm put-parameter --name ${SSM_PREFIX}/ANTHROPIC_API_KEY --type SecureString --overwrite --value sk-ant-..."
+[ -n "$DEEPGRAM_API_KEY" ] || warn "DEEPGRAM_API_KEY not provided — placeholder stored. Update with: aws ssm put-parameter --name ${SSM_PREFIX}/DEEPGRAM_API_KEY --type SecureString --overwrite --value YOUR_KEY"
 
 # Secrets live in SSM only — never inject into EB environment properties (HIPAA).
 # Non-secret config (DB host/name/user, USE_SSM) is set on EB below.
@@ -281,9 +284,11 @@ cat > "$OPTS_FILE" <<JSON
   {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"DB_NAME","Value":"$DB_NAME"},
   {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"DB_USER","Value":"$DB_USER"},
   {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"DB_SSL","Value":"true"},
-  {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"JWT_EXPIRES_IN","Value":"8h"},
+  {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"JWT_EXPIRES_IN","Value":"1h"},
   {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"S3_AUDIO_BUCKET","Value":"$AUDIO_BUCKET"},
-  {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"AWS_REGION","Value":"$AWS_REGION"}
+  {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"AWS_REGION","Value":"$AWS_REGION"},
+  {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"USE_DEEPGRAM","Value":"true"},
+  {"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"DEEPGRAM_MODEL","Value":"nova-3-medical"}
 ]
 JSON
 
@@ -418,21 +423,23 @@ DIST_DOMAIN="$(aws cloudfront get-distribution --id "$DIST_ID" --query 'Distribu
 log "CloudFront distribution: $DIST_ID ($DIST_DOMAIN)"
 
 # ── 8. Build + upload the frontend ───────────────────────────────────────────
-log "Building frontend with VITE_API_URL=https://$DIST_DOMAIN/api ..."
+FRONTEND_PUBLIC_URL="${FRONTEND_PUBLIC_URL:-https://app.anot.health}"
+log "Building frontend with VITE_API_URL=${FRONTEND_PUBLIC_URL}/api ..."
 (
   cd "$FRONTEND_DIR"
   npm install
-  VITE_API_URL="https://$DIST_DOMAIN/api" npm run build
+  VITE_API_URL="${FRONTEND_PUBLIC_URL}/api" npm run build
 )
 log "Uploading frontend to s3://$FRONTEND_BUCKET ..."
 aws s3 sync "$FRONTEND_DIR/dist" "s3://$FRONTEND_BUCKET" --delete >/dev/null
 aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths '/*' >/dev/null
 
-# ── 9. Lock CORS to the CloudFront origin ────────────────────────────────────
-log "Setting CORS_ORIGINS=https://$DIST_DOMAIN on the backend..."
+# ── 9. Lock CORS to the public + CloudFront origins ─────────────────────────
+CORS_VALUE="${FRONTEND_PUBLIC_URL},https://${DIST_DOMAIN}"
+log "Setting CORS_ORIGINS=${CORS_VALUE} on the backend..."
 CORS_OPTS="$(mktemp)"
 cat > "$CORS_OPTS" <<JSON
-[{"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"CORS_ORIGINS","Value":"https://$DIST_DOMAIN"}]
+[{"Namespace":"aws:elasticbeanstalk:application:environment","OptionName":"CORS_ORIGINS","Value":"${CORS_VALUE}"}]
 JSON
 aws elasticbeanstalk update-environment --environment-name "$EB_ENV" --option-settings "file://$CORS_OPTS" >/dev/null
 

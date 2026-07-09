@@ -63,28 +63,36 @@ const getNoteByVisit = async (req, res) => {
               c.name  AS clinician_name,
               COALESCE(sb.name, s.name) AS scribe_name,
               COALESCE(n.submitted_by, v.scribe_id) AS actual_scribe_id
-       FROM notes n
-       JOIN visits   v  ON v.id  = n.visit_id
+       FROM visits   v
        JOIN patients p  ON p.id  = v.patient_id
        JOIN users    c  ON c.id  = v.clinician_id
        LEFT JOIN users s  ON s.id  = v.scribe_id
+       LEFT JOIN notes n  ON n.visit_id = v.id
        LEFT JOIN users sb ON sb.id = n.submitted_by
-       WHERE n.visit_id = $1`,
+       WHERE v.id = $1`,
       [visitId]
     )
     if (!result.rows[0]) return res.status(404).json({ error: 'Note not found for this visit.' })
 
-    const note = result.rows[0]
-    void auditLog(req.user, 'NOTE_VIEWED', 'note', String(note.id), 'Clinical note accessed', {
-      req,
-      module_key: 'clinical',
-      action_category: 'read',
-      metadata: { visit_id: visitId },
-    }).catch(reportAuditFailure)
-    cloudWatchAudit.logDataAccess(
-      req.user.id, req.user.role, 'note', String(note.id), 'READ', req.clientIp,
-      { visit_id: visitId },
-    )
+    const row = result.rows[0]
+    const note = {
+      ...row,
+      visit_id: row.visit_id ?? parseInt(visitId, 10),
+      status: row.status ?? 'pending',
+    }
+
+    if (note.id) {
+      void auditLog(req.user, 'NOTE_VIEWED', 'note', String(note.id), 'Clinical note accessed', {
+        req,
+        module_key: 'clinical',
+        action_category: 'read',
+        metadata: { visit_id: visitId },
+      }).catch(reportAuditFailure)
+      cloudWatchAudit.logDataAccess(
+        req.user.id, req.user.role, 'note', String(note.id), 'READ', req.clientIp,
+        { visit_id: visitId },
+      )
+    }
 
     res.status(200).json({ note })
   } catch (err) {

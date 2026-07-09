@@ -97,11 +97,67 @@ async function maybeAutoTranscribe(visitId, user, req) {
       console.warn(`[transcription] Deepgram not configured — skipping auto-transcribe for visit ${visitId}`)
       return false
     }
-    await queueVisitTranscription(visitId, user, req, 'upload')
+    
+    // Check if batch transcription is enabled (default: true for cost optimization)
+    const useBatchAPI = process.env.DEEPGRAM_USE_BATCH !== 'false'
+    
+    if (useBatchAPI) {
+      // Use batch API for 81% cost reduction
+      console.log(`[transcription] Using batch API for visit ${visitId}`)
+      await queueBatchTranscription(visitId, user, req)
+    } else {
+      // Fallback to real-time transcription
+      console.log(`[transcription] Using real-time API for visit ${visitId}`)
+      await queueVisitTranscription(visitId, user, req, 'upload')
+    }
+    
     return true
   } catch (e) {
     console.warn('[transcription] maybeAutoTranscribe:', e.message)
     return false
+  }
+}
+
+async function queueBatchTranscription(visitId, user, req) {
+  const { getAudioBuffer } = require('../services/s3Storage')
+  const { submitBatchTranscription } = require('../services/deepgramBatchService')
+  
+  try {
+    // Get visit details
+    const visitResult = await pool.query('SELECT audio_file FROM visits WHERE id = $1', [visitId])
+    const visit = visitResult.rows[0]
+    
+    if (!visit || !visit.audio_file) {
+      console.warn(`[batch] No audio file for visit ${visitId}`)
+      return
+    }
+    
+    // Get audio buffer from S3
+    const audioKey = dbPathToKey(visit.audio_file.split(',')[0])
+    const audioBuffer = await getAudioBuffer(audioKey)
+    
+    if (!audioBuffer) {
+      console.error(`[batch] Failed to retrieve audio for visit ${visitId}`)
+      return
+    }
+    
+    // Load settings
+    const settings = await loadAiSettings()
+    
+    // Submit to batch API
+    const result = await submitBatchTranscription(audioBuffer, visitId, settings)
+    
+    // Update visit status
+    await pool.query(
+      `UPDATE visits SET transcription_status = $1 WHERE id = $2`,
+      ['pending', visitId]
+    )
+    
+    console.log(`[batch] ✅ Submitted visit ${visitId} for batch transcription. Request ID: ${result.requestId}`)
+    
+  } catch (error) {
+    console.error(`[batch] Failed to queue batch transcription for visit ${visitId}:`, error)
+    throw error
   }
 }
 

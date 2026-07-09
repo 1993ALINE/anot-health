@@ -1613,10 +1613,17 @@ function Scribe() {
               )}
               {!loadingNote && !currentSeg && txSt === 'processing' && (
                 <div style={{ color: '#64748B', fontSize: 12, lineHeight: 1.6 }}>
-                  Transcription in progress… This panel refreshes automatically.
+                  <div style={{ marginBottom: 8 }}>⏳ Transcription in progress…</div>
+                  <div style={{ fontSize: 11, opacity: 0.8 }}>Using cost-optimized batch processing (5-15 min). This panel refreshes automatically.</div>
                 </div>
               )}
-              {!loadingNote && !currentSeg && txSt !== 'processing' && txSt !== 'failed' && (
+              {!loadingNote && !currentSeg && txSt === 'pending' && (
+                <div style={{ color: '#64748B', fontSize: 12, lineHeight: 1.6 }}>
+                  <div style={{ marginBottom: 8 }}>⏳ Audio submitted for transcription</div>
+                  <div style={{ fontSize: 11, opacity: 0.8 }}>Batch processing in progress (5-15 min). This panel refreshes automatically.</div>
+                </div>
+              )}
+              {!loadingNote && !currentSeg && txSt !== 'processing' && txSt !== 'failed' && txSt !== 'pending' && (
                 <div style={{ color: '#64748B', fontSize: 12, lineHeight: 1.6 }}>
                   No transcript yet. Transcription runs automatically once the clinician finishes the visit — this updates on its own.
                 </div>

@@ -33,6 +33,7 @@ fs.mkdirSync(dir, { recursive: true })
 
 const files = [
   { name: 'test-10min.wav', seconds: 600 },
+  { name: 'test-45min.wav', seconds: 2700 },
   { name: 'test-1hour.wav', seconds: 3600 },
   { name: 'test-probe.wav', seconds: 30 },
 ]

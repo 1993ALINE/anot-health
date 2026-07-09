@@ -1,6 +1,9 @@
 /** Client-side max before upload (backend limit is 500 MB). */
 export const MAX_AUDIO_UPLOAD_BYTES = 500 * 1024 * 1024
 
+/** Soft duration threshold — UI warns at 30 min; backend supports up to ~60 min within 500 MB. */
+export const LONG_RECORDING_WARN_SECONDS = 30 * 60
+
 export const UPLOAD_MAX_RETRIES = 3
 export const UPLOAD_RETRY_DELAY_MS = 2000
 
