@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-22.04
     defaults:
       run:
-        working-directory: anot-backend-main/anot-backend-main
+        working-directory: anot-backend-main
     env:
       NODE_ENV: test
       JWT_SECRET: ci-test-jwt-secret-minimum-32-characters-long
@@ -22,7 +22,7 @@ jobs:
           node-version: '22.x'
           check-latest: true
           cache: 'npm'
-          cache-dependency-path: anot-backend-main/anot-backend-main/package-lock.json
+          cache-dependency-path: anot-backend-main/package-lock.json
       - run: npm ci
       - run: npm test --if-present
 

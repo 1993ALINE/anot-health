@@ -22,13 +22,13 @@ jobs:
           check-latest: true
           cache: 'npm'
           cache-dependency-path: |
-            anot-backend-main/anot-backend-main/package-lock.json
+            anot-backend-main/package-lock.json
             anot-frontend-main/anot-frontend-main/package-lock.json
       - name: Verify Node version
         run: node --version && npm --version
       - name: Backend audit
         if: matrix.project == 'backend'
-        working-directory: anot-backend-main/anot-backend-main
+        working-directory: anot-backend-main
         run: |
           npm ci
           npm audit --audit-level=high
