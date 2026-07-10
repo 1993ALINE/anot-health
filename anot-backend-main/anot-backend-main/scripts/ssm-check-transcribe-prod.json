@@ -1,8 +1,0 @@
-{
-  "commands": [
-    "grep -n transcription_status /var/app/current/src/utils/aiPipeline.js | head -5",
-    "printenv ANTHROPIC_API_KEY | cut -c1-8 || echo no_anthropic",
-    "printenv S3_AUDIO_BUCKET || echo no_s3",
-    "node -e \"require('./src/services/aiSettings').loadAiSettings().then(s=>console.log(JSON.stringify({transcribe:s.transcribe_provider,anthropic:s.anthropic_enabled}))).catch(e=>console.error(e.message))\""
-  ]
-}

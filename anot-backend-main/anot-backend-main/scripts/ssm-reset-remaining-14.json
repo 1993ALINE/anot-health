@@ -1,7 +1,0 @@
-{
-  "commands": [
-    "cd /var/app/current",
-    "cat > /tmp/reset-remaining-stuck.js << 'EOFSCRIPT'\nasync function main() {\n  await require('./src/config/loadSecrets').loadSecrets();\n  delete require.cache[require.resolve('./src/config/db')];\n  const pool = require('./src/config/db');\n  const ids = [191,383,384,385,386,387,388,389,390,391,392,393,394,395];\n  const before = await pool.query(\n    'SELECT id, transcription_status FROM visits WHERE id = ANY($1::int[]) ORDER BY id',\n    [ids],\n  );\n  console.log('Before:', before.rows.map((r) => r.id + '=' + r.transcription_status).join(','));\n  const r = await pool.query(\n    'UPDATE visits SET transcription_status = $1 WHERE id = ANY($2::int[]) RETURNING id',\n    ['idle', ids],\n  );\n  console.log('Reset count:', r.rowCount);\n  await pool.end();\n}\nmain().catch((e) => { console.error('ERR', e.message); process.exit(1); });\nEOFSCRIPT",
-    "USE_SSM=true node /tmp/reset-remaining-stuck.js 2>&1"
-  ]
-}

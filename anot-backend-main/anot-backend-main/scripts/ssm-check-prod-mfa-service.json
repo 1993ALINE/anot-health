@@ -1,5 +1,0 @@
-{
-  "commands": [
-    "grep -n \"function loginRequiresMfa\" -A 8 /var/app/current/src/services/mfaService.js 2>/dev/null || grep -n \"function loginRequiresMfa\" -A 8 /var/app/staging/current/src/services/mfaService.js"
-  ]
-}

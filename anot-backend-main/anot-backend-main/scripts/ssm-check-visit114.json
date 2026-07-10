@@ -1,5 +1,0 @@
-{
-  "commands": [
-    "grep -i 'visit 114\\|Visit 114\\|transcribe\\|TRANSCRIPTION' /var/log/web.stdout.log 2>/dev/null | tail -40 | tr -cd '\\11\\12\\15\\40-\\176'"
-  ]
-}

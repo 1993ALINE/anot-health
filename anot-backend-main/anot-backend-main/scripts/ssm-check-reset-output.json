@@ -1,6 +1,0 @@
-{
-  "commands": [
-    "cd /var/app/current",
-    "USE_SSM=true node scripts/reset-stuck-idle.js 2>&1 || USE_SSM=true node reset-stuck-idle.js 2>&1"
-  ]
-}

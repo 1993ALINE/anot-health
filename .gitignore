@@ -1,14 +1,77 @@
-﻿node_modules/
+﻿# Dependencies
+node_modules/
+
+# Build artifacts
 dist/
+build/
+coverage/
+.nyc_output/
+
+# Archives
 *.zip
+!infrastructure/*.zip
+
+# Backups
 *.bak
 *.backup
 backups/
 backup-v*/
 temp-extract-*/
-coverage/
+
+# Environment files
 .env
 .env.local
 .env.*.local
+
+# Secrets
 secrets/
 **/secrets/
+
+# Test fixtures and outputs
+test-fixtures/
+*-results*.txt
+*-output*.txt
+e2e-*.txt
+
+# Logs
+*.log
+day*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# SSM configurations (generated)
+ssm-*.json
+
+# Temporary scripts
+*-test-*.ps1
+*-test-*.sh
+
+# Screenshots and media in scripts
+scripts/*.png
+scripts/*.jpg
+scripts/*.gif
+
+# Temporary files
+*.tmp
+*.temp
+*-out.txt
+*-out.json
+
+# IDE/Editor files
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.settings-cleaned
+
+# OS files
+Thumbs.db
+
+# Fix/Session documentation (temporary)
+*_FIX.md
+*_SUMMARY.md
+SESSION_*.md
+CLEANUP_TASKS.md

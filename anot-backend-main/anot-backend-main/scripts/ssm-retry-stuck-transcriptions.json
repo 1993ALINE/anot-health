@@ -1,6 +1,0 @@
-{
-  "commands": [
-    "cd /var/app/current",
-    "node -e \"const ids=[189,190,191,193,363,365,366,368,373,374,376,378,379,383,384,385,386,387,388,389,390,391,392,393,394,395]; const sleep=ms=>new Promise(r=>setTimeout(r,ms)); (async()=>{ require('./src/config/loadSecrets').loadSecrets?.(); require('dotenv').config(); const { setVisitTranscriptionStatus } = require('./src/utils/visitSchemaCompat'); const { runAIPipeline } = require('./src/utils/aiPipeline'); for (let i=0;i<ids.length;i++){ const id=ids[i]; console.log('Reset+run', id); await setVisitTranscriptionStatus(id,'idle'); try { await runAIPipeline(id,{user:{id:0,name:'ssm-retry',role:'admin'}}); console.log('OK', id); } catch(e){ console.error('ERR', id, e.message); } if(i<ids.length-1) await sleep(15000); } process.exit(0); })().catch(e=>{console.error(e);process.exit(1);});\""
-  ]
-}

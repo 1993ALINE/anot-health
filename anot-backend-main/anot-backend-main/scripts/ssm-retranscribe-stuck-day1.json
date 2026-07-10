@@ -1,7 +1,0 @@
-{
-  "commands": [
-    "cd /var/app/current",
-    "export USE_SSM=true",
-    "node scripts/retranscribe-failed.js --run --mode=db --ids=189,190,191,193,363,365,366,368,373,374,376,378,379,383,384,385,386,387,388,389,390,391,392,393,394,395 --confirm --delay=15000 2>&1 | tail -80"
-  ]
-}
