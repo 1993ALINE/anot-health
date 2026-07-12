@@ -284,6 +284,7 @@ async function bootstrap() {
   app.use('/api/consent',     require('./routes/consent'))
   app.use('/api/admin',       require('./routes/admin'))
   app.use('/api/admin',       require('./routes/health'))
+  app.use('/api/claude-stats', require('./routes/claude-stats'))
 
   // ─── 404 HANDLER ─────────────────────────────────────────────────────────────
 

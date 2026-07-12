@@ -1,0 +1,418 @@
+# LOAD TEST DATA ENTRY HELPER
+# Use this file for quick copy-paste during manual testing
+
+========================================
+TEST CLINICIAN
+========================================
+Email: load-test-doctor-july11@anot.health
+Password: LoadTest@2026
+First Name: Load
+Last Name: Test
+Role: Clinician
+Phone: +8801521434823
+Specialty: General Medicine
+
+========================================
+PATIENT DATA (Copy each line)
+========================================
+
+Patient 1:
+Name: Load Test Patient 1
+MRN: LT-2026-001
+DOB: 1980-01-01
+Gender: F
+Phone: +8801521434801
+Email: patient1@example.com
+
+Patient 2:
+Name: Load Test Patient 2
+MRN: LT-2026-002
+DOB: 1980-01-01
+Gender: M
+Phone: +8801521434802
+Email: patient2@example.com
+
+Patient 3:
+Name: Load Test Patient 3
+MRN: LT-2026-003
+DOB: 1980-01-01
+Gender: F
+Phone: +8801521434803
+Email: patient3@example.com
+
+Patient 4:
+Name: Load Test Patient 4
+MRN: LT-2026-004
+DOB: 1980-01-01
+Gender: M
+Phone: +8801521434804
+Email: patient4@example.com
+
+Patient 5:
+Name: Load Test Patient 5
+MRN: LT-2026-005
+DOB: 1980-01-01
+Gender: F
+Phone: +8801521434805
+Email: patient5@example.com
+
+Patient 6:
+Name: Load Test Patient 6
+MRN: LT-2026-006
+DOB: 1980-01-01
+Gender: M
+Phone: +8801521434806
+Email: patient6@example.com
+
+Patient 7:
+Name: Load Test Patient 7
+MRN: LT-2026-007
+DOB: 1980-01-01
+Gender: F
+Phone: +8801521434807
+Email: patient7@example.com
+
+Patient 8:
+Name: Load Test Patient 8
+MRN: LT-2026-008
+DOB: 1980-01-01
+Gender: M
+Phone: +8801521434808
+Email: patient8@example.com
+
+Patient 9:
+Name: Load Test Patient 9
+MRN: LT-2026-009
+DOB: 1980-01-01
+Gender: F
+Phone: +8801521434809
+Email: patient9@example.com
+
+Patient 10:
+Name: Load Test Patient 10
+MRN: LT-2026-010
+DOB: 1980-01-01
+Gender: M
+Phone: +8801521434810
+Email: patient10@example.com
+
+Patient 11:
+Name: Load Test Patient 11
+MRN: LT-2026-011
+DOB: 1980-01-01
+Gender: F
+Phone: +8801521434811
+Email: patient11@example.com
+
+Patient 12:
+Name: Load Test Patient 12
+MRN: LT-2026-012
+DOB: 1980-01-01
+Gender: M
+Phone: +8801521434812
+Email: patient12@example.com
+
+Patient 13:
+Name: Load Test Patient 13
+MRN: LT-2026-013
+DOB: 1980-01-01
+Gender: F
+Phone: +8801521434813
+Email: patient13@example.com
+
+Patient 14:
+Name: Load Test Patient 14
+MRN: LT-2026-014
+DOB: 1980-01-01
+Gender: M
+Phone: +8801521434814
+Email: patient14@example.com
+
+Patient 15:
+Name: Load Test Patient 15
+MRN: LT-2026-015
+DOB: 1980-01-01
+Gender: F
+Phone: +8801521434815
+Email: patient15@example.com
+
+Patient 16:
+Name: Load Test Patient 16
+MRN: LT-2026-016
+DOB: 1980-01-01
+Gender: M
+Phone: +8801521434816
+Email: patient16@example.com
+
+Patient 17:
+Name: Load Test Patient 17
+MRN: LT-2026-017
+DOB: 1980-01-01
+Gender: F
+Phone: +8801521434817
+Email: patient17@example.com
+
+Patient 18:
+Name: Load Test Patient 18
+MRN: LT-2026-018
+DOB: 1980-01-01
+Gender: M
+Phone: +8801521434818
+Email: patient18@example.com
+
+Patient 19:
+Name: Load Test Patient 19
+MRN: LT-2026-019
+DOB: 1980-01-01
+Gender: F
+Phone: +8801521434819
+Email: patient19@example.com
+
+Patient 20:
+Name: Load Test Patient 20
+MRN: LT-2026-020
+DOB: 1980-01-01
+Gender: M
+Phone: +8801521434820
+Email: patient20@example.com
+
+========================================
+VISIT DATA (Copy for each visit)
+========================================
+
+Visit 1:
+Patient: Load Test Patient 1 (LT-2026-001)
+Date: 2026-07-11
+Time: 09:00
+Chief Complaint: Load test visit #1
+
+Visit 2:
+Patient: Load Test Patient 2 (LT-2026-002)
+Date: 2026-07-11
+Time: 09:30
+Chief Complaint: Load test visit #2
+
+Visit 3:
+Patient: Load Test Patient 3 (LT-2026-003)
+Date: 2026-07-11
+Time: 10:00
+Chief Complaint: Load test visit #3
+
+Visit 4:
+Patient: Load Test Patient 4 (LT-2026-004)
+Date: 2026-07-11
+Time: 10:30
+Chief Complaint: Load test visit #4
+
+Visit 5:
+Patient: Load Test Patient 5 (LT-2026-005)
+Date: 2026-07-11
+Time: 11:00
+Chief Complaint: Load test visit #5
+
+Visit 6:
+Patient: Load Test Patient 6 (LT-2026-006)
+Date: 2026-07-11
+Time: 11:30
+Chief Complaint: Load test visit #6
+
+Visit 7:
+Patient: Load Test Patient 7 (LT-2026-007)
+Date: 2026-07-11
+Time: 12:00
+Chief Complaint: Load test visit #7
+
+Visit 8:
+Patient: Load Test Patient 8 (LT-2026-008)
+Date: 2026-07-11
+Time: 12:30
+Chief Complaint: Load test visit #8
+
+Visit 9:
+Patient: Load Test Patient 9 (LT-2026-009)
+Date: 2026-07-11
+Time: 13:00
+Chief Complaint: Load test visit #9
+
+Visit 10:
+Patient: Load Test Patient 10 (LT-2026-010)
+Date: 2026-07-11
+Time: 13:30
+Chief Complaint: Load test visit #10
+
+Visit 11:
+Patient: Load Test Patient 11 (LT-2026-011)
+Date: 2026-07-11
+Time: 14:00
+Chief Complaint: Load test visit #11
+
+Visit 12:
+Patient: Load Test Patient 12 (LT-2026-012)
+Date: 2026-07-11
+Time: 14:30
+Chief Complaint: Load test visit #12
+
+Visit 13:
+Patient: Load Test Patient 13 (LT-2026-013)
+Date: 2026-07-11
+Time: 15:00
+Chief Complaint: Load test visit #13
+
+Visit 14:
+Patient: Load Test Patient 14 (LT-2026-014)
+Date: 2026-07-11
+Time: 15:30
+Chief Complaint: Load test visit #14
+
+Visit 15:
+Patient: Load Test Patient 15 (LT-2026-015)
+Date: 2026-07-11
+Time: 16:00
+Chief Complaint: Load test visit #15
+
+Visit 16:
+Patient: Load Test Patient 16 (LT-2026-016)
+Date: 2026-07-11
+Time: 16:30
+Chief Complaint: Load test visit #16
+
+Visit 17:
+Patient: Load Test Patient 17 (LT-2026-017)
+Date: 2026-07-11
+Time: 17:00
+Chief Complaint: Load test visit #17
+
+Visit 18:
+Patient: Load Test Patient 18 (LT-2026-018)
+Date: 2026-07-11
+Time: 17:30
+Chief Complaint: Load test visit #18
+
+Visit 19:
+Patient: Load Test Patient 19 (LT-2026-019)
+Date: 2026-07-11
+Time: 18:00
+Chief Complaint: Load test visit #19
+
+Visit 20:
+Patient: Load Test Patient 20 (LT-2026-020)
+Date: 2026-07-11
+Time: 18:30
+Chief Complaint: Load test visit #20
+
+========================================
+QPS GRADE COMMENTS (Copy for each grade)
+========================================
+
+Professional documentation - load test verified
+Excellent documentation - load test verified
+Good quality note - load test verified
+Professional SOAP format - load test verified
+Comprehensive and accurate - load test verified
+
+========================================
+SUGGESTED GRADES (for variety)
+========================================
+88, 90, 87, 92, 89, 91, 86, 93, 88, 90, 89, 94, 87, 91, 88, 90, 85, 92, 89, 91
+
+========================================
+AUDIO FILE LOCATION
+========================================
+Path: C:\Users\Administrator\Desktop\anot-health\anot-backend-main\scripts\test-audio-20min.wav
+Size: ~38 MB
+Duration: 20 minutes
+Format: WAV, 16kHz, mono
+
+If file doesn't exist, generate with:
+cd anot-backend-main
+node scripts/generate-test-audio.js 20
+
+========================================
+BROWSER URLS
+========================================
+Frontend: https://app.anot.health
+Backend Health: https://anot-backend-prod.eba-m2bjp2gp.ap-southeast-1.elasticbeanstalk.com/api/health
+
+========================================
+TEST CREDENTIALS SUMMARY
+========================================
+
+Admin:
+- Email: atiqurrahmanaline@gmail.com
+- Password: #1Knowtex2026
+
+Scribe:
+- Email: shahib@anot.health
+- Password: #1Knowtex2026
+
+QPS:
+- Email: farhan@anot.health
+- Password: #1Knowtex2026
+
+Test Clinician:
+- Email: load-test-doctor-july11@anot.health
+- Password: LoadTest@2026
+
+========================================
+QUICK TIPS
+========================================
+
+1. Keep this file open in Notepad during testing
+2. Use Ctrl+F to quickly find patient/visit data
+3. Copy-paste entire sections to speed up data entry
+4. Check off items in LOAD_TEST_CHECKLIST.md as you go
+5. If a step fails, document it and continue
+6. Take screenshots of any errors
+7. Monitor system performance throughout
+
+========================================
+CSV FORMAT (for spreadsheet import)
+========================================
+
+Patient#,Name,MRN,DOB,Gender,Phone,Email
+1,Load Test Patient 1,LT-2026-001,1980-01-01,F,+8801521434801,patient1@example.com
+2,Load Test Patient 2,LT-2026-002,1980-01-01,M,+8801521434802,patient2@example.com
+3,Load Test Patient 3,LT-2026-003,1980-01-01,F,+8801521434803,patient3@example.com
+4,Load Test Patient 4,LT-2026-004,1980-01-01,M,+8801521434804,patient4@example.com
+5,Load Test Patient 5,LT-2026-005,1980-01-01,F,+8801521434805,patient5@example.com
+6,Load Test Patient 6,LT-2026-006,1980-01-01,M,+8801521434806,patient6@example.com
+7,Load Test Patient 7,LT-2026-007,1980-01-01,F,+8801521434807,patient7@example.com
+8,Load Test Patient 8,LT-2026-008,1980-01-01,M,+8801521434808,patient8@example.com
+9,Load Test Patient 9,LT-2026-009,1980-01-01,F,+8801521434809,patient9@example.com
+10,Load Test Patient 10,LT-2026-010,1980-01-01,M,+8801521434810,patient10@example.com
+11,Load Test Patient 11,LT-2026-011,1980-01-01,F,+8801521434811,patient11@example.com
+12,Load Test Patient 12,LT-2026-012,1980-01-01,M,+8801521434812,patient12@example.com
+13,Load Test Patient 13,LT-2026-013,1980-01-01,F,+8801521434813,patient13@example.com
+14,Load Test Patient 14,LT-2026-014,1980-01-01,M,+8801521434814,patient14@example.com
+15,Load Test Patient 15,LT-2026-015,1980-01-01,F,+8801521434815,patient15@example.com
+16,Load Test Patient 16,LT-2026-016,1980-01-01,M,+8801521434816,patient16@example.com
+17,Load Test Patient 17,LT-2026-017,1980-01-01,F,+8801521434817,patient17@example.com
+18,Load Test Patient 18,LT-2026-018,1980-01-01,M,+8801521434818,patient18@example.com
+19,Load Test Patient 19,LT-2026-019,1980-01-01,F,+8801521434819,patient19@example.com
+20,Load Test Patient 20,LT-2026-020,1980-01-01,M,+8801521434820,patient20@example.com
+
+Visit#,Patient,Date,Time,ChiefComplaint
+1,Load Test Patient 1,2026-07-11,09:00,Load test visit #1
+2,Load Test Patient 2,2026-07-11,09:30,Load test visit #2
+3,Load Test Patient 3,2026-07-11,10:00,Load test visit #3
+4,Load Test Patient 4,2026-07-11,10:30,Load test visit #4
+5,Load Test Patient 5,2026-07-11,11:00,Load test visit #5
+6,Load Test Patient 6,2026-07-11,11:30,Load test visit #6
+7,Load Test Patient 7,2026-07-11,12:00,Load test visit #7
+8,Load Test Patient 8,2026-07-11,12:30,Load test visit #8
+9,Load Test Patient 9,2026-07-11,13:00,Load test visit #9
+10,Load Test Patient 10,2026-07-11,13:30,Load test visit #10
+11,Load Test Patient 11,2026-07-11,14:00,Load test visit #11
+12,Load Test Patient 12,2026-07-11,14:30,Load test visit #12
+13,Load Test Patient 13,2026-07-11,15:00,Load test visit #13
+14,Load Test Patient 14,2026-07-11,15:30,Load test visit #14
+15,Load Test Patient 15,2026-07-11,16:00,Load test visit #15
+16,Load Test Patient 16,2026-07-11,16:30,Load test visit #16
+17,Load Test Patient 17,2026-07-11,17:00,Load test visit #17
+18,Load Test Patient 18,2026-07-11,17:30,Load test visit #18
+19,Load Test Patient 19,2026-07-11,18:00,Load test visit #19
+20,Load Test Patient 20,2026-07-11,18:30,Load test visit #20
+
+========================================
+END OF DATA HELPER
+========================================
