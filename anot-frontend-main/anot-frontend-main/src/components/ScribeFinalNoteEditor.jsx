@@ -1,61 +1,60 @@
 import { useMemo } from 'react'
 
-const SECTIONS = [
-  { label: 'CHIEF COMPLAINT', match: /CHIEF COMPLAINT/i },
-  { label: 'HISTORY OF PRESENT ILLNESS (HPI)', match: /HISTORY OF PRESENT ILLNESS(?:\s*\(HPI\))?/i },
-  { label: 'PHYSICAL EXAMINATION (PE)', match: /PHYSICAL EXAMINATION(?:\s*\(PE\))?/i },
-  { label: 'IMAGING', match: /IMAGING/i },
-  { label: 'ASSESSMENT & PLAN (A&P)', match: /ASSESSMENT\s*&\s*PLAN(?:\s*\(A&P\))?/i },
-]
-
-function parseNote(text) {
-  const bodies = Object.fromEntries(SECTIONS.map((s) => [s.label, '']))
-  const raw = String(text || '').trim()
-  if (!raw) {return bodies}
-
-  let remaining = raw
-  for (let i = 0; i < SECTIONS.length; i += 1) {
-    const section = SECTIONS[i]
-    const next = SECTIONS[i + 1]
-    const headerRe = new RegExp(`${section.match.source}\\s*:?\\s*`, 'i')
-    const headerMatch = remaining.match(headerRe)
-    if (!headerMatch) {continue}
-
-    const start = headerMatch.index + headerMatch[0].length
-    let end = remaining.length
-    if (next) {
-      const nextRe = new RegExp(`${next.match.source}\\s*:?`, 'i')
-      const tail = remaining.slice(start)
-      const nextMatch = tail.match(nextRe)
-      if (nextMatch) {end = start + nextMatch.index}
-    }
-    bodies[section.label] = remaining.slice(start, end).trim()
-  }
-
-  if (!SECTIONS.some((s) => bodies[s.label]) && raw) {
-    bodies[SECTIONS[0].label] = raw
-  }
-  return bodies
+// A "section header" is any line whose trimmed text ends with ':' — same convention as
+// `countTemplateSections` (Clinician/index.jsx), so notes render consistently with
+// however many/whatever sections a clinician's own template defines (not a fixed list).
+function isHeaderLine(line) {
+  const trimmed = line.trim()
+  return trimmed.length > 0 && trimmed.length <= 80 && trimmed.endsWith(':')
 }
 
-function buildNote(bodies) {
-  return SECTIONS.map((s) => `${s.label}:\n\n${bodies[s.label] || ''}`.trimEnd()).join('\n\n')
+/** Parse free text into an ordered list of { label, body } sections. */
+function parseNote(text) {
+  const raw = String(text || '').trim()
+  if (!raw) {return []}
+
+  const lines = raw.split('\n')
+  const headerIdx = []
+  lines.forEach((line, i) => {
+    if (isHeaderLine(line)) {headerIdx.push(i)}
+  })
+
+  if (headerIdx.length === 0) {
+    return [{ label: '', body: raw }]
+  }
+
+  const sections = []
+  for (let i = 0; i < headerIdx.length; i += 1) {
+    const start = headerIdx[i]
+    const end = i + 1 < headerIdx.length ? headerIdx[i + 1] : lines.length
+    const label = lines[start].trim().replace(/:$/, '')
+    const body = lines.slice(start + 1, end).join('\n').trim()
+    sections.push({ label, body })
+  }
+  return sections
+}
+
+function buildNote(sections) {
+  return sections
+    .map((s) => (s.label ? `${s.label}:\n\n${s.body || ''}`.trimEnd() : s.body || ''))
+    .join('\n\n')
 }
 
 export default function ScribeFinalNoteEditor({ value, onChange, readOnly = false, className = '' }) {
-  const bodies = useMemo(() => parseNote(value), [value])
+  const sections = useMemo(() => parseNote(value), [value])
 
-  const setBody = (label, body) => {
-    onChange(buildNote({ ...bodies, [label]: body }))
+  const setBody = (index, body) => {
+    const next = sections.map((s, i) => (i === index ? { ...s, body } : s))
+    onChange(buildNote(next))
   }
 
   if (readOnly) {
     return (
       <div className={`scribe-final-note scribe-final-note--readonly ${className}`.trim()}>
-        {SECTIONS.map((s) => (
-          <div key={s.label} className="scribe-final-note__section">
-            <div className="scribe-final-note__header">{s.label}</div>
-            <pre className="scribe-final-note__body">{bodies[s.label] || '—'}</pre>
+        {sections.map((s, i) => (
+          <div key={`${s.label}-${i}`} className="scribe-final-note__section">
+            {s.label ? <div className="scribe-final-note__header">{s.label}</div> : null}
+            <pre className="scribe-final-note__body">{s.body || '—'}</pre>
           </div>
         ))}
       </div>
@@ -64,13 +63,13 @@ export default function ScribeFinalNoteEditor({ value, onChange, readOnly = fals
 
   return (
     <div className={`scribe-final-note ${className}`.trim()}>
-      {SECTIONS.map((s) => (
-        <div key={s.label} className="scribe-final-note__section">
-          <div className="scribe-final-note__header">{s.label}</div>
+      {sections.map((s, i) => (
+        <div key={`${s.label}-${i}`} className="scribe-final-note__section">
+          {s.label ? <div className="scribe-final-note__header">{s.label}</div> : null}
           <textarea
             className="scribe-final-note__input"
-            value={bodies[s.label]}
-            onChange={(e) => setBody(s.label, e.target.value)}
+            value={s.body}
+            onChange={(e) => setBody(i, e.target.value)}
             rows={3}
             spellCheck
           />

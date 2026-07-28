@@ -70,6 +70,9 @@ function validateSettingsForm(form) {
     if (form.anthropic_enabled && !form.anthropic_api_key_set && !form.anthropic_api_key?.trim()) {
         return 'AI note generation is enabled but no Anthropic API key is saved. Enter a key or turn it off.'
     }
+    if (form.transcribe_enabled && !form.deepgram_api_key_set && !form.deepgram_api_key?.trim()) {
+        return 'Deepgram transcription is enabled but no Deepgram API key is saved. Enter a key or turn it off.'
+    }
     return ''
 }
 
@@ -124,6 +127,8 @@ function buildSettingsPayload(form) {
     }
     if (form.anthropic_api_key?.trim()) {payload.anthropic_api_key = form.anthropic_api_key.trim()}
     if (form.anthropic_clear_api_key) {payload.anthropic_clear_api_key = true}
+    if (form.deepgram_api_key?.trim()) {payload.deepgram_api_key = form.deepgram_api_key.trim()}
+    if (form.deepgram_clear_api_key) {payload.deepgram_clear_api_key = true}
     return payload
 }
 
@@ -280,6 +285,9 @@ const DEFAULT_SETTINGS_FORM = {
     deepgram_redact_pii: false,
     deepgram_remove_filler_words: true,
     deepgram_custom_vocabulary_text: '',
+    deepgram_api_key: '',
+    deepgram_api_key_set: false,
+    deepgram_clear_api_key: false,
     anthropic_api_key: '',
     anthropic_api_key_set: false,
     anthropic_clear_api_key: false,
@@ -908,6 +916,9 @@ function Admin() {
             deepgram_redact_pii: !!raw?.deepgram_redact_pii,
             deepgram_remove_filler_words: raw?.deepgram_remove_filler_words !== false,
             deepgram_custom_vocabulary_text: formatCustomVocabularyText(raw?.deepgram_custom_vocabulary),
+            deepgram_api_key: '',
+            deepgram_clear_api_key: false,
+            deepgram_api_key_set: raw?.deepgram_api_key_set,
             anthropic_api_key: '',
             anthropic_clear_api_key: false,
             anthropic_api_key_set: raw?.anthropic_api_key_set,
@@ -2190,6 +2201,16 @@ function Admin() {
                                                     <input type="checkbox" checked={!!settingsForm.transcribe_enabled} onChange={(e) => handleSettingInput('transcribe_enabled', e.target.checked)} /> Enable Deepgram Nova-3 Medical
                                                 </label>
                                                 <p className="adm-settings-note" style={{ marginTop: 8 }}>Requires <code>DEEPGRAM_API_KEY</code>, <code>USE_DEEPGRAM=true</code>, and audio in S3.</p>
+                                            </div>
+                                            <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>
+                                                <label className="adm-form-label" title="Encrypted at rest in the database. Enter a new value to rotate; leave blank to keep the saved key.">Deepgram API key {settingsForm.deepgram_api_key_set ? <span style={{ color: '#059669' }}>(saved — encrypted in DB)</span> : null}</label>
+                                                <input className="adm-input" type="password" autoComplete="new-password" placeholder={settingsForm.deepgram_api_key_set ? 'Leave blank to keep existing key' : 'Deepgram API key...'}
+                                                    value={settingsForm.deepgram_api_key} onChange={(e) => handleSettingInput('deepgram_api_key', e.target.value)} />
+                                            </div>
+                                            <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>
+                                                <label className="adm-form-label">
+                                                    <input type="checkbox" checked={!!settingsForm.deepgram_clear_api_key} onChange={(e) => handleSettingInput('deepgram_clear_api_key', e.target.checked)} /> Remove stored API key on save
+                                                </label>
                                             </div>
                                             <div className="adm-form-group">
                                                 <label className="adm-form-label">Model</label>

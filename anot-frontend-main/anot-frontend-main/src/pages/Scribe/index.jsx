@@ -161,7 +161,14 @@ function parseTranscriptions(raw) {
  * Merge polled note data without clobbering local edits
  */
 function mergePolledNoteData(note, visitId, baselineRef, txSegmentsRef) {
-  const updates = { note, selectedRecPatch: { transcription_status: note.transcription_status } }
+  const updates = {
+    note,
+    selectedRecPatch: {
+      transcription_status: note.transcription_status,
+      note_status: note.status,
+      locked_at: note.locked_at,
+    },
+  }
   if (!note.transcription) {return updates}
 
   const base = baselineRef.current
@@ -540,11 +547,13 @@ function Scribe() {
           if (n) {
             const merged = mergePolledNoteData(n, visitId, baselineRef, txSegmentsRef)
             setNote(merged.note)
-            setSelectedRec((prev) =>
-              prev && String(prev.id) === String(visitId)
-                ? { ...prev, ...merged.selectedRecPatch }
-                : prev,
-            )
+            setSelectedRec((prev) => {
+              if (!prev || String(prev.id) !== String(visitId)) {return prev}
+              if (!prev.locked_at && merged.selectedRecPatch.locked_at) {
+                showNotif('This note was locked by the clinician.', 'amber')
+              }
+              return { ...prev, ...merged.selectedRecPatch }
+            })
             if (merged.txSegments) {
               setTxSegments(merged.txSegments)
               setBaseline((prev) =>
@@ -738,12 +747,17 @@ function Scribe() {
   useEffect(() => {
     if (screen !== 'note' || !selectedRec?.id) {return undefined}
     const st = note?.transcription_status || selectedRec?.transcription_status
-    if (st !== 'processing') {return undefined}
+    const notePhase = selectedRec?.note_status ?? selectedRec?.status
+    const noteDone = ['submitted', 'uploaded'].includes(notePhase)
+    // Keep polling while transcription is still processing, or while the
+    // note isn't done yet — the latter lets the editor pick up a clinician
+    // lock (and flip to read-only) without the scribe having to save/reload.
+    if (st !== 'processing' && noteDone) {return undefined}
     const timer = setInterval(() => {
       void loadNote(selectedRec.id, { mergeOnly: true })
     }, POLL_INTERVAL_MS)
     return () => clearInterval(timer)
-  }, [screen, selectedRec?.id, selectedRec?.transcription_status, note?.transcription_status, loadNote])
+  }, [screen, selectedRec?.id, selectedRec?.transcription_status, selectedRec?.note_status, selectedRec?.status, note?.transcription_status, loadNote])
 
   useEffect(() => {
     if (activeRecIdx >= txSegments.length && txSegments.length > 0) {
