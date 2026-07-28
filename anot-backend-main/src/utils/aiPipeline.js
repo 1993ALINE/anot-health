@@ -16,6 +16,8 @@ const {
 
 } = require('./aiPipelineHelpers')
 
+const { resolveTemplateSections } = require('./noteTemplateSections')
+
 
 
 const AI_DRAFT_UNAVAILABLE =
@@ -84,7 +86,7 @@ async function callAnthropicForNote(anthropic, settings, prompt) {
 
 
 
-async function generateAINote(transcriptions, patientInfo) {
+async function generateAINote(transcriptions, patientInfo, templateSections) {
 
   try {
 
@@ -98,7 +100,7 @@ async function generateAINote(transcriptions, patientInfo) {
 
     const combinedTranscription = buildCombinedTranscription(transcriptions)
 
-    const prompt = buildAnthropicNotePrompt(patientInfo, combinedTranscription)
+    const prompt = buildAnthropicNotePrompt(patientInfo, combinedTranscription, templateSections)
 
 
 
@@ -168,6 +170,8 @@ function auditUserFromOptions(options) {
 
 async function resolveAiDraft(transcriptions, visit) {
 
+  const templateSections = await resolveTemplateSections(visit.clinician_id, visit.visit_type, 'aiPipeline')
+
   let aiNote = await generateAINote(transcriptions, {
 
     patient_name: visit.patient_name,
@@ -178,7 +182,7 @@ async function resolveAiDraft(transcriptions, visit) {
 
     visit_date: visit.visit_date,
 
-  })
+  }, templateSections)
 
   if (!aiNote && transcriptions.length > 0) {
 

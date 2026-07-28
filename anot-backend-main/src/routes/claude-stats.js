@@ -8,14 +8,14 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/db');
-const { authenticate } = require('../middleware/auth');
+const { protect } = require('../middleware/auth');
 const claudeService = require('../services/claudeService');
 
 /**
  * GET /api/claude-stats/current
  * Get current session cost statistics (in-memory)
  */
-router.get('/current', authenticate, async (req, res) => {
+router.get('/current', protect, async (req, res) => {
   try {
     // Only admins can view costs
     if (req.user.role !== 'admin') {
@@ -40,7 +40,7 @@ router.get('/current', authenticate, async (req, res) => {
  * GET /api/claude-stats/daily
  * Get daily cost breakdown from database
  */
-router.get('/daily', authenticate, async (req, res) => {
+router.get('/daily', protect, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Admin access required' });
@@ -72,7 +72,7 @@ router.get('/daily', authenticate, async (req, res) => {
  * GET /api/claude-stats/monthly
  * Get monthly cost breakdown
  */
-router.get('/monthly', authenticate, async (req, res) => {
+router.get('/monthly', protect, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Admin access required' });
@@ -100,7 +100,7 @@ router.get('/monthly', authenticate, async (req, res) => {
  * GET /api/claude-stats/today
  * Get today's usage in real-time
  */
-router.get('/today', authenticate, async (req, res) => {
+router.get('/today', protect, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Admin access required' });
@@ -149,7 +149,7 @@ router.get('/today', authenticate, async (req, res) => {
  * POST /api/claude-stats/reset
  * Manually reset daily counter (admin only)
  */
-router.post('/reset', authenticate, async (req, res) => {
+router.post('/reset', protect, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
       return res.status(403).json({ error: 'Admin access required' });
@@ -174,7 +174,7 @@ router.post('/reset', authenticate, async (req, res) => {
  * GET /api/claude-stats/usage-by-visit/:visitId
  * Get Claude usage for a specific visit
  */
-router.get('/usage-by-visit/:visitId', authenticate, async (req, res) => {
+router.get('/usage-by-visit/:visitId', protect, async (req, res) => {
   try {
     const visitId = parseInt(req.params.visitId);
     

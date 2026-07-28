@@ -158,6 +158,7 @@ const TRANSCRIBE_SPECIALTIES = new Set(['PRIMARYCARE', 'CARDIOLOGY', 'NEUROLOGY'
 
 function mapAiSettings(row) {
   const anthropicEnc = row.anthropic_api_key_enc
+  const deepgramEnc = row.deepgram_api_key_enc
   const model = String(row.anthropic_model || AI_DEFAULTS.anthropic_model).trim()
   const specialty = String(row.transcribe_medical_specialty || AI_DEFAULTS.transcribe_medical_specialty).trim().toUpperCase()
   const deepgramModelIn = String(row.deepgram_model || AI_DEFAULTS.deepgram_model).trim()
@@ -174,6 +175,7 @@ function mapAiSettings(row) {
     transcribe_auto_transcribe_on_upload: row.transcribe_auto_transcribe_on_upload != null
       ? !!row.transcribe_auto_transcribe_on_upload
       : !!row.deepgram_auto_transcribe_on_upload,
+    deepgram_api_key_set: !!(deepgramEnc && String(deepgramEnc).length > 0),
     anthropic_api_key_set: !!(anthropicEnc && String(anthropicEnc).length > 0),
     anthropic_enabled: row.anthropic_enabled !== false,
     anthropic_model: ANTHROPIC_MODELS.has(model) ? model : AI_DEFAULTS.anthropic_model,
@@ -305,6 +307,18 @@ const updateSettings = async (req, res) => {
         : String(cur.anthropic_model || AI_DEFAULTS.anthropic_model)
     const anthropic_model = ANTHROPIC_MODELS.has(anthropicModelIn) ? anthropicModelIn : AI_DEFAULTS.anthropic_model
 
+    let deepgram_api_key_enc = cur.deepgram_api_key_enc || null
+    let newDeepgramKeySaved = false
+    if (payload.deepgram_clear_api_key === true) {
+      deepgram_api_key_enc = null
+    } else if (payload.deepgram_api_key != null && String(payload.deepgram_api_key).trim()) {
+      deepgram_api_key_enc = encryptString(String(payload.deepgram_api_key).trim())
+      if (!deepgram_api_key_enc) {
+        return res.status(500).json({ error: getPublicErrorMessage(500, new Error('encryption failed')) })
+      }
+      newDeepgramKeySaved = true
+    }
+
     const ffmpeg_enabled = payload.ffmpeg_enabled !== undefined ? !!payload.ffmpeg_enabled : !!cur.ffmpeg_enabled
     const fmtIn =
       payload.ffmpeg_target_format !== undefined ? String(payload.ffmpeg_target_format || 'mp3').toLowerCase() : String(cur.ffmpeg_target_format || 'mp3').toLowerCase()
@@ -366,6 +380,7 @@ const updateSettings = async (req, res) => {
       transcribe_show_speaker_labels,
       transcribe_auto_transcribe_on_upload,
       deepgram_model,
+      deepgram_api_key_enc,
       anthropic_enabled,
       anthropic_api_key_enc,
       anthropic_model,
@@ -404,6 +419,7 @@ const updateSettings = async (req, res) => {
       transcribe_show_speaker_labels,
       transcribe_auto_transcribe_on_upload,
       deepgram_model,
+      deepgram_api_key_enc,
       anthropic_enabled,
       anthropic_api_key_enc,
       anthropic_model,
@@ -448,6 +464,10 @@ const updateSettings = async (req, res) => {
     if (newAnthropicKeySaved || payload.anthropic_clear_api_key === true) {
       cloudWatchAudit.logSettingChange(req.user.id, req.user.role, 'anthropic_api_key',
         cur.anthropic_api_key_enc ? 'set' : 'unset', anthropic_api_key_enc ? 'set' : 'cleared', req.clientIp)
+    }
+    if (newDeepgramKeySaved || payload.deepgram_clear_api_key === true) {
+      cloudWatchAudit.logSettingChange(req.user.id, req.user.role, 'deepgram_api_key',
+        cur.deepgram_api_key_enc ? 'set' : 'unset', deepgram_api_key_enc ? 'set' : 'cleared', req.clientIp)
     }
 
     res.status(200).json({ message: 'Settings saved successfully.', settings: mapInternalRow(result.rows[0], columnSet) })

@@ -1,6 +1,7 @@
 const pool = require('../config/db')
 const { sendHttpError } = require('../utils/errorMessages')
 const { ensureClinicianTemplatesSchema } = require('../utils/ensureClinicianTemplatesSchema')
+const { visitTypeToTemplateId } = require('../utils/noteTemplateSections')
 
 const DEFAULT_TEMPLATES = [
     {
@@ -75,6 +76,17 @@ async function listTemplatesForUser(userId) {
         return DEFAULT_TEMPLATES.map((t) => ({ ...t }))
     }
     return rows.map(mapRow)
+}
+
+/**
+ * Resolve the clinician's saved template matching a visit type (e.g. 'Follow-up' → 'follow-up'),
+ * for AI draft generation. Returns null if the clinician has no matching template.
+ */
+async function getTemplateForVisitType(userId, visitType) {
+  await ensureClinicianTemplatesSchema()
+  const templates = await listTemplatesForUser(userId)
+  const templateId = visitTypeToTemplateId(visitType)
+  return templates.find((t) => t.id === templateId) || null
 }
 
 const getClinicianTemplates = async (req, res) => {
@@ -162,4 +174,6 @@ module.exports = {
     saveClinicianTemplates,
     deleteClinicianTemplate,
     DEFAULT_TEMPLATES,
+    listTemplatesForUser,
+    getTemplateForVisitType,
 }

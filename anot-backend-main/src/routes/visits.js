@@ -31,6 +31,7 @@ const pool = require('../config/db')
 const { runAIPipeline, generateAINote } = require('../utils/aiPipeline')
 const { getVisitForUser } = require('../utils/visitAccess')
 const { setVisitTranscriptionStatus } = require('../utils/visitSchemaCompat')
+const { resolveTemplateSections } = require('../utils/noteTemplateSections')
 
 const TRANSCRIPTION_UNAVAILABLE_RE = /^\[Recording \d+: transcription unavailable\]$/i
 
@@ -80,7 +81,7 @@ const AI_DRAFT_UNAVAILABLE =
 async function loadVisitDetailForDraft(visitId) {
   const detail = await pool.query(
     `
-      SELECT v.visit_type, v.visit_date, p.name AS patient_name, p.mrn
+      SELECT v.visit_type, v.visit_date, v.clinician_id, p.name AS patient_name, p.mrn
       FROM visits v
       JOIN patients p ON p.id = v.patient_id
       WHERE v.id = $1
@@ -154,12 +155,14 @@ async function generateDraft(req, res) {
 
     validateNoteEditableForDraft(note)
 
+    const templateSections = await resolveTemplateSections(row.clinician_id, row.visit_type, 'generate-draft')
+
     let aiDraft = await generateAINote(segments, {
       patient_name: row.patient_name,
       mrn: row.mrn,
       visit_type: row.visit_type,
       visit_date: row.visit_date,
-    })
+    }, templateSections)
     if (!aiDraft) aiDraft = AI_DRAFT_UNAVAILABLE
 
     await saveAiDraftToNote(id, aiDraft, segments, note)

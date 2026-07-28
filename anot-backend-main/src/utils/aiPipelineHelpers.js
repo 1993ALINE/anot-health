@@ -13,10 +13,30 @@ function buildCombinedTranscription(transcriptions) {
     .join('\n\n')
 }
 
+const DEFAULT_SECTION_HEADERS = [
+  'CHIEF COMPLAINT',
+  'HISTORY OF PRESENT ILLNESS (HPI)',
+  'PHYSICAL EXAMINATION (PE)',
+  'IMAGING',
+  'ASSESSMENT & PLAN (A&P)',
+]
+
 /**
- * Build Anthropic user prompt for clinical note generation
+ * Build Anthropic user prompt for clinical note generation.
+ * @param {object} patientInfo
+ * @param {string} combinedTranscription
+ * @param {string[]} [templateSections] ordered section headers from the clinician's saved
+ *   template for this visit type (see utils/noteTemplateSections.js). Falls back to the
+ *   default 5-section format when absent/empty.
  */
-function buildAnthropicNotePrompt(patientInfo, combinedTranscription) {
+function buildAnthropicNotePrompt(patientInfo, combinedTranscription, templateSections) {
+  const headers = Array.isArray(templateSections) && templateSections.length > 0
+    ? templateSections
+    : DEFAULT_SECTION_HEADERS
+  console.log(`[aiPipelineHelpers] buildAnthropicNotePrompt: using ${Array.isArray(templateSections) && templateSections.length > 0 ? 'CLINICIAN TEMPLATE' : 'DEFAULT'} headers: ${JSON.stringify(headers)}`)
+
+  const sectionList = headers.map((h) => `${h}:`).join('\n')
+
   return `Generate a structured clinical note from the visit transcription below.
 
 Context (do NOT repeat in the note — patient details are shown elsewhere in the UI):
@@ -28,22 +48,9 @@ Date: ${patientInfo.visit_date}
 TRANSCRIPTION(S):
 ${combinedTranscription}
 
-Start directly with CHIEF COMPLAINT — no title, no patient header, no markdown. Use EXACTLY these 5 plain-text section headers ending with a colon. Write "Not mentioned" if information is not available in the transcription.
+Start directly with the first section header below — no title, no patient header, no markdown. Use EXACTLY these ${headers.length} plain-text section headers ending with a colon, in this exact order. Under each header, write the content a clinician would expect for a section with that name, based only on the transcription — write "Not mentioned" if that information isn't present.
 
-CHIEF COMPLAINT:
-[1-2 sentences describing the main reason for the visit]
-
-HISTORY OF PRESENT ILLNESS (HPI):
-[Detailed narrative including onset, duration, severity, associated symptoms]
-
-PHYSICAL EXAMINATION (PE):
-[Physical exam findings, or "Not performed/mentioned"]
-
-IMAGING:
-[Any imaging results or orders, or "Not mentioned"]
-
-ASSESSMENT & PLAN (A&P):
-[Diagnosis and treatment plan including medications, referrals, follow-up]`
+${sectionList}`
 }
 
 /**

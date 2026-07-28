@@ -24,6 +24,7 @@ const EXTENSION_FIELD_KEYS = [
   'anthropic_api_key_enc',
   'anthropic_enabled',
   'anthropic_model',
+  'deepgram_api_key_enc',
 ]
 
 function parseSocialLinks(raw) {
