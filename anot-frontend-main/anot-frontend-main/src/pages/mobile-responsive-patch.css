@@ -1,4 +1,4 @@
-﻿/* mobile-responsive-patch.css — global mobile tap targets & overflow fixes */
+/* mobile-responsive-patch.css — global mobile tap targets & overflow fixes */
 
 @media (max-width: 768px) {
   html,
@@ -132,6 +132,70 @@
   }
 }
 
+@media (max-width: 768px) {
+  /* Sidebar toggle and hamburger display */
+  .sf-sidebar, .sf-sidebar--rich {
+    transform: translateX(-100%);
+    width: 280px !important;
+    max-width: 85vw;
+    z-index: 400;
+  }
+  .sf-sidebar.open, .sf-sidebar--rich.open {
+    transform: translateX(0);
+  }
+  .sf-hamburger {
+    display: flex !important;
+    z-index: 450;
+  }
+
+  /* Global Topbar */
+  .sf-topbar {
+    padding-left: 4rem;
+    height: auto;
+    min-height: 60px;
+  }
+
+  /* Force grids to single column */
+  .adm-grid, 
+  .cl-grid, 
+  .sf-grid, 
+  .sf-form-grid,
+  .cl-schedule .sf-form-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Stack flex containers */
+  .sf-stats,
+  .sf-panels,
+  .cl-panels,
+  .adm-panels {
+    flex-direction: column !important;
+    gap: 1rem !important;
+  }
+
+  /* Ensure tables can scroll */
+  .sf-table-wrap, 
+  .adm-table-wrap, 
+  .cl-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  .sf-table, 
+  .adm-table {
+    min-width: 700px;
+  }
+
+  /* Modals */
+  .sf-modal, 
+  .sf-modal-content {
+    width: 95vw !important;
+    max-width: 95vw !important;
+    margin: 10px auto !important;
+  }
+}
+
 @media (max-width: 375px) {
   .sf-portal .sf-body {
     padding-left: 12px;
@@ -139,7 +203,7 @@
   }
 
   .sf-portal .sf-topbar {
-    padding-left: 3rem;
+    padding-left: 3.5rem;
     padding-right: 0.75rem;
   }
 }
