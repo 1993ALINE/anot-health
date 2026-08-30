@@ -23,9 +23,9 @@ router.put('/:id', protect, restrict('clinician'), updateVisit)
 router.delete('/:id', protect, restrict('clinician'), deleteVisit)
 router.post('/:id/lock-note', protect, restrict('clinician'), lockNote)
 
-// Clinician (own visits), Scribe (assigned visits) and QPS (review) — the
-// controller scopes results per role. Admins do not work with the visit list.
-router.get('/', protect, restrict('clinician', 'scribe', 'qps'), getAllVisits)
+// Clinician (own visits), Scribe (assigned visits), QPS (review), and Admins (all) — the
+// controller scopes results per role.
+router.get('/', protect, restrict('clinician', 'scribe', 'qps', 'admin', 'super_admin'), getAllVisits)
 
 const pool = require('../config/db')
 const { runAIPipeline, generateAINote } = require('../utils/aiPipeline')

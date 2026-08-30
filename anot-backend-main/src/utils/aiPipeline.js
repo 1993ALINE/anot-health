@@ -72,11 +72,11 @@ async function callAnthropicForNote(anthropic, settings, prompt) {
 
     model: settings.anthropic_model || 'claude-haiku-4-5',
 
-    max_tokens: 1500,
+    max_tokens: 1800,
 
     system:
 
-      'You are a medical scribe assistant. Generate structured clinical notes from visit transcriptions. Use plain text only — no markdown, no bold markers, no # headers, no separator lines. Be professional, concise and clinically accurate. Only include information present in the transcription. Never invent or assume clinical details.',
+      'You are a medical scribe assistant. Generate structured clinical notes from visit transcriptions. Use plain text only — no markdown, no bold markers, no # headers, no separator lines. Be professional, concise and clinically accurate. Only include clinical information present in the transcription — never invent or assume clinical details. The one exception is any ICD-10/CPT/E&M coding section: there, follow the coding-specific instructions in the user prompt, which derive codes from the diagnoses and plan you documented rather than from verbatim transcript mentions.',
 
     messages: [{ role: 'user', content: prompt }],
 

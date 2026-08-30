@@ -584,18 +584,34 @@
 }
 
 /* ── Note editor (Final Note) ──────────────────────────── */
-.scribe-portal .scribe-final-note {
+/* Shared by Scribe and Clinician portals (ScribeFinalNoteEditor / AiDraftReadonly
+   are used from both — scope to both shells, not just .scribe-portal, or the
+   Clinician note view falls back to unstyled <pre> (no wrap, no section gaps). */
+.scribe-portal .scribe-final-note,
+.cl-portal .scribe-final-note {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   padding: 12px 14px;
 }
 
-.scribe-portal .scribe-final-note__section:first-child .scribe-final-note__header {
+.scribe-portal .scribe-final-note__section,
+.cl-portal .scribe-final-note__section {
+  margin-bottom: 28px;
+}
+
+.scribe-portal .scribe-final-note__section:last-child,
+.cl-portal .scribe-final-note__section:last-child {
+  margin-bottom: 0;
+}
+
+.scribe-portal .scribe-final-note__section:first-child .scribe-final-note__header,
+.cl-portal .scribe-final-note__section:first-child .scribe-final-note__header {
   margin-top: 0;
 }
 
-.scribe-portal .scribe-final-note__header {
+.scribe-portal .scribe-final-note__header,
+.cl-portal .scribe-final-note__header {
   color: #374151;
   font-weight: 600;
   font-size: 13px;
@@ -604,7 +620,8 @@
   margin-bottom: 4px;
 }
 
-.scribe-portal .scribe-final-note__input {
+.scribe-portal .scribe-final-note__input,
+.cl-portal .scribe-final-note__input {
   width: 100%;
   box-sizing: border-box;
   border: none;
@@ -620,11 +637,13 @@
   background: transparent;
 }
 
-.scribe-portal .scribe-final-note__input:focus {
+.scribe-portal .scribe-final-note__input:focus,
+.cl-portal .scribe-final-note__input:focus {
   outline: none;
 }
 
-.scribe-portal .scribe-final-note--readonly .scribe-final-note__body {
+.scribe-portal .scribe-final-note--readonly .scribe-final-note__body,
+.cl-portal .scribe-final-note--readonly .scribe-final-note__body {
   margin: 0 0 12px;
   padding: 0;
   font-size: 13px;
@@ -635,15 +654,18 @@
   background: transparent;
 }
 
-.scribe-portal .scribe-final-note--readonly {
+.scribe-portal .scribe-final-note--readonly,
+.cl-portal .scribe-final-note--readonly {
   background: #eef2ff;
 }
 
-.scribe-portal .scribe-ai-draft-readonly.scribe-final-note--readonly {
+.scribe-portal .scribe-ai-draft-readonly.scribe-final-note--readonly,
+.cl-portal .scribe-ai-draft-readonly.scribe-final-note--readonly {
   background: color-mix(in srgb, var(--brand-primary) 4%, var(--bg-card));
 }
 
-.scribe-portal .scribe-ai-draft-unavailable {
+.scribe-portal .scribe-ai-draft-unavailable,
+.cl-portal .scribe-ai-draft-unavailable {
   padding: 12px 14px;
   font-size: 13px;
   line-height: 1.75;

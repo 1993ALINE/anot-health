@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, lazy, Suspense, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { authAPI, usersAPI, adminAPI, settingsAPI, assignmentsAPI, API_BASE } from '../../services/api'
+import { authAPI, usersAPI, adminAPI, settingsAPI, assignmentsAPI, ehrAPI, API_BASE } from '../../services/api'
 import { fetchCsrfToken } from '../../utils/csrf'
 import { setBranding, useBranding } from '../../services/branding'
 import SystemProfileManager from '../../components/SystemProfileManager'
@@ -874,6 +874,25 @@ function Admin() {
     const [deepgramTestLoading, setDeepgramTestLoading] = useState(false)
     const [deepgramTestResult, setDeepgramTestResult] = useState(null)
 
+    // EHR connections live in their own small state, separate from the big
+    // settingsForm/PUT-/settings flow above (avoids threading multi-EHR fields
+    // through that already-large form). Loaded independently of the settings
+    // tab since the clinician edit modal (Users tab) also needs the list.
+    const [ehrConnections, setEhrConnections] = useState([])
+    const [ehrConnectionTypes, setEhrConnectionTypes] = useState([])
+    const [ehrLoading, setEhrLoading] = useState(false)
+    const [ehrFormOpen, setEhrFormOpen] = useState(false)
+    const [ehrForm, setEhrForm] = useState({ id: null, ehr_type: '', name: '', enabled: false, credentials: {} })
+    const [ehrSaving, setEhrSaving] = useState(false)
+    const [ehrTestLoading, setEhrTestLoading] = useState({})
+    const [ehrTestResults, setEhrTestResults] = useState({})
+    const [ehrSyncConnectionId, setEhrSyncConnectionId] = useState('')
+    const [ehrSyncDateFrom, setEhrSyncDateFrom] = useState('')
+    const [ehrSyncDateTo, setEhrSyncDateTo] = useState('')
+    const [ehrSyncPatientsLoading, setEhrSyncPatientsLoading] = useState(false)
+    const [ehrSyncAppointmentsLoading, setEhrSyncAppointmentsLoading] = useState(false)
+    const [ehrSyncResult, setEhrSyncResult] = useState(null)
+
     const toggleAdminModuleKey = useCallback((key) => {
         setEditUser((prev) => {
             if (!prev || prev.role !== 'admin') {return prev}
@@ -1035,6 +1054,22 @@ function Admin() {
         }
     }, [hydrateSettingsForm])
 
+    const loadEhrConnections = useCallback(async () => {
+        try {
+            setEhrLoading(true)
+            const [connData, typeData] = await Promise.all([
+                settingsAPI.listEhrConnections(),
+                settingsAPI.getEhrConnectionTypes(),
+            ])
+            setEhrConnections(connData.connections || [])
+            setEhrConnectionTypes(typeData.types || [])
+        } catch (err) {
+            showToast(`Failed to load EHR connections: ${err.message}`, 'error')
+        } finally {
+            setEhrLoading(false)
+        }
+    }, [showToast])
+
     useEffect(() => {
         if (recentlyAddedUserId === null || recentlyAddedUserId === undefined) {return}
         const timer = setTimeout(() => setRecentlyAddedUserId(null), 2600)
@@ -1051,8 +1086,9 @@ function Admin() {
                 /* best-effort; mutating calls retry CSRF on 403 */
             }
             void loadAll()
+            void loadEhrConnections()
         })
-    }, [loadAll])
+    }, [loadAll, loadEhrConnections])
 
     useEffect(() => {
         queueMicrotask(() => {
@@ -1162,6 +1198,126 @@ function Admin() {
         }
     }
 
+    const ehrSelectedTypeDef = ehrConnectionTypes.find((t) => t.ehrType === ehrForm.ehr_type) || null
+
+    const openAddEhrConnection = () => {
+        setEhrForm({ id: null, ehr_type: ehrConnectionTypes[0]?.ehrType || '', name: '', enabled: false, credentials: {} })
+        setEhrFormOpen(true)
+    }
+
+    const openEditEhrConnection = (conn) => {
+        setEhrForm({ id: conn.id, ehr_type: conn.ehr_type, name: conn.name, enabled: conn.enabled, credentials: {} })
+        setEhrFormOpen(true)
+    }
+
+    const handleEhrFormInput = (key, value) => {
+        setEhrForm((prev) => ({ ...prev, [key]: value }))
+    }
+
+    const handleEhrCredentialInput = (fieldKey, value) => {
+        setEhrForm((prev) => ({ ...prev, credentials: { ...prev.credentials, [fieldKey]: value } }))
+    }
+
+    const saveEhrConnection = async () => {
+        if (!ehrForm.name.trim() || !ehrForm.ehr_type) {
+            showToast('Name and EHR type are required.', 'error')
+            return
+        }
+        try {
+            setEhrSaving(true)
+            if (ehrForm.id) {
+                await settingsAPI.updateEhrConnection(ehrForm.id, {
+                    name: ehrForm.name.trim(),
+                    enabled: ehrForm.enabled,
+                    credentials: ehrForm.credentials,
+                })
+            } else {
+                await settingsAPI.createEhrConnection({
+                    ehr_type: ehrForm.ehr_type,
+                    name: ehrForm.name.trim(),
+                    enabled: ehrForm.enabled,
+                    credentials: ehrForm.credentials,
+                })
+            }
+            await loadEhrConnections()
+            setEhrFormOpen(false)
+            showToast('EHR connection saved successfully')
+        } catch (err) {
+            showToast(err.message || 'Failed to save EHR connection.', 'error')
+        } finally {
+            setEhrSaving(false)
+        }
+    }
+
+    const deleteEhrConnection = (conn) => {
+        setConfirmDialog({
+            title: 'Delete EHR connection',
+            message: `Delete "${conn.name}"? Any clinicians assigned to it will be unassigned; already-uploaded notes are unaffected.`,
+            confirmText: 'Delete connection',
+            tone: 'danger',
+            onConfirm: async () => {
+                try {
+                    await settingsAPI.deleteEhrConnection(conn.id)
+                    await loadEhrConnections()
+                    showToast('EHR connection deleted')
+                } catch (err) {
+                    showToast(err.message || 'Failed to delete EHR connection.', 'error')
+                }
+            },
+        })
+    }
+
+    const testEhrConnection = async (conn) => {
+        try {
+            setEhrTestLoading((prev) => ({ ...prev, [conn.id]: true }))
+            await settingsAPI.testEhrConnection(conn.id)
+            setEhrTestResults((prev) => ({ ...prev, [conn.id]: { ok: true } }))
+            showToast(`${conn.name}: connection test succeeded`)
+        } catch (err) {
+            setEhrTestResults((prev) => ({ ...prev, [conn.id]: { ok: false, error: err.message } }))
+            showToast(err.message || 'Connection test failed.', 'error')
+        } finally {
+            setEhrTestLoading((prev) => ({ ...prev, [conn.id]: false }))
+        }
+    }
+
+    const syncEhrPatients = async () => {
+        if (!ehrSyncConnectionId) {
+            showToast('Choose a connection first.', 'error')
+            return
+        }
+        try {
+            setEhrSyncPatientsLoading(true)
+            const data = await ehrAPI.syncPatients(ehrSyncConnectionId)
+            setEhrSyncResult({ type: 'patients', ...data })
+            showToast(`Patient sync complete: ${data.created} created, ${data.matched} matched`)
+        } catch (err) {
+            showToast(err.message || 'Patient sync failed.', 'error')
+        } finally {
+            setEhrSyncPatientsLoading(false)
+        }
+    }
+
+    const syncEhrAppointments = async () => {
+        if (!ehrSyncConnectionId) {
+            showToast('Choose a connection first.', 'error')
+            return
+        }
+        if (!ehrSyncDateFrom || !ehrSyncDateTo) {
+            showToast('Choose a start and end date first.', 'error')
+            return
+        }
+        try {
+            setEhrSyncAppointmentsLoading(true)
+            const data = await ehrAPI.syncAppointments(ehrSyncConnectionId, ehrSyncDateFrom, ehrSyncDateTo)
+            setEhrSyncResult({ type: 'appointments', ...data })
+            showToast(`Appointment sync complete: ${data.created} created, ${data.updated} updated`)
+        } catch (err) {
+            showToast(err.message || 'Appointment sync failed.', 'error')
+        } finally {
+            setEhrSyncAppointmentsLoading(false)
+        }
+    }
 
     // ── Derived ───────────────────────────────────────
     const safe       = Array.isArray(users) ? users : []
@@ -1248,6 +1404,10 @@ function Admin() {
                 npi: editUser.npi,
                 license: editUser.license,
                 rate_per_note: editUser.rate_per_note,
+                ...(editUser.role === 'clinician' ? {
+                    ehr_connection_id: editUser.ehr_connection_id || null,
+                    ehr_provider_id: editUser.ehr_provider_id || null,
+                } : {}),
             }
             if (isSuperAdmin(currentUser) && editUser.role === 'admin') {
                 const am = editUser.admin_modules
@@ -2419,6 +2579,132 @@ function Admin() {
                                         </div>
                                     </div>
 
+                                    <div className="adm-form-card">
+                                        <div className="adm-form-card__title">EHR connections</div>
+                                        <p className="adm-settings-note" style={{ marginBottom: 16 }}>
+                                            Configure one connection per EHR account your practice uses — multiple clinicians can share the same connection (same login) if that's how your EHR is set up. Each clinician is then assigned to a connection with their own External Provider ID (in their profile edit screen) so their notes, schedule, and patients stay correctly separated even when sharing credentials. Credentials are encrypted at rest.
+                                        </p>
+                                        {ehrLoading ? <LoadingBox /> : (
+                                            <>
+                                                {ehrConnections.length === 0 && !ehrFormOpen && (
+                                                    <p className="adm-settings-note">No EHR connections configured yet.</p>
+                                                )}
+                                                {ehrConnections.map((conn) => (
+                                                    <div key={conn.id} className="adm-form-grid" style={{ borderTop: '1px solid var(--gray-border, #e5e7eb)', paddingTop: 12, marginTop: 12 }}>
+                                                        <div className="adm-form-group" style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                                                            <div>
+                                                                <strong>{conn.name}</strong>{' '}
+                                                                <span className="adm-badge">{conn.ehr_type}</span>{' '}
+                                                                {conn.enabled ? <span style={{ color: '#059669' }}>enabled</span> : <span style={{ color: '#94a3b8' }}>disabled</span>}
+                                                                {!conn.credentials_set && <span className="adm-err" style={{ marginLeft: 8 }}>⚠ no credentials saved</span>}
+                                                            </div>
+                                                            <div style={{ display: 'flex', gap: 8 }}>
+                                                                <button type="button" className="adm-btn-ghost" onClick={() => testEhrConnection(conn)} disabled={!!ehrTestLoading[conn.id] || !conn.enabled}>
+                                                                    {ehrTestLoading[conn.id] ? 'Testing…' : 'Test'}
+                                                                </button>
+                                                                <button type="button" className="adm-btn-ghost" onClick={() => openEditEhrConnection(conn)}>Edit</button>
+                                                                <button type="button" className="adm-btn-ghost" onClick={() => deleteEhrConnection(conn)}>Delete</button>
+                                                            </div>
+                                                            {ehrTestResults[conn.id] && (
+                                                                ehrTestResults[conn.id].ok
+                                                                    ? <div className="adm-settings-note" style={{ color: '#059669', width: '100%' }}>✓ Connection succeeded.</div>
+                                                                    : <div className="adm-err" style={{ width: '100%' }}>⚠ {ehrTestResults[conn.id].error}</div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                ))}
+
+                                                {ehrFormOpen ? (
+                                                    <div className="adm-form-grid" style={{ borderTop: '1px solid var(--gray-border, #e5e7eb)', paddingTop: 12, marginTop: 12 }}>
+                                                        <div className="adm-form-group">
+                                                            <label className="adm-form-label">EHR type</label>
+                                                            <select className="adm-input" value={ehrForm.ehr_type} disabled={!!ehrForm.id}
+                                                                    onChange={(e) => handleEhrFormInput('ehr_type', e.target.value)}>
+                                                                {ehrConnectionTypes.map((t) => (
+                                                                    <option key={t.ehrType} value={t.ehrType}>{t.label}</option>
+                                                                ))}
+                                                            </select>
+                                                        </div>
+                                                        <div className="adm-form-group">
+                                                            <label className="adm-form-label">Connection name</label>
+                                                            <input className="adm-input" placeholder="e.g. Tebra — Main Practice"
+                                                                   value={ehrForm.name} onChange={(e) => handleEhrFormInput('name', e.target.value)} />
+                                                        </div>
+                                                        <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>
+                                                            <label className="adm-form-label">
+                                                                <input type="checkbox" checked={!!ehrForm.enabled} onChange={(e) => handleEhrFormInput('enabled', e.target.checked)} /> Enabled
+                                                            </label>
+                                                        </div>
+                                                        {(ehrSelectedTypeDef?.credentialFields || []).map((f) => (
+                                                            <div className="adm-form-group" key={f.key}>
+                                                                <label className="adm-form-label">{f.label}</label>
+                                                                <input className="adm-input" type={f.secret ? 'password' : 'text'} autoComplete="new-password"
+                                                                    placeholder={ehrForm.id ? 'Leave blank to keep existing' : `${f.label}...`}
+                                                                    value={ehrForm.credentials[f.key] || ''}
+                                                                    onChange={(e) => handleEhrCredentialInput(f.key, e.target.value)} />
+                                                            </div>
+                                                        ))}
+                                                        <div className="adm-settings-actions" style={{ gridColumn: '1 / -1' }}>
+                                                            <button type="button" className="adm-btn-primary" onClick={saveEhrConnection} disabled={ehrSaving}>
+                                                                {ehrSaving ? 'Saving…' : 'Save connection'}
+                                                            </button>
+                                                            <button type="button" className="adm-btn-ghost" onClick={() => setEhrFormOpen(false)}>Cancel</button>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="adm-settings-actions" style={{ marginTop: 16 }}>
+                                                        <button type="button" className="adm-btn-primary" onClick={openAddEhrConnection} disabled={ehrConnectionTypes.length === 0}>
+                                                            + Add EHR connection
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+
+                                    <div className="adm-form-card">
+                                        <div className="adm-form-card__title">EHR sync</div>
+                                        <p className="adm-settings-note" style={{ marginBottom: 16 }}>
+                                            Pull patients and appointments from a configured, enabled connection into Anot.
+                                        </p>
+                                        <div className="adm-form-grid">
+                                            <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>
+                                                <label className="adm-form-label">Connection</label>
+                                                <select className="adm-input" value={ehrSyncConnectionId} onChange={(e) => setEhrSyncConnectionId(e.target.value)}>
+                                                    <option value="">Choose a connection…</option>
+                                                    {ehrConnections.filter((c) => c.enabled).map((c) => (
+                                                        <option key={c.id} value={c.id}>{c.name} ({c.ehr_type})</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>
+                                                <button type="button" className="adm-btn-ghost" onClick={syncEhrPatients} disabled={ehrSyncPatientsLoading || !ehrSyncConnectionId}>
+                                                    {ehrSyncPatientsLoading ? 'Syncing patients…' : 'Sync patients now'}
+                                                </button>
+                                            </div>
+                                            <div className="adm-form-group">
+                                                <label className="adm-form-label">From date</label>
+                                                <input className="adm-input" type="date" value={ehrSyncDateFrom} onChange={(e) => setEhrSyncDateFrom(e.target.value)} />
+                                            </div>
+                                            <div className="adm-form-group">
+                                                <label className="adm-form-label">To date</label>
+                                                <input className="adm-input" type="date" value={ehrSyncDateTo} onChange={(e) => setEhrSyncDateTo(e.target.value)} />
+                                            </div>
+                                            <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>
+                                                <button type="button" className="adm-btn-ghost" onClick={syncEhrAppointments} disabled={ehrSyncAppointmentsLoading || !ehrSyncConnectionId}>
+                                                    {ehrSyncAppointmentsLoading ? 'Syncing appointments…' : 'Sync appointments now'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                        {ehrSyncResult && (
+                                            <div className="adm-settings-note" style={{ marginTop: 10 }}>
+                                                {ehrSyncResult.type === 'patients'
+                                                    ? `Last patient sync: ${ehrSyncResult.created} created, ${ehrSyncResult.matched} matched, ${ehrSyncResult.total} total.`
+                                                    : `Last appointment sync: ${ehrSyncResult.created} created, ${ehrSyncResult.updated} updated.`}
+                                            </div>
+                                        )}
+                                    </div>
+
                                     {settingsError && <div className="adm-err">⚠ {settingsError}</div>}
                                     <div className="adm-settings-actions">
                                         <button type="button" className="adm-btn-primary" onClick={saveSettings} disabled={settingsSaving}>
@@ -2540,7 +2826,7 @@ function Admin() {
                         <div className="adm-modal__scroll">
                             <div className="adm-form-grid">
                                 {[['Full Name', 'name'],['Email', 'email'],['Phone', 'phone'],['Specialty', 'specialty'],
-                                    ...(editUser.role === 'clinician' ? [['NPI', 'npi'],['License', 'license']] : []),
+                                    ...(editUser.role === 'clinician' ? [['NPI', 'npi'],['License', 'license'],['External Provider ID', 'ehr_provider_id']] : []),
                                 ].map(([l, k]) => (
                                     <div key={k} className="adm-form-group">
                                         <label className="adm-form-label">{l}</label>
@@ -2548,6 +2834,21 @@ function Admin() {
                                                onChange={(e) => setEditUser({ ...editUser, [k]: e.target.value })} />
                                     </div>
                                 ))}
+                                {editUser.role === 'clinician' && (
+                                    <div className="adm-form-group">
+                                        <label className="adm-form-label">EHR Connection</label>
+                                        <select className="adm-input" value={editUser.ehr_connection_id || ''}
+                                                onChange={(e) => setEditUser({ ...editUser, ehr_connection_id: e.target.value ? Number(e.target.value) : null })}>
+                                            <option value="">None</option>
+                                            {ehrConnections.map((c) => (
+                                                <option key={c.id} value={c.id}>{c.name} ({c.ehr_type})</option>
+                                            ))}
+                                        </select>
+                                        <p className="adm-form-hint" style={{ marginTop: 6, fontSize: 12, color: '#64748b' }}>
+                                            Notes this clinician submits push to this EHR. Multiple clinicians can share the same connection (same login credentials) — each just needs their own distinct External Provider ID above, so their schedules and patients stay separate. Configure connections under Settings.
+                                        </p>
+                                    </div>
+                                )}
                                 <div className="adm-form-group">
                                     <label className="adm-form-label">Role</label>
                                     {editUser.role === 'super_admin' ? (

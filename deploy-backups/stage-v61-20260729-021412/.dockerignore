@@ -1,0 +1,31 @@
+# Dependencies (reinstalled inside the image)
+node_modules
+npm-debug.log*
+
+# Local environment / secrets — never bake these into the image
+.env
+.env.*
+!.env.example
+
+# Uploaded audio + runtime artifacts
+src/uploads
+uploads
+*.log
+
+# Version control / editor / OS noise
+.git
+.gitignore
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Tests / reports / docs that aren't needed at runtime
+test-results
+playwright-report
+coverage
+*.md
+
+# The container only needs the backend; ignore sibling workspace artifacts
+Dockerfile
+.dockerignore

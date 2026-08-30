@@ -1090,7 +1090,7 @@ function countTemplateSections(content) {
   let count = 0
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
-    if (!line) continue
+    if (!line) { continue }
     if (line.endsWith(':')) {
       count++
       continue

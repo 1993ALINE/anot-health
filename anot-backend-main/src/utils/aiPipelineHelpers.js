@@ -22,6 +22,22 @@ const DEFAULT_SECTION_HEADERS = [
 ]
 
 /**
+ * Append the ICD-10/CPT coding sections to a header list, unless the clinician's own
+ * template already defines an equivalent section (matched loosely — e.g. a template with
+ * "ICD-10 codes" or "E&M code based on MDM" already covers one or both).
+ */
+function withCodingHeaders(headers) {
+  const upper = headers.map((h) => h.toUpperCase())
+  const hasIcd = upper.some((h) => h.includes('ICD'))
+  const hasCpt = upper.some((h) => h.includes('CPT') || h.includes('E&M') || h.includes('E/M'))
+  return [
+    ...headers,
+    ...(hasIcd ? [] : ['ICD-10 CODES']),
+    ...(hasCpt ? [] : ['CPT CODES']),
+  ]
+}
+
+/**
  * Build Anthropic user prompt for clinical note generation.
  * @param {object} patientInfo
  * @param {string} combinedTranscription
@@ -30,10 +46,11 @@ const DEFAULT_SECTION_HEADERS = [
  *   default 5-section format when absent/empty.
  */
 function buildAnthropicNotePrompt(patientInfo, combinedTranscription, templateSections) {
-  const headers = Array.isArray(templateSections) && templateSections.length > 0
+  const baseHeaders = Array.isArray(templateSections) && templateSections.length > 0
     ? templateSections
     : DEFAULT_SECTION_HEADERS
-  console.log(`[aiPipelineHelpers] buildAnthropicNotePrompt: using ${Array.isArray(templateSections) && templateSections.length > 0 ? 'CLINICIAN TEMPLATE' : 'DEFAULT'} headers: ${JSON.stringify(headers)}`)
+  const headers = withCodingHeaders(baseHeaders)
+  console.log(`[aiPipelineHelpers] buildAnthropicNotePrompt: using ${Array.isArray(templateSections) && templateSections.length > 0 ? 'CLINICIAN TEMPLATE' : 'DEFAULT'} headers (+coding): ${JSON.stringify(headers)}`)
 
   const sectionList = headers.map((h) => `${h}:`).join('\n')
 
@@ -49,6 +66,8 @@ TRANSCRIPTION(S):
 ${combinedTranscription}
 
 Start directly with the first section header below — no title, no patient header, no markdown. Use EXACTLY these ${headers.length} plain-text section headers ending with a colon, in this exact order. Under each header, write the content a clinician would expect for a section with that name, based only on the transcription — write "Not mentioned" if that information isn't present.
+
+For any section about ICD-10, CPT, or E&M/MDM codes specifically: do not just scan the transcript for literal code mentions (clinicians rarely dictate codes aloud). Instead, act as a certified medical coder — review the diagnoses, findings, and plan you just documented elsewhere in this note, and assign the ICD-10-CM diagnosis codes and CPT (including E&M) codes that those documented facts actually support. List each as "CODE — short description" on its own line, most relevant first. Base any E&M level strictly on the documented history/exam/medical decision-making complexity — do not upcode. Only write "Not mentioned" if the note truly contains no diagnosis or billable service. These are coder-assist suggestions for the clinician to verify before billing, not a final determination.
 
 ${sectionList}`
 }

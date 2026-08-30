@@ -503,6 +503,20 @@ export const settingsAPI = {
   saveClinicianTemplates: async (templates) =>
     apiMutate('POST', '/settings/clinician-templates', { body: { templates } }),
   deleteClinicianTemplate: async (id) => apiMutate('DELETE', `/settings/clinician-templates/${encodeURIComponent(id)}`),
+  listEhrConnections: async () => apiFetch('/settings/ehr-connections'),
+  getEhrConnectionTypes: async () => apiFetch('/settings/ehr-connections/types'),
+  createEhrConnection: async (payload) => apiMutate('POST', '/settings/ehr-connections', { body: payload }),
+  updateEhrConnection: async (id, payload) => apiMutate('PUT', `/settings/ehr-connections/${encodeURIComponent(id)}`, { body: payload }),
+  deleteEhrConnection: async (id) => apiMutate('DELETE', `/settings/ehr-connections/${encodeURIComponent(id)}`),
+  testEhrConnection: async (id) => apiMutate('POST', `/settings/ehr-connections/${encodeURIComponent(id)}/test`),
+}
+
+export const ehrAPI = {
+  getStatus: async (connectionId) => apiFetch(`/ehr/${encodeURIComponent(connectionId)}/status`),
+  syncPatients: async (connectionId, updatedSince) =>
+    apiMutate('POST', `/ehr/${encodeURIComponent(connectionId)}/sync-patients`, { body: { updatedSince: updatedSince || undefined } }),
+  syncAppointments: async (connectionId, dateFrom, dateTo) =>
+    apiMutate('POST', `/ehr/${encodeURIComponent(connectionId)}/sync-appointments`, { body: { date_from: dateFrom, date_to: dateTo } }),
 }
 
 export const assignmentsAPI = {
