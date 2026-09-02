@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useCallback, useLayoutEffect, useSyncExternalStore, useMemo } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useLayoutEffect, useSyncExternalStore, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { DEFAULT_BRAND_LOGO_SRC } from '../services/branding'
 

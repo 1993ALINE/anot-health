@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { authAPI, visitsAPI, patientsAPI, notesAPI, settingsAPI, isAbortError } from '../../services/api'
 import { POLL_INTERVAL_MS, getTranscription } from '../../services/transcriptionService'
@@ -1742,127 +1742,6 @@ function Clinician() {
     }
   }, [])
 
-  const handleStartQuickVisit = async (visitParams) => {
-    let patientId = visitParams.patient_id
-    let patientName = visitParams.name
-    let patientMrn = visitParams.mrn
-
-    if (!patientId) {
-      try {
-        const pRes = await patientsAPI.create({
-          name: visitParams.name,
-          mrn: visitParams.mrn,
-          date_of_birth: null,
-        })
-        patientId = pRes?.patient?.id
-        patientName = pRes?.patient?.name || visitParams.name
-        patientMrn = pRes?.patient?.mrn || visitParams.mrn
-      } catch (e) {
-        if (e.payload?.patient?.id) {
-          patientId = e.payload.patient.id
-          patientName = e.payload.patient.name || visitParams.name
-          patientMrn = e.payload.patient.mrn || visitParams.mrn
-        } else {
-          throw e
-        }
-      }
-    }
-
-    const now = new Date()
-    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-    const vd = await visitsAPI.create({
-      patient_id: patientId,
-      visit_date: localDate(0),
-      visit_time: timeStr,
-      visit_type: visitParams.visit_type || 'Comprehensive Exam',
-    })
-
-    const createdVisit = {
-      ...(vd.visit || {}),
-      id: vd.visit?.id,
-      patient_id: patientId,
-      patient_name: patientName,
-      mrn: patientMrn,
-      patient_consent_recorded: true,
-      status: 'upcoming',
-    }
-
-    setVisits((p) => [...p, createdVisit].sort((a, b) => (a.visit_time || '').localeCompare(b.visit_time || '')))
-    await startVisit(createdVisit)
-  }
-
-  const handleStartScheduledVisit = async (visit) => {
-    await startVisit({ ...visit, patient_consent_recorded: true })
-  }
-
-  const handleStartInstantVisit = useCallback(async () => {
-    try {
-      const now = new Date()
-      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-      const autoMrn = `MRN-${now.getTime().toString().slice(-6)}`
-      
-      let patientId
-      let patientName = 'Dictated Patient'
-      try {
-        const pRes = await patientsAPI.create({
-          name: 'Dictated Patient (Pending AI Transcription)',
-          mrn: autoMrn,
-          date_of_birth: null,
-        })
-        patientId = pRes?.patient?.id
-        patientName = pRes?.patient?.name || patientName
-      } catch (e) {
-        if (e.payload?.patient?.id) {
-          patientId = e.payload.patient.id
-          patientName = e.payload.patient.name || patientName
-        } else {
-          showToast('Could not initialize instant consultation', 'error')
-          return
-        }
-      }
-
-      const vd = await visitsAPI.create({
-        patient_id: patientId,
-        visit_date: localDate(0),
-        visit_time: timeStr,
-        visit_type: 'Comprehensive Exam',
-      })
-
-      const createdVisit = {
-        ...(vd.visit || {}),
-        id: vd.visit?.id,
-        patient_id: patientId,
-        patient_name: patientName,
-        mrn: autoMrn,
-        patient_consent_recorded: true,
-        status: 'upcoming',
-      }
-
-      setVisits((p) => [...p, createdVisit].sort((a, b) => (a.visit_time || '').localeCompare(b.visit_time || '')))
-      setQuickRecOpen(false)
-      await startVisit(createdVisit)
-      showToast('🎙 Live consultation recording started — speak patient details anytime!')
-    } catch (err) {
-      showToast(err?.message || 'Failed to start instant consultation', 'error')
-    }
-  }, [startVisit])
-
-  const copyFullNoteToEmr = () => {
-    const rawContent = reviewNote?.final_note || cleanAiDraftForDisplay(reviewNote?.ai_draft) || ''
-    if (!rawContent.trim()) {
-      showToast('No note content available to copy', 'warn')
-      return
-    }
-    const formatted = buildNote(parseNote(rawContent))
-    navigator.clipboard?.writeText(formatted).then(() => {
-      setNoteCopied(true)
-      setTimeout(() => setNoteCopied(false), 2500)
-      showToast('✓ Clinical note copied to clipboard — ready to paste into EMR!')
-    }).catch(() => {
-      showToast('Failed to copy to clipboard', 'error')
-    })
-  }
-
   const runConfirm = async () => {
     if (!confirmDialog?.onConfirm) {return}
     setConfirmLoading(true)
@@ -2175,6 +2054,127 @@ function Clinician() {
       cRef.current = []
       showToast(micErr?.message || 'Failed to start recording. Please check microphone access.', 'error')
     }
+  }
+
+  const handleStartQuickVisit = async (visitParams) => {
+    let patientId = visitParams.patient_id
+    let patientName = visitParams.name
+    let patientMrn = visitParams.mrn
+
+    if (!patientId) {
+      try {
+        const pRes = await patientsAPI.create({
+          name: visitParams.name,
+          mrn: visitParams.mrn,
+          date_of_birth: null,
+        })
+        patientId = pRes?.patient?.id
+        patientName = pRes?.patient?.name || visitParams.name
+        patientMrn = pRes?.patient?.mrn || visitParams.mrn
+      } catch (e) {
+        if (e.payload?.patient?.id) {
+          patientId = e.payload.patient.id
+          patientName = e.payload.patient.name || visitParams.name
+          patientMrn = e.payload.patient.mrn || visitParams.mrn
+        } else {
+          throw e
+        }
+      }
+    }
+
+    const now = new Date()
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+    const vd = await visitsAPI.create({
+      patient_id: patientId,
+      visit_date: localDate(0),
+      visit_time: timeStr,
+      visit_type: visitParams.visit_type || 'Comprehensive Exam',
+    })
+
+    const createdVisit = {
+      ...(vd.visit || {}),
+      id: vd.visit?.id,
+      patient_id: patientId,
+      patient_name: patientName,
+      mrn: patientMrn,
+      patient_consent_recorded: true,
+      status: 'upcoming',
+    }
+
+    setVisits((p) => [...p, createdVisit].sort((a, b) => (a.visit_time || '').localeCompare(b.visit_time || '')))
+    await startVisit(createdVisit)
+  }
+
+  const handleStartScheduledVisit = async (visit) => {
+    await startVisit({ ...visit, patient_consent_recorded: true })
+  }
+
+  const handleStartInstantVisit = useCallback(async () => {
+    try {
+      const now = new Date()
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+      const autoMrn = `MRN-${now.getTime().toString().slice(-6)}`
+      
+      let patientId
+      let patientName = 'Dictated Patient'
+      try {
+        const pRes = await patientsAPI.create({
+          name: 'Dictated Patient (Pending AI Transcription)',
+          mrn: autoMrn,
+          date_of_birth: null,
+        })
+        patientId = pRes?.patient?.id
+        patientName = pRes?.patient?.name || patientName
+      } catch (e) {
+        if (e.payload?.patient?.id) {
+          patientId = e.payload.patient.id
+          patientName = e.payload.patient.name || patientName
+        } else {
+          showToast('Could not initialize instant consultation', 'error')
+          return
+        }
+      }
+
+      const vd = await visitsAPI.create({
+        patient_id: patientId,
+        visit_date: localDate(0),
+        visit_time: timeStr,
+        visit_type: 'Comprehensive Exam',
+      })
+
+      const createdVisit = {
+        ...(vd.visit || {}),
+        id: vd.visit?.id,
+        patient_id: patientId,
+        patient_name: patientName,
+        mrn: autoMrn,
+        patient_consent_recorded: true,
+        status: 'upcoming',
+      }
+
+      setVisits((p) => [...p, createdVisit].sort((a, b) => (a.visit_time || '').localeCompare(b.visit_time || '')))
+      setQuickRecOpen(false)
+      await startVisit(createdVisit)
+      showToast('🎙 Live consultation recording started — speak patient details anytime!')
+    } catch (err) {
+      showToast(err?.message || 'Failed to start instant consultation', 'error')
+    }
+  }, [startVisit])
+
+  const copyFullNoteToEmr = () => {
+    const rawContent = reviewNote?.final_note || cleanAiDraftForDisplay(reviewNote?.ai_draft) || ''
+    if (!rawContent.trim()) {
+      showToast('No note content available to copy', 'warn')
+      return
+    }
+    const formatted = buildNote(parseNote(rawContent))
+    navigator.clipboard?.writeText(formatted).then(() => {
+      setNoteCopied(true)
+      setTimeout(() => setNoteCopied(false), 2500)
+      showToast('✓ Clinical note copied to clipboard — ready to paste into EMR!')
+    }).catch(() => {
+      showToast('Failed to copy to clipboard', 'error')
+    })
   }
 
   const pauseResume = () => {

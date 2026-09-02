@@ -1,4 +1,4 @@
-import { Component } from 'react'
+import React, { Component } from 'react'
 
 export function PortalCrashFallback() {
   return (
@@ -22,8 +22,8 @@ export default class ErrorBoundary extends Component {
     return { error }
   }
 
-  componentDidCatch(error) {
-    console.error(`[${this.props.portalName || 'Portal'}] Render failed:`, error?.message || 'unknown')
+  componentDidCatch(error, errorInfo) {
+    console.error(`[${this.props.portalName || 'Portal'}] Render failed:`, error?.message || 'unknown', error?.stack, errorInfo)
   }
 
   handleRetry = () => {

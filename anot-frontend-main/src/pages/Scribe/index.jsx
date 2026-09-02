@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, useSidebarOffCanvasMode, portalSidebarAriaHidden, portalSidebarInert, ConfirmDialog, PortalSidebarBrand, parseTranscriptionBlocks } from '../shared'
 import { authAPI, usersAPI, visitsAPI, notesAPI, isAbortError } from '../../services/api'
 import { POLL_INTERVAL_MS } from '../../services/transcriptionService'
