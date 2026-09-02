@@ -31,6 +31,7 @@ import { useSessionTimeout } from '../../utils/useSessionTimeout'
 import { saveClinicianTemplates } from '../../utils/clinicianTemplates'
 import PatientConsentModal from '../../components/PatientConsentModal'
 import AiDraftReadonly from '../../components/AiDraftReadonly'
+import ScribeFinalNoteEditor from '../../components/ScribeFinalNoteEditor'
 import { cleanAiDraftForDisplay } from '../../utils/aiDraftFormat'
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -2733,182 +2734,113 @@ function Clinician() {
                 </div>
               }
             />
-            <div className="sf-body">
-              <button type="button" className="cl-note-detail-back" onClick={closeNoteDetail}>
-                ← Back to Notes
-              </button>
-              
-              <div className="cl-note-detail-header">
-                <div className="cl-note-detail-chip">
-                  <span className="cl-note-detail-chip__icon" aria-hidden>📄</span>
-                  <span className="cl-note-detail-chip__label">
-                    {reviewNote.final_note
-                      ? `Final Note — ${reviewNote.scribe_name || 'Scribe'}`
-                      : reviewNote.ai_draft
-                        ? 'AI Draft — scribe has not submitted yet'
-                        : `Final Note — ${reviewNote.scribe_name || 'Scribe'}`}
-                  </span>
-                  {isNoteDetailCompleted(reviewNote) ? (
-                    <span className="cl-note-detail-chip__lock" title="Locked" aria-label="Locked">🔒</span>
-                  ) : null}
+            <div className="sf-body cl-note-review-body">
+              <div className="cl-note-review-top">
+                <button type="button" className="cl-note-detail-back" onClick={closeNoteDetail}>
+                  <span>←</span>
+                  <span>Back to Notes</span>
+                </button>
+                
+                <div className="cl-note-detail-header-card">
+                  <div className="cl-note-detail-chip">
+                    <span className="cl-note-detail-chip__icon" aria-hidden>📄</span>
+                    <span className="cl-note-detail-chip__label">
+                      {reviewNote.final_note
+                        ? `Final Note — ${reviewNote.scribe_name || 'Scribe'}`
+                        : reviewNote.ai_draft
+                          ? 'AI Draft — Scribe has not submitted yet'
+                          : `Final Note — ${reviewNote.scribe_name || 'Scribe'}`}
+                    </span>
+                    {isNoteDetailCompleted(reviewNote) ? (
+                      <span className="cl-note-detail-chip__lock" title="Locked" aria-label="Locked">🔒 Locked</span>
+                    ) : null}
+                  </div>
+
+                  {/* Action Bar - Always visible for unlocked notes */}
+                  {!isNoteDetailCompleted(reviewNote) && (
+                    <div className="cl-note-review-actions">
+                      {editingNote ? (
+                        <>
+                          <button
+                            type="button"
+                            className="cl-note-btn cl-note-btn--cancel"
+                            onClick={cancelEditingNote}
+                            disabled={savingNote}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            className="cl-note-btn cl-note-btn--save"
+                            onClick={saveEditedNote}
+                            disabled={savingNote}
+                          >
+                            {savingNote ? 'Saving…' : '💾 Save Changes'}
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            className="cl-note-btn cl-note-btn--edit"
+                            onClick={startEditingNote}
+                          >
+                            ✏️ Edit Note
+                          </button>
+                          
+                          <button
+                            type="button"
+                            className="cl-note-btn cl-note-btn--lock"
+                            onClick={() => setLockConfirmOpen(true)}
+                          >
+                            🔒 Lock Note
+                          </button>
+                          
+                          {!editReq[reviewNote.note_id] ? (
+                            <button
+                              type="button"
+                              className="cl-note-btn cl-note-btn--request"
+                              onClick={async () => {
+                                try {
+                                  await notesAPI.requestEdit(reviewNote.note_id)
+                                  setEditReq((p) => ({ ...p, [reviewNote.note_id]: true }))
+                                  showToast('Edit request sent')
+                                } catch (e) {
+                                  showToast(e.message, 'error')
+                                }
+                              }}
+                            >
+                              ↩️ Request Edit from Scribe
+                            </button>
+                          ) : (
+                            <span className="cl-note-chip--requested">
+                              ✓ Edit Requested
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
-              {/* Action Bar - Always visible for unlocked notes */}
-              {!isNoteDetailCompleted(reviewNote) && (
-                <div style={{
-                  display: 'flex',
-                  gap: '12px',
-                  padding: '16px',
-                  background: '#F9FAFB',
-                  borderRadius: '12px',
-                  marginBottom: '16px',
-                  border: '1px solid #E5E7EB',
-                  flexWrap: 'wrap',
-                  alignItems: 'center',
-                }}>
-                  {editingNote ? (
-                    <>
-                      <button
-                        type="button"
-                        style={{
-                          padding: '10px 20px',
-                          borderRadius: '8px',
-                          border: '1px solid #D1D5DB',
-                          background: 'white',
-                          color: '#374151',
-                          fontWeight: 600,
-                          fontSize: '14px',
-                          cursor: 'pointer',
-                        }}
-                        onClick={cancelEditingNote}
-                        disabled={savingNote}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="button"
-                        style={{
-                          padding: '10px 20px',
-                          borderRadius: '8px',
-                          border: 'none',
-                          background: '#10B981',
-                          color: 'white',
-                          fontWeight: 600,
-                          fontSize: '14px',
-                          cursor: savingNote ? 'not-allowed' : 'pointer',
-                          opacity: savingNote ? 0.6 : 1,
-                        }}
-                        onClick={saveEditedNote}
-                        disabled={savingNote}
-                      >
-                        {savingNote ? 'Saving...' : '💾 Save Changes'}
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        style={{
-                          padding: '10px 20px',
-                          borderRadius: '8px',
-                          border: 'none',
-                          background: '#3B82F6',
-                          color: 'white',
-                          fontWeight: 600,
-                          fontSize: '14px',
-                          cursor: 'pointer',
-                        }}
-                        onClick={startEditingNote}
-                      >
-                        ✏️ Edit Note
-                      </button>
-                      
-                      <button
-                        type="button"
-                        style={{
-                          padding: '10px 20px',
-                          borderRadius: '8px',
-                          border: 'none',
-                          background: '#10B981',
-                          color: 'white',
-                          fontWeight: 600,
-                          fontSize: '14px',
-                          cursor: 'pointer',
-                        }}
-                        onClick={() => setLockConfirmOpen(true)}
-                      >
-                        🔒 Lock Note
-                      </button>
-                      
-                      {!editReq[reviewNote.note_id] ? (
-                        <button
-                          type="button"
-                          style={{
-                            padding: '10px 20px',
-                            borderRadius: '8px',
-                            border: '1px solid #D1D5DB',
-                            background: 'white',
-                            color: '#374151',
-                            fontWeight: 600,
-                            fontSize: '14px',
-                            cursor: 'pointer',
-                          }}
-                          onClick={async () => {
-                            try {
-                              await notesAPI.requestEdit(reviewNote.note_id)
-                              setEditReq((p) => ({ ...p, [reviewNote.note_id]: true }))
-                              showToast('Edit request sent')
-                            } catch (e) {
-                              showToast(e.message, 'error')
-                            }
-                          }}
-                        >
-                          ↩️ Request Edit from Scribe
-                        </button>
-                      ) : (
-                        <span style={{
-                          padding: '8px 16px',
-                          borderRadius: '8px',
-                          background: '#FEF3C7',
-                          color: '#92400E',
-                          fontSize: '13px',
-                          fontWeight: 600,
-                        }}>
-                          ✓ Edit Requested
-                        </span>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
-
-              <div className="sf-note-card">
+              <div className="cl-note-card">
                 {editingNote ? (
-                  <textarea
-                    className="sf-textarea"
-                    style={{
-                      width: '100%',
-                      minHeight: '400px',
-                      fontFamily: 'ui-monospace, monospace',
-                      fontSize: '13px',
-                      lineHeight: '1.6',
-                      padding: '16px',
-                      border: '2px solid #4F46E5',
-                      borderRadius: '8px',
-                      resize: 'vertical',
-                    }}
+                  <ScribeFinalNoteEditor
                     value={editedNoteContent}
-                    onChange={(e) => setEditedNoteContent(e.target.value)}
-                    disabled={savingNote}
-                    autoFocus
+                    onChange={(val) => setEditedNoteContent(val)}
+                    readOnly={false}
                   />
                 ) : reviewNote.final_note ? (
-                  <pre className="sf-note-pre">{reviewNote.final_note}</pre>
+                  <ScribeFinalNoteEditor
+                    value={reviewNote.final_note}
+                    onChange={() => {}}
+                    readOnly
+                  />
                 ) : reviewNote.ai_draft ? (
                   <AiDraftReadonly aiDraft={reviewNote.ai_draft} />
                 ) : (
-                  <pre className="sf-note-pre">Scribe has not started drafting yet.</pre>
+                  <div className="cl-note-empty">Scribe has not started drafting yet.</div>
                 )}
               </div>
               {lockConfirmOpen ? (
