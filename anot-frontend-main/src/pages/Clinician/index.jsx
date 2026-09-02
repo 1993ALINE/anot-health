@@ -2016,7 +2016,7 @@ function Clinician() {
     else { startVisit(v) }
   }
 
-  const startVisit = async (v) => {
+  const startVisit = useCallback(async (v) => {
     if (active) {return}
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -2059,7 +2059,7 @@ function Clinician() {
       cRef.current = []
       showToast(micErr?.message || 'Failed to start recording. Please check microphone access.', 'error')
     }
-  }
+  }, [active, showToast])
 
   const handleStartQuickVisit = async (visitParams) => {
     let patientId = visitParams.patient_id
@@ -2164,7 +2164,7 @@ function Clinician() {
     } catch (err) {
       showToast(err?.message || 'Failed to start instant consultation', 'error')
     }
-  }, [startVisit])
+  }, [startVisit, showToast])
 
   const copyFullNoteToEmr = () => {
     const rawContent = reviewNote?.final_note || cleanAiDraftForDisplay(reviewNote?.ai_draft) || ''
@@ -2425,7 +2425,7 @@ function Clinician() {
       try {
         const endData = await visitsAPI.endVisit(visitId, duration)
         applyEndedVisitToState(visitId, endData, patientName, duration)
-      } catch (apiErr) {
+      } catch {
         // Fallback status update so clinician is never trapped in in-progress
         try {
           await visitsAPI.updateStatus(visitId, 'recording-uploaded')

@@ -20,7 +20,7 @@ export default defineConfig([
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
     rules: {
-      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      'no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^(React|_)' }],
       'no-console': ['warn', { allow: ['warn', 'error'] }],
       'eqeqeq': ['error', 'always'],
       'curly': ['error', 'all'],

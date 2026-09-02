@@ -2,8 +2,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   acquireWakeLock,
   releaseWakeLock,
-  startAudioKeepAlive,
-  stopAudioKeepAlive,
   startRecordingKeepAlive,
   stopRecordingKeepAlive,
 } from '../utils/recordingKeepAlive'
