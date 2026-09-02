@@ -26,11 +26,11 @@ function createClient() {
         ...(cookieJar.length ? { 'Cookie': cookieJar.join('; ') } : {}),
         ...(token ? { 'Authorization': 'Bearer ' + token } : {})
       };
+      if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method.toUpperCase()) && csrfToken) {
+        headers['X-CSRF-Token'] = csrfToken;
+      }
       if (body) {
         headers['Content-Type'] = 'application/json';
-        if (!['GET', 'HEAD'].includes(method) && csrfToken) {
-          headers['X-CSRF-Token'] = csrfToken;
-        }
       }
       const req = https.request({
         hostname: 'app.anot.health',
@@ -98,9 +98,10 @@ function createClient() {
     });
   }
 
-  async function login(email, password) {
+  async function login(email, password, options = { force: true }) {
     await fetchCsrf();
-    const res = await request('POST', '/api/auth/login', { email, password });
+    const { force = true } = options;
+    const res = await request('POST', '/api/auth/login', { email, password, force });
     if (res.body?.token) {
       token = res.body.token;
     }
