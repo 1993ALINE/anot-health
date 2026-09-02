@@ -146,8 +146,61 @@ async function transcribeAllAudioFiles(audioFiles, settings, visitId) {
   return { transcriptions, successCount }
 }
 
+/**
+ * Extract dictated patient information from audio transcripts.
+ * Looks for spoken patterns such as:
+ * - "Patient is John Smith" / "Patient name is Sarah Jenkins" / "Patient: John Doe"
+ * - "MRN 12345" / "Medical record number 12345"
+ * - "Date of birth July 14 1982" / "DOB 1982-07-14"
+ * - "45-year-old male" / "Age 45"
+ */
+function extractDictatedPatientDetails(transcript) {
+  if (!transcript || typeof transcript !== 'string') return null
+
+  const clean = transcript.replace(/\r\n/g, '\n').trim()
+  const details = {}
+
+  // 1. Patient Name matching
+  // Matches: "Patient is [Name]", "Patient name is [Name]", "Patient name [Name]", "Patient: [Name]", "Dictation for [Name]"
+  const nameMatch = clean.match(/(?:patient(?:'s)?(?:\s+name)?\s+(?:is|:)?\s*|dictation\s+(?:for|on)\s+)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/i)
+  if (nameMatch && nameMatch[1]) {
+    const rawName = nameMatch[1].trim()
+    const skipTerms = ['a male', 'a female', 'the patient', 'this patient', 'an established', 'a new', 'follow up']
+    if (!skipTerms.includes(rawName.toLowerCase())) {
+      details.name = rawName
+    }
+  }
+
+  // 2. MRN matching
+  const mrnMatch = clean.match(/(?:mrn|medical\s+record\s+number|chart\s+(?:number|id)|record\s+number)(?:\s+is|\s*:)?\s*([A-Za-z0-9\-]+)/i)
+  if (mrnMatch && mrnMatch[1] && mrnMatch[1].length >= 3 && mrnMatch[1].length <= 20) {
+    details.mrn = mrnMatch[1].trim().toUpperCase()
+  }
+
+  // 3. Date of birth matching
+  const dobMatch = clean.match(/(?:dob|date\s+of\s+birth|born(?:\s+on)?)(?:\s+is|\s*:)?\s*([A-Za-z0-9\s,\/\-]+?(?=\.|\n|,|\s+who|\s+is|\s+presents|\s+presents\s+with|$))/i)
+  if (dobMatch && dobMatch[1]) {
+    const rawDob = dobMatch[1].trim()
+    const parsed = Date.parse(rawDob)
+    if (!Number.isNaN(parsed) && rawDob.length >= 6) {
+      const d = new Date(parsed)
+      details.date_of_birth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    }
+  }
+
+  // 4. Age & Gender matching
+  const ageGenderMatch = clean.match(/(\d{1,3})(?:\s*|-)(?:year|yo|y\.o\.)(?:\s*|-)(?:old)?\s*(male|female|man|woman|boy|girl)/i)
+  if (ageGenderMatch) {
+    details.age = parseInt(ageGenderMatch[1], 10)
+    details.gender = ageGenderMatch[2].toLowerCase()
+  }
+
+  return Object.keys(details).length > 0 ? details : null
+}
+
 module.exports = {
   buildCombinedTranscription,
   buildAnthropicNotePrompt,
   transcribeAllAudioFiles,
+  extractDictatedPatientDetails,
 }

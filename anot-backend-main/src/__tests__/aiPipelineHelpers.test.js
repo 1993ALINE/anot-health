@@ -1,4 +1,4 @@
-const { buildAnthropicNotePrompt } = require('../utils/aiPipelineHelpers')
+const { buildAnthropicNotePrompt, extractDictatedPatientDetails } = require('../utils/aiPipelineHelpers')
 
 const patientInfo = {
   patient_name: 'Jane Doe',
@@ -6,6 +6,34 @@ const patientInfo = {
   visit_type: 'Follow-up',
   visit_date: '2026-01-01',
 }
+
+describe('extractDictatedPatientDetails', () => {
+  test('extracts patient name, MRN, and demographics from dictated speech', () => {
+    const transcript = 'Patient is Michael Scott, MRN 49201. He is a 45-year-old male presenting with acute lower back pain.'
+    const result = extractDictatedPatientDetails(transcript)
+    expect(result).not.toBeNull()
+    expect(result.name).toBe('Michael Scott')
+    expect(result.mrn).toBe('49201')
+    expect(result.age).toBe(45)
+    expect(result.gender).toBe('male')
+  })
+
+  test('extracts dictated patient name with Patient Name is prefix', () => {
+    const transcript = 'Patient name is Sarah Connor, chart number SC-882. 35yo female for annual wellness exam.'
+    const result = extractDictatedPatientDetails(transcript)
+    expect(result).not.toBeNull()
+    expect(result.name).toBe('Sarah Connor')
+    expect(result.mrn).toBe('SC-882')
+    expect(result.age).toBe(35)
+    expect(result.gender).toBe('female')
+  })
+
+  test('returns null when no patient dictation is present', () => {
+    const transcript = 'Doctor: How are you feeling today? Patient: My knee has been hurting for two weeks.'
+    const result = extractDictatedPatientDetails(transcript)
+    expect(result).toBeNull()
+  })
+})
 
 describe('buildAnthropicNotePrompt', () => {
   test('falls back to the default 5-section format when no template sections are given, plus coding sections', () => {

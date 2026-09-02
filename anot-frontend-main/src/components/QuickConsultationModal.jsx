@@ -8,6 +8,7 @@ export default function QuickConsultationModal({
   patients = [],
   onStartScheduledVisit,
   onStartQuickVisit,
+  onStartInstantVisit,
 }) {
   const [tab, setTab] = useState('scheduled') // 'scheduled' | 'new'
   const [patientSearch, setPatientSearch] = useState('')
@@ -39,6 +40,16 @@ export default function QuickConsultationModal({
     }
     setError('')
     onStartScheduledVisit(visit)
+    onClose()
+  }
+
+  const handleStartInstant = () => {
+    if (!consentGiven) {
+      setError('Please confirm patient consent before recording.')
+      return
+    }
+    setError('')
+    onStartInstantVisit?.()
     onClose()
   }
 
@@ -88,10 +99,35 @@ export default function QuickConsultationModal({
             <span className="quick-rec-modal__icon">🎙</span>
             <div>
               <h2 id="quick-rec-title" className="quick-rec-modal__title">Start Patient Consultation</h2>
-              <p className="quick-rec-modal__subtitle">Begin live consultation and AI clinical documentation</p>
+              <p className="quick-rec-modal__subtitle">Live recording & AI clinical documentation</p>
             </div>
           </div>
           <button type="button" className="quick-rec-modal__close" onClick={onClose} aria-label="Close modal">×</button>
+        </div>
+
+        {/* Instant Consultation (Zero Manual Input) */}
+        <div className="quick-rec-instant-card">
+          <div className="quick-rec-instant-card__info">
+            <div className="quick-rec-instant-card__title">
+              <span className="quick-rec-instant-card__badge">⚡ 1-Click Zero Typing</span>
+              <strong>Instant Consultation (Dictate Patient)</strong>
+            </div>
+            <p className="quick-rec-instant-card__desc">
+              Start recording immediately. Simply dictate the patient's name, MRN, and details during the consultation — AI will extract and structure them automatically.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="quick-rec-btn quick-rec-btn--instant"
+            onClick={handleStartInstant}
+            title="Start consultation immediately without entering patient details manually"
+          >
+            🎙 Instant Record
+          </button>
+        </div>
+
+        <div className="quick-rec-divider">
+          <span>or choose scheduled / manual patient</span>
         </div>
 
         {/* Tab switcher */}

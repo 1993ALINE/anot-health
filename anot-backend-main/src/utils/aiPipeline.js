@@ -14,6 +14,8 @@ const {
 
   transcribeAllAudioFiles,
 
+  extractDictatedPatientDetails,
+
 } = require('./aiPipelineHelpers')
 
 const { resolveTemplateSections } = require('./noteTemplateSections')
@@ -256,7 +258,38 @@ async function persistTranscriptionAndDraft(id, transcriptions, visit, options =
 
   const transcriptionData = JSON.stringify(transcriptions)
 
+  // Auto-extract dictated patient demographics from audio transcripts
+  try {
+    const combinedTranscript = transcriptions.join(' ')
+    const dictated = extractDictatedPatientDetails(combinedTranscript)
+    if (dictated && visit?.patient_id) {
+      const currentName = String(visit.patient_name || '').toLowerCase()
+      const isPlaceholder = !currentName ||
+        currentName.startsWith('dictated') ||
+        currentName.startsWith('walk-in') ||
+        currentName.startsWith('provisional') ||
+        currentName.startsWith('pending') ||
+        currentName.includes('unnamed')
 
+      if (dictated.name && (isPlaceholder || dictated.name.length > 3)) {
+        await pool.query(
+          `UPDATE patients SET 
+             name = COALESCE($1, name), 
+             mrn = COALESCE($2, mrn), 
+             date_of_birth = COALESCE($3, date_of_birth),
+             updated_at = NOW() 
+           WHERE id = $4`,
+          [dictated.name, dictated.mrn || null, dictated.date_of_birth || null, visit.patient_id]
+        )
+        // Also update local visit object for note generation context
+        visit.patient_name = dictated.name
+        if (dictated.mrn) visit.mrn = dictated.mrn
+        console.log(`[aiPipeline] Automatically updated patient #${visit.patient_id} from dictation:`, dictated)
+      }
+    }
+  } catch (dictErr) {
+    console.warn('[aiPipeline] Dictated patient detail update skipped:', dictErr?.message)
+  }
 
   const aiNote = await resolveAiDraft(transcriptions, visit)
 
