@@ -19,6 +19,8 @@ const PROFILE_COLUMNS = [
     { name: 'mfa_enabled', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_enabled BOOLEAN NOT NULL DEFAULT false' },
     { name: 'mfa_method', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_method VARCHAR(10)' },
     { name: 'mfa_destination', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_destination TEXT' },
+    { name: 'active_session_id', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS active_session_id TEXT DEFAULT NULL' },
+    { name: 'last_active_at', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active_at TIMESTAMPTZ DEFAULT NULL' },
     { name: 'failed_login_attempts', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INT NOT NULL DEFAULT 0' },
     { name: 'locked_until', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ' },
     { name: 'last_failed_login_at', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS last_failed_login_at TIMESTAMPTZ' },
@@ -28,6 +30,10 @@ const PROFILE_INDEXES = [
     {
         name: 'idx_users_force_password_change',
         ddl: 'CREATE INDEX IF NOT EXISTS idx_users_force_password_change ON users(force_password_change) WHERE force_password_change = true',
+    },
+    {
+        name: 'idx_users_active_session',
+        ddl: 'CREATE INDEX IF NOT EXISTS idx_users_active_session ON users(active_session_id) WHERE active_session_id IS NOT NULL',
     },
 ]
 

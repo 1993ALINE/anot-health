@@ -1,3 +1,4 @@
+const crypto = require('crypto')
 const bcrypt = require('bcryptjs')
 const { getBcryptRounds } = require('../utils/bcryptCost')
 const jwt = require('jsonwebtoken')
@@ -13,6 +14,9 @@ const { incrementTokenVersion } = require('../utils/tokenVersion')
 const { loginRequiresMfa, issueAndSendCode, verifyMfaCode, maskDestination, isMfaFullyEnrolled, PHI_ROLES } = require('../services/mfaService')
 const { setSessionCookie, clearSessionCookie } = require('../utils/sessionCookie')
 const { isLocked, lockoutMessage, recordFailedLogin, resetFailedLogins } = require('../services/accountLockout')
+
+const SESSION_INACTIVITY_MS = 15 * 60 * 1000 // 15 minutes of inactivity timeout
+
 function roleToStaffModule(role) {
     const m = {
         admin: 'admins',
@@ -30,16 +34,18 @@ const PHI_TRAINING_VERSION = 1
 
 // ─── GENERATE JWT TOKEN ───────────────────────────────────────────────────────
 
-const generateToken = (user) => {
+const generateToken = (user, extraClaims = {}) => {
     return jwt.sign(
         {
             id: user.id,
             userId: user.id,
             role: user.role,
             token_version: Number(user.token_version) || 0,
+            session_id: user.active_session_id || extraClaims.session_id || null,
+            ...extraClaims,
         },
         process.env.JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRES_IN || '1h' }
+        { expiresIn: process.env.JWT_EXPIRES_IN || '8h' }
     )
 }
 
@@ -151,7 +157,53 @@ async function buildPostPasswordLoginResponse(user, req, res) {
         }
     }
 
-    const token = generateToken(user)
+    // ─── SINGLE CONCURRENT SESSION PER USER ──────────────────────────────
+    const hasActiveSession = !!(
+        user.active_session_id &&
+        user.last_active_at &&
+        (Date.now() - new Date(user.last_active_at).getTime() < SESSION_INACTIVITY_MS)
+    )
+
+    if (hasActiveSession && !req.body?.force) {
+        void auditLog(
+            { id: user.id, name: user.name, role: user.role },
+            'LOGIN_CONCURRENT_BLOCKED',
+            'auth',
+            String(user.id),
+            'Concurrent login attempt blocked — active session already exists for this user',
+            { req, module_key: 'authentication', status: 'warning', action_category: 'authentication' }
+        ).catch(reportAuditFailure)
+        return {
+            status: 409,
+            body: {
+                error: 'This account already has an active session on another device. Only one session is permitted per user.',
+                code: 'CONCURRENT_SESSION_ACTIVE',
+                canForce: true,
+            },
+        }
+    }
+
+    if (req.body?.force && hasActiveSession) {
+        await incrementTokenVersion(user.id)
+        user.token_version = (Number(user.token_version) || 0) + 1
+        void auditLog(
+            { id: user.id, name: user.name, role: user.role },
+            'CONCURRENT_SESSION_TERMINATED',
+            'auth',
+            String(user.id),
+            'Prior active session terminated by user force sign-in',
+            { req, module_key: 'authentication', status: 'warning', action_category: 'authentication' }
+        ).catch(reportAuditFailure)
+    }
+
+    const sessionId = crypto.randomUUID()
+    await pool.query(
+        'UPDATE users SET active_session_id = $1, last_active_at = NOW() WHERE id = $2',
+        [sessionId, user.id]
+    )
+    user.active_session_id = sessionId
+
+    const token = generateToken(user, { session_id: sessionId })
     setSessionCookie(res, token)
     void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_SUCCESS', 'auth', String(user.id), 'Signed in successfully', { req, module_key: 'authentication', status: 'success', action_category: 'authentication' }).catch(reportAuditFailure)
     cloudWatchAudit.logLogin(user.id, user.email, user.role, req.clientIp, 'success')
@@ -160,17 +212,25 @@ async function buildPostPasswordLoginResponse(user, req, res) {
         body: {
             message: 'Login successful',
             user: toAuthUser(user),
+            token,
         },
     }
 }
 
-/** Issue full session: HttpOnly cookie + user payload (no token in JSON body). */
-function respondFullSession(res, user, extra = {}) {
-    const token = generateToken(user)
+/** Issue full session: HttpOnly cookie + user payload (with unique session_id). */
+async function respondFullSession(res, user, extra = {}) {
+    const sessionId = crypto.randomUUID()
+    await pool.query(
+        'UPDATE users SET active_session_id = $1, last_active_at = NOW() WHERE id = $2',
+        [sessionId, user.id]
+    )
+    user.active_session_id = sessionId
+    const token = generateToken(user, { session_id: sessionId })
     setSessionCookie(res, token)
     return res.status(200).json({
         message: extra.message || 'Login successful',
         user: toAuthUser(user),
+        token,
         ...extra,
     })
 }
@@ -610,6 +670,7 @@ const { clearCsrfCookie } = require('../middleware/csrf')
 
 const logout = async (req, res) => {
     try {
+        await pool.query('UPDATE users SET active_session_id = NULL, last_active_at = NULL WHERE id = $1', [req.user.id]).catch(() => {})
         await incrementTokenVersion(req.user.id)
         void auditLog(req.user, 'LOGOUT', 'auth', String(req.user.id), 'User signed out', { req, module_key: 'authentication', status: 'success', action_category: 'authentication' }).catch(reportAuditFailure)
         const emailRow = await pool.query('SELECT email FROM users WHERE id = $1', [req.user.id])

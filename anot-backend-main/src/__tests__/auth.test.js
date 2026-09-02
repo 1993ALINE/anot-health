@@ -93,6 +93,24 @@ describe('validateUserAuthState (session)', () => {
     expect(result.ok).toBe(false)
     expect(result.error).toMatch(/session expired/i)
   })
+
+  test('rejects session_id mismatch when account was logged in elsewhere', () => {
+    const result = validateUserAuthState(
+      { found: true, status: 'active', role: 'clinician', token_version: 1, active_session_id: 'sess-device-b' },
+      { role: 'clinician', token_version: 1, session_id: 'sess-device-a' },
+    )
+    expect(result.ok).toBe(false)
+    expect(result.code).toBe('SESSION_TERMINATED')
+    expect(result.error).toMatch(/logged into on another device/i)
+  })
+
+  test('accepts matching active_session_id', () => {
+    const result = validateUserAuthState(
+      { found: true, status: 'active', role: 'clinician', token_version: 1, active_session_id: 'sess-device-a' },
+      { role: 'clinician', token_version: 1, session_id: 'sess-device-a' },
+    )
+    expect(result.ok).toBe(true)
+  })
 })
 
 describe('restrict (role enforcement)', () => {

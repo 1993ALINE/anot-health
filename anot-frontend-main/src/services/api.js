@@ -247,10 +247,11 @@ const handleResponse = async (res) => {
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 
 export const authAPI = {
-  login: async (email, password) => {
+  login: async (email, password, options = {}) => {
+    const { force = false } = typeof options === 'boolean' ? { force: options } : options
     const data = await apiMutate('POST', '/auth/login', {
       includeAuth: false,
-      body: { email, password },
+      body: { email, password, force },
     })
     // Persist session when login completes (HttpOnly cookie set by server).
     if (data.user && !data.temporaryToken && !data.requireMfa && !data.requirePhiTraining && !data.requirePasswordChange) {

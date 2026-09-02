@@ -17,13 +17,15 @@ async function getUserAuthState(userId) {
     const cached = userCheckCache.get(key)
     if (cached && cached.expiresAt > now) return cached
 
-    const { rows } = await pool.query('SELECT status, role, token_version FROM users WHERE id = $1', [key])
+    const { rows } = await pool.query('SELECT status, role, token_version, active_session_id, last_active_at FROM users WHERE id = $1', [key])
     const row = rows[0]
     const state = {
         found:  !!row,
         status: row ? row.status : null,
         role:   row ? row.role : null,
         token_version: row ? Number(row.token_version) || 0 : null,
+        active_session_id: row ? row.active_session_id : null,
+        last_active_at: row ? row.last_active_at : null,
         expiresAt: now + USER_CHECK_TTL_MS,
     }
     userCheckCache.set(key, state)
@@ -74,6 +76,14 @@ function validateUserAuthState(state, decoded) {
     const dbVersion = Number(state.token_version) || 0
     if (jwtVersion !== dbVersion) {
         return { ok: false, status: 401, error: 'Session expired. Please log in again.' }
+    }
+    if (decoded.session_id && state.active_session_id && decoded.session_id !== state.active_session_id) {
+        return {
+            ok: false,
+            status: 401,
+            error: 'Your session has ended because this account was logged into on another device.',
+            code: 'SESSION_TERMINATED',
+        }
     }
     return { ok: true }
 }
@@ -201,6 +211,12 @@ const protect = async (req, res, next) => {
 
         const mfaCheck = checkMfaRequired(req.user, req.path)
         if (!mfaCheck.ok) return sendAuthFailure(res, mfaCheck)
+
+        // Throttle last_active_at touch (every 60s) to maintain session liveness
+        if (state && (!state.last_active_at || Date.now() - new Date(state.last_active_at).getTime() > 60 * 1000)) {
+            pool.query('UPDATE users SET last_active_at = NOW() WHERE id = $1', [decoded.id]).catch(() => {})
+            state.last_active_at = new Date()
+        }
 
         next()
     } catch (err) {

@@ -212,6 +212,7 @@ export default function Login() {
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [concurrentSessionActive, setConcurrentSessionActive] = useState(false)
   const [phiTrainingToken, setPhiTrainingToken] = useState(null)
   const [passwordChangeToken, setPasswordChangeToken] = useState(null)
   const [csrfTokenFetched, setCsrfTokenFetched] = useState(false)
@@ -297,8 +298,10 @@ export default function Login() {
     goToDashboard(data.user)
   }
 
-  const handleLogin = async (e) => {
-    e.preventDefault()
+  const handleLogin = async (e, force = false) => {
+    if (e) {
+      e.preventDefault()
+    }
     setError('')
     if (!email || !password) {
       setError('Please enter your email and password.')
@@ -307,10 +310,17 @@ export default function Login() {
     setLoading(true)
     try {
       await fetchCsrfToken(API_BASE, { forceRefresh: true })
-      const data = await authAPI.login(email.trim(), password)
+      const data = await authAPI.login(email.trim(), password, { force })
+      setConcurrentSessionActive(false)
       routeAfterAuth(data)
     } catch (err) {
-      setError(humanizeAuthError(err))
+      if (err?.status === 409 || err?.code === 'CONCURRENT_SESSION_ACTIVE') {
+        setConcurrentSessionActive(true)
+        setError(err?.message || 'This account is currently active on another device. Only one session is permitted per user.')
+      } else {
+        setConcurrentSessionActive(false)
+        setError(humanizeAuthError(err))
+      }
     } finally {
       setLoading(false)
     }
@@ -462,9 +472,26 @@ export default function Login() {
                     </div>
                   ) : null}
 
-                  <button type="submit" className="login-page__submit" disabled={loading || !csrfReady}>
-                    {loading ? 'Signing in…' : `Sign in to ${branding.system_name || 'Anot'}`}
-                  </button>
+                  {concurrentSessionActive ? (
+                    <div className="login-page__concurrent-box" style={{ margin: '0.75rem 0 1rem', padding: '0.75rem 1rem', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: '8px' }}>
+                      <p style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', color: '#f87171', lineHeight: 1.4 }}>
+                        Only one session is permitted per user. Would you like to terminate the other device&apos;s session and sign in here?
+                      </p>
+                      <button
+                        type="button"
+                        className="login-page__submit"
+                        onClick={() => handleLogin(null, true)}
+                        disabled={loading || !csrfReady}
+                        style={{ background: '#dc2626', borderColor: '#b91c1c' }}
+                      >
+                        {loading ? 'Terminating & Signing In…' : 'Log Out Other Device & Sign In Here'}
+                      </button>
+                    </div>
+                  ) : (
+                    <button type="submit" className="login-page__submit" disabled={loading || !csrfReady}>
+                      {loading ? 'Signing in…' : `Sign in to ${branding.system_name || 'Anot'}`}
+                    </button>
+                  )}
                 </form>
 
                 <p className="login-page__footer">
