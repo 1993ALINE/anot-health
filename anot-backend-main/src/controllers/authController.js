@@ -14,6 +14,7 @@ const { incrementTokenVersion } = require('../utils/tokenVersion')
 const { loginRequiresMfa, issueAndSendCode, verifyMfaCode, maskDestination, isMfaFullyEnrolled, PHI_ROLES } = require('../services/mfaService')
 const { setSessionCookie, clearSessionCookie } = require('../utils/sessionCookie')
 const { isLocked, lockoutMessage, recordFailedLogin, resetFailedLogins } = require('../services/accountLockout')
+const { invalidateUserAuthCache } = require('../middleware/auth')
 
 const SESSION_INACTIVITY_MS = 15 * 60 * 1000 // 15 minutes of inactivity timeout
 
@@ -202,6 +203,7 @@ async function buildPostPasswordLoginResponse(user, req, res) {
         [sessionId, user.id]
     )
     user.active_session_id = sessionId
+    invalidateUserAuthCache(user.id)
 
     const token = generateToken(user, { session_id: sessionId })
     setSessionCookie(res, token)
@@ -225,6 +227,7 @@ async function respondFullSession(res, user, extra = {}) {
         [sessionId, user.id]
     )
     user.active_session_id = sessionId
+    invalidateUserAuthCache(user.id)
     const token = generateToken(user, { session_id: sessionId })
     setSessionCookie(res, token)
     return res.status(200).json({
@@ -672,6 +675,7 @@ const logout = async (req, res) => {
     try {
         await pool.query('UPDATE users SET active_session_id = NULL, last_active_at = NULL WHERE id = $1', [req.user.id]).catch(() => {})
         await incrementTokenVersion(req.user.id)
+        invalidateUserAuthCache(req.user.id)
         void auditLog(req.user, 'LOGOUT', 'auth', String(req.user.id), 'User signed out', { req, module_key: 'authentication', status: 'success', action_category: 'authentication' }).catch(reportAuditFailure)
         const emailRow = await pool.query('SELECT email FROM users WHERE id = $1', [req.user.id])
         cloudWatchAudit.logLogout(req.user.id, emailRow.rows[0]?.email || null, req.clientIp)

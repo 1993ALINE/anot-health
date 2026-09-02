@@ -8,7 +8,7 @@ const { isMfaDisabled } = require('../services/mfaService')
 // role changed, after the token was issued (tokens live up to JWT_EXPIRES_IN).
 // We re-check the account against the DB, but cache the result briefly so we
 // don't add a query to every single authenticated request.
-const USER_CHECK_TTL_MS = 10 * 1000
+const USER_CHECK_TTL_MS = 2 * 1000
 const userCheckCache = new Map() // userId -> { status, role, found, expiresAt }
 
 async function getUserAuthState(userId) {
