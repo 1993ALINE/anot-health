@@ -33,6 +33,8 @@ import PatientConsentModal from '../../components/PatientConsentModal'
 import AiDraftReadonly from '../../components/AiDraftReadonly'
 import ScribeFinalNoteEditor from '../../components/ScribeFinalNoteEditor'
 import { cleanAiDraftForDisplay } from '../../utils/aiDraftFormat'
+import { startRecordingKeepAlive, stopRecordingKeepAlive } from '../../utils/recordingKeepAlive'
+import * as offlineAudioQueue from '../../utils/offlineAudioQueue'
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -2001,15 +2003,28 @@ function Clinician() {
       cRef.current = []; mRef.current = rec
       rec.ondataavailable = (e) => { if (e.data?.size > 0) {cRef.current.push(e.data)} }
       rec.start(1000)
-      await visitsAPI.updateStatus(v.id, 'in-progress')
+
+      // Keep screen awake & prevent OS audio pipeline suspension on sleep/lock
+      startRecordingKeepAlive(stream).catch(() => {})
+
+      // Try updating server status, but do NOT fail/abort recording if offline
+      try {
+        await visitsAPI.updateStatus(v.id, 'in-progress')
+      } catch (netErr) {
+        console.warn('[startVisit] Server status update skipped in offline mode:', netErr?.message)
+      }
+
       setVisits(p => p.map(x => x.id === v.id ? { ...x, status:'in-progress' } : x))
       setActive(v); setPaused(false); setTimer(0)
       tRef.current = setInterval(() => setTimer(t => t + 1), 1000)
-      showToast('🎙 Recording started')
-    } catch {
+
+      const isOffline = !navigator.onLine
+      showToast(isOffline ? '🎙 Recording started (offline mode)' : '🎙 Recording started')
+    } catch (micErr) {
       // Tear down anything that started before the failure so we never leak a
       // live mic stream (red recording indicator) or a running timer.
       clearInterval(tRef.current)
+      stopRecordingKeepAlive().catch(() => {})
       const rec = mRef.current
       try {
         if (rec && rec.state !== 'inactive') {
@@ -2021,7 +2036,7 @@ function Clinician() {
       } catch { /* recorder already torn down */ }
       mRef.current = null
       cRef.current = []
-      showToast('Failed to start visit. Please try again.', 'error')
+      showToast(micErr?.message || 'Failed to start recording. Please check microphone access.', 'error')
     }
   }
 
@@ -2087,8 +2102,9 @@ function Clinician() {
   /**
    * Stop recorder and upload remaining audio blob
    */
-  const processRemainingAudio = (rec, visitId) => new Promise((resolve) => {
+  const processRemainingAudio = (rec, visitId, patientId, patientName, duration) => new Promise((resolve) => {
     if (!rec || rec.state === 'inactive') {
+      stopRecordingKeepAlive().catch(() => {})
       resolve({ uploadQueued: false })
       return
     }
@@ -2100,14 +2116,20 @@ function Clinician() {
         } catch (err) {
           try {
             const b = normalizeAudioBlob(new Blob(cRef.current, { type: rec.mimeType || 'audio/webm' }))
-            await queueAudioUpload({ visitId, blob: b, mode: 'primary', durationSeconds: timer })
+            await queueAudioUpload({ visitId, blob: b, mode: 'primary', durationSeconds: duration })
+            await offlineAudioQueue.addToQueue(b, patientId, visitId, {
+              mode: 'primary',
+              durationSeconds: duration,
+              patientName,
+            }).catch(() => {})
             uploadQueued = true
           } catch {
             showToast(formatUploadError(err), 'error')
           }
         }
       }
-      rec.stream.getTracks().forEach(t => t.stop())
+      rec.stream?.getTracks().forEach(t => t.stop())
+      stopRecordingKeepAlive().catch(() => {})
       resolve({ uploadQueued })
     }
     rec.stop()
@@ -2123,6 +2145,7 @@ function Clinician() {
     cRef.current = []
     mRef.current = null
     longRecWarnRef.current = false
+    stopRecordingKeepAlive().catch(() => {})
   }
 
   /**
@@ -2157,6 +2180,7 @@ function Clinician() {
     const patientName = active.patient_name
     try {
       clearInterval(tRef.current)
+      stopRecordingKeepAlive().catch(() => {})
       const rec = mRef.current
       if (rec && rec.state !== 'inactive') {
         rec.onstop = null
@@ -2164,7 +2188,11 @@ function Clinician() {
         rec.stop()
       }
       rec?.stream?.getTracks().forEach(t => t.stop())
-      await visitsAPI.updateStatus(visitId, 'upcoming')
+      try {
+        await visitsAPI.updateStatus(visitId, 'upcoming')
+      } catch {
+        /* offline safe */
+      }
       setVisits(p => p.map(x => x.id === visitId ? { ...x, status: 'upcoming' } : x))
       resetRecordingState()
       showToast(`Recording cancelled for ${patientName}`)
@@ -2229,6 +2257,7 @@ function Clinician() {
   const endVisit = async () => {
     if (!active) { return }
     const visitId = active.id
+    const patientId = active.patient_id
     const patientName = active.patient_name
     const duration = timer
 
@@ -2241,14 +2270,14 @@ function Clinician() {
 
       let uploadQueued = false
       try {
-        const res = await processRemainingAudio(rec, visitId)
+        const res = await processRemainingAudio(rec, visitId, patientId, patientName, duration)
         uploadQueued = res?.uploadQueued || false
       } catch (uploadErr) {
         console.error('[endVisit] audio process error:', uploadErr)
       }
 
       if (uploadQueued) {
-        showToast('Upload queued — recording will sync automatically.', 'info')
+        showToast('✓ Recording saved offline — will sync automatically when online.', 'info')
       }
 
       try {
@@ -2258,21 +2287,24 @@ function Clinician() {
         // Fallback status update so clinician is never trapped in in-progress
         try {
           await visitsAPI.updateStatus(visitId, 'recording-uploaded')
-          setVisits((p) =>
-            p.map((v) =>
-              v.id === visitId
-                ? {
-                    ...v,
-                    status: 'recording-uploaded',
-                    transcription_status: 'processing',
-                    duration_seconds: duration,
-                  }
-                : v
-            )
-          )
-          showToast(`✓ Encounter ended for ${patientName}`)
         } catch {
-          handleVisitEndError(apiErr)
+          /* offline fallback */
+        }
+        setVisits((p) =>
+          p.map((v) =>
+            v.id === visitId
+              ? {
+                  ...v,
+                  status: 'recording-uploaded',
+                  transcription_status: 'processing',
+                  duration_seconds: duration,
+                  offline_pending: uploadQueued,
+                }
+              : v
+          )
+        )
+        if (!uploadQueued) {
+          showToast(`✓ Encounter ended for ${patientName}`)
         }
       }
     } catch (err) {
@@ -2290,7 +2322,11 @@ function Clinician() {
       const rec = new MediaRecorder(stream, getMime() ? { mimeType: getMime() } : {})
       acRef.current = []; arRef.current = rec
       rec.ondataavailable = (e) => { if (e.data?.size > 0) {acRef.current.push(e.data)} }
-      rec.start(1000); setAddRec(v); setAddTimer(0); setAddPaused(false)
+      rec.start(1000)
+
+      startRecordingKeepAlive(stream).catch(() => {})
+
+      setAddRec(v); setAddTimer(0); setAddPaused(false)
       atRef.current = setInterval(() => setAddTimer(t => t + 1), 1000)
     } catch { showToast('Microphone access denied.', 'error') }
   }
@@ -2314,13 +2350,20 @@ function Clinician() {
               try {
                 const b = normalizeAudioBlob(new Blob(acRef.current, { type: arRef.current.mimeType || 'audio/webm' }))
                 await queueAudioUpload({ visitId: vid, blob: b, mode: 'append' })
-                showToast('Upload failed — recording is saved in this tab and will retry automatically. Keep this tab open.', 'error')
+                await offlineAudioQueue.addToQueue(b, addRec.patient_id, vid, {
+                  mode: 'append',
+                  durationSeconds: extra,
+                  patientName: addRec.patient_name,
+                }).catch(() => {})
+                showToast('Recording saved locally — will upload automatically when online.', 'info')
               } catch {
                 showToast(formatUploadError(err), 'error')
               }
             }
           }
-          arRef.current?.stream?.getTracks().forEach(t => t.stop()); res()
+          arRef.current?.stream?.getTracks().forEach(t => t.stop())
+          stopRecordingKeepAlive().catch(() => {})
+          res()
         }
         arRef.current.stop()
       })
