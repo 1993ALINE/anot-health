@@ -353,9 +353,7 @@ const endVisit = async (req, res) => {
       )
       if (!lock.rows[0]) return { notFound: true }
 
-      if (!lock.rows[0].audio_file) {
-        return { noAudio: true }
-      }
+      const hasAudio = !!(lock.rows[0].audio_file && String(lock.rows[0].audio_file).trim() !== '')
 
       const hasDuration = await visitHasDurationSeconds()
       const updated = hasDuration
@@ -389,32 +387,33 @@ const endVisit = async (req, res) => {
         'VISIT_ENDED',
         'visit',
         String(id),
-        `Visit ended — duration: ${duration_seconds}s`,
+        `Visit ended — duration: ${duration_seconds || 0}s`,
         client,
         { req, module_key: 'clinical', action_category: 'update', status: 'success' }
       )
 
-      return { visit: updated.rows[0] }
+      return { visit: updated.rows[0], hasAudio }
     })
 
     if (visit.notFound) return res.status(404).json({ error: 'Visit not found.' })
-    if (visit.noAudio)  return res.status(400).json({ error: 'Cannot end visit before any audio is uploaded.' })
 
     res.status(200).json({
-      message: 'Visit ended. AI transcription starting...',
-      visit: { ...visit.visit, transcription_status: 'processing' },
-      transcription_status: 'processing',
+      message: visit.hasAudio ? 'Visit ended. AI transcription starting...' : 'Visit ended.',
+      visit: { ...visit.visit, transcription_status: visit.hasAudio ? 'processing' : 'none' },
+      transcription_status: visit.hasAudio ? 'processing' : 'none',
     })
 
-    // Run AI pipeline in background (non-blocking)
-    setImmediate(() => {
-      console.log(`[transcription] endVisit triggered pipeline for visit ${id}`)
-      runAIPipeline(id, { user: req.user, req })
-        .catch((err) => console.error(`[transcription] Background AI error for visit ${id}:`, err.message))
-    })
+    // Run AI pipeline in background (non-blocking) only if audio is attached
+    if (visit.hasAudio) {
+      setImmediate(() => {
+        console.log(`[transcription] endVisit triggered pipeline for visit ${id}`)
+        runAIPipeline(id, { user: req.user, req })
+          .catch((err) => console.error(`[transcription] Background AI error for visit ${id}:`, err.message))
+      })
+    }
 
   } catch (err) {
-        sendHttpError(res, 500, err, { context: 'undefined', req })
+    sendHttpError(res, 500, err, { context: 'undefined', req })
   }
 }
 

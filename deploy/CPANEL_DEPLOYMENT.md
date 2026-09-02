@@ -66,7 +66,7 @@ npm run build
 **Linux / macOS:**
 
 ```bash
-cd anot-frontend-main/anot-frontend-main
+cd anot-frontend-main
 printf '%s\n' 'VITE_API_URL=https://api.yourdomain.com/api' > .env.production
 npm ci && npm run build
 ```

@@ -36,8 +36,8 @@ BUCKET="${BUCKET:-${PROJECT_ID}-anot-audio}"
 
 # Frontend (Firebase Hosting)
 FIREBASE_SITE="${FIREBASE_SITE:-$PROJECT_ID}"
-FRONTEND_DIR="anot-frontend-main/anot-frontend-main"
-BACKEND_DIR="anot-backend-main/anot-backend-main"
+FRONTEND_DIR="anot-frontend-main"
+BACKEND_DIR="anot-backend-main"
 
 # Optional provider keys — read from env if present, else left blank/prompted.
 ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-}"

@@ -12,8 +12,10 @@ It is built as **two packages** in one workspace—**not** two unrelated apps:
 
 | Part | Stack | Role |
 |------|--------|------|
-| **Backend** (`anot-backend-main/anot-backend-main`) | Node, Express, PostgreSQL, JWT | REST API, file/audio, AI pipeline |
-| **Frontend** (`anot-frontend-main/anot-frontend-main`) | React 19, Vite, React Router | Role-based SPA (clinician, scribe, QPS, admin, super admin) |
+| Part | Stack | Role |
+|------|--------|------|
+| **Backend** (`anot-backend-main`) | Node, Express, PostgreSQL, JWT | REST API, file/audio, AI pipeline |
+| **Frontend** (`anot-frontend-main`) | React 19, Vite, React Router | Role-based SPA (clinician, scribe, QPS, admin, super admin) |
 
 **Why two folders?** The code is often split across two Git repos (API vs UI). Locally they are **merged operationally**: same product, shared API contract (`/api/...`), run together against one dev database.
 
@@ -32,19 +34,16 @@ It is built as **two packages** in one workspace—**not** two unrelated apps:
 
 ## Layout on disk
 
-GitHub zips often unpack with a nested folder. Your workspace uses:
-
 ```text
 anot/                                    ← repo root (this README)
-  .env                                   ← optional copy of DATABASE_URL (gitignored)
-  anot-backend-main/
-    anot-backend-main/                   ← Node API: npm install / npm run dev
-      .env                               ← DATABASE_URL, JWT_SECRET (gitignored)
-      src/server.js
-  anot-frontend-main/
-    anot-frontend-main/                  ← Vite app: npm install / npm run dev
-      .env.local                         ← VITE_API_URL (gitignored)
-      src/
+  anot-backend-main/                     ← Node API: npm install / npm run dev
+    .env                                 ← DATABASE_URL, JWT_SECRET (gitignored)
+    src/server.js
+  anot-frontend-main/                    ← Vite app: npm install / npm run dev
+    .env.local                           ← VITE_API_URL (gitignored)
+    src/
+  docs/                                  ← Platform & compliance documentation
+  deploy/                                ← Cloud & hosting deployment guides
 ```
 
 ## Local development
@@ -52,16 +51,13 @@ anot/                                    ← repo root (this README)
 From the **repo root** (`anot`), install everything once, then start **API + web** together:
 
 ```powershell
-Set-Location "C:\Users\Jp Asher\Documents\GitHub\anot"
-npm install
-npm run install:all
 npm run dev
 ```
 
 - **API:** `http://127.0.0.1:5000/` (health JSON)  
 - **App:** URL printed by Vite (often `http://localhost:5173`) — sign in at **`/login`**. **`/`** redirects by session/role.
 
-On localhost the client uses **`http://127.0.0.1:5000/api`** by default — see `anot-frontend-main/anot-frontend-main/src/services/api.js`. Override with **`VITE_API_URL`** / **`VITE_USE_LOCAL_API`** in `.env.local` — [deploy/LOCALHOST_SETUP.md](deploy/LOCALHOST_SETUP.md).
+On localhost the client uses **`http://127.0.0.1:5000/api`** by default — see `anot-frontend-main/src/services/api.js`. Override with **`VITE_API_URL`** / **`VITE_USE_LOCAL_API`** in `.env.local` — [deploy/LOCALHOST_SETUP.md](deploy/LOCALHOST_SETUP.md).
 
 **“Failed to fetch” / “Cannot reach the API”:** [deploy/LOCALHOST_SETUP.md#12-troubleshooting-localhost](deploy/LOCALHOST_SETUP.md#12-troubleshooting-localhost). Quick checks: API still running; open `http://127.0.0.1:5000/`; use the Vite URL from the terminal if port 5173 is busy.
 
@@ -69,26 +65,23 @@ On localhost the client uses **`http://127.0.0.1:5000/api`** by default — see 
 
 ```powershell
 # Terminal 1
-Set-Location ".\anot-backend-main\anot-backend-main"
+Set-Location ".\anot-backend-main"
 npm install
 npm run dev
 
 # Terminal 2
-Set-Location ".\anot-frontend-main\anot-frontend-main"
+Set-Location ".\anot-frontend-main"
 npm install
 npm run dev
 ```
 
 ### Dev test accounts (disposable DB only)
 
-With **`DATABASE_URL`** in **`anot-backend-main\anot-backend-main\.env`** pointing at your **dev** database:
+With **`DATABASE_URL`** in **`anot-backend-main\.env`** pointing at your **dev** database:
 
 ```powershell
-# From repo root
-npm run seed:dev
-
-# Or from the backend folder
-Set-Location ".\anot-backend-main\anot-backend-main"
+# From the backend folder
+Set-Location ".\anot-backend-main"
 npm run seed:dev
 ```
 
@@ -110,8 +103,8 @@ Sign-in is always at **`/login`**; the app routes by **`role`** from the server 
 
 | Location | Purpose |
 |----------|---------|
-| `anot-backend-main/anot-backend-main/.env` | `DATABASE_URL`, `JWT_SECRET`, optional `ANTHROPIC_API_KEY`, `PORT` |
-| `anot-frontend-main/anot-frontend-main/.env.local` | Optional. On **localhost** / **127.0.0.1**, the app uses **`http://127.0.0.1:5000/api`** by default unless **`VITE_USE_LOCAL_API=false`**. See [deploy/LOCALHOST_SETUP.md](deploy/LOCALHOST_SETUP.md). |
+| `anot-backend-main/.env` | `DATABASE_URL`, `JWT_SECRET`, optional `ANTHROPIC_API_KEY`, `PORT` |
+| `anot-frontend-main/.env.local` | Optional. On **localhost** / **127.0.0.1**, the app uses **`http://127.0.0.1:5000/api`** by default unless **`VITE_USE_LOCAL_API=false`**. See [deploy/LOCALHOST_SETUP.md](deploy/LOCALHOST_SETUP.md). |
 
 Use your **Neon dev** database only for local work; production is separate.
 

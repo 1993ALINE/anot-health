@@ -14,8 +14,8 @@ This folder contains **three complete guides**. Commands assume repository paths
 
 | Package | Path |
 |---------|------|
-| Backend | `anot-backend-main/anot-backend-main/` |
-| Frontend | `anot-frontend-main/anot-frontend-main/` |
+| Backend | `anot-backend-main/` |
+| Frontend | `anot-frontend-main/` |
 
 **Product overview** (features, upstream repos): **[`../README.md`](../README.md)**
 

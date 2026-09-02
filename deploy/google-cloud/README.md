@@ -45,7 +45,7 @@ Why these choices:
 | `README.md` | This guide. |
 
 Backend container files live with the backend:
-`anot-backend-main/anot-backend-main/Dockerfile` and `.dockerignore`.
+`anot-backend-main/Dockerfile` and `.dockerignore`.
 
 ---
 
@@ -116,11 +116,11 @@ Grants the Cloud Run runtime service account `roles/secretmanager.secretAccessor
 `roles/cloudsql.client`, and `roles/storage.objectAdmin` (on the bucket).
 
 ### 7. Database migrations  ⚠️ run once
-SQL migrations live in `anot-backend-main/anot-backend-main/migrations/*.sql`.
+SQL migrations live in `anot-backend-main/migrations/*.sql`.
 Apply them in filename order. Easiest via the Cloud SQL connect helper:
 
 ```bash
-cd anot-backend-main/anot-backend-main
+cd anot-backend-main
 for f in $(ls migrations/*.sql | sort); do
   echo "Applying $f"
   gcloud sql connect anot-postgres --user=anot_app --database=anot < "$f"
@@ -158,7 +158,7 @@ _CORS_ORIGINS=https://YOUR_SITE.web.app,https://YOUR_SITE.firebaseapp.com .
 **Frontend only:**
 
 ```bash
-cd anot-frontend-main/anot-frontend-main
+cd anot-frontend-main
 VITE_API_URL="https://<cloud-run-url>/api" npm run build
 firebase deploy --only hosting --project YOUR_PROJECT_ID
 ```

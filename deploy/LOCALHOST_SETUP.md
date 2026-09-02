@@ -124,7 +124,7 @@ After setup, **restart** `npm run dev` so the API reloads `.env`.
 
 ## 5) Backend configuration (`.env`)
 
-**Path:** `anot-backend-main/anot-backend-main/.env`
+**Path:** `anot-backend-main/.env`
 
 ### Required
 
@@ -233,8 +233,8 @@ Start the **API first** so the browser does not call a dead server on first pain
 Equivalent without root scripts:
 
 ```powershell
-npm run dev --prefix anot-backend-main/anot-backend-main
-npm run dev --prefix anot-frontend-main/anot-frontend-main
+npm run dev --prefix anot-backend-main
+npm run dev --prefix anot-frontend-main
 ```
 
 ---
@@ -256,7 +256,7 @@ Sign in at **`/login`** (e.g. `http://localhost:5173/login`). Route **`/`** redi
 
 ### How the UI chooses the API
 
-File: `anot-frontend-main/anot-frontend-main/src/services/api.js`
+File: `anot-frontend-main/src/services/api.js`
 
 - On **`localhost` or `127.0.0.1`**, the app uses **`http://127.0.0.1:5000/api`** by default (reduces Windows IPv6 **`::1`** vs IPv4 issues).
 - To use a **remote** API while on localhost: create **`.env.local`** with:
@@ -283,13 +283,13 @@ See [Vite env documentation](https://vite.dev/guide/env-and-mode.html). Only **`
 Migrations live in:
 
 ```text
-anot-backend-main/anot-backend-main/migrations/
+anot-backend-main/migrations/
 ```
 
 Apply with **`psql`** (repeat for each file in chronological order):
 
 ```bash
-psql "postgresql://USER:PASS@HOST:5432/DBNAME" -f anot-backend-main/anot-backend-main/migrations/20260210_visits_visit_type_add_other.sql
+psql "postgresql://USER:PASS@HOST:5432/DBNAME" -f anot-backend-main/migrations/20260210_visits_visit_type_add_other.sql
 ```
 
 **Windows (from repo root), example:**

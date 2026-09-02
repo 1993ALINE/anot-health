@@ -236,7 +236,7 @@ Mounted route map (`src/server.js`):
 backend) → RDS / S3 / Deepgram / Anthropic.
 
 > The frontend's production API base URL lives in
-> `anot-frontend-main/anot-frontend-main/.env.production` (`VITE_API_URL`). The backend enforces a
+> `anot-frontend-main/.env.production` (`VITE_API_URL`). The backend enforces a
 > CORS allow-list (configurable via the `CORS_ORIGINS` env var) so only approved origins may call
 > the API.
 
@@ -760,8 +760,8 @@ the step-by-step procedure and RTO/RPO targets.
 | Resource | URL |
 | --- | --- |
 | GitHub | https://github.com/1993ALINE/anot-health |
-| Frontend repo path | `anot-frontend-main/anot-frontend-main` |
-| Backend repo path | `anot-backend-main/anot-backend-main` |
+| Frontend repo path | `anot-frontend-main` |
+| Backend repo path | `anot-backend-main` |
 | AWS Console | https://console.aws.amazon.com |
 | Deepgram Console | https://console.deepgram.com |
 | Anthropic Console | https://console.anthropic.com |

@@ -23,7 +23,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: |
             anot-backend-main/package-lock.json
-            anot-frontend-main/anot-frontend-main/package-lock.json
+            anot-frontend-main/package-lock.json
       - name: Verify Node version
         run: node --version && npm --version
       - name: Backend audit
@@ -34,7 +34,7 @@ jobs:
           npm audit --audit-level=high
       - name: Frontend audit
         if: matrix.project == 'frontend'
-        working-directory: anot-frontend-main/anot-frontend-main
+        working-directory: anot-frontend-main
         run: |
           npm ci
           npm audit --audit-level=high

@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-22.04
     defaults:
       run:
-        working-directory: anot-frontend-main/anot-frontend-main
+        working-directory: anot-frontend-main
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -38,7 +38,7 @@ jobs:
           node-version: '22.x'
           check-latest: true
           cache: 'npm'
-          cache-dependency-path: anot-frontend-main/anot-frontend-main/package-lock.json
+          cache-dependency-path: anot-frontend-main/package-lock.json
       - run: npm ci
       - run: npm run lint --if-present
       - run: npm test --if-present

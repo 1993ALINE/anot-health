@@ -98,7 +98,7 @@ npm run build
 **Linux / macOS:**
 
 ```bash
-cd anot-frontend-main/anot-frontend-main
+cd anot-frontend-main
 printf '%s\n' 'VITE_API_URL=https://api.yourdomain.com/api' > .env.production
 npm ci && npm run build
 ```
@@ -155,7 +155,7 @@ sudo mkdir -p /opt/anot
 sudo chown -R ubuntu:ubuntu /opt/anot
 cd /opt/anot
 git clone https://github.com/YOUR_ORG/anot.git repo
-cd repo/anot-backend-main/anot-backend-main
+cd repo/anot-backend-main
 npm ci --omit=dev
 ```
 
@@ -165,10 +165,10 @@ If you deploy without `git`, use `scp`/`rsync` to copy the same folder structure
 
 ## 8) Backend `.env` (production)
 
-**Path:** `/opt/anot/repo/anot-backend-main/anot-backend-main/.env`
+**Path:** `/opt/anot/repo/anot-backend-main/.env`
 
 ```bash
-cd /opt/anot/repo/anot-backend-main/anot-backend-main
+cd /opt/anot/repo/anot-backend-main
 chmod 600 .env
 nano .env
 ```
@@ -213,7 +213,7 @@ Optional: `ANTHROPIC_API_KEY`, `SETTINGS_ENCRYPTION_KEY` (see `src/config/db.js`
 SQL files:
 
 ```text
-anot-backend-main/anot-backend-main/migrations/
+anot-backend-main/migrations/
 ```
 
 From a machine that can reach the DB:
@@ -225,7 +225,7 @@ psql "postgresql://anot_app:PASSWORD@HOST:5432/anot" -f migrations/20260210_visi
 Apply **all** migration files in order. If the repo ships a npm script for a specific migration:
 
 ```bash
-cd /opt/anot/repo/anot-backend-main/anot-backend-main
+cd /opt/anot/repo/anot-backend-main
 npm run migrate:visit-type-other
 ```
 
@@ -234,7 +234,7 @@ npm run migrate:visit-type-other
 ## 10) Smoke test the API
 
 ```bash
-cd /opt/anot/repo/anot-backend-main/anot-backend-main
+cd /opt/anot/repo/anot-backend-main
 node src/server.js
 ```
 
@@ -246,7 +246,7 @@ Confirm logs show DB connected and `Anot server running on http://127.0.0.1:5000
 
 ```bash
 sudo npm install -g pm2
-cd /opt/anot/repo/anot-backend-main/anot-backend-main
+cd /opt/anot/repo/anot-backend-main
 pm2 start src/server.js --name anot-api
 pm2 save
 pm2 startup systemd -u ubuntu --hp /home/ubuntu
@@ -314,7 +314,7 @@ sudo systemctl reload nginx
 **On your laptop** (after `npm run build`):
 
 ```bash
-scp -i YOUR_KEY.pem -r anot-frontend-main/anot-frontend-main/dist/* ubuntu@YOUR_EC2_PUBLIC_IP:/tmp/anotfe/
+scp -i YOUR_KEY.pem -r anot-frontend-main/dist/* ubuntu@YOUR_EC2_PUBLIC_IP:/tmp/anotfe/
 ```
 
 **On the server:**
@@ -344,8 +344,8 @@ Then:
 ## 15) Uploads directory
 
 ```bash
-sudo mkdir -p /opt/anot/repo/anot-backend-main/anot-backend-main/src/uploads
-sudo chown -R ubuntu:ubuntu /opt/anot/repo/anot-backend-main/anot-backend-main/src/uploads
+sudo mkdir -p /opt/anot/repo/anot-backend-main/src/uploads
+sudo chown -R ubuntu:ubuntu /opt/anot/repo/anot-backend-main/src/uploads
 ```
 
 ---

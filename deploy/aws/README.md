@@ -151,7 +151,7 @@ Sets `CORS_ORIGINS=https://<dist>.cloudfront.net` on the backend.
 
 ## Database migrations  ⚠️ run once
 
-SQL migrations live in `anot-backend-main/anot-backend-main/migrations/*.sql` and
+SQL migrations live in `anot-backend-main/migrations/*.sql` and
 must be applied in filename order. RDS is **not publicly accessible**, so run
 them from inside the VPC. Two easy options:
 
@@ -160,7 +160,7 @@ available if you install it, or use `node`):
 
 ```bash
 # Install the EB CLI once: pip install awsebcli
-cd anot-backend-main/anot-backend-main
+cd anot-backend-main
 eb ssh anot-backend-prod        # opens a shell on the instance
 # then, on the instance:
 sudo dnf install -y postgresql15   # client only
@@ -183,7 +183,7 @@ aws ec2 authorize-security-group-ingress --group-id $SG --protocol tcp --port 54
 
 HOST=$(aws rds describe-db-instances --db-instance-identifier $DB_INSTANCE_ID --query 'DBInstances[0].Endpoint.Address' --output text)
 PASS=$(aws ssm get-parameter --name /anot/db-password --with-decryption --query 'Parameter.Value' --output text)
-cd anot-backend-main/anot-backend-main
+cd anot-backend-main
 for f in $(ls migrations/*.sql | sort); do
   echo "Applying $f"; PGPASSWORD="$PASS" psql "sslmode=require host=$HOST user=anot_app dbname=anot" -f "$f"
 done
@@ -228,7 +228,7 @@ re-apply, or `aws s3api delete-bucket-lifecycle --bucket "$AUDIO_BUCKET"`.
 ```bash
 APP=anot-backend ENV=anot-backend-prod
 STAGE=$(mktemp -d)
-cp -r anot-backend-main/anot-backend-main/. "$STAGE"/
+cp -r anot-backend-main/. "$STAGE"/
 rm -rf "$STAGE/node_modules" "$STAGE/src/uploads"
 ( cd "$STAGE" && npm pkg delete dependencies.anot-workspace )
 mkdir -p "$STAGE/.ebextensions" && cp deploy/aws/ebextensions/.ebextensions/* "$STAGE/.ebextensions/"
@@ -247,7 +247,7 @@ aws elasticbeanstalk update-environment --environment-name "$ENV" --version-labe
 ```bash
 DIST=$(aws cloudfront list-distributions --query "DistributionList.Items[?Comment=='anot-anot-backend-prod'].Id | [0]" --output text)
 DOMAIN=$(aws cloudfront get-distribution --id "$DIST" --query 'Distribution.DomainName' --output text)
-cd anot-frontend-main/anot-frontend-main
+cd anot-frontend-main
 VITE_API_URL="https://$DOMAIN/api" npm run build
 aws s3 sync dist "s3://anot-frontend-$(aws sts get-caller-identity --query Account --output text)" --delete
 aws cloudfront create-invalidation --distribution-id "$DIST" --paths '/*'

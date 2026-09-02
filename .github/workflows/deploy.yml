@@ -47,9 +47,9 @@ jobs:
           node-version: '22.x'
           check-latest: true
           cache: 'npm'
-          cache-dependency-path: anot-frontend-main/anot-frontend-main/package-lock.json
+          cache-dependency-path: anot-frontend-main/package-lock.json
       - name: Build frontend
-        working-directory: anot-frontend-main/anot-frontend-main
+        working-directory: anot-frontend-main
         env:
           VITE_API_URL: https://app.anot.health/api
         run: |

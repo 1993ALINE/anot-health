@@ -20,7 +20,7 @@ flowchart LR
   test --> frontend[deploy-frontend build]
 ```
 
-1. **Test** — `npm ci` + `npm test` in `anot-backend-main/anot-backend-main` (71 tests).
+1. **Test** — `npm ci` + `npm test` in `anot-backend-main`.
 2. **Deploy-frontend** — validates the production Vite build (upload to hosting is manual).
 
 The **deploy-backend** job is disabled in GitHub Actions. Backend production releases use the manual script below.
@@ -32,7 +32,7 @@ The **deploy-backend** job is disabled in GitHub Actions. Backend production rel
 After tests pass locally or in CI:
 
 ```powershell
-cd anot-backend-main\anot-backend-main
+cd anot-backend-main
 powershell -File scripts\deploy-to-eb.ps1
 ```
 
@@ -65,4 +65,4 @@ All GitHub Actions jobs use **Node.js 22** (matches local development and Elasti
 
 - [DEPLOYMENT_RUNBOOK.md](./DEPLOYMENT_RUNBOOK.md) — team SOP, rollback, escalation
 - [SSM_PARAMETERS.md](./SSM_PARAMETERS.md) — production secrets
-- [SECURITY.md](../SECURITY.md) — deployment security controls
+- [SECURITY.md](./compliance/SECURITY.md) — deployment security controls

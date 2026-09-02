@@ -46,8 +46,8 @@ DB_USER="${DB_USER:-anot_app}"                          # RDS master user == app
 DB_SG_NAME="${DB_SG_NAME:-anot-db-sg}"
 
 # Directories
-BACKEND_DIR="${BACKEND_DIR:-anot-backend-main/anot-backend-main}"
-FRONTEND_DIR="${FRONTEND_DIR:-anot-frontend-main/anot-frontend-main}"
+BACKEND_DIR="${BACKEND_DIR:-anot-backend-main}"
+FRONTEND_DIR="${FRONTEND_DIR:-anot-frontend-main}"
 EBEXT_DIR="${EBEXT_DIR:-deploy/aws/ebextensions/.ebextensions}"
 
 # Optional provider keys — read from env if present, else placeholders are stored.
