@@ -742,6 +742,39 @@
   background: #1d4ed8;
 }
 
+.cl-note-btn--copy {
+  background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 2px 4px rgba(79, 70, 229, 0.25);
+}
+.cl-note-btn--copy:hover:not(:disabled) {
+  background: linear-gradient(135deg, #4338ca 0%, #3730a3 100%);
+}
+
+.cl-note-btn--copied {
+  background: #16a34a !important;
+  color: #ffffff !important;
+  border-color: #15803d !important;
+}
+
+.btn-record {
+  background: linear-gradient(135deg, #e11d48 0%, #be123c 100%) !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  box-shadow: 0 2px 6px rgba(225, 29, 72, 0.3) !important;
+  border: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  transition: all 0.15s ease !important;
+}
+.btn-record:hover:not(:disabled) {
+  background: linear-gradient(135deg, #be123c 0%, #9f1239 100%) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 10px rgba(225, 29, 72, 0.4) !important;
+}
+
 .cl-note-btn--lock {
   background: #059669;
   color: #ffffff;

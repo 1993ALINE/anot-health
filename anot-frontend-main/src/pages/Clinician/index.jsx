@@ -35,6 +35,8 @@ import ScribeFinalNoteEditor from '../../components/ScribeFinalNoteEditor'
 import { cleanAiDraftForDisplay } from '../../utils/aiDraftFormat'
 import { startRecordingKeepAlive, stopRecordingKeepAlive } from '../../utils/recordingKeepAlive'
 import * as offlineAudioQueue from '../../utils/offlineAudioQueue'
+import QuickConsultationModal from '../../components/QuickConsultationModal'
+import { parseNote, buildNote } from '../../utils/noteParser'
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -1725,6 +1727,89 @@ function Clinician() {
   const [lockConfirmOpen, setLockConfirmOpen] = useState(false)
   const [lockConfirmLoading, setLockConfirmLoading] = useState(false)
   const [consentPending, setConsentPending] = useState(null)
+  const [quickRecOpen, setQuickRecOpen] = useState(false)
+  const [patientList, setPatientList] = useState([])
+  const [noteCopied, setNoteCopied] = useState(false)
+
+  const loadPatients = useCallback(async () => {
+    try {
+      const res = await patientsAPI.getAll()
+      if (res?.patients && Array.isArray(res.patients)) {
+        setPatientList(res.patients)
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  const handleStartQuickVisit = async (visitParams) => {
+    let patientId = visitParams.patient_id
+    let patientName = visitParams.name
+    let patientMrn = visitParams.mrn
+
+    if (!patientId) {
+      try {
+        const pRes = await patientsAPI.create({
+          name: visitParams.name,
+          mrn: visitParams.mrn,
+          date_of_birth: null,
+        })
+        patientId = pRes?.patient?.id
+        patientName = pRes?.patient?.name || visitParams.name
+        patientMrn = pRes?.patient?.mrn || visitParams.mrn
+      } catch (e) {
+        if (e.payload?.patient?.id) {
+          patientId = e.payload.patient.id
+          patientName = e.payload.patient.name || visitParams.name
+          patientMrn = e.payload.patient.mrn || visitParams.mrn
+        } else {
+          throw e
+        }
+      }
+    }
+
+    const now = new Date()
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+    const vd = await visitsAPI.create({
+      patient_id: patientId,
+      visit_date: localDate(0),
+      visit_time: timeStr,
+      visit_type: visitParams.visit_type || 'Comprehensive Exam',
+    })
+
+    const createdVisit = {
+      ...(vd.visit || {}),
+      id: vd.visit?.id,
+      patient_id: patientId,
+      patient_name: patientName,
+      mrn: patientMrn,
+      patient_consent_recorded: true,
+      status: 'upcoming',
+    }
+
+    setVisits((p) => [...p, createdVisit].sort((a, b) => (a.visit_time || '').localeCompare(b.visit_time || '')))
+    await startVisit(createdVisit)
+  }
+
+  const handleStartScheduledVisit = async (visit) => {
+    await startVisit({ ...visit, patient_consent_recorded: true })
+  }
+
+  const copyFullNoteToEmr = () => {
+    const rawContent = reviewNote?.final_note || cleanAiDraftForDisplay(reviewNote?.ai_draft) || ''
+    if (!rawContent.trim()) {
+      showToast('No note content available to copy', 'warn')
+      return
+    }
+    const formatted = buildNote(parseNote(rawContent))
+    navigator.clipboard?.writeText(formatted).then(() => {
+      setNoteCopied(true)
+      setTimeout(() => setNoteCopied(false), 2500)
+      showToast('✓ Clinical note copied to clipboard — ready to paste into EMR!')
+    }).catch(() => {
+      showToast('Failed to copy to clipboard', 'error')
+    })
+  }
 
   const runConfirm = async () => {
     if (!confirmDialog?.onConfirm) {return}
@@ -2799,71 +2884,82 @@ function Clinician() {
                     ) : null}
                   </div>
 
-                  {/* Action Bar - Always visible for unlocked notes */}
-                  {!isNoteDetailCompleted(reviewNote) && (
-                    <div className="cl-note-review-actions">
-                      {editingNote ? (
-                        <>
-                          <button
-                            type="button"
-                            className="cl-note-btn cl-note-btn--cancel"
-                            onClick={cancelEditingNote}
-                            disabled={savingNote}
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            type="button"
-                            className="cl-note-btn cl-note-btn--save"
-                            onClick={saveEditedNote}
-                            disabled={savingNote}
-                          >
-                            {savingNote ? 'Saving…' : '💾 Save Changes'}
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            className="cl-note-btn cl-note-btn--edit"
-                            onClick={startEditingNote}
-                          >
-                            ✏️ Edit Note
-                          </button>
-                          
-                          <button
-                            type="button"
-                            className="cl-note-btn cl-note-btn--lock"
-                            onClick={() => setLockConfirmOpen(true)}
-                          >
-                            🔒 Lock Note
-                          </button>
-                          
-                          {!editReq[reviewNote.note_id] ? (
+                  <div className="cl-note-review-actions">
+                    <button
+                      type="button"
+                      className={`cl-note-btn cl-note-btn--copy ${noteCopied ? 'cl-note-btn--copied' : ''}`}
+                      onClick={copyFullNoteToEmr}
+                      title="Copy complete clinical note to clipboard for EMR/EHR"
+                    >
+                      {noteCopied ? '✓ Copied to Clipboard' : '📋 Copy to EMR'}
+                    </button>
+
+                    {/* Action Bar for unlocked notes */}
+                    {!isNoteDetailCompleted(reviewNote) && (
+                      <>
+                        {editingNote ? (
+                          <>
                             <button
                               type="button"
-                              className="cl-note-btn cl-note-btn--request"
-                              onClick={async () => {
-                                try {
-                                  await notesAPI.requestEdit(reviewNote.note_id)
-                                  setEditReq((p) => ({ ...p, [reviewNote.note_id]: true }))
-                                  showToast('Edit request sent')
-                                } catch (e) {
-                                  showToast(e.message, 'error')
-                                }
-                              }}
+                              className="cl-note-btn cl-note-btn--cancel"
+                              onClick={cancelEditingNote}
+                              disabled={savingNote}
                             >
-                              ↩️ Request Edit from Scribe
+                              Cancel
                             </button>
-                          ) : (
-                            <span className="cl-note-chip--requested">
-                              ✓ Edit Requested
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
+                            <button
+                              type="button"
+                              className="cl-note-btn cl-note-btn--save"
+                              onClick={saveEditedNote}
+                              disabled={savingNote}
+                            >
+                              {savingNote ? 'Saving…' : '💾 Save Changes'}
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              className="cl-note-btn cl-note-btn--edit"
+                              onClick={startEditingNote}
+                            >
+                              ✏️ Edit Note
+                            </button>
+                            
+                            <button
+                              type="button"
+                              className="cl-note-btn cl-note-btn--lock"
+                              onClick={() => setLockConfirmOpen(true)}
+                            >
+                              🔒 Lock Note
+                            </button>
+                          
+                            {!editReq[reviewNote.note_id] ? (
+                              <button
+                                type="button"
+                                className="cl-note-btn cl-note-btn--request"
+                                onClick={async () => {
+                                  try {
+                                    await notesAPI.requestEdit(reviewNote.note_id)
+                                    setEditReq((p) => ({ ...p, [reviewNote.note_id]: true }))
+                                    showToast('Edit request sent')
+                                  } catch (e) {
+                                    showToast(e.message, 'error')
+                                  }
+                                }}
+                              >
+                                ↩️ Request Edit from Scribe
+                              </button>
+                            ) : (
+                              <span className="cl-note-chip--requested">
+                                ✓ Edit Requested
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -2943,6 +3039,21 @@ function Clinician() {
               title={historyTitle}
               subtitle={historySubtitle}
             >
+              <button
+                type="button"
+                className="btn btn-record btn-sm"
+                onClick={() => {
+                  if (active) {
+                    showToast('Consultation recording is already in progress.', 'warn')
+                    return
+                  }
+                  loadPatients()
+                  setQuickRecOpen(true)
+                }}
+                title="Start a new consultation with direct audio recording"
+              >
+                🎙 Start Consultation
+              </button>
               <button type="button" className="btn btn-sm" disabled={loading} onClick={() => loadHistory({ notify: true })} title="Reload list">
                 ⟳ Refresh
               </button>
@@ -3345,6 +3456,21 @@ function Clinician() {
                   ⟳ <span className="cl-refresh-label">Refresh</span>
                 </button>
               </ClinicianTooltip>
+              <button
+                type="button"
+                className="btn btn-record btn-sm"
+                onClick={() => {
+                  if (active) {
+                    showToast('Consultation recording is already in progress.', 'warn')
+                    return
+                  }
+                  loadPatients()
+                  setQuickRecOpen(true)
+                }}
+                title="Start a new consultation with direct audio recording"
+              >
+                🎙 Start Consultation
+              </button>
               <button type="button" className="btn btn-navy btn-sm" onClick={() => { setShowAdd((f) => !f); setPtErr('') }}>
                 + Add Patient
               </button>
@@ -3864,6 +3990,14 @@ function Clinician() {
 
       {aiVisit    && <AIModal    visit={aiVisit}    onClose={() => { setAiVisit(null); setAiVisitFromNotes(false) }} hideAudioControls={aiVisitFromNotes} showToast={showToast} />}
       {consentModal}
+      <QuickConsultationModal
+        isOpen={quickRecOpen}
+        onClose={() => setQuickRecOpen(false)}
+        upcomingVisits={visits}
+        patients={patientList}
+        onStartScheduledVisit={handleStartScheduledVisit}
+        onStartQuickVisit={handleStartQuickVisit}
+      />
       {toast      && <Toast toast={toast} />}
     </div>
   )
