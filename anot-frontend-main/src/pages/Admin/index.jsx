@@ -1566,18 +1566,8 @@ function Admin() {
     }
 
     const requestSignOut = () => {
-        setConfirmDialog({
-            title: 'Confirm sign out',
-            message: 'Sign out of the admin panel now?',
-            confirmText: 'Sign out',
-            tone: 'danger',
-            onConfirm: async () => {
-                try {
-                    await authAPI.logout({ reload: true })
-                } catch {
-                    globalThis.location.replace('/login')
-                }
-            },
+        authAPI.logout({ reload: true }).catch(() => {
+            globalThis.location.replace('/login')
         })
     }
 

@@ -155,16 +155,32 @@ export async function destroyOfflinePhiDatabase() {
     return
   }
   try {
+    if (dbPromise) {
+      const db = await Promise.race([dbPromise, new Promise((r) => setTimeout(r, 100))])
+      if (db && typeof db.close === 'function') {
+        db.close()
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
     await clearQueue()
   } catch {
     /* queue may not exist yet */
   }
   dbPromise = null
   return new Promise((resolve) => {
-    const request = indexedDB.deleteDatabase(DB_NAME)
-    request.onsuccess = () => resolve(true)
-    request.onerror = () => resolve(false)
-    request.onblocked = () => resolve(false)
+    const timer = setTimeout(() => resolve(false), 200)
+    try {
+      const request = indexedDB.deleteDatabase(DB_NAME)
+      request.onsuccess = () => { clearTimeout(timer); resolve(true) }
+      request.onerror = () => { clearTimeout(timer); resolve(false) }
+      request.onblocked = () => { clearTimeout(timer); resolve(false) }
+    } catch {
+      clearTimeout(timer)
+      resolve(false)
+    }
   })
 }
 

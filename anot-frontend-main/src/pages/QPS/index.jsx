@@ -223,18 +223,8 @@ function QPS() {
   const offCanvasSidebar = useSidebarOffCanvasMode()
   const branding = useBranding()
   const requestLogout = () => {
-    setConfirmDialog({
-      tone: 'primary',
-      title: 'Sign out?',
-      message: 'You will need to sign in again to use Anot.',
-      confirmText: 'Log out',
-      onConfirm: async () => {
-        try {
-          await authAPI.logout({ reload: true })
-        } catch {
-          globalThis.location.replace('/login')
-        }
-      },
+    authAPI.logout({ reload: true }).catch(() => {
+      globalThis.location.replace('/login')
     })
   }
 

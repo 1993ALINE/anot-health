@@ -285,17 +285,23 @@ export const authAPI = {
     return data
   },
   logout: async ({ reload = true } = {}) => {
-    try {
-      await apiMutate('POST', '/auth/logout')
-    } catch {
-      /* ignore — clear local state regardless */
-    }
+    // 1. Immediately wipe local auth state so UI reflects logout in 0ms
     clearSession()
     clearCsrfToken()
-    await purgeClientPhiStorage()
+
+    // 2. Fire server logout in the background (fire-and-forget)
+    const serverLogoutPromise = apiMutate('POST', '/auth/logout').catch(() => {})
+
+    // 3. Purge storage in the background
+    const storagePurgePromise = purgeClientPhiStorage().catch(() => {})
+
+    // 4. Instant navigation without waiting on network or IndexedDB locks
     if (reload && typeof globalThis.location !== 'undefined') {
       globalThis.location.replace('/login')
+      return
     }
+
+    await Promise.allSettled([serverLogoutPromise, storagePurgePromise])
   },
   getCurrentUser: () => {
     const user = readStoredUser()

@@ -438,20 +438,22 @@ function Scribe() {
 
   const requestLogout = useCallback(() => {
     const dirtyNote = screen === 'note' && isDirty
-    setConfirmDialog({
-      tone: 'primary',
-      title: 'Sign out?',
-      message: dirtyNote
-        ? 'You have unsaved edits to a note. Signing out will lose those changes unless you saved a draft. You will need to sign in again to use Anot.'
-        : 'You will need to sign in again to use Anot.',
-      confirmText: 'Log out',
-      onConfirm: async () => {
-        try {
-          await authAPI.logout({ reload: true })
-        } catch {
-          globalThis.location.replace('/login')
-        }
-      },
+    if (dirtyNote) {
+      setConfirmDialog({
+        tone: 'danger',
+        title: 'Unsaved Changes',
+        message: 'You have unsaved edits to a note. Signing out will lose those changes unless you saved a draft. Sign out anyway?',
+        confirmText: 'Discard & Sign out',
+        onConfirm: () => {
+          authAPI.logout({ reload: true }).catch(() => {
+            globalThis.location.replace('/login')
+          })
+        },
+      })
+      return
+    }
+    authAPI.logout({ reload: true }).catch(() => {
+      globalThis.location.replace('/login')
     })
   }, [screen, isDirty])
 

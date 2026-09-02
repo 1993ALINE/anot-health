@@ -1754,18 +1754,23 @@ function Clinician() {
   }
 
   const requestLogout = () => {
-    setConfirmDialog({
-      tone: 'primary',
-      title: 'Sign out?',
-      message: 'You will need to sign in again to use Anot.',
-      confirmText: 'Log out',
-      onConfirm: async () => {
-        try {
-          await authAPI.logout({ reload: true })
-        } catch {
-          globalThis.location.replace('/login')
-        }
-      },
+    if (active) {
+      setConfirmDialog({
+        tone: 'danger',
+        title: 'Recording in progress',
+        message: 'An active consultation recording is currently running. Signing out will discard the active recording. Are you sure you want to sign out?',
+        confirmText: 'Discard & Sign out',
+        onConfirm: () => {
+          stopRecordingKeepAlive().catch(() => {})
+          authAPI.logout({ reload: true }).catch(() => {
+            globalThis.location.replace('/login')
+          })
+        },
+      })
+      return
+    }
+    authAPI.logout({ reload: true }).catch(() => {
+      globalThis.location.replace('/login')
     })
   }
 
