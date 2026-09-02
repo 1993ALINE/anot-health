@@ -145,8 +145,8 @@ async function runDictationTest() {
     mrn: autoMrn,
     date_of_birth: null,
   });
-  assert(ptRes.status === 201 && ptRes.body?.patient?.id, `Provisional patient created automatically (ID: ${ptRes.body?.patient?.id}, MRN: ${autoMrn})`);
-  const patientId = ptRes.body.patient.id;
+  const patientId = ptRes.body?.patient?.id || ptRes.body?.id;
+  assert(ptRes.status === 201 && patientId, `Provisional patient created automatically (ID: ${patientId}, MRN: ${autoMrn})`);
 
   // Schedule instant visit
   const todayIso = new Date().toISOString().split('T')[0];

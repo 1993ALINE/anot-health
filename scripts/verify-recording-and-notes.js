@@ -132,10 +132,10 @@ async function run() {
   assert(typeof indexRes.body?.raw === 'string' && indexRes.body.raw.includes('<div id="root">'), 'index.html contains root container');
 
   // Fetch Clinician route chunk to verify WakeLock & KeepAlive are deployed
-  const clinicianChunkRes = await client.request('GET', '/assets/Clinician-nwrTvKC2.js');
+  const clinicianChunkRes = await client.request('GET', '/assets/Clinician-CsbJVI5O.js');
   assert(clinicianChunkRes.status === 200, 'Clinician JS chunk loads from CloudFront CDN (200 OK)');
   assert(clinicianChunkRes.body?.raw?.includes('wakeLock'), 'Live Clinician bundle contains screen wakeLock recording keep-alive!');
-  assert(clinicianChunkRes.body?.raw?.includes('Start Consultation') || clinicianChunkRes.body?.raw?.includes('quickRec'), 'Live Clinician bundle contains Direct Record & Start Consultation action!');
+  assert(clinicianChunkRes.body?.raw?.includes('Start Consultation') || clinicianChunkRes.body?.raw?.includes('quickRec') || clinicianChunkRes.body?.raw?.includes('Instant Consultation'), 'Live Clinician bundle contains Direct Record & Instant Dictation action!');
 
   // Step 2: Clinician Authentication
   console.log('\n--- Step 2: Testing Clinician Authentication on Live API ---');
@@ -146,8 +146,9 @@ async function run() {
   // Step 3: Fetch Patients
   console.log('\n--- Step 3: Fetching Clinician Patients & Schedule ---');
   const ptsRes = await client.request('GET', '/api/patients');
-  assert(ptsRes.status === 200 && Array.isArray(ptsRes.body?.patients), `Retrieved ${ptsRes.body?.patients?.length} patients from live production`);
-  const targetPatient = ptsRes.body.patients[0];
+  const patientList = Array.isArray(ptsRes.body) ? ptsRes.body : (ptsRes.body?.patients || []);
+  assert(ptsRes.status === 200 && patientList.length > 0, `Retrieved ${patientList.length} patients from live production`);
+  const targetPatient = patientList[0];
 
   // Step 4: Schedule Encounter & Record Consent
   console.log('\n--- Step 4: Testing Encounter Creation & Consent Recording ---');
