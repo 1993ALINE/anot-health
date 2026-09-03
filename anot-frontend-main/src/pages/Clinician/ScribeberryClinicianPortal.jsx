@@ -171,6 +171,7 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
     return DEFAULT_MACROS
   })
   const [macroModalOpen, setMacroModalOpen] = useState(false)
+  const [scheduleModalOpen, setScheduleModalOpen] = useState(false)
   const [editingMacro, setEditingMacro] = useState(null)
   const [macroForm, setMacroForm] = useState({ name: '', shortcut: '', content: '' })
 
@@ -404,19 +405,30 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
     }
   }
 
-  const handleSelectScheduledPatient = (pId) => {
-    setSelectedPatientIdForEncounter(pId)
-    if (pId) {
-      const p = patientList.find((x) => String(x.id) === String(pId))
+  const handleSelectScheduledPatient = (val) => {
+    setSelectedPatientIdForEncounter(val)
+    if (!val) {
+      setPatientNameInput('')
+      setPatientMrnInput('')
+      setPatientAgeInput('')
+      return
+    }
+
+    if (val.startsWith('visit-')) {
+      const vId = val.replace('visit-', '')
+      const v = visits.find((x) => String(x.id) === String(vId))
+      if (v) {
+        setPatientNameInput(v.patient_name || '')
+        setPatientMrnInput(v.mrn || '')
+        setPatientAgeInput(getPatientDisplayAge(v, patientList) || '')
+      }
+    } else {
+      const p = patientList.find((x) => String(x.id) === String(val))
       if (p) {
         setPatientNameInput(p.name || '')
         setPatientMrnInput(p.mrn || '')
         setPatientAgeInput(getPatientDisplayAge(p, patientList) || '')
       }
-    } else {
-      setPatientNameInput('')
-      setPatientMrnInput('')
-      setPatientAgeInput('')
     }
   }
 
@@ -430,7 +442,19 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
       let patientMrn = patientMrnInput.trim()
       let patientAge = patientAgeInput.trim()
 
-      if (patientId && !patientName) {
+      let existingVisitId = null
+      if (typeof patientId === 'string' && patientId.startsWith('visit-')) {
+        existingVisitId = patientId.replace('visit-', '')
+        const foundV = visits.find((v) => String(v.id) === String(existingVisitId))
+        if (foundV) {
+          patientId = foundV.patient_id
+          if (!patientName) patientName = foundV.patient_name || 'Patient'
+          if (!patientMrn) patientMrn = foundV.mrn || 'Auto-MRN'
+          if (!patientAge) patientAge = getPatientDisplayAge(foundV, patientList)
+        }
+      }
+
+      if (patientId && !patientName && !existingVisitId) {
         const found = patientList.find((p) => String(p.id) === String(patientId))
         if (found) {
           patientName = found.name
@@ -452,7 +476,7 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
       }
 
       // Create or ensure patient record in DB if new name is provided
-      if (!patientId || (patientNameInput && patientName !== 'Patient Encounter')) {
+      if (!patientId && !existingVisitId) {
         try {
           const pRes = await patientsAPI.create({
             name: patientName,
@@ -469,15 +493,21 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
       }
 
       const dbVisitType = normalizeVisitTypeForDb(selectedTemplate)
-      const vRes = await visitsAPI.create({
-        patient_id: patientId || undefined,
-        visit_date: now.toISOString().slice(0, 10),
-        visit_time: timeStr,
-        visit_type: dbVisitType,
-      })
+      let visitId = existingVisitId
+      if (!visitId) {
+        const vRes = await visitsAPI.create({
+          patient_id: patientId || undefined,
+          visit_date: now.toISOString().slice(0, 10),
+          visit_time: timeStr,
+          visit_type: dbVisitType,
+        })
+        visitId = vRes?.visit?.id
+      } else {
+        await visitsAPI.updateStatus(visitId, 'in-progress').catch(() => {})
+      }
 
       const newVisit = {
-        id: vRes?.visit?.id,
+        id: visitId,
         patient_id: patientId,
         patient_name: patientName,
         mrn: patientMrn,
@@ -960,19 +990,32 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
                         <span className="sm-intake-title">Patient Encounter Details</span>
                       </div>
 
-                      {patientList.length > 0 && (
+                      {(visits.length > 0 || patientList.length > 0) && (
                         <div className="sm-patient-quick-select">
                           <select
                             className="sm-patient-quick-dropdown"
                             value={selectedPatientIdForEncounter}
                             onChange={(e) => handleSelectScheduledPatient(e.target.value)}
                           >
-                            <option value="">⚡ Load Scheduled Patient ({patientList.length}) ▾</option>
-                            {patientList.map((p) => (
-                              <option key={p.id} value={p.id}>
-                                {p.name} — Age: {getPatientDisplayAge(p, patientList)} ({p.mrn})
-                              </option>
-                            ))}
+                            <option value="">⚡ Load Scheduled Patient ▾</option>
+                            {visits.length > 0 && (
+                              <optgroup label={`📅 Today's Scheduled Visits (${visits.length})`}>
+                                {visits.map((v) => (
+                                  <option key={`v-${v.id}`} value={`visit-${v.id}`}>
+                                    {v.visit_time ? `${v.visit_time} — ` : ''}{v.patient_name || 'Patient'} ({v.mrn || 'Auto-MRN'})
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
+                            {patientList.length > 0 && (
+                              <optgroup label={`👥 All Clinic Patients (${patientList.length})`}>
+                                {patientList.map((p) => (
+                                  <option key={`p-${p.id}`} value={String(p.id)}>
+                                    {p.name} — Age: {getPatientDisplayAge(p, patientList)} ({p.mrn})
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
                           </select>
                         </div>
                       )}
@@ -1375,6 +1418,14 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
               <div className="sm-side-card__title-group">
                 <span className="sm-side-card__title">Today's visits</span>
                 <span className="sm-side-card__count">{visits.length}</span>
+                <button
+                  type="button"
+                  className="sm-btn-add-schedule"
+                  onClick={() => setScheduleModalOpen(true)}
+                  title="Schedule a visit for today"
+                >
+                  + Add
+                </button>
               </div>
 
               {/* Schedule Filter Pills */}
@@ -1505,6 +1556,17 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
         />
       )}
 
+      {/* Schedule Visit Modal */}
+      {scheduleModalOpen && (
+        <ScheduleVisitModal
+          isOpen={scheduleModalOpen}
+          patientList={patientList}
+          onClose={() => setScheduleModalOpen(false)}
+          onVisitCreated={loadData}
+          showToast={showToast}
+        />
+      )}
+
       {/* Clinical Macros Manager Modal */}
       {macroModalOpen && (
         <ManageMacrosModal
@@ -1524,6 +1586,199 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
           onInsert={handleInsertMacro}
         />
       )}
+    </div>
+  )
+}
+
+/**
+ * ScheduleVisitModal
+ * Allows clinicians to quickly schedule an encounter for Today with an existing or new patient
+ */
+function ScheduleVisitModal({ isOpen, onClose, patientList, onVisitCreated, showToast }) {
+  const [patientMode, setPatientMode] = useState('existing')
+  const [selectedPatientId, setSelectedPatientId] = useState(patientList[0]?.id ? String(patientList[0].id) : '')
+  const [newName, setNewName] = useState('')
+  const [newAge, setNewAge] = useState('')
+  const [newMrn, setNewMrn] = useState('')
+  const [visitTime, setVisitTime] = useState(() => {
+    const now = new Date()
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  })
+  const [visitType, setVisitType] = useState('SOAP Note — Adult (Standard)')
+  const [submitting, setSubmitting] = useState(false)
+
+  if (!isOpen) return null
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setSubmitting(true)
+    try {
+      let patientId = selectedPatientId
+      let finalName = ''
+
+      if (patientMode === 'existing') {
+        if (!patientId && patientList.length > 0) {
+          patientId = String(patientList[0].id)
+        }
+        const p = patientList.find((x) => String(x.id) === String(patientId))
+        finalName = p?.name || 'Patient'
+      } else {
+        finalName = newName.trim() || 'New Patient'
+        const finalMrn = newMrn.trim() || `MRN-${Date.now().toString().slice(-6)}`
+        const pRes = await patientsAPI.create({
+          name: finalName,
+          mrn: finalMrn,
+        })
+        patientId = pRes?.patient?.id
+      }
+
+      const today = new Date().toISOString().slice(0, 10)
+      const dbVisitType = normalizeVisitTypeForDb(visitType)
+      await visitsAPI.create({
+        patient_id: patientId || undefined,
+        visit_date: today,
+        visit_time: visitTime,
+        visit_type: dbVisitType,
+      })
+
+      showToast(`✓ Visit for ${finalName} scheduled for today at ${visitTime}!`)
+      await onVisitCreated()
+      onClose()
+    } catch (err) {
+      showToast(err?.message || 'Failed to schedule visit', 'error')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="sm-modal-overlay" onClick={onClose}>
+      <div className="sm-modal sm-schedule-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="sm-modal__header">
+          <div className="sm-modal__title-group">
+            <h3>📅 Schedule Today's Visit</h3>
+            <p>Add a new appointment to Dr. Provencio's schedule for today.</p>
+          </div>
+          <button type="button" className="sm-btn-close-modal" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="sm-schedule-form">
+          <div className="sm-schedule-form-body">
+            {/* Patient Mode Selection */}
+            <div className="sm-form-group">
+              <label className="sm-form-label">Patient Option</label>
+              <div className="sm-segmented-ctrl">
+                <button
+                  type="button"
+                  className={`sm-segmented-btn ${patientMode === 'existing' ? 'sm-segmented-btn--active' : ''}`}
+                  onClick={() => setPatientMode('existing')}
+                >
+                  👥 Registered Patient
+                </button>
+                <button
+                  type="button"
+                  className={`sm-segmented-btn ${patientMode === 'new' ? 'sm-segmented-btn--active' : ''}`}
+                  onClick={() => setPatientMode('new')}
+                >
+                  ➕ New Patient
+                </button>
+              </div>
+            </div>
+
+            {patientMode === 'existing' ? (
+              <div className="sm-form-group">
+                <label className="sm-form-label">Select Clinic Patient *</label>
+                <select
+                  className="sm-form-select"
+                  value={selectedPatientId}
+                  onChange={(e) => setSelectedPatientId(e.target.value)}
+                  required
+                >
+                  {patientList.length === 0 && <option value="">No patients found</option>}
+                  {patientList.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} — Age: {getPatientDisplayAge(p, patientList)} ({p.mrn})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="sm-form-grid-3">
+                <div className="sm-form-group">
+                  <label className="sm-form-label">Patient Name *</label>
+                  <input
+                    type="text"
+                    className="sm-form-input"
+                    placeholder="e.g. Eleanor Vance"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="sm-form-group">
+                  <label className="sm-form-label">Age / DOB</label>
+                  <input
+                    type="text"
+                    className="sm-form-input"
+                    placeholder="e.g. 52 yrs"
+                    value={newAge}
+                    onChange={(e) => setNewAge(e.target.value)}
+                  />
+                </div>
+                <div className="sm-form-group">
+                  <label className="sm-form-label">MRN / ID</label>
+                  <input
+                    type="text"
+                    className="sm-form-input"
+                    placeholder="e.g. MRN-948123"
+                    value={newMrn}
+                    onChange={(e) => setNewMrn(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="sm-form-grid-2">
+              <div className="sm-form-group">
+                <label className="sm-form-label">Appointment Time *</label>
+                <input
+                  type="time"
+                  className="sm-form-input"
+                  value={visitTime}
+                  onChange={(e) => setVisitTime(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="sm-form-group">
+                <label className="sm-form-label">Encounter Template *</label>
+                <select
+                  className="sm-form-select"
+                  value={visitType}
+                  onChange={(e) => setVisitType(e.target.value)}
+                >
+                  {CLINICAL_TEMPLATES.map((t) => (
+                    <option key={t.id} value={t.label}>
+                      {t.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="sm-schedule-form-footer">
+            <button type="button" className="sm-btn-cancel-modal" onClick={onClose} disabled={submitting}>
+              Cancel
+            </button>
+            <button type="submit" className="sm-btn-save-schedule" disabled={submitting}>
+              {submitting ? 'Scheduling...' : '➕ Add to Today\'s Schedule'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }
