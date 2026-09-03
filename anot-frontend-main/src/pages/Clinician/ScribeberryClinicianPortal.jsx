@@ -155,6 +155,9 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
 
   // Selected Patient for next/active encounter
   const [selectedPatientIdForEncounter, setSelectedPatientIdForEncounter] = useState('')
+  const [patientNameInput, setPatientNameInput] = useState('')
+  const [patientAgeInput, setPatientAgeInput] = useState('')
+  const [patientMrnInput, setPatientMrnInput] = useState('')
 
   // Custom Free-Text Macros / SmartPhrases
   const [macros, setMacros] = useState(() => {
@@ -401,17 +404,33 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
     }
   }
 
+  const handleSelectScheduledPatient = (pId) => {
+    setSelectedPatientIdForEncounter(pId)
+    if (pId) {
+      const p = patientList.find((x) => String(x.id) === String(pId))
+      if (p) {
+        setPatientNameInput(p.name || '')
+        setPatientMrnInput(p.mrn || '')
+        setPatientAgeInput(getPatientDisplayAge(p, patientList) || '')
+      }
+    } else {
+      setPatientNameInput('')
+      setPatientMrnInput('')
+      setPatientAgeInput('')
+    }
+  }
+
   const handleStartInstantDictation = async (customPatientId = null) => {
     try {
       const now = new Date()
       const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
       
       let patientId = customPatientId || selectedPatientIdForEncounter
-      let patientName = ''
-      let patientMrn = ''
-      let patientAge = ''
+      let patientName = patientNameInput.trim()
+      let patientMrn = patientMrnInput.trim()
+      let patientAge = patientAgeInput.trim()
 
-      if (patientId) {
+      if (patientId && !patientName) {
         const found = patientList.find((p) => String(p.id) === String(patientId))
         if (found) {
           patientName = found.name
@@ -420,33 +439,38 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
         }
       }
 
-      if (!patientId) {
-        const autoMrn = `MRN-${now.getTime().toString().slice(-6)}`
-        const autoName = `Patient ${autoMrn}`
+      if (!patientName) {
+        patientName = 'Patient Encounter'
+      }
+
+      if (!patientMrn) {
+        patientMrn = `MRN-${now.getTime().toString().slice(-6)}`
+      }
+
+      if (!patientAge) {
+        patientAge = '36 yrs'
+      }
+
+      // Create or ensure patient record in DB if new name is provided
+      if (!patientId || (patientNameInput && patientName !== 'Patient Encounter')) {
         try {
           const pRes = await patientsAPI.create({
-            name: autoName,
-            mrn: autoMrn,
+            name: patientName,
+            mrn: patientMrn,
           })
-          patientId = pRes?.patient?.id
-          patientName = autoName
-          patientMrn = autoMrn
+          if (pRes?.patient?.id) {
+            patientId = pRes.patient.id
+          }
         } catch (e) {
           if (e.payload?.patient?.id) {
             patientId = e.payload.patient.id
-            patientName = autoName
-            patientMrn = autoMrn
-          } else if (patientList.length > 0) {
-            patientId = patientList[0].id
-            patientName = patientList[0].name
-            patientMrn = patientList[0].mrn
           }
         }
       }
 
       const dbVisitType = normalizeVisitTypeForDb(selectedTemplate)
       const vRes = await visitsAPI.create({
-        patient_id: patientId,
+        patient_id: patientId || undefined,
         visit_date: now.toISOString().slice(0, 10),
         visit_time: timeStr,
         visit_type: dbVisitType,
@@ -457,7 +481,7 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
         patient_id: patientId,
         patient_name: patientName,
         mrn: patientMrn,
-        age: patientAge || '36 yrs',
+        age: patientAge,
         visit_date: now.toISOString().slice(0, 10),
         visit_time: timeStr,
         visit_type: dbVisitType,
@@ -929,48 +953,68 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
               {isIdleState && (
                 <div className="sm-state-idle">
                   <div className="sm-idle-card">
-                    {/* Active Patient Demographic Selector Header */}
-                    <div className="sm-patient-select-box">
-                      <div className="sm-patient-select-header">
-                        <span className="sm-patient-select-title">👤 Patient Encounter</span>
-                        <select
-                          className="sm-patient-select-dropdown"
-                          value={selectedPatientIdForEncounter}
-                          onChange={(e) => setSelectedPatientIdForEncounter(e.target.value)}
-                        >
-                          <option value="">✨ New / Instant Patient Encounter</option>
-                          {patientList.map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.name} — Age: {getPatientDisplayAge(p, patientList)} ({p.mrn})
-                            </option>
-                          ))}
-                        </select>
+                    {/* Active Patient Demographic & Intake Bar */}
+                    <div className="sm-patient-intake-card">
+                      <div className="sm-patient-intake-header">
+                        <div className="sm-patient-intake-badge">
+                          <span className="sm-intake-icon">👤</span>
+                          <span className="sm-intake-title">Patient Encounter Details</span>
+                        </div>
+
+                        {patientList.length > 0 && (
+                          <div className="sm-patient-quick-select">
+                            <select
+                              className="sm-patient-quick-dropdown"
+                              value={selectedPatientIdForEncounter}
+                              onChange={(e) => handleSelectScheduledPatient(e.target.value)}
+                            >
+                              <option value="">⚡ Or select from Today's Scheduled Patients ({patientList.length}) ▾</option>
+                              {patientList.map((p) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name} — Age: {getPatientDisplayAge(p, patientList)} ({p.mrn})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
                       </div>
 
-                      <div className="sm-patient-select-meta-strip">
-                        <span className="sm-patient-select-meta-item">
-                          <strong>Name:</strong>{' '}
-                          {selectedPatientIdForEncounter
-                            ? patientList.find((p) => String(p.id) === String(selectedPatientIdForEncounter))?.name || 'Patient'
-                            : 'Instant Patient'}
-                        </span>
-                        <span className="sm-meta-divider">•</span>
-                        <span className="sm-patient-select-meta-item">
-                          <strong>Age:</strong>{' '}
-                          {selectedPatientIdForEncounter
-                            ? getPatientDisplayAge(
-                                patientList.find((p) => String(p.id) === String(selectedPatientIdForEncounter)),
-                                patientList
-                              )
-                            : '36 yrs'}
-                        </span>
-                        <span className="sm-meta-divider">•</span>
-                        <span className="sm-patient-select-meta-item">
-                          <strong>MRN:</strong>{' '}
-                          {selectedPatientIdForEncounter
-                            ? patientList.find((p) => String(p.id) === String(selectedPatientIdForEncounter))?.mrn || 'Auto-MRN'
-                            : 'Auto-generated'}
-                        </span>
+                      <div className="sm-patient-intake-inputs-row">
+                        <div className="sm-intake-field sm-intake-field--name">
+                          <label className="sm-intake-label">Patient Name *</label>
+                          <input
+                            type="text"
+                            className="sm-intake-input sm-intake-input--name"
+                            placeholder="Enter patient name (e.g. John Doe, Sarah Miller)..."
+                            value={patientNameInput}
+                            onChange={(e) => {
+                              setPatientNameInput(e.target.value)
+                              if (selectedPatientIdForEncounter) setSelectedPatientIdForEncounter('')
+                            }}
+                          />
+                        </div>
+
+                        <div className="sm-intake-field sm-intake-field--age">
+                          <label className="sm-intake-label">Age / DOB</label>
+                          <input
+                            type="text"
+                            className="sm-intake-input"
+                            placeholder="e.g. 45 yrs"
+                            value={patientAgeInput}
+                            onChange={(e) => setPatientAgeInput(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="sm-intake-field sm-intake-field--mrn">
+                          <label className="sm-intake-label">MRN / ID</label>
+                          <input
+                            type="text"
+                            className="sm-intake-input"
+                            placeholder="e.g. MRN-849201"
+                            value={patientMrnInput}
+                            onChange={(e) => setPatientMrnInput(e.target.value)}
+                          />
+                        </div>
                       </div>
                     </div>
 
