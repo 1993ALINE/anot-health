@@ -344,7 +344,7 @@
   flex-direction: column;
   align-items: center;
   text-align: center;
-  max-width: 480px;
+  max-width: 640px;
   width: 100%;
 }
 
@@ -1516,9 +1516,86 @@
   border-color: var(--sm-blue-400);
 }
 
+/* ─── MODAL OVERLAY & CONTAINER ───────────────────────────────────────── */
+.sm-modal-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  background: rgba(15, 23, 42, 0.65) !important;
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 99999 !important;
+  padding: 20px !important;
+  box-sizing: border-box !important;
+}
+
+.sm-modal {
+  background: #FFFFFF !important;
+  border-radius: 16px !important;
+  width: 100% !important;
+  max-width: 560px !important;
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(0, 0, 0, 0.05) !important;
+  overflow: hidden !important;
+  animation: smModalPop 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  position: relative !important;
+  box-sizing: border-box !important;
+}
+
+@keyframes smModalPop {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.sm-modal__header {
+  padding: 16px 24px !important;
+  border-bottom: 1px solid var(--sm-slate-200) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  background: #FFFFFF !important;
+}
+
+.sm-modal__title-group h3 {
+  font-size: 17px !important;
+  font-weight: 800 !important;
+  color: var(--sm-slate-900) !important;
+  margin: 0 0 2px 0 !important;
+  letter-spacing: -0.02em !important;
+}
+
+.sm-modal__title-group p {
+  font-size: 12.5px !important;
+  color: var(--sm-slate-500) !important;
+  margin: 0 !important;
+}
+
+.sm-btn-close-modal {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 8px !important;
+  border: 1px solid var(--sm-slate-200) !important;
+  background: var(--sm-slate-50) !important;
+  color: var(--sm-slate-600) !important;
+  font-size: 15px !important;
+  font-weight: bold !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+
+.sm-btn-close-modal:hover {
+  background: var(--sm-red-50) !important;
+  color: var(--sm-red-600) !important;
+  border-color: #FECACA !important;
+}
+
 /* ─── MANAGE MACROS MODAL ────────────────────────────────────────────── */
 .sm-macro-modal {
-  max-width: 780px !important;
+  max-width: 800px !important;
   width: 95% !important;
   max-height: 85vh;
   display: flex;

@@ -1496,9 +1496,11 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
       {selectedNoteModal && (
         <SaintMaryNoteViewerModal
           note={selectedNoteModal}
+          noteData={selectedNoteModal}
           currentUser={currentUser}
           onClose={() => setSelectedNoteModal(null)}
           onNoteUpdated={loadData}
+          showToast={showToast}
         />
       )}
 
