@@ -150,7 +150,7 @@
     border-radius: 10px;
     border: 1px solid color-mix(in srgb, var(--brand-primary) 28%, #e2e8f0);
     background: color-mix(in srgb, var(--brand-primary) 8%, #fff);
-    color: var(--brand-primary, #4260e9);
+    color: var(--brand-primary, #0A3663);
     cursor: pointer;
     font-family: inherit;
     transition:
@@ -200,7 +200,7 @@
 .adm-modperm-summary__v {
     font-size: 0.9rem;
     font-weight: 800;
-    color: var(--brand-primary, #4260e9);
+    color: var(--brand-primary, #0A3663);
 }
 
 .adm-modperm-body {
@@ -309,7 +309,7 @@
 }
 
 .adm-modperm-switch input:checked + .adm-modperm-switch__track {
-    background: linear-gradient(90deg, var(--brand-primary, #4260e9), var(--brand-secondary, #7b61ff));
+    background: linear-gradient(90deg, var(--brand-primary, #0A3663), var(--brand-secondary, #008080));
 }
 
 .adm-modperm-switch input:checked + .adm-modperm-switch__track::after {
@@ -370,7 +370,7 @@
 
 .adm-modperm-btn--primary {
     color: #fff;
-    background: linear-gradient(135deg, var(--brand-primary, #4260e9), var(--brand-secondary, #7b61ff));
+    background: linear-gradient(135deg, var(--brand-primary, #0A3663), var(--brand-secondary, #008080));
     box-shadow: 0 4px 16px color-mix(in srgb, var(--brand-primary) 28%, transparent);
 }
 

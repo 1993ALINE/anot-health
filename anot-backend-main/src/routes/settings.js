@@ -16,6 +16,7 @@ const {
 router.get('/public', getPublicSettings)
 router.get('/clinician-templates', protect, restrict('clinician'), getClinicianTemplates)
 router.post('/clinician-templates', protect, restrict('clinician'), saveClinicianTemplates)
+router.put('/clinician-templates', protect, restrict('clinician'), saveClinicianTemplates)
 router.delete('/clinician-templates/:id', protect, restrict('clinician'), deleteClinicianTemplate)
 router.get('/internal', protect, loadAdminPortalModuleKeys, restrict('admin', 'super_admin'), requireAdminPortalModules('settings'), getInternalSettings)
 router.get('/transcription', protect, loadAdminPortalModuleKeys, restrict('admin', 'super_admin'), requireAdminPortalModules('settings'), getTranscriptionSettings)

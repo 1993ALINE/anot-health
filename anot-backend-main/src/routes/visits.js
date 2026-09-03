@@ -22,6 +22,7 @@ router.put('/:id/status', protect, restrict('clinician', 'scribe'), updateVisitS
 router.put('/:id', protect, restrict('clinician'), updateVisit)
 router.delete('/:id', protect, restrict('clinician'), deleteVisit)
 router.post('/:id/lock-note', protect, restrict('clinician'), lockNote)
+router.put('/:id/lock-note',  protect, restrict('clinician'), lockNote)
 
 // Clinician (own visits), Scribe (assigned visits), QPS (review), and Admins (all) — the
 // controller scopes results per role.

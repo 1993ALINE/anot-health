@@ -7,6 +7,7 @@ import SystemProfileManager from '../../components/SystemProfileManager'
 import PasswordStrengthMeter from '../../components/PasswordStrengthMeter'
 import { validatePassword } from '../../utils/passwordPolicy'
 import AdminModulePermissionsModal from '../../components/AdminModulePermissionsModal'
+import SaintMaryClinicModule from '../../components/SaintMaryClinicModule'
 import AdminAuditDashboard from './AdminAuditDashboard'
 import SystemHealth from './SystemHealth'
 import { SfAccountMenu, useSidebar, Overlay, usePortalDrawerMode, portalSidebarAriaHidden, portalSidebarInert, PortalSidebarBrand } from '../shared'
@@ -173,11 +174,11 @@ function getRegisterUserErrorMessage(err) {
 
 /** Primary brand palette — align with CSS :root (--brand-primary / --brand-secondary) */
 const BRAND = {
-    root: '#4260E9',
-    light: '#6D84F5',
-    deep: '#2D49C7',
-    secondary: '#7B61FF',
-    secondaryLight: '#9D8DFF',
+    root: '#0A3663',
+    light: '#1A548C',
+    deep: '#062343',
+    secondary: '#008080',
+    secondaryLight: '#00A1A3',
     muted: '#64748b',
 }
 
@@ -188,12 +189,12 @@ const SEM = {
 }
 
 const ROLE_CFG = {
-    clinician:    { label: 'Clinician',    bg: '#EEF2FF', color: BRAND.deep, icon: '🩺' },
-    scribe:       { label: 'Scribe',       bg: '#F5F3FF', color: BRAND.secondary, icon: '📝' },
-    qps:          { label: 'QPS',          bg: '#EDE9FE', color: '#5b21b6', icon: '✅' },
-    admin:        { label: 'Admin',        bg: '#EEF2FF', color: BRAND.root, icon: '⚙️' },
+    clinician:    { label: 'Clinician',    bg: '#EEF5FB', color: BRAND.root, icon: '🩺' },
+    scribe:       { label: 'Scribe',       bg: '#E0F5F5', color: BRAND.secondary, icon: '📝' },
+    qps:          { label: 'QPS',          bg: '#EBF3FA', color: '#005C5E', icon: '✅' },
+    admin:        { label: 'Admin',        bg: '#EEF5FB', color: BRAND.root, icon: '⚙️' },
     super_admin:  { label: 'Super Admin',  bg: '#FEF3C7', color: '#b45309', icon: '👑' },
-    elevated:     { label: 'Administrator', bg: '#EEF2FF', color: BRAND.root, icon: '⚙️' },
+    elevated:     { label: 'Administrator', bg: '#EEF5FB', color: BRAND.root, icon: '⚙️' },
 }
 
 const NAV = [
@@ -203,6 +204,7 @@ const NAV = [
     { key: 'qps',         icon: '✅', label: 'QPS Staff' },
     { key: 'admins',      icon: '⚙️', label: 'Admins' },
     { key: 'assignments', icon: '🔗', label: 'Assignments' },
+    { key: 'saint-mary-clinic', icon: '🏥', label: 'Saint Mary Clinic' },
     { key: 'payroll',     icon: '💳', label: 'Payroll' },
     { key: 'audit',       icon: '🔍', label: 'Audit Logs' },
     { key: 'health',      icon: '💓', label: 'System Health' },
@@ -217,6 +219,7 @@ const MODULE_META = {
     qps:           { tagline: 'Quality scoring and note review oversight.' },
     admins:        { tagline: 'Elevated operators — Super Admins manage Admin access and modules.' },
     assignments:   { tagline: 'Who documents whom — keep pairs accurate and current.' },
+    'saint-mary-clinic': { tagline: 'Clinic doctor roster, Saint Mary custom interface, and ambient workflow oversight.' },
     payroll:       { tagline: 'Compensation tied to completed notes and agreed rates.' },
     audit:         { tagline: 'Enterprise activity monitoring, security analytics, and immutable compliance exports.' },
     health:        { tagline: 'Live status of core services, API integrations, and platform metrics.' },
@@ -268,8 +271,8 @@ const DEFAULT_SETTINGS_FORM = {
     x_url: '',
     logo_data_url: '',
     favicon_data_url: '',
-    primary_color: '#4260E9',
-    secondary_color: '#7B61FF',
+    primary_color: '#0A3663',
+    secondary_color: '#008080',
     system_description: 'Clinical documentation platform',
     audit_retention_days: 2555,
     transcribe_enabled: false,
@@ -1780,6 +1783,11 @@ function Admin() {
                     { label: 'Page', value: auditDashMeta?.page !== null && auditDashMeta?.page !== undefined ? String(auditDashMeta.page) : '—' },
                     { label: 'Alerts', value: auditDashMeta?.alerts !== null && auditDashMeta?.alerts !== undefined ? String(auditDashMeta.alerts) : '—' },
                 ]
+            case 'saint-mary-clinic':
+                return [
+                    { label: 'Clinic', value: 'Saint Mary Clinic, AB' },
+                    { label: 'Interface', value: 'Saint Mary Clinic UI' },
+                ]
             case 'settings':
                 return [
                     { label: 'Environment', value: 'Production' },
@@ -2009,6 +2017,11 @@ function Admin() {
                     {tab === 'qps'        && <AdminUserTable {...userTableProps} userList={qpsStaff}   role="qps" />}
                     {tab === 'admins' && (isSuperAdmin(currentUser) || adminMayOpenTab(currentUser, 'admins')) && (
                         <AdminUserTable {...userTableProps} userList={portalAdmins} role="elevated" />
+                    )}
+
+                    {/* ── SAINT MARY CLINIC, ALBERTA ───────────── */}
+                    {tab === 'saint-mary-clinic' && (
+                        <SaintMaryClinicModule currentUser={currentUser} showToast={showToast} />
                     )}
 
                     {/* ── ASSIGNMENTS ───────────────────────────── */}

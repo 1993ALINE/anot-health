@@ -107,18 +107,25 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
 
   const resolvedStatus = visitId ? status : 'error'
 
+  const [reloadTrigger, setReloadTrigger] = useState(0)
+
   const fetchBlobUrl = useCallback(async (idx) => {
     if (blobUrlsRef.current[idx]) {return blobUrlsRef.current[idx]}
 
-    const blob = await audioAPI.getBlob(visitIdRef.current, idx)
-    if (!blob?.size) {throw new Error('empty')}
+    try {
+      const blob = await audioAPI.getBlob(visitIdRef.current, idx)
+      if (!blob?.size) {throw new Error('empty')}
 
-    const url = URL.createObjectURL(blob)
-    blobUrlsRef.current[idx] = url
-    return url
+      const url = URL.createObjectURL(blob)
+      blobUrlsRef.current[idx] = url
+      return url
+    } catch (err) {
+      delete blobUrlsRef.current[idx]
+      throw err
+    }
   }, [])
 
-  // Recording count only on visit change.
+  // Recording count only on visit change or reload.
   useEffect(() => {
     if (!visitId) {
       return
@@ -126,22 +133,14 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
 
     let cancelled = false
 
-    setCount(1)
-    setActiveIdx(0)
-    setDurations({})
-    durationsRef.current = {}
-    setProgress(0)
-    setCurrentTime(0)
-    setDuration(0)
-    setPlaying(false)
-    setStatus('loading')
-
     Object.values(blobUrlsRef.current).forEach((url) => URL.revokeObjectURL(url))
     blobUrlsRef.current = {}
 
     audioAPI.getCount(visitId)
       .then((d) => {
-        if (!cancelled && d.count > 0) {setCount(d.count)}
+        if (!cancelled && d.count > 0) {
+          setCount(d.count)
+        }
       })
       .catch(() => {})
 
@@ -150,7 +149,7 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
       Object.values(blobUrlsRef.current).forEach((url) => URL.revokeObjectURL(url))
       blobUrlsRef.current = {}
     }
-  }, [visitId])
+  }, [visitId, reloadTrigger])
 
   // Load active recording on tab switch: fetch blob, wait for metadata, then ready.
   useEffect(() => {
@@ -174,8 +173,6 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
 
         audio.pause()
         audio.currentTime = 0
-        // Read the latest speed from a ref so this (heavy) load effect doesn't
-        // need `playbackRate` as a dependency and re-run on every speed change.
         audio.playbackRate = playbackRateRef.current
         audio.src = url
 
@@ -195,7 +192,8 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
         setProgress(0)
         setCurrentTime(0)
         setStatus('ready')
-      } catch {
+      } catch (loadErr) {
+        console.warn(`[PortalAudioPlayer] Failed to load recording ${activeIdx + 1} for visit ${visitId}:`, loadErr?.message)
         if (!cancelled) {setStatus('error')}
       }
     })()
@@ -204,7 +202,7 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
       cancelled = true
       audio.pause()
     }
-  }, [activeIdx, visitId, durationSecs, fetchBlobUrl, storeDuration])
+  }, [activeIdx, visitId, durationSecs, fetchBlobUrl, storeDuration, reloadTrigger])
 
   // Playback events on the single main audio element.
   useEffect(() => {
@@ -359,7 +357,17 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
         </span>
         {resolvedStatus === 'loading' ? <span className="sf-audio-bar__pill">Loading…</span> : null}
         {resolvedStatus === 'ready' ? <span className="sf-audio-bar__pill sf-audio-bar__pill--ok">Ready</span> : null}
-        {resolvedStatus === 'error' ? <span className="sf-audio-bar__pill sf-audio-bar__pill--error">Audio unavailable</span> : null}
+        {resolvedStatus === 'error' ? (
+          <button
+            type="button"
+            className="sf-audio-bar__pill sf-audio-bar__pill--error"
+            style={{ cursor: 'pointer', border: 'none', background: '#FEE2E2', color: '#991B1B', fontWeight: 600 }}
+            onClick={() => setReloadTrigger((t) => t + 1)}
+            title="Click to retry loading audio recording"
+          >
+            Audio unavailable · ⟳ Retry
+          </button>
+        ) : null}
         <span className="sf-audio-timer" aria-live="polite">
           <span>{displayCurrent} / {displayTotal}</span>
         </span>

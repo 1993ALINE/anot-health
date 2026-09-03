@@ -37,7 +37,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  background: #4260e9;
+  background: #0A3663;
   color: #fff;
   border: none;
   border-radius: 10px;
@@ -58,7 +58,7 @@
   border-radius: 50%;
   animation: sysh-spin 0.7s linear infinite;
 }
-.sysh-spinner--dark { border-color: rgba(15, 23, 42, 0.2); border-top-color: #4260e9; }
+.sysh-spinner--dark { border-color: rgba(15, 23, 42, 0.2); border-top-color: #0A3663; }
 @keyframes sysh-spin { to { transform: rotate(360deg); } }
 
 /* ── Overall status card ──────────────────────────────────────────────── */

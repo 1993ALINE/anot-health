@@ -548,7 +548,7 @@ function QPS() {
             <div className="sf-card sf-card-lg">
               <div className="sf-card__title">My Activity</div>
               <div className="sf-metric-grid">
-                {[['Notes Graded', gradedNotes.length, '#4260E9'], ['Providers Reviewed', [...new Set(gradedNotes.map(n => n.clinician_id))].length, '#00C896'], ['Pending Review', notes.filter(n => n.status !== 'uploaded').length, '#FFB547']].map(([l, v, c]) => (
+                {[['Notes Graded', gradedNotes.length, '#0A3663'], ['Providers Reviewed', [...new Set(gradedNotes.map(n => n.clinician_id))].length, '#00C896'], ['Pending Review', notes.filter(n => n.status !== 'uploaded').length, '#FFB547']].map(([l, v, c]) => (
                   <div key={l} className="sf-metric-tile">
                     <div className="sf-metric-tile__val" style={{ color: c }}>{v}</div>
                     <div className="sf-metric-tile__lbl">{l}</div>
@@ -896,7 +896,7 @@ function Empty({ icon, title, sub }) {
 
 function Notif({ notif }) {
   return (
-    <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 999, background: notif.type === 'error' ? '#FFE8ED' : 'linear-gradient(135deg,#4260E9,#7B61FF)', color: notif.type === 'error' ? '#be123c' : '#fff', padding: '12px 20px', borderRadius: 10, fontSize: 13, fontWeight: 500, boxShadow: '0 4px 20px rgba(0,0,0,.15)' }}>
+    <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 999, background: notif.type === 'error' ? '#FFE8ED' : 'linear-gradient(135deg,#0A3663,#008080)', color: notif.type === 'error' ? '#be123c' : '#fff', padding: '12px 20px', borderRadius: 10, fontSize: 13, fontWeight: 500, boxShadow: '0 4px 20px rgba(0,0,0,.15)' }}>
       {notif.type === 'error' ? '⚠ ' : '✓ '}{notif.msg}
     </div>
   )

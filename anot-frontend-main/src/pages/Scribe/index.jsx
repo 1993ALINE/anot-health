@@ -1063,14 +1063,14 @@ function Scribe() {
                       <div className="sf-grade-detail__name">{selectedGrade.patient_name}</div>
                       <div className="sf-grade-detail__meta">{selectedGrade.mrn} · {selectedGrade.visit_type} · {fmtDisplayDate(selectedGrade.visit_date)} · {selectedGrade.clinician_name}</div>
                     </div>
-                    <div style={{ fontSize: 36, fontWeight: 700, color: selectedGrade.overall_score >= 90 ? '#4260E9' : selectedGrade.overall_score >= 75 ? '#FFB547' : '#FF5A7A', lineHeight: 1 }}>{selectedGrade.overall_score}<span style={{ fontSize: 14, color: '#64748B', fontWeight: 400 }}>/100</span></div>
+                    <div style={{ fontSize: 36, fontWeight: 700, color: selectedGrade.overall_score >= 90 ? '#0A3663' : selectedGrade.overall_score >= 75 ? '#FFB547' : '#FF5A7A', lineHeight: 1 }}>{selectedGrade.overall_score}<span style={{ fontSize: 14, color: '#64748B', fontWeight: 400 }}>/100</span></div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 20 }}>
                     {[['Accuracy', selectedGrade.accuracy],['Completeness', selectedGrade.completeness],['Medical Terminology', selectedGrade.terminology],['Formatting', selectedGrade.formatting]].map(([l, v]) => (
                       <div key={l}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                           <span style={{ fontSize: 13, color: '#1E293B', fontWeight: 500 }}>{l}</span>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: v >= 90 ? '#4260E9' : v >= 75 ? '#FFB547' : '#FF5A7A' }}>{v}/100</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: v >= 90 ? '#0A3663' : v >= 75 ? '#FFB547' : '#FF5A7A' }}>{v}/100</span>
                         </div>
                         <ScoreBar value={v} />
                       </div>
@@ -1096,7 +1096,7 @@ function Scribe() {
                   <div style={{ width: 48, height: 48, borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, background: g.overall_score >= 90 ? '#E1F5EE' : g.overall_score >= 75 ? '#FAEEDA' : '#FCEBEB', color: g.overall_score >= 90 ? '#085041' : g.overall_score >= 75 ? '#633806' : '#501313' }}>{g.overall_score}</div>
                   <div><div className="sf-row-name">{g.patient_name}</div><div className="sf-row-meta">{g.mrn} · {g.visit_type} · {fmtDisplayDate(g.visit_date)} · {g.clinician_name}</div>{g.comment && <div style={{ fontSize: 12, color: '#64748B', marginTop: 4, fontStyle: 'italic' }}>"{g.comment.length > 60 ? g.comment.slice(0, 60) + '...' : g.comment}"</div>}</div>
                 </div>
-                <div className="sf-row-right"><span style={{ fontSize: 12, color: '#4260E9', fontWeight: 500 }}>View →</span></div>
+                <div className="sf-row-right"><span style={{ fontSize: 12, color: '#0A3663', fontWeight: 500 }}>View →</span></div>
               </div>
             ))}
           </div>
@@ -1132,7 +1132,7 @@ function Scribe() {
             <div className="sf-card sf-card-lg">
               <div className="sf-card__title">My Activity</div>
               <div className="sf-metric-grid">
-                {[['Notes Written', myNotes.length, '#4260E9'],['Notes Submitted', myNotes.filter(n => ['submitted','uploaded'].includes(n.status)).length, '#00C896'],['Notes Graded', grades.length, '#FFB547']].map(([l, v, c]) => (
+                {[['Notes Written', myNotes.length, '#0A3663'],['Notes Submitted', myNotes.filter(n => ['submitted','uploaded'].includes(n.status)).length, '#00C896'],['Notes Graded', grades.length, '#FFB547']].map(([l, v, c]) => (
                   <div key={l} className="sf-metric-tile">
                     <div className="sf-metric-tile__val" style={{ color: c }}>{v}</div>
                     <div className="sf-metric-tile__lbl">{l}</div>
@@ -1250,7 +1250,7 @@ function Scribe() {
                 {QUICK.map(({ label, date }) => {
                   const isSel = selectedDate === date
                   return (
-                    <div key={date} onClick={() => setSelectedDate(date)} style={{ padding: '14px 16px', borderRadius: 12, cursor: 'pointer', border: `2px solid ${isSel ? '#4260E9' : '#E2E8F0'}`, background: isSel ? 'linear-gradient(135deg,#4260E9,#7B61FF)' : '#fff', transition: 'all .15s' }}>
+                    <div key={date} onClick={() => setSelectedDate(date)} style={{ padding: '14px 16px', borderRadius: 12, cursor: 'pointer', border: `2px solid ${isSel ? '#0A3663' : '#E2E8F0'}`, background: isSel ? 'linear-gradient(135deg,#0A3663,#008080)' : '#fff', transition: 'all .15s' }}>
                       <div style={{ fontSize: 14, fontWeight: 600, color: isSel ? '#fff' : '#1E293B' }}>{label}</div>
                       <div style={{ fontSize: 12, color: isSel ? 'rgba(255,255,255,.6)' : '#64748B', marginTop: 3 }}>{fmtShortDate(date)}</div>
                     </div>
@@ -1733,7 +1733,7 @@ function Empty({ icon, title, sub }) {
 
 function Notif({ notif }) {
   return (
-    <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 999, background: notif.type === 'red' ? '#FFE8ED' : 'linear-gradient(135deg,#4260E9,#7B61FF)', color: notif.type === 'red' ? '#be123c' : '#fff', padding: '12px 20px', borderRadius: 10, fontSize: 13, fontWeight: 500, boxShadow: '0 4px 20px rgba(0,0,0,.15)' }}>
+    <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 999, background: notif.type === 'red' ? '#FFE8ED' : 'linear-gradient(135deg,#0A3663,#008080)', color: notif.type === 'red' ? '#be123c' : '#fff', padding: '12px 20px', borderRadius: 10, fontSize: 13, fontWeight: 500, boxShadow: '0 4px 20px rgba(0,0,0,.15)' }}>
       {notif.type === 'red' ? '⚠ ' : '✓ '}{notif.msg}
     </div>
   )

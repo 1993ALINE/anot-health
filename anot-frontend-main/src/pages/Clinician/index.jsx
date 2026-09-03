@@ -36,6 +36,9 @@ import { cleanAiDraftForDisplay } from '../../utils/aiDraftFormat'
 import { startRecordingKeepAlive, stopRecordingKeepAlive } from '../../utils/recordingKeepAlive'
 import * as offlineAudioQueue from '../../utils/offlineAudioQueue'
 import QuickConsultationModal from '../../components/QuickConsultationModal'
+import ScribeberryRecordButton from '../../components/ScribeberryRecordButton'
+import ScribeberryRecordingDock from '../../components/ScribeberryRecordingDock'
+import ScribeberryClinicianPortal from './ScribeberryClinicianPortal'
 import { parseNote, buildNote } from '../../utils/noteParser'
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -945,7 +948,7 @@ function AIModalHeader({ visit, hideAudioControls, txBadge, txSt, txBusy, loadin
             <StatusBadge label={txBadge} className={transcriptionStatusBadgeClass(txSt)} />
           ) : null}
           {!hideAudioControls && visit.audio_file ? (
-            <button type="button" disabled={txBusy || loading} onClick={onRunTx} style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#4260E9,#7B61FF)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: txBusy ? 'wait' : 'pointer', opacity: txBusy ? 0.75 : 1, fontFamily: 'inherit' }}>
+            <button type="button" disabled={txBusy || loading} onClick={onRunTx} style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: 'linear-gradient(135deg,#0A3663,#008080)', color: '#fff', fontSize: 12, fontWeight: 600, cursor: txBusy ? 'wait' : 'pointer', opacity: txBusy ? 0.75 : 1, fontFamily: 'inherit' }}>
               {txBusy ? 'Sending…' : 'Send to scribe'}
             </button>
           ) : null}
@@ -961,7 +964,7 @@ function AIModalTabBar({ tab, onTabChange, hideAudioControls }) {
   return (
     <div style={{ display:'flex', borderBottom:'1px solid #E2E8F0', padding:'0 24px' }}>
       {[['ai','Scribe draft'],['transcription','Transcript']].map(([k,l]) => (
-        <button key={k} onClick={() => onTabChange(k)} style={{ padding:'12px 0', marginRight:24, fontSize:14, fontWeight: tab===k ? 700 : 400, color: tab===k ? '#4260E9' : '#94A3B8', background:'none', border:'none', borderBottom: tab===k ? '2px solid #4260E9' : '2px solid transparent', cursor:'pointer', fontFamily:'inherit' }}>{l}</button>
+        <button key={k} onClick={() => onTabChange(k)} style={{ padding:'12px 0', marginRight:24, fontSize:14, fontWeight: tab===k ? 700 : 400, color: tab===k ? '#0A3663' : '#94A3B8', background:'none', border:'none', borderBottom: tab===k ? '2px solid #0A3663' : '2px solid transparent', cursor:'pointer', fontFamily:'inherit' }}>{l}</button>
       ))}
     </div>
   )
@@ -997,7 +1000,7 @@ function AIModalTranscriptContent({ txts, recIdx, onRecIdxChange }) {
       {txts.length > 1 && (
         <div style={{ display:'flex', gap:8, marginBottom:16 }}>
           {txts.map((_, i) => (
-            <button key={i} onClick={() => onRecIdxChange(i)} style={{ padding:'6px 16px', borderRadius:10, fontSize:13, fontWeight:600, cursor:'pointer', border:'2px solid', background: recIdx===i ? 'linear-gradient(135deg,#4260E9,#7B61FF)' : '#fff', color: recIdx===i ? '#fff' : '#64748B', borderColor: recIdx===i ? '#4260E9' : '#E2E8F0' }}>Rec {i+1}</button>
+            <button key={i} onClick={() => onRecIdxChange(i)} style={{ padding:'6px 16px', borderRadius:10, fontSize:13, fontWeight:600, cursor:'pointer', border:'2px solid', background: recIdx===i ? 'linear-gradient(135deg,#0A3663,#008080)' : '#fff', color: recIdx===i ? '#fff' : '#64748B', borderColor: recIdx===i ? '#0A3663' : '#E2E8F0' }}>Rec {i+1}</button>
           ))}
         </div>
       )}
@@ -1501,7 +1504,7 @@ function ClinicianTopbar({
 // ─── BUTTON STYLES ────────────────────────────────────────────────────────────
 
 const _B = {
-  primary: { display:'inline-flex', alignItems:'center', gap:8, padding:'10px 20px', borderRadius:12, background:'linear-gradient(135deg,#4260E9,#7B61FF)', color:'#fff', border:'none', fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:'inherit', boxShadow:'0 4px 14px rgba(66,96,233,.35)' },
+  primary: { display:'inline-flex', alignItems:'center', gap:8, padding:'10px 20px', borderRadius:12, background:'linear-gradient(135deg,#0A3663,#008080)', color:'#fff', border:'none', fontSize:14, fontWeight:700, cursor:'pointer', fontFamily:'inherit', boxShadow:'0 4px 14px rgba(10,54,99,.35)' },
   outline: { display:'inline-flex', alignItems:'center', gap:8, padding:'10px 20px', borderRadius:12, background:'#fff', color:'#475569', border:'1.5px solid #E2E8F0', fontSize:14, fontWeight:600, cursor:'pointer', fontFamily:'inherit' },
   action:  { display:'inline-flex', alignItems:'center', gap:6, padding:'9px 16px', borderRadius:10, fontSize:13, fontWeight:700, cursor:'pointer', border:'none', fontFamily:'inherit', whiteSpace:'nowrap' },
   small:   { padding:'7px 14px', borderRadius:10, fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'inherit' },
@@ -1517,7 +1520,7 @@ export default function ClinicianWithErrorBoundary() {
   )
 }
 
-function Clinician() {
+function StandardClinicianPortal() {
   const _navigate    = useNavigate()
   const cu          = getCurrentUser()
   const sidebar     = useSidebar()
@@ -2857,7 +2860,7 @@ function Clinician() {
               <div className="sf-card__title">My activity</div>
               <div className="sf-metric-grid">
                 {[
-                  [encDayLabel, todayEnc, '#4260E9'],
+                  [encDayLabel, todayEnc, '#0A3663'],
                   ['With Scribe', pendingEnc, '#FFB547'],
                   ['Completed', completedEnc, '#00C896'],
                 ].map(([label, val, color]) => (
@@ -3096,21 +3099,22 @@ function Clinician() {
               title={historyTitle}
               subtitle={historySubtitle}
             >
-              <button
-                type="button"
-                className="btn btn-record btn-sm"
-                onClick={() => {
-                  if (active) {
+              <ScribeberryRecordButton
+                activeVisit={active || addRec}
+                isPaused={active ? paused : addPaused}
+                timerSeconds={active ? timer : addTimer}
+                stream={active ? mRef.current?.stream : arRef.current?.stream}
+                onStartClick={() => {
+                  if (active || addRec) {
                     showToast('Consultation recording is already in progress.', 'warn')
                     return
                   }
                   loadPatients()
                   setQuickRecOpen(true)
                 }}
-                title="Start a new consultation with direct audio recording"
-              >
-                🎙 Start Consultation
-              </button>
+                onPauseResume={active ? pauseResume : pauseResumeAdd}
+                onEndVisit={active ? endVisit : stopAdd}
+              />
               <button type="button" className="btn btn-sm" disabled={loading} onClick={() => loadHistory({ notify: true })} title="Reload list">
                 ⟳ Refresh
               </button>
@@ -3158,11 +3162,11 @@ function Clinician() {
                     gap: 6,
                     whiteSpace: 'nowrap',
                     background: notesActiveFilterCount > 0 ? '#EFF6FF' : 'white',
-                    border: `1px solid ${notesActiveFilterCount > 0 ? '#4F46E5' : '#E5E7EB'}`,
+                    border: `1px solid ${notesActiveFilterCount > 0 ? '#0A3663' : '#E5E7EB'}`,
                     borderRadius: 6,
                     padding: '6px 12px',
                     fontSize: 13,
-                    color: notesActiveFilterCount > 0 ? '#4F46E5' : '#374151',
+                    color: notesActiveFilterCount > 0 ? '#0A3663' : '#374151',
                     cursor: 'pointer',
                   }}
                 >
@@ -3513,21 +3517,22 @@ function Clinician() {
                   ⟳ <span className="cl-refresh-label">Refresh</span>
                 </button>
               </ClinicianTooltip>
-              <button
-                type="button"
-                className="btn btn-record btn-sm"
-                onClick={() => {
-                  if (active) {
+              <ScribeberryRecordButton
+                activeVisit={active || addRec}
+                isPaused={active ? paused : addPaused}
+                timerSeconds={active ? timer : addTimer}
+                stream={active ? mRef.current?.stream : arRef.current?.stream}
+                onStartClick={() => {
+                  if (active || addRec) {
                     showToast('Consultation recording is already in progress.', 'warn')
                     return
                   }
                   loadPatients()
                   setQuickRecOpen(true)
                 }}
-                title="Start a new consultation with direct audio recording"
-              >
-                🎙 Start Consultation
-              </button>
+                onPauseResume={active ? pauseResume : pauseResumeAdd}
+                onEndVisit={active ? endVisit : stopAdd}
+              />
               <button type="button" className="btn btn-navy btn-sm" onClick={() => { setShowAdd((f) => !f); setPtErr('') }}>
                 + Add Patient
               </button>
@@ -4045,6 +4050,38 @@ function Clinician() {
         </div>
       )}
 
+      <ScribeberryRecordingDock
+        activeVisit={active || addRec}
+        isPaused={active ? paused : addPaused}
+        timerSeconds={active ? timer : addTimer}
+        stream={active ? mRef.current?.stream : arRef.current?.stream}
+        onPauseResume={active ? pauseResume : pauseResumeAdd}
+        onEndVisit={active ? endVisit : stopAdd}
+        onCancel={
+          active
+            ? () => {
+                setConfirmDialog({
+                  title: 'Discard Recording?',
+                  message: `Are you sure you want to discard the active recording for ${active.patient_name || 'this patient'}? All audio will be lost and the encounter will be restored to upcoming.`,
+                  confirmLabel: 'Discard Recording',
+                  danger: true,
+                  onConfirm: cancelRecording,
+                })
+              }
+            : () => {
+                clearInterval(atRef.current)
+                arRef.current?.stream?.getTracks().forEach((t) => t.stop())
+                stopRecordingKeepAlive().catch(() => {})
+                setAddRec(null)
+                setAddTimer(0)
+                acRef.current = []
+                arRef.current = null
+                showToast('Additional recording discarded')
+              }
+        }
+        mode={active ? 'primary' : 'additional'}
+      />
+
       {aiVisit    && <AIModal    visit={aiVisit}    onClose={() => { setAiVisit(null); setAiVisitFromNotes(false) }} hideAudioControls={aiVisitFromNotes} showToast={showToast} />}
       {consentModal}
       <QuickConsultationModal
@@ -4084,3 +4121,28 @@ function Toast({ toast }) {
     </div>
   )
 }
+
+function Clinician() {
+  const cu = getCurrentUser()
+
+  const useSaintMaryUi =
+    cu?.ui_mode === 'scribeberry' ||
+    (cu?.clinic_code === 'saint_mary' && cu?.ui_mode !== 'standard')
+
+  if (useSaintMaryUi) {
+    return (
+      <ScribeberryClinicianPortal
+        currentUser={cu}
+        onLogout={() => {
+          stopRecordingKeepAlive().catch(() => {})
+          authAPI.logout({ reload: true }).catch(() => {
+            globalThis.location.replace('/login')
+          })
+        }}
+      />
+    )
+  }
+
+  return <StandardClinicianPortal />
+}
+

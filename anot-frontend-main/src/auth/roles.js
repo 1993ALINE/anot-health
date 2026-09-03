@@ -15,6 +15,7 @@ export const ADMIN_PORTAL_MODULES = [
     { key: 'qps', icon: '✅', label: 'QPS Staff' },
     { key: 'admins', icon: '⚙️', label: 'Admins' },
     { key: 'assignments', icon: '🔗', label: 'Assignments' },
+    { key: 'saint-mary-clinic', icon: '🏥', label: 'Saint Mary Clinic' },
     { key: 'payroll', icon: '💳', label: 'Payroll' },
     { key: 'audit', icon: '🔍', label: 'Audit Logs' },
     { key: 'settings', icon: '🛠', label: 'Settings' },

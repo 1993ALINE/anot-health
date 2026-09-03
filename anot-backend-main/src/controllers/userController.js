@@ -673,6 +673,98 @@ const getPerformance = async (req, res) => {
     }
 }
 
+// ─── SAINT MARY CLINIC MANAGEMENT ──────────────────────────────────────────
+
+const getSaintMaryDoctors = async (req, res) => {
+    try {
+        await ensureUserProfileSchema()
+        const returning = await userSelectList()
+        const result = await pool.query(`
+            SELECT ${returning} FROM users
+            WHERE clinic_code = 'saint_mary' OR (role = 'clinician' AND ui_mode = 'scribeberry')
+            ORDER BY name ASC
+        `)
+        res.status(200).json({ doctors: result.rows })
+    } catch (err) {
+        sendHttpError(res, 500, err, { context: 'getSaintMaryDoctors', req })
+    }
+}
+
+const addSaintMaryDoctor = async (req, res) => {
+    try {
+        await ensureUserProfileSchema()
+        const { userId, ui_mode = 'scribeberry' } = req.body
+        if (!userId) {
+            return res.status(400).json({ error: 'userId is required.' })
+        }
+        const returning = await userSelectList()
+        const result = await pool.query(`
+            UPDATE users
+            SET clinic_code = 'saint_mary',
+                clinic_name = 'Saint Mary Clinic, Alberta',
+                ui_mode = $1
+            WHERE id = $2
+            RETURNING ${returning}
+        `, [ui_mode || 'scribeberry', userId])
+
+        if (!result.rows[0]) {
+            return res.status(404).json({ error: 'Doctor not found.' })
+        }
+        await auditLog(req.user, 'CLINIC_DOCTOR_ADDED', 'user', String(userId), `Added to Saint Mary Clinic (UI: ${ui_mode})`, { req, module_key: 'saint-mary-clinic' }).catch(reportAuditFailure)
+        res.status(200).json({ message: 'Doctor enrolled in Saint Mary Clinic.', doctor: result.rows[0] })
+    } catch (err) {
+        sendHttpError(res, 500, err, { context: 'addSaintMaryDoctor', req })
+    }
+}
+
+const removeSaintMaryDoctor = async (req, res) => {
+    try {
+        await ensureUserProfileSchema()
+        const { id } = req.params
+        const returning = await userSelectList()
+        const result = await pool.query(`
+            UPDATE users
+            SET clinic_code = NULL,
+                clinic_name = NULL,
+                ui_mode = 'standard'
+            WHERE id = $1
+            RETURNING ${returning}
+        `, [id])
+
+        if (!result.rows[0]) {
+            return res.status(404).json({ error: 'Doctor not found.' })
+        }
+        await auditLog(req.user, 'CLINIC_DOCTOR_REMOVED', 'user', String(id), 'Removed from Saint Mary Clinic', { req, module_key: 'saint-mary-clinic' }).catch(reportAuditFailure)
+        res.status(200).json({ message: 'Doctor unassigned from Saint Mary Clinic.', doctor: result.rows[0] })
+    } catch (err) {
+        sendHttpError(res, 500, err, { context: 'removeSaintMaryDoctor', req })
+    }
+}
+
+const toggleDoctorUiMode = async (req, res) => {
+    try {
+        await ensureUserProfileSchema()
+        const { id } = req.params
+        const { ui_mode } = req.body
+        const newMode = ui_mode === 'scribeberry' ? 'scribeberry' : 'standard'
+        const returning = await userSelectList()
+        const result = await pool.query(`
+            UPDATE users
+            SET ui_mode = $1
+            WHERE id = $2
+            RETURNING ${returning}
+        `, [newMode, id])
+
+        if (!result.rows[0]) {
+            return res.status(404).json({ error: 'Doctor not found.' })
+        }
+        await auditLog(req.user, 'CLINIC_UI_MODE_UPDATED', 'user', String(id), `UI mode changed to ${newMode}`, { req, module_key: 'saint-mary-clinic' }).catch(reportAuditFailure)
+        res.status(200).json({ message: `Doctor UI mode set to ${newMode}.`, doctor: result.rows[0] })
+    } catch (err) {
+        sendHttpError(res, 500, err, { context: 'toggleDoctorUiMode', req })
+    }
+}
+
 module.exports = {
     getAllUsers,
     getUser,
@@ -686,4 +778,8 @@ module.exports = {
     getPerformance,
     updateRate,
     resetPassword,
+    getSaintMaryDoctors,
+    addSaintMaryDoctor,
+    removeSaintMaryDoctor,
+    toggleDoctorUiMode,
 }

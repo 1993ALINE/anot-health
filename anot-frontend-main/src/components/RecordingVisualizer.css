@@ -1,0 +1,35 @@
+.rec-visualizer {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 4px;
+}
+
+.rec-visualizer__bar {
+  display: inline-block;
+  width: 3px;
+  min-height: 4px;
+  max-height: 22px;
+  border-radius: 4px;
+  background: currentColor;
+  transition: height 0.08s ease-out;
+}
+
+.rec-visualizer--primary .rec-visualizer__bar {
+  background: #ffffff;
+}
+
+.rec-visualizer--blue .rec-visualizer__bar {
+  background: #186DF6;
+}
+
+.rec-visualizer--red .rec-visualizer__bar {
+  background: #E11D48;
+}
+
+.rec-visualizer--paused .rec-visualizer__bar {
+  background: #D97706 !important;
+  opacity: 0.6;
+  height: 4px !important;
+}

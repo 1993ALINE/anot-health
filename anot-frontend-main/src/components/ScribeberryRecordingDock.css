@@ -1,0 +1,242 @@
+.scribeberry-dock {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9990;
+  width: calc(100% - 48px);
+  max-width: 860px;
+  background: #0F172A;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+  box-shadow: 0 12px 38px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(24, 109, 246, 0.25);
+  padding: 10px 18px;
+  animation: slideUpDock 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUpDock {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.scribeberry-dock__content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.scribeberry-dock__status-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.scribeberry-dock__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.scribeberry-dock__badge--live {
+  background: rgba(225, 29, 72, 0.2);
+  border: 1px solid rgba(225, 29, 72, 0.4);
+  color: #FDA4AF;
+}
+
+.scribeberry-dock__badge--paused {
+  background: rgba(217, 119, 6, 0.2);
+  border: 1px solid rgba(217, 119, 6, 0.4);
+  color: #FCD34D;
+}
+
+.scribeberry-dock__pulse-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #E11D48;
+  box-shadow: 0 0 8px #E11D48;
+  display: inline-block;
+  animation: pulseRecDot 1.4s infinite ease-in-out;
+}
+
+.scribeberry-dock__badge--paused .scribeberry-dock__pulse-dot {
+  background: #D97706;
+  box-shadow: none;
+  animation: none;
+}
+
+@keyframes pulseRecDot {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.6; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.scribeberry-dock__timer {
+  font-family: 'JetBrains Mono', 'Roboto Mono', 'SF Mono', Consolas, monospace;
+  font-size: 17px;
+  font-weight: 700;
+  color: #FFFFFF;
+  letter-spacing: 0.04em;
+  min-width: 52px;
+}
+
+.scribeberry-dock__visualizer-wrap {
+  display: flex;
+  align-items: center;
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.scribeberry-dock__patient-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 160px;
+}
+
+.scribeberry-dock__patient-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #FFFFFF;
+  font-size: 14px;
+}
+
+.scribeberry-dock__patient-icon {
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+.scribeberry-dock__patient-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #94A3B8;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.scribeberry-dock__dot-sep {
+  opacity: 0.5;
+}
+
+.scribeberry-dock__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scribeberry-dock__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+  font-family: inherit;
+  transition: all 0.16s ease;
+}
+
+.scribeberry-dock__btn--pause {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #F8FAFC;
+}
+
+.scribeberry-dock__btn--pause:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #FFFFFF;
+}
+
+.scribeberry-dock__btn--resume {
+  background: rgba(217, 119, 6, 0.25);
+  border-color: rgba(217, 119, 6, 0.5);
+  color: #FDE68A;
+}
+
+.scribeberry-dock__btn--resume:hover {
+  background: rgba(217, 119, 6, 0.4);
+  color: #FFFFFF;
+}
+
+.scribeberry-dock__btn--finish {
+  background: #186DF6;
+  border-color: #38BDF8;
+  color: #FFFFFF;
+  box-shadow: 0 4px 16px rgba(24, 109, 246, 0.45);
+  padding: 8px 18px;
+}
+
+.scribeberry-dock__btn--finish:hover {
+  background: #135AD2;
+  box-shadow: 0 6px 20px rgba(24, 109, 246, 0.6);
+  transform: translateY(-1px);
+}
+
+.scribeberry-dock__btn--finish:active {
+  transform: translateY(0);
+}
+
+.scribeberry-dock__stop-icon {
+  width: 10px;
+  height: 10px;
+  background: #FFFFFF;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.scribeberry-dock__btn--cancel {
+  background: transparent;
+  border-color: rgba(255, 255, 255, 0.1);
+  color: #94A3B8;
+  padding: 8px 12px;
+}
+
+.scribeberry-dock__btn--cancel:hover {
+  background: rgba(225, 29, 72, 0.15);
+  border-color: rgba(225, 29, 72, 0.4);
+  color: #FDA4AF;
+}
+
+@media (max-width: 680px) {
+  .scribeberry-dock {
+    bottom: 12px;
+    width: calc(100% - 24px);
+    padding: 10px 14px;
+  }
+  .scribeberry-dock__content {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .scribeberry-dock__status-group {
+    justify-content: space-between;
+  }
+  .scribeberry-dock__actions {
+    justify-content: space-between;
+  }
+}

@@ -42,7 +42,7 @@ body {
 .sf-skip-btn:focus-visible,
 .portal-modal__close:focus-visible,
 .adm-topbar__menu-btn:focus-visible {
-  outline: 2px solid var(--brand-focus-ring, #4260e9);
+  outline: 2px solid var(--brand-focus-ring, #0A3663);
   outline-offset: 2px;
 }
 

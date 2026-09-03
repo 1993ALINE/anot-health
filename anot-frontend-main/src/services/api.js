@@ -390,10 +390,17 @@ export const usersAPI = {
   deleteUser: async (id) => apiMutate('DELETE', `/users/${id}`),
   getByRole: async (role) => apiFetch(`/users/role/${role}`),
   getMyClinicians: async () => apiFetch('/assignments/my-clinicians'),
-  // The server generates the temporary password and returns it once; the client
-  // no longer supplies one.
   resetPassword: async (id) => apiMutate('PUT', `/users/${id}/reset-password`),
   updateRate: async (id, rate) => apiMutate('PUT', `/users/${id}/rate`, { body: { rate_per_note: rate } }),
+}
+
+// ─── SAINT MARY CLINIC ────────────────────────────────────────────────────────
+
+export const saintMaryClinicAPI = {
+  getDoctors: async () => apiFetch('/users/clinics/saint-mary'),
+  addDoctor: async (userId, ui_mode = 'scribeberry') => apiMutate('POST', '/users/clinics/saint-mary/doctors', { body: { userId, ui_mode } }),
+  removeDoctor: async (id) => apiMutate('DELETE', `/users/clinics/saint-mary/doctors/${id}`),
+  toggleUiMode: async (id, ui_mode) => apiMutate('PATCH', `/users/clinics/saint-mary/doctors/${id}/ui-mode`, { body: { ui_mode } }),
 }
 
 // ─── PATIENTS ─────────────────────────────────────────────────────────────────

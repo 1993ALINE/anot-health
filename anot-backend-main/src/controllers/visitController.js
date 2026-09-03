@@ -54,7 +54,7 @@ const getVisitsByDate = async (req, res) => {
          p.id as patient_id, p.name as patient_name, p.mrn, p.date_of_birth,
          u.name as scribe_name, u.id as scribe_id,
          n.id as note_id, n.status as note_status,
-         n.ai_draft, n.transcription, n.updated_at as note_updated_at
+         n.final_note, n.ai_draft, n.transcription, n.updated_at as note_updated_at
        FROM visits v
        JOIN patients p ON p.id = v.patient_id
        LEFT JOIN users u ON u.id = v.scribe_id
@@ -110,7 +110,8 @@ const getAllVisits = async (req, res) => {
         p.id as patient_id, p.name as patient_name, p.mrn,
         c.name as clinician_name, c.id as clinician_id,
         s.name as scribe_name, s.id as scribe_id,
-        n.id as note_id, n.status as note_status, n.updated_at as note_updated_at
+        n.id as note_id, n.status as note_status,
+        n.final_note, n.ai_draft, n.transcription, n.updated_at as note_updated_at
       FROM visits v
       JOIN patients p ON p.id = v.patient_id
       JOIN users c    ON c.id = v.clinician_id

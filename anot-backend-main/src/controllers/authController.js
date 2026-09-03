@@ -249,6 +249,9 @@ const toAuthUser = (user) => ({
     npi:       user.npi,
     license:   user.license,
     status:    user.status,
+    clinic_code: user.clinic_code || null,
+    clinic_name: user.clinic_name || null,
+    ui_mode:     user.ui_mode || 'standard',
     avatar_data_url: user.avatar_data_url || null,
     personal_info: user.personal_info || null,
     admin_modules: user.admin_modules ?? null,
@@ -554,7 +557,7 @@ const getMe = async (req, res) => {
     try {
         await ensureUserProfileSchema()
         const result = await pool.query(
-            'SELECT id, name, email, role, specialty, phone, npi, license, status, avatar_data_url, personal_info, admin_modules, created_at FROM users WHERE id = $1',
+            'SELECT id, name, email, role, specialty, phone, npi, license, status, clinic_code, clinic_name, ui_mode, avatar_data_url, personal_info, admin_modules, created_at FROM users WHERE id = $1',
             [req.user.id]
         )
 
@@ -605,7 +608,7 @@ const updateMe = async (req, res) => {
                  avatar_data_url = $4,
                  personal_info = $5
              WHERE id = $6
-             RETURNING id, name, email, role, specialty, phone, npi, license, status, avatar_data_url, personal_info, admin_modules, created_at`,
+             RETURNING id, name, email, role, specialty, phone, npi, license, status, clinic_code, clinic_name, ui_mode, avatar_data_url, personal_info, admin_modules, created_at`,
             [cleanName, cleanEmail, cleanPhone || null, cleanAvatar || null, cleanInfo || null, req.user.id]
         )
         if (!result.rows[0]) {

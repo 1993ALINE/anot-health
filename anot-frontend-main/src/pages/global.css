@@ -4,48 +4,49 @@ html, body, #root { height: 100%; }
 
 /* ── Design system (medical SaaS / Anot) ───────────────── */
 :root {
-    --brand-primary: #4260E9;
-    --brand-primary-light: #6D84F5;
-    --brand-primary-dark: #2D49C7;
-    --brand-primary-ultra-light: #EEF2FF;
-    --brand-secondary: #7B61FF;
-    --brand-secondary-light: #9D8DFF;
-    --brand-sky: #4FACFE;
-    --brand-soft-blue: #8EA2FF;
-    --gradient-hero: linear-gradient(135deg, #4260E9 0%, #5B6DF5 45%, #7B61FF 100%);
-    --gradient-btn: linear-gradient(135deg, #4260E9, #7B61FF);
-    --gradient-btn-hover: linear-gradient(135deg, #2D49C7, #6847FF);
-    --success: #00C896;
-    --success-light: #DDFBF3;
-    --warning: #FFB547;
-    --danger: #FF5A7A;
-    --danger-light: #FFE8ED;
-    --bg-main: #F4F7FF;
+    --brand-primary: #186DF6;
+    --brand-primary-light: #3D85F7;
+    --brand-primary-dark: #135AD2;
+    --brand-primary-ultra-light: #EFF6FF;
+    --brand-secondary: #0F172A;
+    --brand-secondary-light: #334155;
+    --brand-sky: #38BDF8;
+    --brand-soft-blue: #60A5FA;
+    --brand-navy: #0F172A;
+    --gradient-hero: #186DF6;
+    --gradient-btn: #186DF6;
+    --gradient-btn-hover: #135AD2;
+    --success: #10B981;
+    --success-light: #ECFDF5;
+    --warning: #F59E0B;
+    --danger: #E11D48;
+    --danger-light: #FFE4E6;
+    --bg-main: #F8FAFC;
     --bg-card: #FFFFFF;
-    --bg-section: #EEF2FF;
+    --bg-section: #F1F5F9;
     --bg-dark: #0F172A;
-    --sidebar-bg: #111827;
-    --text-main: #1E293B;
-    --text-sub: #64748B;
+    --sidebar-bg: #F1F5F9;
+    --text-main: #0F172A;
+    --text-sub: #475569;
     --text-muted: #94A3B8;
     --border: #E2E8F0;
     --border-soft: #CBD5E1;
-    --shadow-soft: 0 8px 30px rgba(0, 0, 0, 0.08);
-    --shadow-premium: 0 20px 60px color-mix(in srgb, var(--brand-primary) 28%, transparent);
-    --shadow-card: 0 10px 40px color-mix(in srgb, var(--brand-primary) 22%, transparent);
+    --shadow-soft: 0 4px 16px rgba(0, 0, 0, 0.05);
+    --shadow-premium: 0 8px 24px rgba(24, 109, 246, 0.12);
+    --shadow-card: 0 4px 16px rgba(15, 23, 42, 0.06);
 
     /* Derived brand system (build UI from --brand-primary + --brand-secondary) */
     --brand-root: var(--brand-primary);
-    --brand-surface: color-mix(in srgb, var(--brand-primary) 5%, var(--bg-card));
-    --brand-surface-muted: color-mix(in srgb, var(--brand-primary) 8%, var(--bg-main));
-    --brand-border: color-mix(in srgb, var(--brand-primary) 14%, var(--border));
-    --brand-border-strong: color-mix(in srgb, var(--brand-primary) 22%, var(--border-soft));
-    --brand-focus-ring: color-mix(in srgb, var(--brand-primary) 38%, transparent);
-    --brand-glow-soft: color-mix(in srgb, var(--brand-primary) 10%, transparent);
-    --brand-glow-mid: color-mix(in srgb, var(--brand-primary) 18%, transparent);
-    --brand-shadow-sm: 0 4px 16px color-mix(in srgb, var(--brand-primary) 16%, transparent);
-    --brand-shadow-md: 0 8px 28px color-mix(in srgb, var(--brand-primary) 18%, transparent);
-    --brand-shadow-lg: 0 18px 48px color-mix(in srgb, var(--brand-primary) 24%, transparent);
+    --brand-surface: #FFFFFF;
+    --brand-surface-muted: #F8FAFC;
+    --brand-border: #E2E8F0;
+    --brand-border-strong: #CBD5E1;
+    --brand-focus-ring: rgba(24, 109, 246, 0.25);
+    --brand-glow-soft: rgba(24, 109, 246, 0.1);
+    --brand-glow-mid: rgba(24, 109, 246, 0.18);
+    --brand-shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.06);
+    --brand-shadow-md: 0 4px 16px rgba(15, 23, 42, 0.08);
+    --brand-shadow-lg: 0 8px 28px rgba(15, 23, 42, 0.1);
     --sidebar-w: 220px;
     --topbar-h: 60px;
     --radius: 16px;
@@ -53,22 +54,11 @@ html, body, #root { height: 100%; }
     --radius-lg: 20px;
 
     /* Portal cards — shared across roles (scribe, QPS, clinician rows, etc.) */
-    --sf-card-edge: color-mix(in srgb, var(--brand-primary) 11%, var(--border));
-    --sf-card-surface: linear-gradient(
-        165deg,
-        #ffffff 0%,
-        color-mix(in srgb, var(--brand-primary) 4%, #fbfcff) 48%,
-        color-mix(in srgb, var(--brand-secondary) 3%, #ffffff) 100%
-    );
-    --sf-card-shadow: 0 4px 22px color-mix(in srgb, var(--brand-primary) 8%, rgba(15, 23, 42, 0.05)),
-        0 0 0 1px rgba(255, 255, 255, 0.88) inset;
-    --sf-card-shadow-hover: 0 12px 38px color-mix(in srgb, var(--brand-primary) 13%, rgba(15, 23, 42, 0.07)),
-        0 0 0 1px rgba(255, 255, 255, 0.95) inset;
-    --sf-panel-head-bg: linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--brand-primary) 7%, #ffffff) 0%,
-        color-mix(in srgb, var(--brand-primary-ultra-light) 88%, #ffffff) 100%
-    );
+    --sf-card-edge: #E2E8F0;
+    --sf-card-surface: #FFFFFF;
+    --sf-card-shadow: 0 2px 12px rgba(15, 23, 42, 0.05);
+    --sf-card-shadow-hover: 0 6px 20px rgba(15, 23, 42, 0.08);
+    --sf-panel-head-bg: #EFF6FF;
 
     /* Legacy names used across layout utilities */
     --navy: var(--sidebar-bg);
@@ -559,7 +549,7 @@ h1, h2, h3, h4, .sf-topbar-title { font-family: 'Poppins', system-ui, sans-serif
 }
 
 .sf-account-menu__trigger:focus-visible {
-    outline: 2px solid var(--brand-focus-ring, #4260e9);
+    outline: 2px solid var(--brand-focus-ring, #0A3663);
     outline-offset: 3px;
 }
 
@@ -1063,7 +1053,7 @@ h1, h2, h3, h4, .sf-topbar-title { font-family: 'Poppins', system-ui, sans-serif
     display: block;
     height: 100%;
     min-height: 6px;
-    background: #4F46E5;
+    background: #0A3663;
     border-radius: 4px;
     transition: width 0.08s linear;
     pointer-events: none;
@@ -1073,7 +1063,7 @@ h1, h2, h3, h4, .sf-topbar-title { font-family: 'Poppins', system-ui, sans-serif
 }
 .sf-progress-fill--live {
     transition: none;
-    background: #4F46E5;
+    background: #0A3663;
 }
 .sf-progress-thumb {
     position: absolute;
@@ -1476,8 +1466,8 @@ button.sf-back:hover { text-decoration: underline; }
 }
 
 .sf-note-toolbar__btn:hover:not(:disabled) {
-    border-color: rgba(66, 96, 233, 0.5);
-    box-shadow: 0 4px 16px rgba(66, 96, 233, 0.15);
+    border-color: rgba(10, 54, 99, 0.5);
+    box-shadow: 0 4px 16px rgba(10, 54, 99, 0.15);
     transform: translateY(-1px);
 }
 
@@ -1502,8 +1492,8 @@ button.sf-back:hover { text-decoration: underline; }
     width: 16px;
     height: 16px;
     border-radius: 50%;
-    border: 2px solid rgba(66, 96, 233, 0.2);
-    border-top-color: #4260e9;
+    border: 2px solid rgba(10, 54, 99, 0.2);
+    border-top-color: #0A3663;
     animation: sf-spin 0.7s linear infinite;
     flex-shrink: 0;
 }

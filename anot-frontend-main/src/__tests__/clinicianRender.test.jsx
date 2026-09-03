@@ -6,6 +6,7 @@ import Clinician from '../pages/Clinician/index.jsx'
 import Scribe from '../pages/Scribe/index.jsx'
 import Admin from '../pages/Admin/index.jsx'
 import QPS from '../pages/QPS/index.jsx'
+import { setSession } from '../utils/sessionAuth'
 
 describe('Clinician and Scribe Render Test', () => {
   beforeAll(() => {
@@ -23,8 +24,9 @@ describe('Clinician and Scribe Render Test', () => {
       }),
     })
   })
+
   test('renders Clinician without throwing', async () => {
-    localStorage.setItem('user', JSON.stringify({ id: 23, name: 'Celina Provencio', role: 'clinician' }))
+    setSession({ id: 23, name: 'Celina Provencio', role: 'clinician' })
     const div = document.createElement('div')
     const root = createRoot(div)
     await act(async () => {
@@ -38,7 +40,7 @@ describe('Clinician and Scribe Render Test', () => {
   })
 
   test('renders Scribe without throwing', async () => {
-    localStorage.setItem('user', JSON.stringify({ id: 9, name: 'Shahib Hasib', role: 'scribe' }))
+    setSession({ id: 9, name: 'Shahib Hasib', role: 'scribe' })
     const div = document.createElement('div')
     const root = createRoot(div)
     await act(async () => {
@@ -52,7 +54,7 @@ describe('Clinician and Scribe Render Test', () => {
   })
 
   test('renders Admin without throwing', async () => {
-    localStorage.setItem('user', JSON.stringify({ id: 6, name: 'Atiqur Rahman', role: 'admin' }))
+    setSession({ id: 6, name: 'Atiqur Rahman', role: 'admin' })
     const div = document.createElement('div')
     const root = createRoot(div)
     await act(async () => {
@@ -66,7 +68,7 @@ describe('Clinician and Scribe Render Test', () => {
   })
 
   test('renders QPS without throwing', async () => {
-    localStorage.setItem('user', JSON.stringify({ id: 7, name: 'Quality Officer', role: 'qps' }))
+    setSession({ id: 7, name: 'Quality Officer', role: 'qps' })
     const div = document.createElement('div')
     const root = createRoot(div)
     await act(async () => {
@@ -76,6 +78,28 @@ describe('Clinician and Scribe Render Test', () => {
         </MemoryRouter>
       )
     })
+    expect(div.innerHTML).not.toContain('Something went wrong')
+  })
+
+  test('renders Saint Mary Clinician Portal without throwing', async () => {
+    setSession({
+      id: 25,
+      name: 'Dr. John Doe',
+      role: 'clinician',
+      clinic_code: 'saint_mary',
+      clinic_name: 'Saint Mary Clinic, Alberta',
+      ui_mode: 'scribeberry',
+    })
+    const div = document.createElement('div')
+    const root = createRoot(div)
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <Clinician />
+        </MemoryRouter>
+      )
+    })
+    expect(div.innerHTML).toContain('Saint Mary')
     expect(div.innerHTML).not.toContain('Something went wrong')
   })
 })

@@ -27,7 +27,7 @@
   right: 0;
   top: 0;
   height: 3px;
-  background: linear-gradient(90deg, #4260e9, #7b61ff, #0d9488);
+  background: #166AF4;
   opacity: 0.95;
   pointer-events: none;
 }
@@ -77,7 +77,7 @@
 .pm-avatar--placeholder {
   display: grid;
   place-items: center;
-  background: linear-gradient(145deg, #4260e9, #7b61ff);
+  background: #166AF4;
   color: #fff;
   font-weight: 800;
   font-size: 1.65rem;
@@ -180,8 +180,8 @@
 }
 
 .pm-input:focus {
-  border-color: #4260e9;
-  box-shadow: 0 0 0 3px rgba(66, 96, 233, 0.18);
+  border-color: #0A3663;
+  box-shadow: 0 0 0 3px rgba(10, 54, 99, 0.18);
 }
 
 .pm-textarea {
@@ -223,8 +223,8 @@
   font-size: 0.8125rem;
   font-weight: 700;
   color: #fff;
-  background: var(--gradient-btn, linear-gradient(135deg, #4260e9, #7b61ff));
-  box-shadow: 0 8px 22px rgba(66, 96, 233, 0.3);
+  background: var(--gradient-btn, #166AF4);
+  box-shadow: 0 8px 22px rgba(10, 54, 99, 0.3);
   cursor: pointer;
   font-family: inherit;
 }

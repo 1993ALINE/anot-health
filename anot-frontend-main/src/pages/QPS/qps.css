@@ -471,10 +471,10 @@
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.35) transparent;
-    background: #4f46e5 !important;
+    background: #0A3663 !important;
     background-image: none !important;
     border-right: 1px solid rgba(255, 255, 255, 0.12) !important;
-    box-shadow: 6px 0 32px rgba(79, 70, 229, 0.25) !important;
+    box-shadow: 6px 0 32px rgba(10, 54, 99, 0.25) !important;
 }
 
 :is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
@@ -683,7 +683,7 @@
 
 :is(.qps-portal.sf-page.adm-shell.sf-portal, .qps-portal.sf-page-fixed.adm-shell.sf-portal)
     .sf-sidebar.sf-sidebar--rich.adm-sidebar .adm-sidebar-footer__card {
-    background: #3730a3 !important;
+    background: #05182C !important;
     background-image: none !important;
     border: 1px solid rgba(255, 255, 255, 0.12) !important;
     box-shadow: none !important;
@@ -823,7 +823,7 @@
   font-size: 28px;
   cursor: pointer;
   padding: 8px 12px;
-  color: #4F46E5;
+  color: #0A3663;
   z-index: 1001;
   margin-right: 12px;
 }
@@ -846,7 +846,7 @@
     content: '☰';
     font-size: 28px;
     line-height: 1;
-    color: #4F46E5;
+    color: #0A3663;
   }
 
   .qps-portal .sidebar-wrapper.sf-sidebar {

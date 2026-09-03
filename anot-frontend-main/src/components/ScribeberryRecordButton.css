@@ -1,0 +1,138 @@
+.scribeberry-rec-btn {
+  background: #E11D48 !important;
+  color: #FFFFFF !important;
+  font-weight: 700 !important;
+  font-size: 13px !important;
+  padding: 7px 16px !important;
+  border-radius: 10px !important;
+  box-shadow: 0 4px 14px rgba(225, 29, 72, 0.35) !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  letter-spacing: 0.02em !important;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  cursor: pointer !important;
+}
+
+.scribeberry-rec-btn:hover:not(:disabled) {
+  background: #BE123C !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 6px 20px rgba(225, 29, 72, 0.45) !important;
+}
+
+.scribeberry-rec-btn:active:not(:disabled) {
+  transform: translateY(0) !important;
+}
+
+.scribeberry-rec-btn__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.9);
+  display: inline-block;
+  animation: pulseScribeDot 1.8s infinite ease-in-out;
+}
+
+@keyframes pulseScribeDot {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.35); opacity: 0.75; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.scribeberry-rec-capsule {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #0F172A;
+  border: 1px solid rgba(24, 109, 246, 0.4);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  padding: 4px 6px 4px 10px;
+  border-radius: 12px;
+  animation: capsuleFade 0.2s ease-out;
+}
+
+@keyframes capsuleFade {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.scribeberry-rec-capsule__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.scribeberry-rec-capsule__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #E11D48;
+  box-shadow: 0 0 8px #E11D48;
+  animation: pulseScribeDot 1.4s infinite ease-in-out;
+}
+
+.scribeberry-rec-capsule--paused .scribeberry-rec-capsule__dot {
+  background: #D97706;
+  box-shadow: none;
+  animation: none;
+}
+
+.scribeberry-rec-capsule__timer {
+  font-family: 'JetBrains Mono', 'Roboto Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: #FFFFFF;
+  min-width: 42px;
+}
+
+.scribeberry-rec-capsule__visualizer {
+  display: flex;
+  align-items: center;
+  padding: 0 4px;
+}
+
+.scribeberry-rec-capsule__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.scribeberry-rec-capsule__btn {
+  border: none;
+  border-radius: 7px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  transition: all 0.15s ease;
+}
+
+.scribeberry-rec-capsule__btn--pause {
+  background: rgba(255, 255, 255, 0.12);
+  color: #FFFFFF;
+}
+
+.scribeberry-rec-capsule__btn--pause:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.scribeberry-rec-capsule--paused .scribeberry-rec-capsule__btn--pause {
+  background: rgba(217, 119, 6, 0.3);
+  color: #FDE68A;
+}
+
+.scribeberry-rec-capsule__btn--finish {
+  background: #186DF6;
+  color: #FFFFFF;
+  padding: 4px 10px;
+}
+
+.scribeberry-rec-capsule__btn--finish:hover {
+  background: #135AD2;
+}

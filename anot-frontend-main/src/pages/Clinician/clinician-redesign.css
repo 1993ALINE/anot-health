@@ -1,4 +1,4 @@
-﻿/* Clinician portal visual redesign â€” scoped to .cl-portal.cl-clinician-shell */
+/* Clinician portal visual redesign â€” scoped to .cl-portal.cl-clinician-shell */
 
 /* â”€â”€â”€ Global status badges â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
@@ -80,21 +80,24 @@
   border: 1px solid #16a34a !important;
 }
 
-/* â”€â”€â”€ Sidebar (indigo) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ─── Sidebar (Refined Soft Slate Theme) ─────────────────────────────────── */
 
 .cl-portal.cl-clinician-shell .cl-sidebar.sf-sidebar--rich.adm-sidebar {
-  background: #4f46e5 !important;
-  border-right: 1px solid rgba(255, 255, 255, 0.12) !important;
-  box-shadow: 6px 0 32px rgba(79, 70, 229, 0.25) !important;
+  background: #F1F5F9 !important;
+  background-image: none !important;
+  border-right: 1px solid #E2E8F0 !important;
+  box-shadow: 2px 0 12px rgba(15, 23, 42, 0.04) !important;
 }
 
 .cl-portal.cl-clinician-shell .cl-sidebar .sf-sidebar-rich__top {
-  border-bottom-color: rgba(255, 255, 255, 0.14) !important;
+  border-bottom-color: #E2E8F0 !important;
+  background: #F1F5F9 !important;
 }
 
 .cl-portal.cl-clinician-shell .cl-sidebar .sf-logo,
 .cl-portal.cl-clinician-shell .cl-sidebar .sf-sidebar-rich__titles .sf-logo {
-  color: #fff !important;
+  color: #0F172A !important;
+  font-weight: 800 !important;
 }
 
 .cl-portal.cl-clinician-shell .cl-sidebar.sf-sidebar--rich.adm-sidebar .sf-sidebar-rich__titles .sf-logo-sub,
@@ -107,37 +110,55 @@
   background: transparent !important;
   background-color: transparent !important;
   box-shadow: none !important;
-  color: #fff !important;
+  color: #186DF6 !important;
   font-size: 10px !important;
-  font-weight: 500 !important;
-  letter-spacing: 1px !important;
-  opacity: 0.8 !important;
-  text-transform: uppercase;
+  font-weight: 700 !important;
+  letter-spacing: 1.2px !important;
+  opacity: 0.95 !important;
+  text-transform: uppercase !important;
 }
 
 .cl-portal.cl-clinician-shell .cl-sidebar .sf-sidebar-rich__nav-label {
-  color: rgba(255, 255, 255, 0.55) !important;
+  color: #64748B !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 1.3px !important;
+  text-transform: uppercase !important;
+  opacity: 0.95 !important;
 }
 
 .cl-portal.cl-clinician-shell .cl-sidebar .sf-nav-item.sf-sidebar-rich__nav-item {
-  color: #fff !important;
+  color: #334155 !important;
+  font-weight: 500 !important;
   border-left: 3px solid transparent !important;
   border-radius: 10px;
-  margin: 0 0.35rem;
+  margin: 0 0.35rem 4px;
   padding: 10px 14px !important;
-  min-height: 48px;
+  min-height: 46px;
+  gap: 0.65rem;
+  box-shadow: none !important;
+  transform: none !important;
+  transition:
+    background 0.18s ease,
+    color 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
 }
 
 .cl-portal.cl-clinician-shell .cl-sidebar .sf-nav-item.sf-sidebar-rich__nav-item:hover {
-  background: rgba(255, 255, 255, 0.08) !important;
-  color: #fff !important;
+  background: #FFFFFF !important;
+  color: #0F172A !important;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.05) !important;
+  transform: none !important;
 }
 
 .cl-portal.cl-clinician-shell .cl-sidebar .sf-nav-item.sf-sidebar-rich__nav-item.active {
-  background: rgba(255, 255, 255, 0.15) !important;
-  border-left-color: #fff !important;
-  color: #fff !important;
+  background: #FFFFFF !important;
+  border-left-color: #186DF6 !important;
+  color: #186DF6 !important;
   font-weight: 600 !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06), inset 0 0 0 1px #E2E8F0 !important;
+  transform: none !important;
 }
 
 .cl-portal.cl-clinician-shell .cl-sidebar .sf-sidebar-rich__nav-text {
@@ -145,47 +166,76 @@
 }
 
 .cl-portal.cl-clinician-shell .cl-sidebar .sf-sidebar-rich__nav-ico {
-  color: #fff !important;
-  background: rgba(255, 255, 255, 0.12) !important;
-  border-color: rgba(255, 255, 255, 0.2) !important;
+  width: 2rem;
+  height: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  color: #64748B !important;
+  background: #FFFFFF !important;
+  border: 1px solid #E2E8F0 !important;
+  font-size: 1rem;
+  transform: none !important;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
 }
 
-.cl-portal.cl-clinician-shell .cl-sidebar .sf-nav-item.sf-sidebar-rich__nav-item:hover .sf-sidebar-rich__nav-ico,
+.cl-portal.cl-clinician-shell .cl-sidebar .sf-nav-item.sf-sidebar-rich__nav-item:hover .sf-sidebar-rich__nav-ico {
+  background: #EFF6FF !important;
+  border-color: #BFDBFE !important;
+  color: #186DF6 !important;
+}
+
 .cl-portal.cl-clinician-shell .cl-sidebar .sf-nav-item.sf-sidebar-rich__nav-item.active .sf-sidebar-rich__nav-ico {
-  background: rgba(255, 255, 255, 0.2) !important;
-  border-color: rgba(255, 255, 255, 0.28) !important;
+  background: #186DF6 !important;
+  border-color: #186DF6 !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 2px 8px rgba(24, 109, 246, 0.35) !important;
 }
 
 .cl-portal.cl-clinician-shell .cl-sidebar .sf-sidebar-rich__nav-badge {
-  border: none !important;
+  border: 1px solid rgba(24, 109, 246, 0.2) !important;
+  border-radius: 20px !important;
+  padding: 2px 8px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
 }
 
 .cl-portal.cl-clinician-shell .cl-sidebar .sf-sidebar-rich__nav-badge--urgent {
   background: #dc2626 !important;
   color: #fff !important;
-  box-shadow: 0 2px 10px rgba(220, 38, 38, 0.35) !important;
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3) !important;
 }
 
 .cl-portal.cl-clinician-shell .cl-sidebar .sf-sidebar-rich__nav-badge--schedule {
-  background: #2563eb !important;
+  background: #186DF6 !important;
   color: #fff !important;
-  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.35) !important;
+  box-shadow: 0 2px 8px rgba(24, 109, 246, 0.3) !important;
 }
 
 .cl-portal.cl-clinician-shell .cl-sidebar .adm-sidebar-footer__card {
-  background: #3730a3 !important;
-  border: 1px solid rgba(255, 255, 255, 0.12) !important;
-  box-shadow: none !important;
+  background: #FFFFFF !important;
+  background-image: none !important;
+  border: 1px solid #E2E8F0 !important;
+  border-radius: 14px !important;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05) !important;
+  padding: 12px;
 }
 
 .cl-portal.cl-clinician-shell .cl-sidebar .adm-sidebar-footer__eyebrow {
-  color: rgba(255, 255, 255, 0.6) !important;
-  font-size: 11px !important;
+  color: #186DF6 !important;
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  letter-spacing: 1.1px !important;
+  text-transform: uppercase !important;
 }
 
 .cl-portal.cl-clinician-shell .cl-sidebar .adm-sidebar-footer__who {
-  color: #fff !important;
-  font-weight: 600 !important;
+  color: #0F172A !important;
+  font-weight: 700 !important;
 }
 
 .cl-portal.cl-clinician-shell .cl-sidebar .adm-sidebar-footer__identity {
@@ -201,34 +251,34 @@
 .cl-portal.cl-clinician-shell .cl-sidebar .adm-sidebar-footer__btn,
 .cl-portal.cl-clinician-shell .cl-sidebar .portal-guide-trigger.portal-guide-trigger--footer {
   width: 100% !important;
+  display: inline-flex !important;
+  align-items: center !important;
   justify-content: center !important;
-  border: none !important;
+  gap: 8px;
+  border: 1px solid #E2E8F0 !important;
   border-radius: 8px !important;
-  color: #fff !important;
+  color: #334155 !important;
   font-weight: 600 !important;
-  box-shadow: none !important;
-  min-height: 44px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+  min-height: 42px;
+  background: #F8FAFC !important;
+  transition: all 0.18s ease !important;
 }
 
-.cl-portal.cl-clinician-shell .cl-sidebar .portal-guide-trigger.portal-guide-trigger--footer {
-  background: rgba(255, 255, 255, 0.15) !important;
-}
-
-.cl-portal.cl-clinician-shell .cl-sidebar .adm-sidebar-footer__btn--signout {
-  background: rgba(255, 255, 255, 0.1) !important;
-}
-
-.cl-portal.cl-clinician-shell .cl-sidebar .adm-sidebar-footer__btn:hover,
-.cl-portal.cl-clinician-shell .cl-sidebar .portal-guide-trigger.portal-guide-trigger--footer:hover {
-  filter: brightness(1.08);
+.cl-portal.cl-clinician-shell .cl-sidebar .portal-guide-trigger.portal-guide-trigger--footer:hover,
+.cl-portal.cl-clinician-shell .cl-sidebar .adm-sidebar-footer__btn--signout:hover,
+.cl-portal.cl-clinician-shell .cl-sidebar .adm-sidebar-footer__card > .adm-sidebar-footer__btn:hover {
+  background: #EFF6FF !important;
+  border-color: #BFDBFE !important;
+  color: #186DF6 !important;
 }
 
 .cl-portal.cl-clinician-shell .cl-sidebar .adm-sidebar-footer__btn-ico,
 .cl-portal.cl-clinician-shell .cl-sidebar .portal-guide-trigger__ico {
-  color: #fff !important;
+  color: #ffffff !important;
 }
 
-/* â”€â”€â”€ Main content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ─── Main content ────────────────────────────────────────────────────────────────────────────────────────────────── */
 
 .cl-portal.cl-clinician-shell .sf-portal__main .sf-body,
 .cl-portal.cl-clinician-shell .sf-portal__main .sf-body.cl-schedule,
@@ -485,8 +535,8 @@
 }
 
 .cl-portal.cl-clinician-shell .cl-date-nav__day.active {
-  background: #4F46E5 !important;
-  border-color: #4F46E5 !important;
+  background: #0A3663 !important;
+  border-color: #0A3663 !important;
 }
 
 .cl-portal.cl-clinician-shell .cl-date-nav__day-name {
@@ -509,7 +559,7 @@
   margin-top: 2px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #4F46E5;
+  color: #0A3663;
 }
 
 .cl-portal.cl-clinician-shell .cl-date-nav__day.active .cl-date-nav__day-name,
@@ -534,7 +584,7 @@
 }
 
 .cl-portal.cl-clinician-shell .portal-cal-strip .sf-date-nav-day.cl-date-nav__day.cl-date-nav__day--today:not(.active) .cl-date-nav__today-label {
-  color: #4F46E5 !important;
+  color: #0A3663 !important;
 }
 
 /* â”€â”€â”€ Live chat (Contact) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -687,7 +737,7 @@
 .cl-portal.cl-clinician-shell .cl-now-divider__line {
   flex: 1;
   height: 2px;
-  background: #4f46e5;
+  background: #0A3663;
   border-radius: 1px;
 }
 
@@ -695,7 +745,7 @@
   flex-shrink: 0;
   font-size: 13px;
   font-weight: 600;
-  color: #4f46e5;
+  color: #0A3663;
   white-space: nowrap;
 }
 
@@ -703,7 +753,7 @@
   border: none;
   border-radius: 8px;
   padding: 10px 24px;
-  background: #4f46e5;
+  background: #0A3663;
   color: #fff;
   font-size: 14px;
   font-weight: 600;
@@ -712,7 +762,7 @@
 }
 
 .cl-portal.cl-clinician-shell .cl-notes-btn-open:hover {
-  background: #4338ca;
+  background: #072646;
 }
 
 .cl-portal.cl-clinician-shell .cl-notes-btn-view {
@@ -777,7 +827,7 @@
 /* â”€â”€â”€ Schedule calendar picker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cl-portal.cl-clinician-shell .cl-calendar-btn {
-  color: #4f46e5 !important;
+  color: #0A3663 !important;
   border-radius: 8px;
   padding: 6px 8px;
 }
@@ -795,7 +845,7 @@
 
 .cl-portal.cl-clinician-shell .cl-calendar-popup__day--today,
 .cl-portal.cl-clinician-shell .cl-calendar-popup__day--selected {
-  background: #4f46e5 !important;
+  background: #0A3663 !important;
   color: #fff !important;
 }
 
@@ -812,8 +862,8 @@
 }
 
 .cl-portal.cl-clinician-shell .cl-notes-tab--active {
-  background: #4f46e5 !important;
-  border-color: #4f46e5 !important;
+  background: #0A3663 !important;
+  border-color: #0A3663 !important;
   color: #fff !important;
 }
 
@@ -860,11 +910,11 @@
 
 .cl-portal.cl-clinician-shell .cl-notes-date-filter__input:focus {
   outline: none !important;
-  border-color: #4f46e5 !important;
+  border-color: #0A3663 !important;
 }
 
 .cl-portal.cl-clinician-shell .cl-notes-date-filter__apply:hover {
-  background: #4338ca !important;
+  background: #072646 !important;
 }
 
 .cl-portal.cl-clinician-shell .cl-notes-date-filter__clear:hover {
@@ -872,7 +922,7 @@
 }
 
 .cl-portal.cl-clinician-shell .cl-notes-date-filter__apply {
-  background: #4f46e5 !important;
+  background: #0A3663 !important;
   color: #fff !important;
   border: none !important;
   border-radius: 8px !important;
@@ -987,7 +1037,7 @@
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
-    color: #4f46e5 !important;
+    color: #0A3663 !important;
     font-size: 24px !important;
     line-height: 1;
     min-width: 44px;
@@ -1007,7 +1057,7 @@
     content: 'â˜°';
     font-size: 24px;
     line-height: 1;
-    color: #4f46e5;
+    color: #0A3663;
   }
 
   .cl-portal.cl-clinician-shell.sf-portal .sf-sidebar.sf-sidebar--rich.adm-sidebar.cl-sidebar {
@@ -1669,7 +1719,7 @@
   font-size: 28px;
   cursor: pointer;
   padding: 8px 12px;
-  color: #4F46E5;
+  color: #0A3663;
   z-index: 1001;
   margin-right: 12px;
 }
@@ -1692,7 +1742,7 @@
     content: '☰';
     font-size: 28px;
     line-height: 1;
-    color: #4F46E5;
+    color: #0A3663;
   }
 
   .cl-portal.cl-clinician-shell .sidebar-wrapper.sf-sidebar {
@@ -1705,7 +1755,7 @@
     height: 100dvh;
     max-height: 100dvh;
     z-index: 1000;
-    background: #4f46e5;
+    background: #0A3663;
     box-shadow: 2px 0 8px rgba(0, 0, 0, 0.2);
     transition: left 0.3s ease-in-out;
     overflow-y: auto !important;

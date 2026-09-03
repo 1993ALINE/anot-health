@@ -246,7 +246,7 @@ export default function AdminAuditDashboard({ showToast, currentUser, onMeta }) 
         }))
     }, [summary])
 
-    const moduleColors = ['#4260E9', '#7B61FF', '#0d9488', '#b45309', '#64748b', '#e11d48', '#2563eb', '#059669']
+    const moduleColors = ['#0A3663', '#008080', '#0d9488', '#b45309', '#64748b', '#e11d48', '#2563eb', '#059669']
 
     const onExport = async (format) => {
         try {
@@ -349,8 +349,8 @@ export default function AdminAuditDashboard({ showToast, currentUser, onMeta }) 
                             <AreaChart data={dailyChart} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                                 <defs>
                                     <linearGradient id="auditArea" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="0%" stopColor="var(--brand-primary, #4260E9)" stopOpacity={0.35} />
-                                        <stop offset="100%" stopColor="var(--brand-primary, #4260E9)" stopOpacity={0} />
+                                        <stop offset="0%" stopColor="var(--brand-primary, #0A3663)" stopOpacity={0.35} />
+                                        <stop offset="100%" stopColor="var(--brand-primary, #0A3663)" stopOpacity={0} />
                                     </linearGradient>
                                 </defs>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -364,7 +364,7 @@ export default function AdminAuditDashboard({ showToast, currentUser, onMeta }) 
                                         return key ? `${key} (UTC)` : ''
                                     }}
                                 />
-                                <Area type="monotone" dataKey="events" stroke="var(--brand-primary, #4260E9)" fill="url(#auditArea)" strokeWidth={2} />
+                                <Area type="monotone" dataKey="events" stroke="var(--brand-primary, #0A3663)" fill="url(#auditArea)" strokeWidth={2} />
                             </AreaChart>
                         </ResponsiveContainer>
                     )}
@@ -400,7 +400,7 @@ export default function AdminAuditDashboard({ showToast, currentUser, onMeta }) 
                                 <XAxis dataKey="module_key" tick={{ fontSize: 9 }} stroke="#94a3b8" interval={0} angle={-18} textAnchor="end" height={54} />
                                 <YAxis width={28} tick={{ fontSize: 10 }} stroke="#94a3b8" allowDecimals={false} />
                                 <Tooltip contentStyle={{ borderRadius: 10, fontSize: 12 }} />
-                                <Bar dataKey="n" fill="var(--brand-secondary, #7B61FF)" radius={[6, 6, 0, 0]} />
+                                <Bar dataKey="n" fill="var(--brand-secondary, #008080)" radius={[6, 6, 0, 0]} />
                             </BarChart>
                         </ResponsiveContainer>
                     )}

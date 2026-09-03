@@ -33,7 +33,7 @@ async function userSelectList(tableAlias = '') {
     ]
     if (await hasRatePerNoteColumn()) cols.push(`${p}rate_per_note`)
     if (await hasEhrColumns()) cols.push(`${p}ehr_connection_id`, `${p}ehr_provider_id`)
-    cols.push(`${p}admin_modules`, `${p}created_at`)
+    cols.push(`${p}clinic_code`, `${p}clinic_name`, `${p}ui_mode`, `${p}admin_modules`, `${p}created_at`)
     return cols.join(', ')
 }
 

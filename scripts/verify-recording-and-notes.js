@@ -132,10 +132,10 @@ async function run() {
   assert(typeof indexRes.body?.raw === 'string' && indexRes.body.raw.includes('<div id="root">'), 'index.html contains root container');
 
   // Fetch Clinician route chunk to verify WakeLock & KeepAlive are deployed
-  const clinicianChunkRes = await client.request('GET', '/assets/Clinician-Cg6xRWfP.js');
+  const clinicianChunkRes = await client.request('GET', '/assets/Clinician-Cmj2OWxQ.js');
   assert(clinicianChunkRes.status === 200, 'Clinician JS chunk loads from CloudFront CDN (200 OK)');
   assert(clinicianChunkRes.body?.raw?.includes('wakeLock'), 'Live Clinician bundle contains screen wakeLock recording keep-alive!');
-  assert(clinicianChunkRes.body?.raw?.includes('Start Consultation') || clinicianChunkRes.body?.raw?.includes('quickRec') || clinicianChunkRes.body?.raw?.includes('Instant Consultation'), 'Live Clinician bundle contains Direct Record & Instant Dictation action!');
+  assert(clinicianChunkRes.body?.raw?.includes('Record') || clinicianChunkRes.body?.raw?.includes('scribeberry-rec'), 'Live Clinician bundle contains prominent Record button action!');
 
   // Step 2: Clinician Authentication
   console.log('\n--- Step 2: Testing Clinician Authentication on Live API ---');

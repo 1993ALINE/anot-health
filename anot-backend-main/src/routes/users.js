@@ -13,16 +13,27 @@ const {
   getPerformance,
   updateRate,
   resetPassword,
+  getSaintMaryDoctors,
+  addSaintMaryDoctor,
+  removeSaintMaryDoctor,
+  toggleDoctorUiMode,
 } = require('../controllers/userController')
 const { protect, restrict } = require('../middleware/auth')
 const { loadAdminPortalModuleKeys, requireAdminPortalModules } = require('../middleware/adminPortalModules')
 const { logAdminPortalModuleAccess } = require('../middleware/adminPortalAudit')
 
-// ─── USER ROUTES ──────────────────────────────────────────────────────────────
+// ─── USER & CLINIC ROUTES ───────────────────────────────────────────────────
 
 router.get('/',                protect, loadAdminPortalModuleKeys, restrict('admin', 'super_admin'),            getAllUsers)
 router.get('/stats',           protect, loadAdminPortalModuleKeys, restrict('admin', 'super_admin'), requireAdminPortalModules('overview'), logAdminPortalModuleAccess('overview'), getAdminStats)
 router.get('/payroll',         protect, loadAdminPortalModuleKeys, restrict('admin', 'super_admin'), requireAdminPortalModules('payroll'), logAdminPortalModuleAccess('payroll'), getPayroll)
+
+// Saint Mary Clinic, Alberta management
+router.get('/clinics/saint-mary',                protect, loadAdminPortalModuleKeys, restrict('admin', 'super_admin'), requireAdminPortalModules('saint-mary-clinic'), logAdminPortalModuleAccess('saint-mary-clinic'), getSaintMaryDoctors)
+router.post('/clinics/saint-mary/doctors',       protect, loadAdminPortalModuleKeys, restrict('admin', 'super_admin'), requireAdminPortalModules('saint-mary-clinic'), logAdminPortalModuleAccess('saint-mary-clinic'), addSaintMaryDoctor)
+router.delete('/clinics/saint-mary/doctors/:id', protect, loadAdminPortalModuleKeys, restrict('admin', 'super_admin'), requireAdminPortalModules('saint-mary-clinic'), logAdminPortalModuleAccess('saint-mary-clinic'), removeSaintMaryDoctor)
+router.patch('/clinics/saint-mary/doctors/:id/ui-mode', protect, loadAdminPortalModuleKeys, restrict('admin', 'super_admin'), requireAdminPortalModules('saint-mary-clinic'), logAdminPortalModuleAccess('saint-mary-clinic'), toggleDoctorUiMode)
+
 // Performance reports belong to QPS (quality oversight). Super Admin retains
 // access as the bootstrap operator; regular Admins no longer see this report.
 router.get('/performance',     protect, restrict('qps', 'super_admin'), getPerformance)

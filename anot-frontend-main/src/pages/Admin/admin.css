@@ -1418,7 +1418,7 @@
 }
 
 .adm-btn-action--modules {
-    color: var(--brand-primary, #4260e9);
+    color: var(--brand-primary, #0A3663);
     background: color-mix(in srgb, var(--brand-primary) 8%, rgba(238, 242, 255, 0.98));
     border-color: color-mix(in srgb, var(--brand-primary) 28%, rgba(148, 163, 184, 0.35));
 }
@@ -3485,7 +3485,7 @@
   font-size: 28px;
   cursor: pointer;
   padding: 8px 12px;
-  color: #4F46E5;
+  color: #0A3663;
   z-index: 1001;
   margin-right: 12px;
 }
@@ -3508,7 +3508,7 @@
     content: '☰';
     font-size: 28px;
     line-height: 1;
-    color: #4F46E5;
+    color: #0A3663;
   }
 
   .adm-shell[data-adm-tab] .sidebar-wrapper.sf-sidebar {

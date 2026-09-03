@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { settingsAPI } from './api'
 
 /** Static fallback when `logo_data_url` is empty — file in `public/brand/`. */
-export const DEFAULT_BRAND_LOGO_SRC = '/brand/anot-logo.jfif'
+export const DEFAULT_BRAND_LOGO_SRC = '/brand/anot-logo.png'
 
 export const DEFAULT_BRANDING = {
   system_name: 'Anot',
@@ -15,8 +15,8 @@ export const DEFAULT_BRANDING = {
   social_links: {},
   logo_data_url: '',
   favicon_data_url: '',
-  primary_color: '#2563eb',
-  secondary_color: '#0d9488',
+  primary_color: '#186DF6',
+  secondary_color: '#0F172A',
   system_description: 'Clinical documentation platform',
 }
 

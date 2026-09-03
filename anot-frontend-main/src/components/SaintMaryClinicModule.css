@@ -1,0 +1,517 @@
+/* Saint Mary Clinic, Alberta Management Module Styles */
+
+.sm-clinic {
+  padding: 1.5rem 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.sm-clinic__banner {
+  background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 1.75rem 2rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  box-shadow: 0 8px 30px rgba(15, 23, 42, 0.12);
+}
+
+.sm-clinic__banner-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.25rem;
+}
+
+.sm-clinic__icon-box {
+  width: 54px;
+  height: 54px;
+  background: #186DF6;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  box-shadow: 0 6px 20px rgba(24, 109, 246, 0.4);
+  flex-shrink: 0;
+}
+
+.sm-clinic__badge-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.sm-clinic__badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.sm-clinic__badge--location {
+  background: rgba(56, 189, 248, 0.2);
+  color: #38BDF8;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+}
+
+.sm-clinic__badge--tag {
+  background: rgba(24, 109, 246, 0.2);
+  color: #93C5FD;
+  border: 1px solid rgba(24, 109, 246, 0.4);
+}
+
+.sm-clinic__title {
+  color: #FFFFFF;
+  font-size: 1.6rem;
+  font-weight: 800;
+  margin-bottom: 4px;
+  letter-spacing: -0.02em;
+}
+
+.sm-clinic__subtitle {
+  color: #94A3B8;
+  font-size: 13.5px;
+  line-height: 1.45;
+  max-width: 680px;
+}
+
+.sm-clinic__stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.sm-clinic__stat-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 1.15rem 1.4rem;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sm-clinic__stat-card--highlight {
+  border-color: #BFDBFE;
+  background: #F0F7FF;
+}
+
+.sm-clinic__stat-label {
+  color: #64748B;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sm-clinic__stat-val {
+  color: #0F172A;
+  font-size: 1.75rem;
+  font-weight: 800;
+}
+
+.sm-clinic__stat-card--highlight .sm-clinic__stat-val {
+  color: #186DF6;
+}
+
+.sm-clinic__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.sm-clinic__search-wrap {
+  flex: 1;
+  min-width: 280px;
+}
+
+.sm-clinic__search {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #CBD5E1;
+  background: #FFFFFF;
+  font-size: 13.5px;
+  color: #0F172A;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sm-clinic__search:focus {
+  border-color: #186DF6;
+  box-shadow: 0 0 0 3px rgba(24, 109, 246, 0.15);
+}
+
+.sm-clinic__filter-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sm-clinic__select {
+  padding: 9px 14px;
+  border-radius: 10px;
+  border: 1px solid #CBD5E1;
+  background: #FFFFFF;
+  font-size: 13.5px;
+  color: #0F172A;
+  outline: none;
+  cursor: pointer;
+}
+
+.sm-clinic__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid #CBD5E1;
+  background: #FFFFFF;
+  color: #334155;
+  transition: all 0.15s ease;
+}
+
+.sm-clinic__btn:hover:not(:disabled) {
+  background: #F8FAFC;
+  border-color: #94A3B8;
+}
+
+.sm-clinic__btn--primary {
+  background: #186DF6 !important;
+  color: #FFFFFF !important;
+  border-color: #186DF6 !important;
+  box-shadow: 0 4px 14px rgba(24, 109, 246, 0.35);
+}
+
+.sm-clinic__btn--primary:hover:not(:disabled) {
+  background: #135AD2 !important;
+  box-shadow: 0 6px 18px rgba(24, 109, 246, 0.45);
+}
+
+.sm-clinic__btn--danger {
+  background: #E11D48 !important;
+  color: #FFFFFF !important;
+  border-color: #E11D48 !important;
+}
+
+.sm-clinic__btn--danger:hover:not(:disabled) {
+  background: #BE123C !important;
+}
+
+.sm-clinic__table-card {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 14px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
+  overflow: hidden;
+}
+
+.sm-clinic__table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.sm-clinic__table th {
+  background: #F8FAFC;
+  padding: 12px 18px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748B;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #E2E8F0;
+}
+
+.sm-clinic__table td {
+  padding: 14px 18px;
+  border-bottom: 1px solid #F1F5F9;
+  font-size: 13.5px;
+  color: #0F172A;
+  vertical-align: middle;
+}
+
+.sm-clinic__table tbody tr:hover {
+  background: #F8FAFC;
+}
+
+.sm-clinic__usercell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sm-clinic__avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #EFF6FF;
+  color: #186DF6;
+  border: 1px solid #BFDBFE;
+  font-weight: 800;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sm-clinic__doc-name {
+  font-weight: 700;
+  color: #0F172A;
+}
+
+.sm-clinic__doc-email {
+  font-size: 12px;
+  color: #64748B;
+}
+
+.sm-clinic__specialty-tag {
+  background: #F1F5F9;
+  color: #334155;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.sm-clinic__status-pill {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.sm-clinic__status-pill--active {
+  background: #DCFCE7;
+  color: #166534;
+}
+
+.sm-clinic__status-pill--inactive {
+  background: #FEE2E2;
+  color: #991B1B;
+}
+
+.sm-clinic__ui-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sm-clinic__ui-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sm-clinic__ui-badge--scribeberry {
+  background: #EFF6FF;
+  color: #186DF6;
+  border: 1px solid #BFDBFE;
+}
+
+.sm-clinic__ui-badge--standard {
+  background: #F1F5F9;
+  color: #475569;
+  border: 1px solid #CBD5E1;
+}
+
+.sm-clinic__btn-toggle {
+  background: transparent;
+  border: 1px solid #CBD5E1;
+  color: #64748B;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sm-clinic__btn-toggle:hover {
+  background: #EFF6FF;
+  border-color: #186DF6;
+  color: #186DF6;
+}
+
+.sm-clinic__btn-remove {
+  background: transparent;
+  border: 1px solid #FECDD3;
+  color: #E11D48;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sm-clinic__btn-remove:hover {
+  background: #FFE4E6;
+  border-color: #E11D48;
+}
+
+.sm-clinic__empty {
+  text-align: center;
+  padding: 3rem 1.5rem;
+  color: #64748B;
+}
+
+.sm-clinic__empty-icon {
+  font-size: 40px;
+  margin-bottom: 8px;
+  display: inline-block;
+}
+
+/* Modals */
+.sm-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 1rem;
+}
+
+.sm-modal {
+  background: #FFFFFF;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 520px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  animation: modalPop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalPop {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.sm-modal__header {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #E2E8F0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sm-modal__title {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #0F172A;
+}
+
+.sm-modal__sub {
+  font-size: 12px;
+  color: #64748B;
+}
+
+.sm-modal__close {
+  background: none;
+  border: none;
+  font-size: 22px;
+  color: #94A3B8;
+  cursor: pointer;
+}
+
+.sm-modal__form,
+.sm-modal__body {
+  padding: 1.5rem;
+}
+
+.sm-modal__field {
+  margin-bottom: 1.25rem;
+}
+
+.sm-modal__label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+.sm-modal__select {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #CBD5E1;
+  font-size: 13.5px;
+  outline: none;
+}
+
+.sm-modal__ui-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sm-modal__ui-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #E2E8F0;
+  border-radius: 10px;
+  cursor: pointer;
+  background: #F8FAFC;
+  transition: all 0.15s ease;
+}
+
+.sm-modal__ui-option input {
+  margin-top: 3px;
+}
+
+.sm-modal__ui-option--active {
+  border-color: #186DF6;
+  background: #EFF6FF;
+}
+
+.sm-modal__ui-option strong {
+  display: block;
+  font-size: 13px;
+  color: #0F172A;
+  margin-bottom: 2px;
+}
+
+.sm-modal__ui-option p {
+  font-size: 12px;
+  color: #64748B;
+  line-height: 1.4;
+}
+
+.sm-modal__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 1.5rem;
+}
+
+.sm-modal__confirm-note {
+  font-size: 13px;
+  color: #64748B;
+  margin-top: 8px;
+}

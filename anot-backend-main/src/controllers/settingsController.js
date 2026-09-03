@@ -37,8 +37,8 @@ const DEFAULT_SETTINGS = {
   social_links: {},
   logo_data_url: '',
   favicon_data_url: '',
-  primary_color: '#2563eb',
-  secondary_color: '#0d9488',
+  primary_color: '#186DF6',
+  secondary_color: '#0F172A',
   system_description: 'Clinical documentation platform',
 }
 
@@ -87,8 +87,8 @@ async function ensureSettingsTable() {
       social_links      JSONB NOT NULL DEFAULT '{}'::jsonb,
       logo_data_url     TEXT,
       favicon_data_url  TEXT,
-      primary_color     VARCHAR(16) NOT NULL DEFAULT '#2563eb',
-      secondary_color   VARCHAR(16) NOT NULL DEFAULT '#0d9488',
+      primary_color     VARCHAR(16) NOT NULL DEFAULT '#186DF6',
+      secondary_color   VARCHAR(16) NOT NULL DEFAULT '#0F172A',
       system_description TEXT,
       created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
