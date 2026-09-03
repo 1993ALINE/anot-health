@@ -148,7 +148,7 @@ export async function apiFetch(path, {
     return fetch(url, opts)
   }
 
-  let res = await fetchWith411Retry(run)
+  let res = await fetchWithTransientRetry(run)
   if (res.status === 403 && MUTATING_METHODS.has(upper)) {
     const peek = parseResponseBody(await res.clone().text(), res)
     if (isCsrfError(peek)) {
@@ -206,12 +206,17 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-/** Retry fetch when intermediaries return 411 Length Required (empty JSON POST body). */
-async function fetchWith411Retry(run) {
+/** Retry fetch when intermediaries return 411 Length Required or 429 Too Many Requests. */
+async function fetchWithTransientRetry(run) {
   let res = await run(false)
   for (let attempt = 1; res.status === 411 && attempt < FETCH_411_MAX_RETRIES; attempt++) {
     console.warn(`[API] 411 Length Required — retry ${attempt}/${FETCH_411_MAX_RETRIES}`)
     await sleep(FETCH_411_BACKOFF_MS * attempt)
+    res = await run(false)
+  }
+  for (let attempt = 1; res.status === 429 && attempt <= 2; attempt++) {
+    console.warn(`[API] 429 Rate Limit — auto-retrying in ${attempt * 600}ms`)
+    await sleep(600 * attempt)
     res = await run(false)
   }
   return res

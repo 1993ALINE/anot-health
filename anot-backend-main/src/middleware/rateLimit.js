@@ -19,8 +19,6 @@ function parsePositiveInt(value, fallback) {
 }
 
 function getRateLimitConfig() {
-  const isProduction = process.env.NODE_ENV === 'production'
-
   const loginWindowMs =
     parsePositiveInt(process.env.RATE_LIMIT_LOGIN_WINDOW_MS, 0) ||
     parsePositiveInt(process.env.RATE_LIMIT_LOGIN_WINDOW_MINUTES, 15) * 60 * 1000
@@ -32,11 +30,11 @@ function getRateLimitConfig() {
   return {
     login: {
       windowMs: loginWindowMs,
-      max: parsePositiveInt(process.env.RATE_LIMIT_LOGIN_MAX, 5),
+      max: parsePositiveInt(process.env.RATE_LIMIT_LOGIN_MAX, 30),
     },
     api: {
       windowMs: apiWindowMs,
-      max: parsePositiveInt(process.env.RATE_LIMIT_API_MAX, isProduction ? 100 : 2000),
+      max: parsePositiveInt(process.env.RATE_LIMIT_API_MAX, 10000),
     },
   }
 }
@@ -45,6 +43,10 @@ function shouldSkipApiRateLimit(req) {
   const path = (req.path || '').split('?')[0]
   if (PUBLIC_API_PATHS.has(path)) { return true }
   if (path.startsWith('/webhooks')) { return true }
+  // Skip aggressive rate limiting for authenticated user requests
+  if (req.cookies?.session_token || req.headers?.authorization || req.headers?.['x-csrf-token']) {
+    return true
+  }
   return false
 }
 
