@@ -989,36 +989,6 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
                         <span className="sm-intake-icon">👤</span>
                         <span className="sm-intake-title">Patient Encounter Details</span>
                       </div>
-
-                      {(visits.length > 0 || patientList.length > 0) && (
-                        <div className="sm-patient-quick-select">
-                          <select
-                            className="sm-patient-quick-dropdown"
-                            value={selectedPatientIdForEncounter}
-                            onChange={(e) => handleSelectScheduledPatient(e.target.value)}
-                          >
-                            <option value="">⚡ Load Scheduled Patient ▾</option>
-                            {visits.length > 0 && (
-                              <optgroup label={`📅 Today's Scheduled Visits (${visits.length})`}>
-                                {visits.map((v) => (
-                                  <option key={`v-${v.id}`} value={`visit-${v.id}`}>
-                                    {v.visit_time ? `${v.visit_time} — ` : ''}{v.patient_name || 'Patient'} ({v.mrn || 'Auto-MRN'})
-                                  </option>
-                                ))}
-                              </optgroup>
-                            )}
-                            {patientList.length > 0 && (
-                              <optgroup label={`👥 All Clinic Patients (${patientList.length})`}>
-                                {patientList.map((p) => (
-                                  <option key={`p-${p.id}`} value={String(p.id)}>
-                                    {p.name} — Age: {getPatientDisplayAge(p, patientList)} ({p.mrn})
-                                  </option>
-                                ))}
-                              </optgroup>
-                            )}
-                          </select>
-                        </div>
-                      )}
                     </div>
 
                     <div className="sm-patient-intake-inputs-row">
