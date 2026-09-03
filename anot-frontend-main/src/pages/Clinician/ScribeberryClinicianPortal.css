@@ -335,27 +335,29 @@
 .sm-state-idle {
   flex: 1;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-.sm-idle-card {
+.sm-idle-hub {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  max-width: 640px;
-  width: 100%;
+  padding: 16px 0;
+  margin: auto 0;
 }
 
 .sm-idle-mic-wrap {
   position: relative;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 .sm-idle-mic-btn {
-  width: 80px;
-  height: 80px;
+  width: 88px;
+  height: 88px;
   border-radius: 50%;
   border: none;
   background: var(--sm-blue-50);
@@ -365,19 +367,19 @@
   justify-content: center;
   cursor: pointer;
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 4px 14px rgba(29, 104, 205, 0.15);
+  box-shadow: 0 4px 18px rgba(29, 104, 205, 0.18);
 }
 
 .sm-idle-mic-btn:hover {
   background: var(--sm-blue-100);
   color: var(--sm-blue-700);
   transform: scale(1.06);
-  box-shadow: 0 6px 20px rgba(29, 104, 205, 0.25);
+  box-shadow: 0 8px 24px rgba(29, 104, 205, 0.28);
 }
 
 .sm-clock-display {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 46px;
+  font-size: 44px;
   font-weight: 800;
   color: var(--sm-slate-900);
   letter-spacing: 2px;
@@ -392,10 +394,10 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14.5px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--sm-slate-500);
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .sm-status-dot {
@@ -424,14 +426,14 @@
   color: #FFFFFF;
   border: none;
   border-radius: 10px;
-  padding: 14px 34px;
+  padding: 13px 32px;
   font-size: 15px;
   font-weight: 700;
   display: inline-flex;
   align-items: center;
   gap: 10px;
   cursor: pointer;
-  margin-top: 24px;
+  margin-top: 20px;
   transition: all 0.2s ease;
   box-shadow: 0 4px 14px rgba(29, 104, 205, 0.3);
 }
@@ -480,46 +482,48 @@
 
 /* Smart Clinical Preset Chips */
 .sm-smart-chips-box {
-  margin-top: 36px;
   width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
+  background: #F8FAFC;
+  border: 1px solid var(--sm-slate-200);
+  border-radius: 12px;
+  padding: 14px 20px;
+  margin-top: 20px;
+  box-sizing: border-box;
 }
 
 .sm-smart-chips-title {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--sm-slate-400);
+  letter-spacing: 0.04em;
+  color: var(--sm-slate-700);
 }
 
 .sm-smart-chips-row {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .sm-smart-chip {
-  background: var(--sm-slate-100);
-  border: 1px solid var(--sm-slate-200);
+  background: #FFFFFF;
+  border: 1px solid var(--sm-slate-300);
   color: var(--sm-slate-700);
-  padding: 5px 11px;
+  padding: 6px 13px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 }
 
 .sm-smart-chip:hover {
   background: var(--sm-blue-50);
-  border-color: var(--sm-blue-200);
+  border-color: var(--sm-blue-400);
   color: var(--sm-blue-700);
   transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.1);
 }
 
 /* ─── STATE 1b: RECORDING PANEL ───────────────────────────────────────── */
@@ -692,14 +696,13 @@
 /* ─── STATE 1a PATIENT INTAKE CARD ────────────────────────────────────── */
 .sm-patient-intake-card {
   width: 100%;
-  background: #FFFFFF;
+  background: #F8FAFC;
   border: 1px solid var(--sm-slate-200);
   border-radius: 12px;
   padding: 16px 20px;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
   text-align: left;
   box-sizing: border-box;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .sm-patient-intake-header {
@@ -774,21 +777,22 @@
 }
 
 .sm-intake-input {
-  background: #F8FAFC;
+  background: #FFFFFF;
   border: 1px solid var(--sm-slate-300);
   border-radius: 8px;
-  padding: 9px 13px;
+  padding: 10px 14px;
   font-size: 13.5px;
   font-weight: 600;
   color: var(--sm-slate-900);
   outline: none;
   transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
 .sm-intake-input:focus {
   background: #FFFFFF;
   border-color: var(--sm-blue-600);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
 }
 
 .sm-intake-input--name {

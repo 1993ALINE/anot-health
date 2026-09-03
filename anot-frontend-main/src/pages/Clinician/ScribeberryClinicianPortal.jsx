@@ -952,73 +952,73 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
               {/* STATE 1a: IDLE — Ready to Record */}
               {isIdleState && (
                 <div className="sm-state-idle">
-                  <div className="sm-idle-card">
-                    {/* Active Patient Demographic & Intake Bar */}
-                    <div className="sm-patient-intake-card">
-                      <div className="sm-patient-intake-header">
-                        <div className="sm-patient-intake-badge">
-                          <span className="sm-intake-icon">👤</span>
-                          <span className="sm-intake-title">Patient Encounter Details</span>
-                        </div>
-
-                        {patientList.length > 0 && (
-                          <div className="sm-patient-quick-select">
-                            <select
-                              className="sm-patient-quick-dropdown"
-                              value={selectedPatientIdForEncounter}
-                              onChange={(e) => handleSelectScheduledPatient(e.target.value)}
-                            >
-                              <option value="">⚡ Or select from Today's Scheduled Patients ({patientList.length}) ▾</option>
-                              {patientList.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.name} — Age: {getPatientDisplayAge(p, patientList)} ({p.mrn})
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
+                  {/* 1. TOP: Patient Demographic & Intake Bar */}
+                  <div className="sm-patient-intake-card">
+                    <div className="sm-patient-intake-header">
+                      <div className="sm-patient-intake-badge">
+                        <span className="sm-intake-icon">👤</span>
+                        <span className="sm-intake-title">Patient Encounter Details</span>
                       </div>
 
-                      <div className="sm-patient-intake-inputs-row">
-                        <div className="sm-intake-field sm-intake-field--name">
-                          <label className="sm-intake-label">Patient Name *</label>
-                          <input
-                            type="text"
-                            className="sm-intake-input sm-intake-input--name"
-                            placeholder="Enter patient name (e.g. John Doe, Sarah Miller)..."
-                            value={patientNameInput}
-                            onChange={(e) => {
-                              setPatientNameInput(e.target.value)
-                              if (selectedPatientIdForEncounter) setSelectedPatientIdForEncounter('')
-                            }}
-                          />
+                      {patientList.length > 0 && (
+                        <div className="sm-patient-quick-select">
+                          <select
+                            className="sm-patient-quick-dropdown"
+                            value={selectedPatientIdForEncounter}
+                            onChange={(e) => handleSelectScheduledPatient(e.target.value)}
+                          >
+                            <option value="">⚡ Load Scheduled Patient ({patientList.length}) ▾</option>
+                            {patientList.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name} — Age: {getPatientDisplayAge(p, patientList)} ({p.mrn})
+                              </option>
+                            ))}
+                          </select>
                         </div>
-
-                        <div className="sm-intake-field sm-intake-field--age">
-                          <label className="sm-intake-label">Age / DOB</label>
-                          <input
-                            type="text"
-                            className="sm-intake-input"
-                            placeholder="e.g. 45 yrs"
-                            value={patientAgeInput}
-                            onChange={(e) => setPatientAgeInput(e.target.value)}
-                          />
-                        </div>
-
-                        <div className="sm-intake-field sm-intake-field--mrn">
-                          <label className="sm-intake-label">MRN / ID</label>
-                          <input
-                            type="text"
-                            className="sm-intake-input"
-                            placeholder="e.g. MRN-849201"
-                            value={patientMrnInput}
-                            onChange={(e) => setPatientMrnInput(e.target.value)}
-                          />
-                        </div>
-                      </div>
+                      )}
                     </div>
 
-                    {/* Glowing Mic Hero */}
+                    <div className="sm-patient-intake-inputs-row">
+                      <div className="sm-intake-field sm-intake-field--name">
+                        <label className="sm-intake-label">Patient Name *</label>
+                        <input
+                          type="text"
+                          className="sm-intake-input sm-intake-input--name"
+                          placeholder="Type patient name (e.g. John Doe, Sarah Miller)..."
+                          value={patientNameInput}
+                          onChange={(e) => {
+                            setPatientNameInput(e.target.value)
+                            if (selectedPatientIdForEncounter) setSelectedPatientIdForEncounter('')
+                          }}
+                        />
+                      </div>
+
+                      <div className="sm-intake-field sm-intake-field--age">
+                        <label className="sm-intake-label">Age / DOB</label>
+                        <input
+                          type="text"
+                          className="sm-intake-input"
+                          placeholder="e.g. 45 yrs"
+                          value={patientAgeInput}
+                          onChange={(e) => setPatientAgeInput(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="sm-intake-field sm-intake-field--mrn">
+                        <label className="sm-intake-label">MRN / ID</label>
+                        <input
+                          type="text"
+                          className="sm-intake-input"
+                          placeholder="e.g. MRN-849201"
+                          value={patientMrnInput}
+                          onChange={(e) => setPatientMrnInput(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 2. CENTER: Ambient Microphone Console */}
+                  <div className="sm-idle-hub">
                     <div className="sm-idle-mic-wrap">
                       <button
                         type="button"
@@ -1026,7 +1026,7 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
                         onClick={() => handleStartInstantDictation()}
                         title="Click to start ambient consultation"
                       >
-                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
                           <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
                           <line x1="12" y1="19" x2="12" y2="22" />
@@ -1035,6 +1035,7 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
                     </div>
 
                     <div className="sm-clock-display">00:00</div>
+                    
                     <div className="sm-status-line">
                       <span className="sm-status-dot sm-status-dot--ready" />
                       <span>Ready for consultation</span>
@@ -1045,12 +1046,12 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
                       className="sm-btn-hero-record"
                       onClick={() => handleStartInstantDictation()}
                     >
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
                         <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
                         <line x1="12" y1="19" x2="12" y2="22" />
                       </svg>
-                      <span>Start recording</span>
+                      <span>Start Ambient Recording</span>
                     </button>
 
                     {/* Template Selection Pill */}
@@ -1068,33 +1069,33 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
                         ))}
                       </select>
                     </div>
+                  </div>
 
-                    {/* Free-Text Clinical Macros Bar */}
-                    <div className="sm-smart-chips-box">
-                      <div className="sm-macros-header-row">
-                        <span className="sm-smart-chips-title">⚡ Clinical Macros & DotPhrases</span>
+                  {/* 3. BOTTOM: Clinical Macros Bar */}
+                  <div className="sm-smart-chips-box">
+                    <div className="sm-macros-header-row">
+                      <span className="sm-smart-chips-title">⚡ Quick Macros & DotPhrases</span>
+                      <button
+                        type="button"
+                        className="sm-btn-manage-macros"
+                        onClick={() => setMacroModalOpen(true)}
+                        title="Add or Edit Custom Macros"
+                      >
+                        ⚙️ Manage Macros
+                      </button>
+                    </div>
+                    <div className="sm-smart-chips-row">
+                      {macros.map((m) => (
                         <button
+                          key={m.id}
                           type="button"
-                          className="sm-btn-manage-macros"
-                          onClick={() => setMacroModalOpen(true)}
-                          title="Add or Edit Custom Macros"
+                          className="sm-smart-chip"
+                          onClick={() => handleInsertMacro(m)}
+                          title={`Insert: ${m.content}`}
                         >
-                          ⚙️ Manage / Add Macros
+                          + {m.shortcut || m.name}
                         </button>
-                      </div>
-                      <div className="sm-smart-chips-row">
-                        {macros.map((m) => (
-                          <button
-                            key={m.id}
-                            type="button"
-                            className="sm-smart-chip"
-                            onClick={() => handleInsertMacro(m)}
-                            title={`Insert: ${m.content}`}
-                          >
-                            + {m.shortcut || m.name}
-                          </button>
-                        ))}
-                      </div>
+                      ))}
                     </div>
                   </div>
                 </div>
