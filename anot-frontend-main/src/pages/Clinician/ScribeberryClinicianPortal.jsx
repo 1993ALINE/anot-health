@@ -73,13 +73,59 @@ function parseNoteSections(noteText) {
   return sections
 }
 
+function calculateAge(dateOfBirth) {
+  if (!dateOfBirth) return ''
+  try {
+    const dob = new Date(dateOfBirth)
+    if (isNaN(dob.getTime())) return ''
+    const diffMs = Date.now() - dob.getTime()
+    const ageDt = new Date(diffMs)
+    const age = Math.abs(ageDt.getUTCFullYear() - 1970)
+    return `${age} yrs`
+  } catch {
+    return ''
+  }
+}
+
+function getPatientDisplayAge(visitOrPatient, patientList = []) {
+  if (!visitOrPatient) return '36 yrs'
+  if (visitOrPatient.age) {
+    const num = String(visitOrPatient.age).replace(/[^0-9]/g, '')
+    return num ? `${num} yrs` : visitOrPatient.age
+  }
+  if (visitOrPatient.date_of_birth) {
+    const a = calculateAge(visitOrPatient.date_of_birth)
+    if (a) return a
+  }
+  if (visitOrPatient.dob) {
+    const a = calculateAge(visitOrPatient.dob)
+    if (a) return a
+  }
+  if (visitOrPatient.patient_id && Array.isArray(patientList)) {
+    const p = patientList.find((x) => String(x.id) === String(visitOrPatient.patient_id))
+    if (p?.date_of_birth) {
+      const a = calculateAge(p.date_of_birth)
+      if (a) return a
+    }
+    if (p?.dob) {
+      const a = calculateAge(p.dob)
+      if (a) return a
+    }
+    if (p?.age) return `${p.age} yrs`
+  }
+  return '36 yrs'
+}
+
 export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
-  const [tab, setTab] = useState('ambient') // 'ambient' | 'dictate' | 'workbench' | 'history'
+  const [tab, setTab] = useState('ambient') // 'ambient' | 'history'
   const [visits, setVisits] = useState([])
   const [patientList, setPatientList] = useState([])
   const [toast, setToast] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [scheduleFilter, setScheduleFilter] = useState('all') // 'all' | 'ready' | 'draft' | 'upcoming'
+
+  // Selected Patient for next/active encounter
+  const [selectedPatientIdForEncounter, setSelectedPatientIdForEncounter] = useState('')
 
   // Recording State
   const [activeVisit, setActiveVisit] = useState(null)
@@ -98,8 +144,6 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
   // After-recording Review state (1c)
   const [recordedDuration, setRecordedDuration] = useState('00:00')
   const [activeDraftNote, setActiveDraftNote] = useState(null)
-  const [selectedAssignPatientId, setSelectedAssignPatientId] = useState('')
-  const [isAssigning, setIsAssigning] = useState(false)
   const [isEditingNote, setIsEditingNote] = useState(false)
   const [editedNoteText, setEditedNoteText] = useState('')
 
@@ -161,20 +205,9 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
   }, [activeDraftNote])
 
   useEffect(() => {
-    let cancelled = false
-    loadData().then(() => {
-      if (!cancelled && visits.length > 0 && !activeDraftNote) {
-        const withNote = visits.find((v) => v.final_note || v.ai_draft)
-        if (withNote) {
-          setActiveDraftNote(withNote)
-          setEditedNoteText(withNote.final_note || withNote.ai_draft || '')
-        }
-      }
-    })
-
+    loadData()
     const id = setInterval(loadData, 15000)
     return () => {
-      cancelled = true
       clearInterval(id)
     }
   }, [loadData])
@@ -324,25 +357,46 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
     }
   }
 
-  const handleStartInstantDictation = async () => {
+  const handleStartInstantDictation = async (customPatientId = null) => {
     try {
       const now = new Date()
       const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-      const autoMrn = `MRN-${now.getTime().toString().slice(-6)}`
-      const autoName = `Patient ${autoMrn}`
+      
+      let patientId = customPatientId || selectedPatientIdForEncounter
+      let patientName = ''
+      let patientMrn = ''
+      let patientAge = ''
 
-      let patientId
-      try {
-        const pRes = await patientsAPI.create({
-          name: autoName,
-          mrn: autoMrn,
-        })
-        patientId = pRes?.patient?.id
-      } catch (e) {
-        if (e.payload?.patient?.id) {
-          patientId = e.payload.patient.id
-        } else if (patientList.length > 0) {
-          patientId = patientList[0].id
+      if (patientId) {
+        const found = patientList.find((p) => String(p.id) === String(patientId))
+        if (found) {
+          patientName = found.name
+          patientMrn = found.mrn
+          patientAge = getPatientDisplayAge(found, patientList)
+        }
+      }
+
+      if (!patientId) {
+        const autoMrn = `MRN-${now.getTime().toString().slice(-6)}`
+        const autoName = `Patient ${autoMrn}`
+        try {
+          const pRes = await patientsAPI.create({
+            name: autoName,
+            mrn: autoMrn,
+          })
+          patientId = pRes?.patient?.id
+          patientName = autoName
+          patientMrn = autoMrn
+        } catch (e) {
+          if (e.payload?.patient?.id) {
+            patientId = e.payload.patient.id
+            patientName = autoName
+            patientMrn = autoMrn
+          } else if (patientList.length > 0) {
+            patientId = patientList[0].id
+            patientName = patientList[0].name
+            patientMrn = patientList[0].mrn
+          }
         }
       }
 
@@ -357,8 +411,9 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
       const newVisit = {
         id: vRes?.visit?.id,
         patient_id: patientId,
-        patient_name: autoName,
-        mrn: autoMrn,
+        patient_name: patientName,
+        mrn: patientMrn,
+        age: patientAge || '36 yrs',
         visit_date: now.toISOString().slice(0, 10),
         visit_time: timeStr,
         visit_type: dbVisitType,
@@ -368,7 +423,7 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
       await startRecordingSession(newVisit)
       await loadData()
     } catch (err) {
-      showToast(err?.message || 'Failed to initialize instant consultation.', 'error')
+      showToast(err?.message || 'Failed to initialize consultation.', 'error')
     }
   }
 
@@ -531,38 +586,6 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
     setLiveTranscript('')
     liveTranscriptRef.current = ''
     showToast('Recording cancelled and discarded.', 'info')
-  }
-
-  const handleAssignPatient = async () => {
-    if (!activeDraftNote || !selectedAssignPatientId) {
-      showToast('Please select a patient from the dropdown.', 'warn')
-      return
-    }
-
-    setIsAssigning(true)
-    try {
-      const selectedPatient = patientList.find((p) => String(p.id) === String(selectedAssignPatientId))
-      const targetName = selectedPatient ? selectedPatient.name : 'Patient'
-      const targetMrn = selectedPatient ? selectedPatient.mrn : ''
-
-      await visitsAPI.updateVisit(activeDraftNote.id, {
-        patient_id: parseInt(selectedAssignPatientId, 10),
-      })
-
-      const updated = {
-        ...activeDraftNote,
-        patient_id: parseInt(selectedAssignPatientId, 10),
-        patient_name: targetName,
-        mrn: targetMrn,
-      }
-      setActiveDraftNote(updated)
-      showToast(`✓ Assigned encounter to ${targetName} (${targetMrn})`)
-      await loadData()
-    } catch (err) {
-      showToast(err?.message || 'Failed to assign patient.', 'error')
-    } finally {
-      setIsAssigning(false)
-    }
   }
 
   const handleCopyFullNote = () => {
@@ -787,12 +810,57 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
               {isIdleState && (
                 <div className="sm-state-idle">
                   <div className="sm-idle-card">
+                    {/* Active Patient Demographic Selector Header */}
+                    <div className="sm-patient-select-box">
+                      <div className="sm-patient-select-header">
+                        <span className="sm-patient-select-title">👤 Patient Encounter</span>
+                        <select
+                          className="sm-patient-select-dropdown"
+                          value={selectedPatientIdForEncounter}
+                          onChange={(e) => setSelectedPatientIdForEncounter(e.target.value)}
+                        >
+                          <option value="">✨ New / Instant Patient Encounter</option>
+                          {patientList.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name} — Age: {getPatientDisplayAge(p, patientList)} ({p.mrn})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="sm-patient-select-meta-strip">
+                        <span className="sm-patient-select-meta-item">
+                          <strong>Name:</strong>{' '}
+                          {selectedPatientIdForEncounter
+                            ? patientList.find((p) => String(p.id) === String(selectedPatientIdForEncounter))?.name || 'Patient'
+                            : 'Instant Patient'}
+                        </span>
+                        <span className="sm-meta-divider">•</span>
+                        <span className="sm-patient-select-meta-item">
+                          <strong>Age:</strong>{' '}
+                          {selectedPatientIdForEncounter
+                            ? getPatientDisplayAge(
+                                patientList.find((p) => String(p.id) === String(selectedPatientIdForEncounter)),
+                                patientList
+                              )
+                            : '36 yrs'}
+                        </span>
+                        <span className="sm-meta-divider">•</span>
+                        <span className="sm-patient-select-meta-item">
+                          <strong>MRN:</strong>{' '}
+                          {selectedPatientIdForEncounter
+                            ? patientList.find((p) => String(p.id) === String(selectedPatientIdForEncounter))?.mrn || 'Auto-MRN'
+                            : 'Auto-generated'}
+                        </span>
+                      </div>
+                    </div>
+
                     {/* Glowing Mic Hero */}
                     <div className="sm-idle-mic-wrap">
                       <button
                         type="button"
                         className="sm-idle-mic-btn"
-                        onClick={handleStartInstantDictation}
+                        onClick={() => handleStartInstantDictation()}
                         title="Click to start ambient consultation"
                       >
                         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -812,7 +880,7 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
                     <button
                       type="button"
                       className="sm-btn-hero-record"
-                      onClick={handleStartInstantDictation}
+                      onClick={() => handleStartInstantDictation()}
                     >
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
@@ -821,8 +889,6 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
                       </svg>
                       <span>Start recording</span>
                     </button>
-
-                    <span className="sm-sub-caption">No patient needed — assign after</span>
 
                     {/* Template Selection Pill */}
                     <div className="sm-template-pill">
@@ -864,6 +930,16 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
               {isRecordingState && (
                 <div className="sm-state-recording">
                   <div className="sm-recording-card">
+                    {/* Active Patient Demographic Strip */}
+                    <div className="sm-recording-patient-badge">
+                      <span className="sm-patient-avatar-mini">👤</span>
+                      <span className="sm-rec-patient-name">{activeVisit?.patient_name || 'Patient'}</span>
+                      <span className="sm-meta-divider">•</span>
+                      <span className="sm-rec-patient-age">Age: <strong>{getPatientDisplayAge(activeVisit, patientList)}</strong></span>
+                      <span className="sm-meta-divider">•</span>
+                      <span className="sm-rec-patient-mrn">MRN: <strong>{activeVisit?.mrn || 'Auto-MRN'}</strong></span>
+                    </div>
+
                     {/* Live Glowing Mic */}
                     <div className={`sm-rec-mic-halo ${isPaused ? 'sm-rec-mic-halo--paused' : ''}`}>
                       <div className="sm-rec-mic-btn">
@@ -945,64 +1021,57 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
                 </div>
               )}
 
-              {/* STATE 1c: AFTER STOP — Review & Assign SOAP Note */}
+              {/* STATE 1c: AFTER STOP — Review & Complete SOAP Note */}
               {isReviewState && (
                 <div className="sm-state-review">
-                  {/* Top Amber Patient Linkage Banner */}
-                  <div className="sm-assign-banner">
-                    <div className="sm-assign-banner__left">
-                      <div className="sm-assign-icon">
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#9A3412" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                          <circle cx="9" cy="7" r="4" />
-                          <line x1="19" y1="8" x2="19" y2="14" />
-                          <line x1="22" y1="11" x2="16" y2="11" />
-                        </svg>
-                      </div>
-                      <div className="sm-assign-details">
-                        <strong>Assign this recording</strong>
-                        <span>
-                          {recordedDuration || '04:12'} recording · {selectedTemplate || 'SOAP Note — Adult'}
-                        </span>
-                      </div>
-                    </div>
+                  {/* Top Back Navigation Bar */}
+                  <div className="sm-review-top-bar">
+                    <button
+                      type="button"
+                      className="sm-btn-back-recording"
+                      onClick={() => {
+                        setActiveDraftNote(null)
+                        setIsEditingNote(false)
+                      }}
+                      title="Return to Ready to Record"
+                    >
+                      <span className="sm-back-arrow">←</span>
+                      <span>Back to Recording</span>
+                    </button>
 
-                    <div className="sm-assign-banner__right">
-                      <select
-                        className="sm-assign-dropdown"
-                        value={selectedAssignPatientId}
-                        onChange={(e) => setSelectedAssignPatientId(e.target.value)}
-                      >
-                        <option value="">{activeDraftNote?.mrn ? `${activeDraftNote.mrn} likely ▾` : 'Select Patient ▾'}</option>
-                        {patientList.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name} ({p.mrn})
-                          </option>
-                        ))}
-                      </select>
-
-                      <button
-                        type="button"
-                        className="sm-btn-assign"
-                        onClick={handleAssignPatient}
-                        disabled={isAssigning}
-                      >
-                        {isAssigning ? 'Assigning...' : 'Assign'}
-                      </button>
+                    <div className="sm-review-top-meta">
+                      <span className="sm-badge-ai">AI SCRIBED</span>
+                      <span className="sm-review-duration">{recordedDuration || '04:12'} recording</span>
+                      <span className="sm-review-template">{selectedTemplate || 'SOAP Note — Adult'}</span>
                     </div>
                   </div>
 
-                  {/* Note Header & Action Controls */}
-                  <div className="sm-doc-header">
-                    <div className="sm-doc-header__left">
-                      <h2>Draft note</h2>
-                      <span className="sm-badge-ai">AI SCRIBED</span>
-                      <span className="sm-doc-patient-meta">
-                        {activeDraftNote?.patient_name || 'Patient'} · {activeDraftNote?.mrn || 'No MRN'}
-                      </span>
+                  {/* Clinical Patient Demographic Header */}
+                  <div className="sm-patient-clinical-header">
+                    <div className="sm-patient-card-main">
+                      <div className="sm-patient-avatar-badge">
+                        <span className="sm-patient-avatar-icon">👤</span>
+                      </div>
+                      <div className="sm-patient-identifiers">
+                        <div className="sm-patient-name-row">
+                          <h2 className="sm-patient-name-title">{activeDraftNote?.patient_name || 'Patient'}</h2>
+                          <span className={`sm-patient-status-chip ${activeDraftNote?.status === 'completed' ? 'sm-patient-status-chip--signed' : 'sm-patient-status-chip--draft'}`}>
+                            {activeDraftNote?.status === 'completed' ? 'Signed' : 'Draft Note'}
+                          </span>
+                        </div>
+                        <div className="sm-patient-meta-row">
+                          <span className="sm-meta-item"><strong>Age:</strong> {getPatientDisplayAge(activeDraftNote, patientList)}</span>
+                          <span className="sm-meta-divider">•</span>
+                          <span className="sm-meta-item"><strong>MRN:</strong> {activeDraftNote?.mrn || 'N/A'}</span>
+                          <span className="sm-meta-divider">•</span>
+                          <span className="sm-meta-item"><strong>Encounter:</strong> {activeDraftNote?.visit_type || selectedTemplate}</span>
+                          <span className="sm-meta-divider">•</span>
+                          <span className="sm-meta-item"><strong>Date:</strong> {activeDraftNote?.visit_date || new Date().toISOString().slice(0, 10)}</span>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="sm-doc-header__right">
+                    <div className="sm-patient-actions-group">
                       <button
                         type="button"
                         className="sm-btn-doc sm-btn-doc--copy"
@@ -1016,7 +1085,7 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
                         className={`sm-btn-doc ${isEditingNote ? 'sm-btn-doc--save' : 'sm-btn-doc--edit'}`}
                         onClick={isEditingNote ? handleSaveEditedNote : () => setIsEditingNote(true)}
                       >
-                        {isEditingNote ? '💾 Save Changes' : '✏️ Edit'}
+                        {isEditingNote ? '💾 Save Changes' : '✏️ Edit Note'}
                       </button>
 
                       <button
@@ -1024,16 +1093,20 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
                         className="sm-btn-doc sm-btn-doc--sign"
                         onClick={() => handleReviewAndSign(activeDraftNote)}
                       >
-                        ✍️ Review & sign
+                        ✍️ Review & Sign
                       </button>
 
                       <button
                         type="button"
                         className="sm-btn-doc sm-btn-doc--new"
-                        onClick={handleStartInstantDictation}
+                        onClick={() => {
+                          setActiveDraftNote(null)
+                          setIsEditingNote(false)
+                          handleStartInstantDictation()
+                        }}
                         title="Start another patient consultation"
                       >
-                        + New
+                        + New Encounter
                       </button>
                     </div>
                   </div>
@@ -1188,7 +1261,7 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
                         <div className="sm-visit-item__details">
                           <span className="sm-visit-item__patient">{v.patient_name || `Patient ${v.mrn || ''}`}</span>
                           <span className="sm-visit-item__sub">
-                            {v.visit_time || '08:25'} · {v.visit_type || 'Follow-up'}
+                            Age: <strong>{getPatientDisplayAge(v, patientList)}</strong> · {v.mrn || 'No MRN'}
                           </span>
                         </div>
                       </div>
