@@ -153,12 +153,16 @@ router.get('/my-clinicians', restrict('scribe'), async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT
-        sa.clinician_id,
+        c.id,
+        c.id        AS clinician_id,
+        c.name,
         c.name      AS clinician_name,
-        c.specialty
+        c.specialty,
+        c.email
       FROM scribe_assignments sa
       JOIN users c ON c.id = sa.clinician_id
       WHERE sa.scribe_id = $1
+      ORDER BY c.name ASC
     `, [req.user.id])
     res.json({ clinicians: result.rows })
   } catch (err) {

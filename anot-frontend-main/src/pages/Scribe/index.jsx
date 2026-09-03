@@ -502,9 +502,21 @@ function Scribe() {
   }, [])
 
   const loadProviders = async () => {
-    try { setLoadingProviders(true); const data = await usersAPI.getMyClinicians(); setProviders(data.clinicians || []) }
-    catch { showNotif('Failed to load providers.', 'red') }
-    finally { setLoadingProviders(false) }
+    try {
+      setLoadingProviders(true)
+      const data = await usersAPI.getMyClinicians()
+      const list = (data.clinicians || []).map((c) => ({
+        ...c,
+        id: c.id || c.clinician_id,
+        name: c.name || c.clinician_name || 'Clinician',
+        specialty: c.specialty || 'General Practitioner',
+      }))
+      setProviders(list)
+    } catch {
+      showNotif('Failed to load providers.', 'red')
+    } finally {
+      setLoadingProviders(false)
+    }
   }
 
   const loadRecordings = useCallback(async (providerId, date) => {
