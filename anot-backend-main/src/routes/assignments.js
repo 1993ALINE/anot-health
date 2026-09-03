@@ -12,7 +12,7 @@ router.use(loadAdminPortalModuleKeys)
 
 // ─── GET ALL ASSIGNMENTS ──────────────────────────────────────────────────────
 
-router.get('/', restrict('admin', 'super_admin'), requireAdminPortalModulesIfAdmin('overview', 'assignments'), logAdminPortalModuleAccess('assignments'), async (req, res) => {
+router.get('/', restrict('admin', 'super_admin', 'scribe', 'clinician', 'qps'), requireAdminPortalModulesIfAdmin('overview', 'assignments'), logAdminPortalModuleAccess('assignments'), async (req, res) => {
   try {
     const base = `
       SELECT

@@ -253,4 +253,38 @@ const deletePatient = async (req, res) => {
     }
 }
 
-module.exports = { getAllPatients, createPatient, getPatient, deletePatient, collectAudioPathsFromVisits }
+// ─── BULK DELETE ALL PATIENTS (Super Admin Only) ──────────────────────────────
+
+const bulkDeleteAllPatients = async (req, res) => {
+    try {
+        const client = await pool.connect()
+        try {
+            await client.query('BEGIN')
+            await client.query('DELETE FROM notes')
+            await client.query('DELETE FROM patient_consent_logs').catch(() => {})
+            await client.query('DELETE FROM visits')
+            await client.query('DELETE FROM patients')
+            await client.query('COMMIT')
+        } catch (txErr) {
+            await client.query('ROLLBACK')
+            throw txErr
+        } finally {
+            client.release()
+        }
+
+        await auditLog(
+            req.user,
+            'ALL_PATIENTS_DELETED',
+            'patient',
+            'all',
+            'Super admin wiped all patient records and encounters',
+            { req, module_key: 'clinical', action_category: 'delete', status: 'success' }
+        ).catch(reportAuditFailure)
+
+        res.status(200).json({ message: 'All patients, visits, and notes successfully deleted.' })
+    } catch (err) {
+        sendHttpError(res, 500, err, { context: 'patient.bulk_delete', req })
+    }
+}
+
+module.exports = { getAllPatients, createPatient, getPatient, deletePatient, bulkDeleteAllPatients, collectAudioPathsFromVisits }

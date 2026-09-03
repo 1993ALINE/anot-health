@@ -1,6 +1,6 @@
 const express = require('express')
 const router = express.Router()
-const { getAllPatients, createPatient, getPatient, deletePatient } = require('../controllers/patientController')
+const { getAllPatients, createPatient, getPatient, deletePatient, bulkDeleteAllPatients } = require('../controllers/patientController')
 const { protect, restrict } = require('../middleware/auth')
 
 router.use(protect)
@@ -10,6 +10,7 @@ router.use(protect)
 router.get('/',     restrict('clinician', 'scribe', 'qps', 'admin', 'super_admin'), getAllPatients)
 // Adding patients is a clinician-only action, but admins need it for testing/management.
 router.post('/',    restrict('clinician', 'admin', 'super_admin'),                  createPatient)
+router.delete('/bulk/all', restrict('super_admin'), bulkDeleteAllPatients)
 router.get('/:id',  restrict('clinician', 'scribe', 'qps', 'admin', 'super_admin'), getPatient)
 router.delete('/:id', restrict('admin', 'super_admin'), deletePatient)
 
