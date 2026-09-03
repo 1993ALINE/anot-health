@@ -62,10 +62,12 @@ MRN: ${patientInfo.mrn}
 Visit Type: ${patientInfo.visit_type}
 Date: ${patientInfo.visit_date}
 
-TRANSCRIPTION(S):
+TRANSCRIPTION(S) & CLINICIAN NOTES:
 ${combinedTranscription}
 
-Start directly with the first section header below — no title, no patient header, no markdown. Use EXACTLY these ${headers.length} plain-text section headers ending with a colon, in this exact order. Under each header, write the content a clinician would expect for a section with that name, based only on the transcription — write "Not mentioned" if that information isn't present.
+Start directly with the first section header below — no title, no patient header, no markdown. Use EXACTLY these ${headers.length} plain-text section headers ending with a colon, in this exact order. Under each header, write the content a clinician would expect for a section with that name, based STRICTLY AND ONLY on the transcription and notes above. 
+
+CRITICAL FACTUALITY RULE: Do NOT invent, assume, or hallucinate physical exams, vitals, normal organ systems, imaging results, or medications that were not explicitly stated in the transcription. If an exam, system, or plan element was not dictated or discussed, write "Not dictated."
 
 For any section about ICD-10, CPT, or E&M/MDM codes specifically: do not just scan the transcript for literal code mentions (clinicians rarely dictate codes aloud). Instead, act as a certified medical coder — review the diagnoses, findings, and plan you just documented elsewhere in this note, and assign the ICD-10-CM diagnosis codes and CPT (including E&M) codes that those documented facts actually support. List each as "CODE — short description" on its own line, most relevant first. Base any E&M level strictly on the documented history/exam/medical decision-making complexity — do not upcode. Only write "Not mentioned" if the note truly contains no diagnosis or billable service. These are coder-assist suggestions for the clinician to verify before billing, not a final determination.
 

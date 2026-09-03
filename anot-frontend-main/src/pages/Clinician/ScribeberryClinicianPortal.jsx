@@ -19,14 +19,43 @@ const CLINICAL_TEMPLATES = [
   { id: 'telehealth', label: 'Telehealth / Virtual Encounter', type: 'Virtual Visit' },
 ]
 
-const QUICK_SMART_CHIPS = [
-  { label: '+ Vitals (120/80, 72bpm)', text: 'VITALS: BP 120/80 mmHg, HR 72 bpm, SpO2 99% on room air, Temp 98.6°F.' },
-  { label: '+ Alert & Oriented x3', text: 'GENERAL: Alert, oriented x3, well-appearing, in no acute distress.' },
-  { label: '+ Normal Heart & Lungs', text: 'CARDIO/RESP: Heart regular rate and rhythm, no murmurs. Lungs clear to auscultation bilaterally.' },
-  { label: '+ Right Knee MSK Exam', text: 'RIGHT KNEE EXAM: Tenderness to palpation over MCL, positive McMurray test, mild joint effusion, limited flexion due to pain.' },
-  { label: '+ Start Ibuprofen 600mg', text: 'PLAN MEDS: Start Ibuprofen 600 mg PO TID with meals as needed for pain and inflammation.' },
-  { label: '+ Ortho Referral & MRI', text: 'PLAN ORDERS: Outpatient orthopedic referral for evaluation and MRI imaging of the affected joint.' },
-  { label: '+ 2-Week Follow-up', text: 'FOLLOW-UP: Return to clinic in 2 weeks or sooner if symptoms, swelling, or pain worsen.' },
+const DEFAULT_MACROS = [
+  {
+    id: 'm_vitals',
+    name: 'Normal Vitals',
+    shortcut: '.vitals',
+    content: 'VITALS: BP 120/80 mmHg, HR 72 bpm regular, Temp 98.6°F, RR 16/min, SpO2 99% on room air.',
+  },
+  {
+    id: 'm_normexam',
+    name: 'Normal Physical Exam',
+    shortcut: '.normexam',
+    content: 'PHYSICAL EXAM:\nGENERAL: Alert and oriented x3, well-nourished, in no acute distress.\nCARDIOVASCULAR: Regular rate and rhythm, normal S1/S2, no murmurs.\nPULMONARY: Clear to auscultation bilaterally, no wheezes, rales, or rhonchi.\nABDOMEN: Soft, non-tender, non-distended, normoactive bowel sounds.',
+  },
+  {
+    id: 'm_kneemsk',
+    name: 'Right Knee MSK Exam',
+    shortcut: '.kneemsk',
+    content: 'RIGHT KNEE EXAM:\nInspection: Mild joint effusion, no erythema or local warmth.\nPalpation: Tenderness to palpation along medial joint line and MCL.\nSpecial Tests: McMurray positive for medial joint discomfort. Lachman negative, stable to varus/valgus stress.\nROM: Active flexion to 115 degrees limited by pain; full extension (0 degrees).',
+  },
+  {
+    id: 'm_rx_nsaid',
+    name: 'Rx NSAID Plan',
+    shortcut: '.rx_nsaid',
+    content: 'PLAN:\n1. Ibuprofen 600 mg PO TID with meals as needed for pain and inflammation.\n2. Advised patient on gastrointestinal precautions and adequate hydration.\n3. Ice application for 15-20 minutes 3-4 times daily.',
+  },
+  {
+    id: 'm_ortho',
+    name: 'Ortho Referral & MRI',
+    shortcut: '.ortho',
+    content: 'PLAN:\n1. Outpatient orthopedic surgery referral ordered for advanced subspecialty evaluation.\n2. Right knee MRI without contrast ordered to assess meniscal and ligamentous status.\n3. Activity modification and avoid high-impact pivoting activities.',
+  },
+  {
+    id: 'm_followup',
+    name: '2-Week Follow-up',
+    shortcut: '.followup',
+    content: 'FOLLOW-UP:\n1. Return to clinic in 2 weeks or sooner if symptoms, swelling, or pain worsen.\n2. Red flag return precautions discussed including severe pain, calf swelling, or inability to bear weight.',
+  },
 ]
 
 function normalizeVisitTypeForDb(val) {
@@ -126,6 +155,21 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
 
   // Selected Patient for next/active encounter
   const [selectedPatientIdForEncounter, setSelectedPatientIdForEncounter] = useState('')
+
+  // Custom Free-Text Macros / SmartPhrases
+  const [macros, setMacros] = useState(() => {
+    try {
+      const saved = localStorage.getItem('anot_clinician_macros_v2')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      }
+    } catch {}
+    return DEFAULT_MACROS
+  })
+  const [macroModalOpen, setMacroModalOpen] = useState(false)
+  const [editingMacro, setEditingMacro] = useState(null)
+  const [macroForm, setMacroForm] = useState({ name: '', shortcut: '', content: '' })
 
   // Recording State
   const [activeVisit, setActiveVisit] = useState(null)
@@ -661,6 +705,81 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
     }
   }
 
+  const saveMacrosToStorage = (newList) => {
+    setMacros(newList)
+    try {
+      localStorage.setItem('anot_clinician_macros_v2', JSON.stringify(newList))
+    } catch {}
+  }
+
+  const handleOpenAddMacro = () => {
+    setEditingMacro(null)
+    setMacroForm({ name: '', shortcut: '.', content: '' })
+    setMacroModalOpen(true)
+  }
+
+  const handleOpenEditMacro = (macro) => {
+    setEditingMacro(macro)
+    setMacroForm({ name: macro.name, shortcut: macro.shortcut, content: macro.content })
+    setMacroModalOpen(true)
+  }
+
+  const handleDeleteMacro = (id) => {
+    const updated = macros.filter((m) => m.id !== id)
+    saveMacrosToStorage(updated)
+    showToast('Macro removed.', 'info')
+  }
+
+  const handleResetMacros = () => {
+    saveMacrosToStorage(DEFAULT_MACROS)
+    showToast('Reset macros to standard presets.')
+  }
+
+  const handleSaveMacroForm = (e) => {
+    if (e && e.preventDefault) e.preventDefault()
+    if (!macroForm.name.trim() || !macroForm.content.trim()) {
+      showToast('Macro Name and Free Text Content are required.', 'warn')
+      return
+    }
+
+    let shortcut = macroForm.shortcut.trim()
+    if (shortcut && !shortcut.startsWith('.')) {
+      shortcut = `.${shortcut}`
+    }
+
+    if (editingMacro) {
+      const updated = macros.map((m) =>
+        m.id === editingMacro.id
+          ? { ...m, name: macroForm.name.trim(), shortcut: shortcut || `.${macroForm.name.toLowerCase().replace(/\s+/g, '')}`, content: macroForm.content.trim() }
+          : m
+      )
+      saveMacrosToStorage(updated)
+      showToast('✓ Macro updated successfully!')
+    } else {
+      const newMacro = {
+        id: `m_${Date.now()}`,
+        name: macroForm.name.trim(),
+        shortcut: shortcut || `.${macroForm.name.toLowerCase().replace(/\s+/g, '')}`,
+        content: macroForm.content.trim(),
+      }
+      saveMacrosToStorage([...macros, newMacro])
+      showToast('✓ New Macro added successfully!')
+    }
+
+    setMacroModalOpen(false)
+    setEditingMacro(null)
+  }
+
+  const handleInsertMacro = (macro) => {
+    const textToInsert = macro.content || macro.text || ''
+    if (!textToInsert) return
+    setDictationNotes((prev) => {
+      const trimmed = prev.trim()
+      return trimmed ? `${trimmed}\n\n${textToInsert}` : textToInsert
+    })
+    showToast(`✓ Added macro: ${macro.name || macro.shortcut}`)
+  }
+
   const handleInsertSmartChip = (chipText) => {
     setDictationNotes((prev) => {
       const trimmed = prev.trim()
@@ -906,18 +1025,29 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
                       </select>
                     </div>
 
-                    {/* Quick Smart Observation Chips */}
+                    {/* Free-Text Clinical Macros Bar */}
                     <div className="sm-smart-chips-box">
-                      <span className="sm-smart-chips-title">Quick Observation Presets</span>
+                      <div className="sm-macros-header-row">
+                        <span className="sm-smart-chips-title">⚡ Clinical Macros & DotPhrases</span>
+                        <button
+                          type="button"
+                          className="sm-btn-manage-macros"
+                          onClick={() => setMacroModalOpen(true)}
+                          title="Add or Edit Custom Macros"
+                        >
+                          ⚙️ Manage / Add Macros
+                        </button>
+                      </div>
                       <div className="sm-smart-chips-row">
-                        {QUICK_SMART_CHIPS.slice(0, 5).map((chip, idx) => (
+                        {macros.map((m) => (
                           <button
-                            key={idx}
+                            key={m.id}
                             type="button"
                             className="sm-smart-chip"
-                            onClick={() => handleInsertSmartChip(chip.text)}
+                            onClick={() => handleInsertMacro(m)}
+                            title={`Insert: ${m.content}`}
                           >
-                            {chip.label}
+                            + {m.shortcut || m.name}
                           </button>
                         ))}
                       </div>
@@ -1294,26 +1424,24 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
             />
 
             <div className="sm-scratchpad-quick-bar">
+              {macros.slice(0, 4).map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  className="sm-btn-mini-chip"
+                  onClick={() => handleInsertMacro(m)}
+                  title={`Insert: ${m.content}`}
+                >
+                  + {m.shortcut || m.name}
+                </button>
+              ))}
               <button
                 type="button"
-                className="sm-btn-mini-chip"
-                onClick={() => handleInsertSmartChip('BP 120/80, HR 72, Temp 98.6°F')}
+                className="sm-btn-mini-chip sm-btn-mini-chip--manage"
+                onClick={() => setMacroModalOpen(true)}
+                title="Manage Macros"
               >
-                + BP/Vitals
-              </button>
-              <button
-                type="button"
-                className="sm-btn-mini-chip"
-                onClick={() => handleInsertSmartChip('Normal exam, no distress')}
-              >
-                + Norm Exam
-              </button>
-              <button
-                type="button"
-                className="sm-btn-mini-chip"
-                onClick={() => handleInsertSmartChip('Ibuprofen 600mg BID')}
-              >
-                + Rx NSAID
+                ⚙️ Macros
               </button>
             </div>
           </div>
@@ -1329,6 +1457,207 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
           onNoteUpdated={loadData}
         />
       )}
+
+      {/* Clinical Macros Manager Modal */}
+      {macroModalOpen && (
+        <ManageMacrosModal
+          macros={macros}
+          editingMacro={editingMacro}
+          macroForm={macroForm}
+          setMacroForm={setMacroForm}
+          onClose={() => {
+            setMacroModalOpen(false)
+            setEditingMacro(null)
+          }}
+          onSave={handleSaveMacroForm}
+          onStartAdd={handleOpenAddMacro}
+          onStartEdit={handleOpenEditMacro}
+          onDelete={handleDeleteMacro}
+          onReset={handleResetMacros}
+          onInsert={handleInsertMacro}
+        />
+      )}
+    </div>
+  )
+}
+
+/**
+ * ManageMacrosModal
+ * Dedicated modal for creating, editing, and deleting clinician DotPhrases / Free-Text Macros
+ */
+function ManageMacrosModal({
+  macros,
+  editingMacro,
+  macroForm,
+  setMacroForm,
+  onClose,
+  onSave,
+  onStartAdd,
+  onStartEdit,
+  onDelete,
+  onReset,
+  onInsert,
+}) {
+  const [activeTab, setActiveTab] = useState(editingMacro ? 'form' : 'list') // 'list' | 'form'
+
+  const handleEditClick = (m) => {
+    onStartEdit(m)
+    setActiveTab('form')
+  }
+
+  const handleNewClick = () => {
+    onStartAdd()
+    setActiveTab('form')
+  }
+
+  return (
+    <div className="sm-modal-overlay" onClick={onClose}>
+      <div className="sm-modal sm-macro-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="sm-modal__header">
+          <div className="sm-modal__title-group">
+            <h3>⚡ Clinical Macros & DotPhrases</h3>
+            <p>Create and customize reusable free-text clinical templates for ambient dictation and notes.</p>
+          </div>
+          <button type="button" className="sm-btn-close-modal" onClick={onClose}>
+            ✕
+          </button>
+        </div>
+
+        {/* Modal Subnav */}
+        <div className="sm-macro-tabs">
+          <button
+            type="button"
+            className={`sm-macro-tab ${activeTab === 'list' ? 'sm-macro-tab--active' : ''}`}
+            onClick={() => setActiveTab('list')}
+          >
+            📋 All Macros ({macros.length})
+          </button>
+          <button
+            type="button"
+            className={`sm-macro-tab ${activeTab === 'form' ? 'sm-macro-tab--active' : ''}`}
+            onClick={handleNewClick}
+          >
+            {editingMacro ? `✏️ Edit: ${editingMacro.name}` : '➕ Add New Macro'}
+          </button>
+        </div>
+
+        <div className="sm-modal__body sm-macro-modal-body">
+          {/* TAB 1: MACRO LIST */}
+          {activeTab === 'list' && (
+            <div className="sm-macro-list-view">
+              <div className="sm-macro-list-header">
+                <span>Click <strong>Insert</strong> to add to notes, or <strong>Edit</strong> to modify free text.</span>
+                <button type="button" className="sm-btn-reset-macros" onClick={onReset}>
+                  ↺ Reset Presets
+                </button>
+              </div>
+
+              <div className="sm-macro-cards-grid">
+                {macros.map((m) => (
+                  <div key={m.id} className="sm-macro-card">
+                    <div className="sm-macro-card__top">
+                      <div className="sm-macro-card__title-row">
+                        <span className="sm-macro-card__shortcut">{m.shortcut || '.macro'}</span>
+                        <strong className="sm-macro-card__name">{m.name}</strong>
+                      </div>
+                      <div className="sm-macro-card__actions">
+                        <button
+                          type="button"
+                          className="sm-btn-macro-action sm-btn-macro-action--insert"
+                          onClick={() => {
+                            onInsert(m)
+                            onClose()
+                          }}
+                          title="Insert into active scratchpad"
+                        >
+                          Insert ↵
+                        </button>
+                        <button
+                          type="button"
+                          className="sm-btn-macro-action sm-btn-macro-action--edit"
+                          onClick={() => handleEditClick(m)}
+                          title="Edit this macro"
+                        >
+                          ✏️ Edit
+                        </button>
+                        <button
+                          type="button"
+                          className="sm-btn-macro-action sm-btn-macro-action--delete"
+                          onClick={() => onDelete(m.id)}
+                          title="Delete macro"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                    <pre className="sm-macro-card__content-preview">{m.content}</pre>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: ADD / EDIT FORM */}
+          {activeTab === 'form' && (
+            <form onSubmit={onSave} className="sm-macro-form">
+              <div className="sm-macro-form__row">
+                <div className="sm-macro-field">
+                  <label className="sm-macro-label">Macro Name *</label>
+                  <input
+                    type="text"
+                    className="sm-macro-input"
+                    placeholder="e.g. Right Knee MSK Exam, Shoulder Findings, Diabetes Plan..."
+                    value={macroForm.name}
+                    onChange={(e) => setMacroForm((p) => ({ ...p, name: e.target.value }))}
+                    required
+                  />
+                </div>
+
+                <div className="sm-macro-field sm-macro-field--short">
+                  <label className="sm-macro-label">Shortcut / DotPhrase</label>
+                  <input
+                    type="text"
+                    className="sm-macro-input"
+                    placeholder=".kneemsk"
+                    value={macroForm.shortcut}
+                    onChange={(e) => setMacroForm((p) => ({ ...p, shortcut: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="sm-macro-field">
+                <div className="sm-macro-label-row">
+                  <label className="sm-macro-label">Free-Text Template Content *</label>
+                  <span className="sm-macro-hint">Type or paste your complete clinical documentation text below</span>
+                </div>
+                <textarea
+                  className="sm-macro-textarea"
+                  placeholder="Type your clinical template text here... e.g.&#10;PHYSICAL EXAM:&#10;Alert and oriented x3. Lungs clear bilaterally. Heart regular rate and rhythm.&#10;PLAN:&#10;1. Start anti-inflammatory therapy..."
+                  value={macroForm.content}
+                  onChange={(e) => setMacroForm((p) => ({ ...p, content: e.target.value }))}
+                  rows={9}
+                  required
+                />
+              </div>
+
+              <div className="sm-macro-form-footer">
+                <button
+                  type="button"
+                  className="sm-btn-macro-cancel"
+                  onClick={() => {
+                    setActiveTab('list')
+                  }}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="sm-btn-macro-save">
+                  💾 {editingMacro ? 'Save Macro Changes' : 'Create & Save Macro'}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

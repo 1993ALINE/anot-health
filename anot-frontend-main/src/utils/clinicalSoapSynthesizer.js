@@ -34,32 +34,29 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
   if (!raw) {
     return [
       'CHIEF COMPLAINT:',
-      'Follow-up & Clinical Consultation',
+      'Clinical Consultation',
       '',
       'HISTORY OF PRESENT ILLNESS (HPI):',
-      'Patient presents for clinical evaluation at Saint Mary Clinic. Symptoms, interval history, and medication response reviewed.',
+      'Clinical consultation recorded. No specific history dictated.',
       '',
       'PHYSICAL EXAMINATION (PE):',
-      'VITALS: Stable and recorded during encounter.',
-      'GENERAL: Alert and oriented x3, well-nourished, in no acute distress.',
+      'Not dictated.',
       '',
       'ASSESSMENT & PLAN (A&P):',
       '1. Clinical evaluation completed.',
-      '2. Continue current medical management as tolerated.',
-      '3. Follow up in clinic as clinically scheduled or sooner if symptoms worsen.',
+      '2. Follow-up as scheduled or as needed for new/worsening symptoms.',
       '',
       'ICD-10 CODES:',
       'Z00.00 — Encounter for general adult medical examination without abnormal findings',
       '',
       'CPT CODES:',
-      '99213 — Office or other outpatient visit for the evaluation and management of an established patient (low/moderate complexity)',
+      '99213 — Office or other outpatient visit for evaluation and management of established patient',
     ].join('\n')
   }
 
-  // If text already has full structured sections with headers, return it
+  // If text already has full structured sections with headers, preserve it cleanly
   const upper = raw.toUpperCase()
   if (upper.includes('CHIEF COMPLAINT') && upper.includes('ASSESSMENT')) {
-    // Check if it already has ICD-10 codes, if not append them
     if (!upper.includes('ICD-10') && !upper.includes('ICD 10')) {
       const icdList = deriveIcd10Codes(raw)
       const cptList = deriveCptCodes(raw, visitType)
@@ -75,86 +72,53 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
     .map(s => s.trim())
     .filter(Boolean)
 
-  // 1. Extract Chief Complaint
-  let chiefComplaint = 'Clinical Consultation'
-  const ccMatch = raw.match(/(?:presenting|presents|here\s+today|complaining\s+of|chief\s+complaint|concern\s+is)\s+(?:here\s+today\s+)?(?:for|with)?\s*([^.,;\n]+)/i)
+  // 1. Extract Chief Complaint strictly from text
+  let chiefComplaint = ''
+  const ccMatch = raw.match(/(?:presenting|presents|here\s+today|complaining\s+of|chief\s+complaint|concern\s+is|reason\s+for\s+visit)\s+(?:here\s+today\s+)?(?:for|with)?\s*([^.,;\n]+)/i)
   if (ccMatch && ccMatch[1]) {
     chiefComplaint = ccMatch[1].trim().replace(/^(a|an|the)\s+/i, '')
     chiefComplaint = chiefComplaint.charAt(0).toUpperCase() + chiefComplaint.slice(1)
-  } else if (/knee\s+pain/i.test(raw)) {
-    chiefComplaint = 'Right Knee Pain'
-  } else if (/chest\s+pain/i.test(raw)) {
-    chiefComplaint = 'Chest Pain Evaluation'
-  } else if (/back\s+pain/i.test(raw)) {
-    chiefComplaint = 'Low Back Pain'
   } else if (sentences[0]) {
-    chiefComplaint = sentences[0].slice(0, 60)
+    chiefComplaint = sentences[0].replace(/^(patient\s+presents\s+(?:with|for)?|here\s+for)\s*/i, '').slice(0, 70)
+  } else {
+    chiefComplaint = 'Clinical Consultation'
   }
 
-  // 2. Extract HPI Narrative
+  // 2. Extract HPI Narrative (only sentences discussing symptoms, onset, history)
   const hpiSentences = sentences.filter(s => 
-    !/physical\s+exam|exam\s+shows|palpation|mcmurray|vitals|x-ray|imaging|mri\s+performed|plan:|plan\s+is|ibuprofen|tylenol|prescribe|orthopedic\s+referral/i.test(s)
+    !/^(?:physical\s+exam|pe:|exam\s+shows|palpation|vitals|x-ray|imaging|mri|plan:|assessment:|follow\s*up|rx:)/i.test(s) &&
+    !/mcmurray|tenderness|swelling|ibuprofen|tylenol|prescribe|orthopedic\s+referral|range\s+of\s+motion/i.test(s)
   )
-  const hpiText = hpiSentences.length > 0
-    ? hpiSentences.join(' ')
-    : raw
+  const hpiText = hpiSentences.length > 0 ? hpiSentences.join(' ') : raw
 
-  // 3. Extract Physical Exam
+  // 3. Extract Physical Exam (strictly from dictated exam terms, otherwise Not dictated)
   const examSentences = sentences.filter(s =>
-    /physical\s+exam|exam\s+shows|palpation|mcmurray|tenderness|swelling|range\s+of\s+motion|rom|vitals|bp|pulse|heart|lung|abdomen|distress|alert/i.test(s)
+    /physical\s+exam|pe:|exam\s+shows|palpation|tenderness|swelling|range\s+of\s+motion|rom|vitals|bp\s+\d+|pulse|heart|lung|abdomen|distress|alert|mcmurray|effusion/i.test(s)
   )
-  let examText = examSentences.length > 0
-    ? examSentences.join(' ')
-    : 'GENERAL: Alert and oriented x3, well-nourished, in no acute distress.\nVITALS: Stable and recorded during visit.'
+  const examText = examSentences.length > 0
+    ? examSentences.join('\n')
+    : 'Not dictated.'
 
-  if (!examText.includes('GENERAL') && !examText.includes('Alert')) {
-    examText = `GENERAL: Alert and oriented x3, in no acute distress.\nFOCUSED EXAM: ${examText}`
-  }
-
-  // 4. Extract Diagnostics / Imaging
+  // 4. Extract Diagnostics / Imaging strictly if mentioned
   const imagingSentences = sentences.filter(s =>
     /x-ray|radiograph|mri|ct\s+scan|ultrasound|labs|blood\s+work|degenerative\s+changes|fracture/i.test(s)
   )
   const imagingText = imagingSentences.length > 0 ? imagingSentences.join(' ') : null
 
-  // 5. Extract Assessment & Plan
+  // 5. Extract Assessment & Plan strictly from dictated text
   const planSentences = sentences.filter(s =>
-    /plan|start|prescribe|ibuprofen|tylenol|medication|referral|orthopedic|ice|rest|pt|physical\s+therapy|follow\s*up/i.test(s)
+    /plan|start|prescribe|ibuprofen|tylenol|naproxen|medication|referral|orthopedic|ice|rest|pt|physical\s+therapy|follow\s*up|advice|counseled/i.test(s)
   )
   
-  let assessmentTitle = chiefComplaint
-  if (/knee/i.test(raw) && /fall|bike/i.test(raw)) {
-    assessmentTitle = '1. Acute right knee pain / strain following bicycle fall with joint line tenderness and mild degenerative changes on X-ray.'
+  let assessmentText = `1. Clinical evaluation for ${chiefComplaint.toLowerCase()}.`
+  let planText = ''
+  if (planSentences.length > 0) {
+    planText = `${assessmentText}\n\nPLAN:\n${planSentences.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
   } else {
-    assessmentTitle = `1. Assessment of ${chiefComplaint.toLowerCase()}.`
+    planText = `${assessmentText}\n\nPLAN:\n1. Discussed clinical findings with patient.\n2. Follow-up as needed or if symptoms persist.`
   }
 
-  const planItems = []
-  if (/ibuprofen|nsaid|tylenol|medication|rx/i.test(raw)) {
-    const medMatch = raw.match(/(?:start|prescribe|take)?\s*(ibuprofen|tylenol|naproxen|amoxicillin|medication)[^\n.,;]*/i)
-    if (medMatch) {
-      planItems.push(`Medication: ${medMatch[0].trim().replace(/^start\s+/i, 'Start ')}.`)
-    } else {
-      planItems.push('Medication: Start Ibuprofen 600 mg PO BID with meals as needed for pain and inflammation.')
-    }
-  } else {
-    planItems.push('Medication: Analgesic/anti-inflammatory therapy as indicated.')
-  }
-
-  if (/ice|rest|brace|elevation|crutches/i.test(raw)) {
-    planItems.push('Conservative Therapy: RICE protocol (Rest, Ice for 20 mins QID, Compression wrap, Elevation).')
-  }
-
-  if (/referral|ortho|mri|specialist/i.test(raw)) {
-    planItems.push('Referrals & Orders: Outpatient orthopedic referral for evaluation and MRI imaging.')
-  }
-
-  planItems.push('Follow-up: Return to clinic in 1–2 weeks or sooner if symptoms, swelling, or instability worsen.')
-  planItems.push('Precautions: Discussed red flags including inability to bear weight, severe erythema, or neurological deficits.')
-
-  const planText = `${assessmentTitle}\n\nPLAN:\n${planItems.map((item, i) => `${i + 1}. ${item}`).join('\n')}`
-
-  // 6. Derive ICD-10 & CPT Codes
+  // 6. Derive ICD-10 & CPT Codes strictly matching dictated text
   const icdCodes = deriveIcd10Codes(raw)
   const cptCodes = deriveCptCodes(raw, visitType)
 
@@ -179,10 +143,10 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
     planText,
     '',
     'ICD-10 CODES:',
-    icdCodes.join('\n'),
+    icdCodes.length > 0 ? icdCodes.join('\n') : 'Z00.00 — Encounter for general adult medical examination without abnormal findings',
     '',
     'CPT CODES:',
-    cptCodes.join('\n')
+    cptCodes.length > 0 ? cptCodes.join('\n') : '99213 — Office or other outpatient visit for evaluation and management of established patient'
   )
 
   return sections.join('\n')
