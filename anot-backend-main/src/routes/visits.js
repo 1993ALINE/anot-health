@@ -244,7 +244,7 @@ router.post('/:id/generate-ai', protect, restrict('clinician', 'scribe'), queueT
 router.post('/:id/transcribe', protect, restrict('clinician', 'scribe'), queueTranscription)
 
 // POST /api/visits/:id/generate-draft — manual AI draft generation from saved transcriptions
-router.post('/:id/generate-draft', protect, restrict('scribe'), generateDraft)
+router.post('/:id/generate-draft', protect, restrict('clinician', 'scribe', 'admin', 'super_admin'), generateDraft)
 
 
 module.exports = router

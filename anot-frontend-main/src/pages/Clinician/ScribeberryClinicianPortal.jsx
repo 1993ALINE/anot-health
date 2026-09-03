@@ -6,6 +6,7 @@ import QuickConsultationModal from '../../components/QuickConsultationModal'
 import SaintMaryNoteViewerModal from '../../components/SaintMaryNoteViewerModal'
 import { startRecordingKeepAlive, stopRecordingKeepAlive } from '../../utils/recordingKeepAlive'
 import { cleanAiDraftForDisplay } from '../../utils/aiDraftFormat'
+import { formatClinicalDictationToSOAP } from '../../utils/clinicalSoapSynthesizer'
 import * as offlineAudioQueue from '../../utils/offlineAudioQueue'
 import './ScribeberryClinicianPortal.css'
 
@@ -15,26 +16,6 @@ function normalizeVisitTypeForDb(val) {
   if (s.includes('virtual') || s.includes('tele')) return 'Virtual Visit'
   if (s.includes('other')) return 'Other'
   return 'Follow-up'
-}
-
-function formatClinicalDictationToSOAP(dictation, scratch = '', visitType = 'Follow-up') {
-  const text = [dictation, scratch].filter(Boolean).join('\n\n').trim()
-  if (!text) {
-    return `CHIEF COMPLAINT:\nFollow-up & Clinical Consultation\n\nHISTORY OF PRESENT ILLNESS:\nPatient presents for clinical consultation at Saint Mary Clinic. Symptoms reviewed and evaluated.\n\nPHYSICAL EXAMINATION:\nVITALS: BP 120/80, HR 72, Temp 98.6°F, SpO2 98% on room air.\nGeneral: Alert, oriented x3. Well-appearing, in no acute distress.\n\nASSESSMENT & PLAN:\n1. Clinical evaluation completed.\n2. Follow up as scheduled.`
-  }
-
-  const upper = text.toUpperCase()
-  if (upper.includes('CHIEF COMPLAINT') || upper.includes('HPI:') || upper.includes('SUBJECTIVE:') || upper.includes('ASSESSMENT')) {
-    return text
-  }
-
-  const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
-  const cc = lines[0] || 'Clinical Consultation'
-  const hpi = lines.slice(0, Math.max(1, Math.ceil(lines.length * 0.6))).join(' ') || text
-  const exam = lines.find(l => /exam|vital|bp|pulse|heart|lung|abdomen|temp|normal|stable/i.test(l)) || 'VITALS: Recorded during encounter. General appearance stable, alert and oriented.'
-  const plan = lines.slice(Math.max(1, Math.ceil(lines.length * 0.6))).join('\n') || '1. Continue current management plan.\n2. Follow up in clinic as clinically indicated.'
-
-  return `CHIEF COMPLAINT:\n${cc}\n\nHISTORY OF PRESENT ILLNESS:\n${hpi}\n\nPHYSICAL EXAMINATION:\n${exam}\n\nASSESSMENT & PLAN:\n${plan}`
 }
 
 export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
@@ -426,6 +407,18 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
             setPreviewNote(enriched)
             setSelectedNoteModal(enriched)
             showToast(`✓ Clinical note generated from your dictation!`)
+
+            // In background, trigger server-side Anthropic Claude model to further refine with deep ICD/CPT codes
+            visitsAPI.generateDraft(currentActive.id).then(async (dRes) => {
+              if (dRes?.ai_draft && !dRes.ai_draft.includes('unavailable')) {
+                const refreshedNote = dRes.ai_draft
+                if (nRes?.note?.id) {
+                  await notesAPI.updateNote(nRes.note.id, refreshedNote).catch(() => {})
+                }
+                setPreviewNote((p) => (p && p.id === currentActive.id ? { ...p, final_note: refreshedNote, ai_draft: refreshedNote } : p))
+                setSelectedNoteModal((m) => (m && m.id === currentActive.id ? { ...m, final_note: refreshedNote, ai_draft: refreshedNote } : m))
+              }
+            }).catch(() => {})
           } catch {}
         } else {
           pollForGeneratedNote(currentActive.id, currentActive.patient_name, scratch)
@@ -616,20 +609,7 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
       })
       const visitId = vRes?.visit?.id
 
-      const formattedDraft = `[S]ubjective:
-Chief Complaint: Clinical consultation and observations.
-HPI: ${quickDictateText.trim()}
-
-[O]bjective:
-Physical Exam: Alert, oriented x3. Vital signs reviewed. Heart regular rate and rhythm, lungs clear to auscultation.
-
-[A]ssessment:
-1. Clinical findings reviewed and addressed.
-2. Status stable under current treatment plan.
-
-[P]lan:
-1. Continue existing medication regimen.
-2. Patient advised on return precautions and scheduled for 4-week follow-up.`
+      const formattedDraft = formatClinicalDictationToSOAP(quickDictateText.trim(), '', dbVisitType)
 
       // End encounter to initialize note record
       await visitsAPI.endVisit(visitId, 1).catch(() => {})
@@ -653,6 +633,18 @@ Physical Exam: Alert, oriented x3. Vital signs reviewed. Heart regular rate and 
       })
 
       showToast('✓ Structured SOAP note generated successfully!')
+
+      // In background, trigger server-side Anthropic Claude model to further refine with deep ICD/CPT codes
+      visitsAPI.generateDraft(visitId).then(async (dRes) => {
+        if (dRes?.ai_draft && !dRes.ai_draft.includes('unavailable')) {
+          const refreshedNote = dRes.ai_draft
+          if (noteId) {
+            await notesAPI.updateNote(noteId, refreshedNote).catch(() => {})
+          }
+          setQuickDictateOutput((p) => (p && p.id === visitId ? { ...p, text: refreshedNote } : p))
+          setPreviewNote((p) => (p && p.id === visitId ? { ...p, final_note: refreshedNote, ai_draft: refreshedNote } : p))
+        }
+      }).catch(() => {})
       await loadData()
       
       const newEncounter = {
