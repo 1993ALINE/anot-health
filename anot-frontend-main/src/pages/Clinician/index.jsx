@@ -4125,11 +4125,10 @@ function Toast({ toast }) {
 function Clinician() {
   const cu = getCurrentUser()
 
-  const useSaintMaryUi =
-    cu?.ui_mode === 'scribeberry' ||
-    (cu?.clinic_code === 'saint_mary' && cu?.ui_mode !== 'standard')
+  // Scribeberry / Saint Mary Clinician Portal is the standard modern clinician interface
+  const isLegacy = cu?.ui_mode === 'legacy_raw'
 
-  if (useSaintMaryUi) {
+  if (!isLegacy) {
     return (
       <ScribeberryClinicianPortal
         currentUser={cu}
