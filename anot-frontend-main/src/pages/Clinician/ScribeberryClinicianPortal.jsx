@@ -103,10 +103,6 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
   const [isEditingNote, setIsEditingNote] = useState(false)
   const [editedNoteText, setEditedNoteText] = useState('')
 
-  // Quick Dictate tab state
-  const [quickDictateText, setQuickDictateText] = useState('')
-  const [generatingQuickNote, setGeneratingQuickNote] = useState(false)
-
   // Note detail modal & copy feedback
   const [selectedNoteModal, setSelectedNoteModal] = useState(null)
   const [copiedSectionIndex, setCopiedSectionIndex] = useState(null)
@@ -678,93 +674,6 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
     }
   }
 
-  // Generate Quick Dictate Note
-  const handleGenerateQuickDictateNote = async () => {
-    if (!quickDictateText.trim()) {
-      showToast('Please enter clinical observations or dictation first.', 'warn')
-      return
-    }
-    setGeneratingQuickNote(true)
-    try {
-      const now = new Date()
-      const autoMrn = `MRN-${now.getTime().toString().slice(-6)}`
-      let patientId
-      let patientName = `Quick Patient (${autoMrn})`
-
-      try {
-        const pRes = await patientsAPI.create({
-          name: patientName,
-          mrn: autoMrn,
-        })
-        patientId = pRes?.patient?.id
-      } catch (e) {
-        if (e.payload?.patient?.id) {
-          patientId = e.payload.patient.id
-        } else if (patientList.length > 0) {
-          patientId = patientList[0].id
-          patientName = patientList[0].name
-        }
-      }
-
-      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-      const dbVisitType = normalizeVisitTypeForDb(selectedTemplate)
-      const vRes = await visitsAPI.create({
-        patient_id: patientId,
-        visit_date: now.toISOString().slice(0, 10),
-        visit_time: timeStr,
-        visit_type: dbVisitType,
-      })
-      const visitId = vRes?.visit?.id
-
-      const formattedDraft = formatClinicalDictationToSOAP(quickDictateText.trim(), dictationNotes, dbVisitType)
-
-      await visitsAPI.endVisit(visitId, 1).catch(() => {})
-
-      const nRes = await notesAPI.getByVisit(visitId).catch(() => null)
-      const noteId = nRes?.note?.id
-
-      if (noteId) {
-        await notesAPI.updateNote(noteId, formattedDraft).catch(() => {})
-      } else {
-        await notesAPI.saveDraft(visitId, formattedDraft, quickDictateText, formattedDraft).catch(() => {})
-      }
-
-      const quickEncounter = {
-        id: visitId,
-        visit_id: visitId,
-        note_id: noteId,
-        patient_name: patientName,
-        mrn: autoMrn,
-        visit_date: now.toISOString().slice(0, 10),
-        visit_time: timeStr,
-        visit_type: dbVisitType,
-        final_note: formattedDraft,
-        status: 'draft',
-      }
-
-      setActiveDraftNote(quickEncounter)
-      setEditedNoteText(formattedDraft)
-      setTab('ambient')
-      showToast('✓ Structured SOAP Note & Codes generated!')
-
-      visitsAPI.generateDraft(visitId).then(async (dRes) => {
-        if (dRes?.ai_draft && !dRes.ai_draft.includes('unavailable')) {
-          const refreshedNote = dRes.ai_draft
-          if (noteId) {
-            await notesAPI.updateNote(noteId, refreshedNote).catch(() => {})
-          }
-          setActiveDraftNote((p) => (p && p.id === visitId ? { ...p, final_note: refreshedNote, ai_draft: refreshedNote } : p))
-          setEditedNoteText(refreshedNote)
-        }
-      }).catch(() => {})
-      await loadData()
-    } catch (err) {
-      showToast(err?.message || 'Failed to generate note.', 'error')
-    } finally {
-      setGeneratingQuickNote(false)
-    }
-  }
-
   // Determine current active display state
   const isRecordingState = Boolean(activeVisit)
   const isReviewState = Boolean(!activeVisit && activeDraftNote && (activeDraftNote.final_note || activeDraftNote.ai_draft))
@@ -824,14 +733,6 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
             >
               <span className="sm-nav__icon">🎙</span>
               <span>Ambient Scribe</span>
-            </button>
-            <button
-              type="button"
-              className={`sm-nav__btn ${tab === 'dictate' ? 'sm-nav__btn--active' : ''}`}
-              onClick={() => setTab('dictate')}
-            >
-              <span className="sm-nav__icon">⚡</span>
-              <span>Quick Dictate</span>
             </button>
             <button
               type="button"
@@ -1172,52 +1073,7 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
             </>
           )}
 
-          {/* TAB 2: QUICK DICTATE */}
-          {tab === 'dictate' && (
-            <div className="sm-quick-dictate-panel">
-              <div className="sm-panel-header">
-                <h2>⚡ Quick Dictation & Formulation</h2>
-                <p>Dictate observations or type consultation notes. The AI engine will structure them into certified SOAP documentation with ICD-10 & CPT coding.</p>
-              </div>
-
-              <textarea
-                className="sm-dictate-textarea"
-                placeholder="Dictate or type clinical encounter observations (e.g. 36-year-old gentleman presenting for right knee pain after falling from his bicycle last night. Exam shows tender MCL, positive McMurray test. Right knee X-ray shows mild degenerative changes. Plan: Ibuprofen 600mg BID, ice and rest, outpatient orthopedic referral for MRI...)"
-                value={quickDictateText}
-                onChange={(e) => setQuickDictateText(e.target.value)}
-                rows={10}
-              />
-
-              <div className="sm-dictate-chips-box">
-                <span className="sm-smart-chips-title">Quick Clinical Inserts:</span>
-                <div className="sm-smart-chips-row">
-                  {QUICK_SMART_CHIPS.map((chip, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      className="sm-smart-chip"
-                      onClick={() => setQuickDictateText((prev) => (prev.trim() ? `${prev.trim()}\n${chip.text}` : chip.text))}
-                    >
-                      {chip.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="sm-dictate-actions">
-                <button
-                  type="button"
-                  className="sm-btn-hero-record"
-                  onClick={handleGenerateQuickDictateNote}
-                  disabled={generatingQuickNote || !quickDictateText.trim()}
-                >
-                  {generatingQuickNote ? 'Synthesizing SOAP Note...' : '⚡ Generate Structured SOAP Note'}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 3: NOTE HISTORY */}
+          {/* TAB 2: NOTE HISTORY */}
           {tab === 'history' && (
             <div className="sm-history-panel">
               <div className="sm-panel-header sm-panel-header--flex">
