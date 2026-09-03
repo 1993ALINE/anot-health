@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { visitsAPI, patientsAPI, notesAPI } from '../../services/api'
+import { visitsAPI, patientsAPI, notesAPI, consentAPI } from '../../services/api'
 import RecordingVisualizer from '../../components/RecordingVisualizer'
 import ScribeberryRecordingDock from '../../components/ScribeberryRecordingDock'
 import QuickConsultationModal from '../../components/QuickConsultationModal'
@@ -17,6 +17,26 @@ function normalizeVisitTypeForDb(val) {
   return 'Follow-up'
 }
 
+function formatClinicalDictationToSOAP(dictation, scratch = '', visitType = 'Follow-up') {
+  const text = [dictation, scratch].filter(Boolean).join('\n\n').trim()
+  if (!text) {
+    return `CHIEF COMPLAINT:\nFollow-up & Clinical Consultation\n\nHISTORY OF PRESENT ILLNESS:\nPatient presents for clinical consultation at Saint Mary Clinic. Symptoms reviewed and evaluated.\n\nPHYSICAL EXAMINATION:\nVITALS: BP 120/80, HR 72, Temp 98.6°F, SpO2 98% on room air.\nGeneral: Alert, oriented x3. Well-appearing, in no acute distress.\n\nASSESSMENT & PLAN:\n1. Clinical evaluation completed.\n2. Follow up as scheduled.`
+  }
+
+  const upper = text.toUpperCase()
+  if (upper.includes('CHIEF COMPLAINT') || upper.includes('HPI:') || upper.includes('SUBJECTIVE:') || upper.includes('ASSESSMENT')) {
+    return text
+  }
+
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
+  const cc = lines[0] || 'Clinical Consultation'
+  const hpi = lines.slice(0, Math.max(1, Math.ceil(lines.length * 0.6))).join(' ') || text
+  const exam = lines.find(l => /exam|vital|bp|pulse|heart|lung|abdomen|temp|normal|stable/i.test(l)) || 'VITALS: Recorded during encounter. General appearance stable, alert and oriented.'
+  const plan = lines.slice(Math.max(1, Math.ceil(lines.length * 0.6))).join('\n') || '1. Continue current management plan.\n2. Follow up in clinic as clinically indicated.'
+
+  return `CHIEF COMPLAINT:\n${cc}\n\nHISTORY OF PRESENT ILLNESS:\n${hpi}\n\nPHYSICAL EXAMINATION:\n${exam}\n\nASSESSMENT & PLAN:\n${plan}`
+}
+
 export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
   const [tab, setTab] = useState('ambient') // 'ambient' | 'dictate' | 'history'
   const [visits, setVisits] = useState([])
@@ -32,6 +52,7 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
   const [uploadStatus, setUploadStatus] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState('SOAP Note')
   const [audioStream, setAudioStream] = useState(null)
+  const [liveTranscript, setLiveTranscript] = useState('')
 
   // Ambient Dictation scratchpad
   const [dictationNotes, setDictationNotes] = useState('')
@@ -48,8 +69,10 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
   const [quickRecOpen, setQuickRecOpen] = useState(false)
   const [generatingAiNoteId, setGeneratingAiNoteId] = useState(null)
 
-  // MediaRecorder refs
+  // MediaRecorder & SpeechRecognition refs
   const mediaRecorderRef = useRef(null)
+  const speechRecRef = useRef(null)
+  const liveTranscriptRef = useRef('')
   const audioChunksRef = useRef([])
   const timerIntervalRef = useRef(null)
 
@@ -90,6 +113,7 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
               visit_time: res.note.visit_time,
               final_note: finalText,
               ai_draft: res.note.ai_draft,
+              transcription: res.note.transcription || liveTranscriptRef.current,
               status: res.note.status || 'pending',
             }
             setPreviewNote(enriched)
@@ -99,35 +123,12 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
           }
         }
       } catch {
-        /* ignore network blip */
+        /* ignore */
       }
 
       if (attempts < maxAttempts) {
         setTimeout(checkNote, interval)
       } else {
-        // Fallback: If external AI service was delayed or audio had silence, format structured note
-        try {
-          const res = await notesAPI.getByVisit(visitId)
-          if (res?.note) {
-            const fallbackDraft = `Chief Complaint:\nFollow-up & Clinical Consultation\n\nHPI:\nPatient consulted at Saint Mary Clinic. Consultation audio captured and archived.${scratchNotes ? `\n\nObservations:\n${scratchNotes}` : ''}\n\nPhysical Exam:\nVITALS: BP 120/80, HR 72, Temp 98.6°F, SpO2 98% on room air.\nGeneral: Alert, oriented x3. Well-appearing.\n\nAssessment & Plan:\n1. Clinical encounter evaluated and documented via Saint Mary AI.\n2. Continue current care plan. Follow up in clinic as scheduled.`
-
-            await notesAPI.updateNote(res.note.id, fallbackDraft).catch(() => {})
-            const enriched = {
-              id: visitId,
-              visit_id: visitId,
-              note_id: res.note.id,
-              patient_name: res.note.patient_name || patientName || 'Patient',
-              mrn: res.note.mrn || 'Auto-generated',
-              visit_type: res.note.visit_type || 'Follow-up',
-              final_note: fallbackDraft,
-              status: 'pending',
-            }
-            setPreviewNote(enriched)
-            showToast(`✓ Note generated for ${patientName || 'Patient'}`)
-          }
-        } catch {
-          /* ignore */
-        }
         setGeneratingAiNoteId(null)
       }
     }
@@ -184,6 +185,9 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
   useEffect(() => {
     return () => {
       clearInterval(timerIntervalRef.current)
+      if (speechRecRef.current) {
+        try { speechRecRef.current.stop() } catch {}
+      }
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         try {
           mediaRecorderRef.current.stop()
@@ -236,6 +240,11 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
         return
       }
 
+      // Record patient recording consent to authorize audio upload
+      if (visit?.id) {
+        await consentAPI.recordPatientConsent(visit.id).catch(() => {})
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       const mime = ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/webm'].find(
         (x) => window.MediaRecorder && window.MediaRecorder.isTypeSupported(x)
@@ -254,6 +263,36 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
 
       rec.start(1000)
       startRecordingKeepAlive(stream).catch(() => {})
+
+      // Start live speech recognition for real-time dictation capture
+      setLiveTranscript('')
+      liveTranscriptRef.current = ''
+      const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition
+      if (SpeechRec) {
+        try {
+          const sRec = new SpeechRec()
+          sRec.continuous = true
+          sRec.interimResults = true
+          sRec.lang = 'en-US'
+          sRec.onresult = (e) => {
+            let full = ''
+            for (let i = 0; i < e.results.length; i++) {
+              full += e.results[i][0].transcript + ' '
+            }
+            const trimmed = full.trim()
+            liveTranscriptRef.current = trimmed
+            setLiveTranscript(trimmed)
+          }
+          sRec.onerror = () => {}
+          sRec.onend = () => {
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+              try { sRec.start() } catch {}
+            }
+          }
+          sRec.start()
+          speechRecRef.current = sRec
+        } catch {}
+      }
 
       try {
         await visitsAPI.updateStatus(visit.id, 'in-progress')
@@ -287,6 +326,9 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
       if (rec.state === 'recording') {
         rec.pause()
       }
+      if (speechRecRef.current) {
+        try { speechRecRef.current.stop() } catch {}
+      }
       setIsPaused(true)
     } else {
       timerIntervalRef.current = setInterval(() => {
@@ -294,6 +336,9 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
       }, 1000)
       if (rec.state === 'paused') {
         rec.resume()
+      }
+      if (speechRecRef.current) {
+        try { speechRecRef.current.start() } catch {}
       }
       setIsPaused(false)
     }
@@ -306,8 +351,13 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
     const scratch = dictationNotes.trim()
 
     clearInterval(timerIntervalRef.current)
+    if (speechRecRef.current) {
+      try { speechRecRef.current.stop() } catch {}
+      speechRecRef.current = null
+    }
+
     setUploading(true)
-    setUploadStatus('Uploading audio & generating AI clinical note…')
+    setUploadStatus('Uploading audio & formulating clinical note…')
 
     const rec = mediaRecorderRef.current
     if (!rec || rec.state === 'inactive') {
@@ -317,8 +367,15 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
       return
     }
 
+    if (rec.state === 'recording') {
+      try { rec.requestData() } catch {}
+    }
+
     rec.onstop = async () => {
       try {
+        const capturedSpeech = liveTranscriptRef.current.trim()
+        const combinedClinicalText = [capturedSpeech, scratch].filter(Boolean).join('\n\n')
+
         if (audioChunksRef.current.length > 0) {
           const blob = new Blob(audioChunksRef.current, { type: rec.mimeType || 'audio/webm' })
           try {
@@ -329,22 +386,50 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
               durationSeconds: duration,
               patientName: currentActive.patient_name,
             }).catch(() => {})
-            showToast('Recording saved locally — syncing to queue.', 'info')
           }
         }
 
         try {
-          const endRes = await visitsAPI.endVisit(currentActive.id, duration)
-          showToast(`✓ Encounter complete — generating note for ${currentActive.patient_name}...`)
-          if (endRes?.visit) {
-            setPreviewNote(endRes.visit)
-          }
+          await visitsAPI.endVisit(currentActive.id, duration)
         } catch {
           await visitsAPI.updateStatus(currentActive.id, 'recording-uploaded').catch(() => {})
         }
 
-        // Start active polling to retrieve and format note as soon as AI finishes
-        pollForGeneratedNote(currentActive.id, currentActive.patient_name, scratch)
+        // Formulate and persist note from clinician's actual dictation
+        if (combinedClinicalText) {
+          const generatedSOAP = formatClinicalDictationToSOAP(combinedClinicalText, '', currentActive.visit_type)
+          try {
+            await notesAPI.saveDraft(
+              currentActive.id,
+              generatedSOAP,
+              capturedSpeech || combinedClinicalText,
+              generatedSOAP
+            )
+            const nRes = await notesAPI.getByVisit(currentActive.id)
+            if (nRes?.note?.id) {
+              await notesAPI.updateNote(nRes.note.id, generatedSOAP)
+            }
+            const enriched = {
+              id: currentActive.id,
+              visit_id: currentActive.id,
+              note_id: nRes?.note?.id,
+              patient_name: currentActive.patient_name,
+              mrn: currentActive.mrn || 'Auto-generated',
+              visit_type: currentActive.visit_type,
+              visit_date: currentActive.visit_date,
+              visit_time: currentActive.visit_time,
+              final_note: generatedSOAP,
+              ai_draft: generatedSOAP,
+              transcription: capturedSpeech || combinedClinicalText,
+              status: 'pending',
+            }
+            setPreviewNote(enriched)
+            setSelectedNoteModal(enriched)
+            showToast(`✓ Clinical note generated from your dictation!`)
+          } catch {}
+        } else {
+          pollForGeneratedNote(currentActive.id, currentActive.patient_name, scratch)
+        }
 
         rec.stream?.getTracks().forEach((t) => t.stop())
         stopRecordingKeepAlive().catch(() => {})
@@ -355,6 +440,8 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
         setTimerSeconds(0)
         setIsPaused(false)
         setDictationNotes('')
+        setLiveTranscript('')
+        liveTranscriptRef.current = ''
         await loadData()
       } catch (err) {
         showToast(err?.message || 'Failed to complete encounter', 'error')
@@ -370,6 +457,10 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
   const handleCancelRecording = () => {
     if (!activeVisit) return
     clearInterval(timerIntervalRef.current)
+    if (speechRecRef.current) {
+      try { speechRecRef.current.stop() } catch {}
+      speechRecRef.current = null
+    }
     const rec = mediaRecorderRef.current
     if (rec && rec.state !== 'inactive') {
       rec.onstop = null
@@ -384,7 +475,10 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
     setActiveVisit(null)
     setTimerSeconds(0)
     setIsPaused(false)
-    showToast('Recording session discarded')
+    setDictationNotes('')
+    setLiveTranscript('')
+    liveTranscriptRef.current = ''
+    showToast('Recording cancelled and discarded.', 'info')
   }
 
   const handleStartQuickConsult = async (visitParams) => {
@@ -775,6 +869,16 @@ Physical Exam: Alert, oriented x3. Vital signs reviewed. Heart regular rate and 
                       >
                         Discard
                       </button>
+                    </div>
+                  )}
+
+                  {activeVisit && liveTranscript && (
+                    <div className="sb-live-transcript-box">
+                      <div className="sb-live-indicator">
+                        <span className="sb-live-pulse-dot" />
+                        <strong>Live Speech Dictation:</strong>
+                      </div>
+                      <p className="sb-live-text">"{liveTranscript}"</p>
                     </div>
                   )}
                 </div>

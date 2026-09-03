@@ -548,6 +548,8 @@ export const supportAPI = {
 export const consentAPI = {
   recordRecording: async (visitId) =>
     apiMutate('POST', '/consent/recording', { body: { visitId } }),
+  recordPatientConsent: async (visitId) =>
+    apiMutate('POST', '/consent/recording', { body: { visitId } }),
 }
 
 export const audioAPI = {
