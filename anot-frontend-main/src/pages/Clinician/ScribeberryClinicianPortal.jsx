@@ -1,12 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { visitsAPI, patientsAPI, notesAPI, consentAPI } from '../../services/api'
 import RecordingVisualizer from '../../components/RecordingVisualizer'
-import ScribeberryRecordingDock from '../../components/ScribeberryRecordingDock'
 import QuickConsultationModal from '../../components/QuickConsultationModal'
 import SaintMaryNoteViewerModal from '../../components/SaintMaryNoteViewerModal'
 import { startRecordingKeepAlive, stopRecordingKeepAlive } from '../../utils/recordingKeepAlive'
 import { cleanAiDraftForDisplay } from '../../utils/aiDraftFormat'
-import { formatClinicalDictationToSOAP } from '../../utils/clinicalSoapSynthesizer'
+import { formatClinicalDictationToSOAP, deriveIcd10Codes, deriveCptCodes } from '../../utils/clinicalSoapSynthesizer'
 import * as offlineAudioQueue from '../../utils/offlineAudioQueue'
 import './ScribeberryClinicianPortal.css'
 
@@ -16,6 +15,44 @@ function normalizeVisitTypeForDb(val) {
   if (s.includes('virtual') || s.includes('tele')) return 'Virtual Visit'
   if (s.includes('other')) return 'Other'
   return 'Follow-up'
+}
+
+function parseNoteSections(noteText) {
+  if (!noteText) return []
+  const text = cleanAiDraftForDisplay(noteText)
+
+  const sectionRegex = /^(?:\[?[A-Z0-9\s/&()\-–—]+\]?|[A-Z\s/&()\-–—]+):\s*$/gm
+  const matches = []
+  let match
+  while ((match = sectionRegex.exec(text)) !== null) {
+    const rawHeader = match[0].replace(/:$/, '').trim()
+    const cleanHeader = rawHeader.replace(/^\[|\]$/g, '').trim()
+    if (cleanHeader.length >= 2 && !/^(NOTE|DATE|TIME|MRN|PATIENT|STATUS)/i.test(cleanHeader)) {
+      matches.push({ header: cleanHeader, index: match.index, length: match[0].length })
+    }
+  }
+
+  if (matches.length === 0) {
+    return [
+      { header: 'CLINICAL NOTE', content: text }
+    ]
+  }
+
+  const sections = []
+  for (let i = 0; i < matches.length; i++) {
+    const current = matches[i]
+    const next = matches[i + 1]
+    const contentStart = current.index + current.length
+    const contentEnd = next ? next.index : text.length
+    const content = text.slice(contentStart, contentEnd).trim()
+    if (content) {
+      sections.push({
+        header: current.header,
+        content: content
+      })
+    }
+  }
+  return sections
 }
 
 export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
@@ -31,12 +68,18 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
   const [timerSeconds, setTimerSeconds] = useState(0)
   const [uploading, setUploading] = useState(false)
   const [uploadStatus, setUploadStatus] = useState('')
-  const [selectedTemplate, setSelectedTemplate] = useState('SOAP Note')
+  const [selectedTemplate, setSelectedTemplate] = useState('SOAP Note — Adult')
   const [audioStream, setAudioStream] = useState(null)
   const [liveTranscript, setLiveTranscript] = useState('')
 
   // Ambient Dictation scratchpad
   const [dictationNotes, setDictationNotes] = useState('')
+
+  // After-recording Review state (1c)
+  const [recordedDuration, setRecordedDuration] = useState('00:00')
+  const [activeDraftNote, setActiveDraftNote] = useState(null)
+  const [selectedAssignPatientId, setSelectedAssignPatientId] = useState('')
+  const [isAssigning, setIsAssigning] = useState(false)
 
   // Quick Dictate tab state
   const [quickDictateText, setQuickDictateText] = useState('')
@@ -62,101 +105,55 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
     setTimeout(() => setToast(null), 3500)
   }, [])
 
-  const pollForGeneratedNote = useCallback(async (visitId, patientName, scratchNotes = '') => {
-    setGeneratingAiNoteId(visitId)
-    let attempts = 0
-    const maxAttempts = 18
-    const interval = 2000
-
-    const checkNote = async () => {
-      attempts++
-      try {
-        const res = await notesAPI.getByVisit(visitId)
-        if (res?.note) {
-          const noteText = res.note.final_note || res.note.ai_draft
-          const hasRealNote = noteText && !noteText.includes('processing') && !noteText.includes('unavailable')
-
-          if (hasRealNote) {
-            let finalText = res.note.final_note || res.note.ai_draft
-            if (scratchNotes && !finalText.includes('CLINICAL OBSERVATIONS')) {
-              finalText = `${finalText}\n\nCLINICAL OBSERVATIONS & SCRATCHPAD:\n${scratchNotes}`
-              await notesAPI.updateNote(res.note.id, finalText).catch(() => {})
-            }
-
-            const enriched = {
-              id: visitId,
-              visit_id: visitId,
-              note_id: res.note.id,
-              patient_name: res.note.patient_name || patientName || 'Patient',
-              mrn: res.note.mrn || 'Auto-generated',
-              visit_type: res.note.visit_type || 'Follow-up',
-              visit_date: res.note.visit_date || new Date().toISOString().slice(0, 10),
-              visit_time: res.note.visit_time,
-              final_note: finalText,
-              ai_draft: res.note.ai_draft,
-              transcription: res.note.transcription || liveTranscriptRef.current,
-              status: res.note.status || 'pending',
-            }
-            setPreviewNote(enriched)
-            setGeneratingAiNoteId(null)
-            showToast(`✨ Structured clinical note ready for ${patientName || 'Patient'}!`)
-            return
-          }
-        }
-      } catch {
-        /* ignore */
-      }
-
-      if (attempts < maxAttempts) {
-        setTimeout(checkNote, interval)
-      } else {
-        setGeneratingAiNoteId(null)
-      }
-    }
-
-    setTimeout(checkNote, 1200)
-  }, [showToast])
+  const fmtTime = (secs) => {
+    const m = Math.floor(secs / 60)
+    const s = secs % 60
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  }
 
   const loadData = useCallback(async () => {
     try {
       const today = new Date().toISOString().slice(0, 10)
       const [vRes, pRes] = await Promise.all([
-        visitsAPI.getAll().catch(() => visitsAPI.getByDate(today).catch(() => ({ visits: [] }))),
+        visitsAPI.getByDate(today).catch(() => ({ visits: [] })),
         patientsAPI.getAll().catch(() => ({ patients: [] })),
       ])
-      const fetchedVisits = vRes?.visits || []
-      setVisits(fetchedVisits)
-      setPatientList(pRes?.patients || [])
 
-      setPreviewNote((prev) => {
-        if (prev) return prev
-        const withNote = fetchedVisits.find((v) => v.final_note || v.ai_draft || v.note_id)
-        return withNote || fetchedVisits[0] || null
-      })
+      const fetchedVisits = vRes?.visits || []
+      const fetchedPatients = pRes?.patients || []
+
+      setVisits(fetchedVisits)
+      setPatientList(fetchedPatients)
+
+      // If activeDraftNote is set, make sure it stays synchronized
+      if (activeDraftNote) {
+        const found = fetchedVisits.find((v) => v.id === activeDraftNote.id)
+        if (found && (found.final_note || found.ai_draft)) {
+          setActiveDraftNote((prev) => ({
+            ...prev,
+            final_note: found.final_note || found.ai_draft || prev.final_note,
+            ai_draft: found.ai_draft || prev.ai_draft,
+            status: found.status || prev.status,
+          }))
+        }
+      }
     } catch {
       /* ignore */
     }
-  }, [])
+  }, [activeDraftNote])
 
   useEffect(() => {
     let cancelled = false
-    const today = new Date().toISOString().slice(0, 10)
-    Promise.all([
-      visitsAPI.getAll().catch(() => visitsAPI.getByDate(today).catch(() => ({ visits: [] }))),
-      patientsAPI.getAll().catch(() => ({ patients: [] })),
-    ]).then(([vRes, pRes]) => {
-      if (!cancelled) {
-        const fetchedVisits = vRes?.visits || []
-        setVisits(fetchedVisits)
-        setPatientList(pRes?.patients || [])
-        const withNote = fetchedVisits.find((v) => v.final_note || v.ai_draft || v.note_id)
+    loadData().then(() => {
+      if (!cancelled && visits.length > 0 && !activeDraftNote) {
+        const withNote = visits.find((v) => v.final_note || v.ai_draft)
         if (withNote) {
-          setPreviewNote(withNote)
+          setActiveDraftNote(withNote)
         }
       }
     })
 
-    const id = setInterval(loadData, 20000)
+    const id = setInterval(loadData, 15000)
     return () => {
       cancelled = true
       clearInterval(id)
@@ -173,41 +170,11 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
         try {
           mediaRecorderRef.current.stop()
           mediaRecorderRef.current.stream?.getTracks().forEach((t) => t.stop())
-        } catch {
-          /* ignore */
-        }
+        } catch {}
       }
       stopRecordingKeepAlive().catch(() => {})
     }
   }, [])
-
-  const handleViewNote = async (visit) => {
-    if (!visit) return
-    setSelectedNoteModal(visit)
-    setPreviewNote(visit)
-
-    try {
-      const res = await notesAPI.getByVisit(visit.id)
-      if (res?.note) {
-        const enriched = {
-          ...visit,
-          ...res.note,
-          patient_name: res.note.patient_name || visit.patient_name,
-          mrn: res.note.mrn || visit.mrn,
-          visit_type: res.note.visit_type || visit.visit_type,
-          visit_date: res.note.visit_date || visit.visit_date,
-          visit_time: res.note.visit_time || visit.visit_time,
-          final_note: res.note.final_note || visit.final_note,
-          ai_draft: res.note.ai_draft || visit.ai_draft,
-          transcription: res.note.transcription || visit.transcription,
-        }
-        setSelectedNoteModal(enriched)
-        setPreviewNote(enriched)
-      }
-    } catch {
-      // Use existing visit data if notes endpoint returns error
-    }
-  }
 
   const startRecordingSession = async (visit) => {
     if (activeVisit) {
@@ -221,7 +188,6 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
         return
       }
 
-      // Record patient recording consent to authorize audio upload
       if (visit?.id) {
         await consentAPI.recordPatientConsent(visit.id).catch(() => {})
       }
@@ -245,56 +211,102 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
       rec.start(1000)
       startRecordingKeepAlive(stream).catch(() => {})
 
-      // Start live speech recognition for real-time dictation capture
+      // Speech Recognition
       setLiveTranscript('')
       liveTranscriptRef.current = ''
-      const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition
-      if (SpeechRec) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+      if (SpeechRecognition) {
         try {
-          const sRec = new SpeechRec()
-          sRec.continuous = true
-          sRec.interimResults = true
-          sRec.lang = 'en-US'
-          sRec.onresult = (e) => {
-            let full = ''
-            for (let i = 0; i < e.results.length; i++) {
-              full += e.results[i][0].transcript + ' '
-            }
-            const trimmed = full.trim()
-            liveTranscriptRef.current = trimmed
-            setLiveTranscript(trimmed)
-          }
-          sRec.onerror = () => {}
-          sRec.onend = () => {
-            if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-              try { sRec.start() } catch {}
-            }
-          }
-          sRec.start()
-          speechRecRef.current = sRec
-        } catch {}
-      }
+          const sr = new SpeechRecognition()
+          sr.continuous = true
+          sr.interimResults = true
+          sr.lang = 'en-US'
 
-      try {
-        await visitsAPI.updateStatus(visit.id, 'in-progress')
-      } catch {
-        /* offline safe */
+          sr.onresult = (event) => {
+            let current = ''
+            for (let i = 0; i < event.results.length; i++) {
+              current += event.results[i][0].transcript + ' '
+            }
+            const trimmed = current.trim()
+            if (trimmed) {
+              setLiveTranscript(trimmed)
+              liveTranscriptRef.current = trimmed
+            }
+          }
+
+          sr.onerror = () => {}
+          sr.onend = () => {
+            if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+              try { sr.start() } catch {}
+            }
+          }
+
+          sr.start()
+          speechRecRef.current = sr
+        } catch {}
       }
 
       setActiveVisit(visit)
       setIsPaused(false)
       setTimerSeconds(0)
+      setActiveDraftNote(null)
 
       clearInterval(timerIntervalRef.current)
       timerIntervalRef.current = setInterval(() => {
         setTimerSeconds((prev) => prev + 1)
       }, 1000)
 
-      showToast(`🎙 Ambient Recording started for ${visit.patient_name || 'Patient'}`)
+      showToast(`🎙 Live recording started! Speak naturally.`)
     } catch (err) {
-      clearInterval(timerIntervalRef.current)
-      stopRecordingKeepAlive().catch(() => {})
-      showToast(err?.message || 'Microphone access denied. Please check permissions.', 'error')
+      showToast(err?.message || 'Could not access microphone.', 'error')
+    }
+  }
+
+  const handleStartInstantDictation = async () => {
+    try {
+      const now = new Date()
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+      const autoMrn = `MRN-${now.getTime().toString().slice(-6)}`
+      const autoName = `Patient ${autoMrn}`
+
+      let patientId
+      try {
+        const pRes = await patientsAPI.create({
+          name: autoName,
+          mrn: autoMrn,
+        })
+        patientId = pRes?.patient?.id
+      } catch (e) {
+        if (e.payload?.patient?.id) {
+          patientId = e.payload.patient.id
+        } else if (patientList.length > 0) {
+          patientId = patientList[0].id
+        }
+      }
+
+      const dbVisitType = normalizeVisitTypeForDb(selectedTemplate)
+      const vRes = await visitsAPI.create({
+        patient_id: patientId,
+        visit_date: now.toISOString().slice(0, 10),
+        visit_time: timeStr,
+        visit_type: dbVisitType,
+      })
+
+      const newVisit = {
+        id: vRes?.visit?.id,
+        patient_id: patientId,
+        patient_name: autoName,
+        mrn: autoMrn,
+        visit_date: now.toISOString().slice(0, 10),
+        visit_time: timeStr,
+        visit_type: dbVisitType,
+        status: 'in-progress',
+      }
+
+      await startRecordingSession(newVisit)
+      await loadData()
+    } catch (err) {
+      showToast(err?.message || 'Failed to initialize instant consultation.', 'error')
     }
   }
 
@@ -302,34 +314,31 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
     const rec = mediaRecorderRef.current
     if (!rec) return
 
-    if (!isPaused) {
+    if (isPaused) {
+      rec.resume()
+      setIsPaused(false)
       clearInterval(timerIntervalRef.current)
-      if (rec.state === 'recording') {
-        rec.pause()
-      }
-      if (speechRecRef.current) {
-        try { speechRecRef.current.stop() } catch {}
-      }
-      setIsPaused(true)
-    } else {
       timerIntervalRef.current = setInterval(() => {
         setTimerSeconds((prev) => prev + 1)
       }, 1000)
-      if (rec.state === 'paused') {
-        rec.resume()
-      }
-      if (speechRecRef.current) {
-        try { speechRecRef.current.start() } catch {}
-      }
-      setIsPaused(false)
+      try { speechRecRef.current?.start() } catch {}
+      showToast('Recording resumed')
+    } else {
+      rec.pause()
+      setIsPaused(true)
+      clearInterval(timerIntervalRef.current)
+      try { speechRecRef.current?.stop() } catch {}
+      showToast('Recording paused')
     }
   }
 
   const handleEndVisit = async () => {
-    if (!activeVisit) return
-    const currentActive = activeVisit
+    const rec = mediaRecorderRef.current
+    if (!rec || !activeVisit) return
+
     const duration = timerSeconds
-    const scratch = dictationNotes.trim()
+    const durationFormatted = fmtTime(duration)
+    setRecordedDuration(durationFormatted)
 
     clearInterval(timerIntervalRef.current)
     if (speechRecRef.current) {
@@ -338,34 +347,24 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
     }
 
     setUploading(true)
-    setUploadStatus('Uploading audio & formulating clinical note…')
+    setUploadStatus('Processing audio & formulating SOAP note...')
 
-    const rec = mediaRecorderRef.current
-    if (!rec || rec.state === 'inactive') {
-      stopRecordingKeepAlive().catch(() => {})
-      setActiveVisit(null)
-      setUploading(false)
-      return
-    }
-
-    if (rec.state === 'recording') {
-      try { rec.requestData() } catch {}
-    }
+    const currentActive = { ...activeVisit }
+    const capturedSpeech = (liveTranscriptRef.current || liveTranscript || '').trim()
+    const scratch = dictationNotes.trim()
+    const combinedClinicalText = [capturedSpeech, scratch].filter(Boolean).join('\n\n')
 
     rec.onstop = async () => {
       try {
-        const capturedSpeech = liveTranscriptRef.current.trim()
-        const combinedClinicalText = [capturedSpeech, scratch].filter(Boolean).join('\n\n')
+        const audioBlob = new Blob(audioChunksRef.current, { type: rec.mimeType || 'audio/webm' })
 
-        if (audioChunksRef.current.length > 0) {
-          const blob = new Blob(audioChunksRef.current, { type: rec.mimeType || 'audio/webm' })
+        if (audioBlob.size > 0) {
           try {
-            await visitsAPI.uploadAudio(currentActive.id, blob)
-          } catch {
-            await offlineAudioQueue.addToQueue(blob, currentActive.patient_id, currentActive.id, {
-              mode: 'primary',
-              durationSeconds: duration,
+            await visitsAPI.uploadAudio(currentActive.id, audioBlob)
+          } catch (uploadErr) {
+            offlineAudioQueue.addToQueue(audioBlob, currentActive.patient_id, currentActive.id, {
               patientName: currentActive.patient_name,
+              durationSeconds: duration,
             }).catch(() => {})
           }
         }
@@ -377,51 +376,53 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
         }
 
         // Formulate and persist note from clinician's actual dictation
-        if (combinedClinicalText) {
-          const generatedSOAP = formatClinicalDictationToSOAP(combinedClinicalText, '', currentActive.visit_type)
-          try {
-            await notesAPI.saveDraft(
-              currentActive.id,
-              generatedSOAP,
-              capturedSpeech || combinedClinicalText,
-              generatedSOAP
-            )
-            const nRes = await notesAPI.getByVisit(currentActive.id)
-            if (nRes?.note?.id) {
-              await notesAPI.updateNote(nRes.note.id, generatedSOAP)
-            }
-            const enriched = {
-              id: currentActive.id,
-              visit_id: currentActive.id,
-              note_id: nRes?.note?.id,
-              patient_name: currentActive.patient_name,
-              mrn: currentActive.mrn || 'Auto-generated',
-              visit_type: currentActive.visit_type,
-              visit_date: currentActive.visit_date,
-              visit_time: currentActive.visit_time,
-              final_note: generatedSOAP,
-              ai_draft: generatedSOAP,
-              transcription: capturedSpeech || combinedClinicalText,
-              status: 'pending',
-            }
-            setPreviewNote(enriched)
-            setSelectedNoteModal(enriched)
-            showToast(`✓ Clinical note generated from your dictation!`)
+        const generatedSOAP = formatClinicalDictationToSOAP(combinedClinicalText, scratch, currentActive.visit_type)
+        try {
+          await notesAPI.saveDraft(
+            currentActive.id,
+            generatedSOAP,
+            capturedSpeech || combinedClinicalText,
+            generatedSOAP
+          )
+          const nRes = await notesAPI.getByVisit(currentActive.id)
+          if (nRes?.note?.id) {
+            await notesAPI.updateNote(nRes.note.id, generatedSOAP)
+          }
 
-            // In background, trigger server-side Anthropic Claude model to further refine with deep ICD/CPT codes
-            visitsAPI.generateDraft(currentActive.id).then(async (dRes) => {
-              if (dRes?.ai_draft && !dRes.ai_draft.includes('unavailable')) {
-                const refreshedNote = dRes.ai_draft
-                if (nRes?.note?.id) {
-                  await notesAPI.updateNote(nRes.note.id, refreshedNote).catch(() => {})
-                }
-                setPreviewNote((p) => (p && p.id === currentActive.id ? { ...p, final_note: refreshedNote, ai_draft: refreshedNote } : p))
-                setSelectedNoteModal((m) => (m && m.id === currentActive.id ? { ...m, final_note: refreshedNote, ai_draft: refreshedNote } : m))
+          const enriched = {
+            id: currentActive.id,
+            visit_id: currentActive.id,
+            note_id: nRes?.note?.id,
+            patient_name: currentActive.patient_name,
+            mrn: currentActive.mrn || 'Auto-generated',
+            visit_type: currentActive.visit_type,
+            visit_date: currentActive.visit_date,
+            visit_time: currentActive.visit_time,
+            final_note: generatedSOAP,
+            ai_draft: generatedSOAP,
+            transcription: capturedSpeech || combinedClinicalText,
+            status: 'draft',
+            duration: durationFormatted,
+          }
+
+          setActiveDraftNote(enriched)
+          setSelectedAssignPatientId(currentActive.patient_id ? String(currentActive.patient_id) : '')
+          setPreviewNote(enriched)
+          showToast(`✓ Clinical note generated from your dictation!`)
+
+          // In background, trigger server-side Anthropic Claude model to further refine with deep ICD/CPT codes
+          visitsAPI.generateDraft(currentActive.id).then(async (dRes) => {
+            if (dRes?.ai_draft && !dRes.ai_draft.includes('unavailable')) {
+              const refreshedNote = dRes.ai_draft
+              if (nRes?.note?.id) {
+                await notesAPI.updateNote(nRes.note.id, refreshedNote).catch(() => {})
               }
-            }).catch(() => {})
-          } catch {}
-        } else {
-          pollForGeneratedNote(currentActive.id, currentActive.patient_name, scratch)
+              setActiveDraftNote((prev) => (prev && prev.id === currentActive.id ? { ...prev, final_note: refreshedNote, ai_draft: refreshedNote } : prev))
+              setPreviewNote((p) => (p && p.id === currentActive.id ? { ...p, final_note: refreshedNote, ai_draft: refreshedNote } : p))
+            }
+          }).catch(() => {})
+        } catch (noteErr) {
+          console.error('Note saving error:', noteErr)
         }
 
         rec.stream?.getTracks().forEach((t) => t.stop())
@@ -432,7 +433,6 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
         setActiveVisit(null)
         setTimerSeconds(0)
         setIsPaused(false)
-        setDictationNotes('')
         setLiveTranscript('')
         liveTranscriptRef.current = ''
         await loadData()
@@ -440,138 +440,81 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
         showToast(err?.message || 'Failed to complete encounter', 'error')
       } finally {
         setUploading(false)
-        setUploadStatus('')
       }
     }
 
-    rec.stop()
-  }
-
-  const handleCancelRecording = () => {
-    if (!activeVisit) return
-    clearInterval(timerIntervalRef.current)
-    if (speechRecRef.current) {
-      try { speechRecRef.current.stop() } catch {}
-      speechRecRef.current = null
-    }
-    const rec = mediaRecorderRef.current
-    if (rec && rec.state !== 'inactive') {
-      rec.onstop = null
-      rec.ondataavailable = null
+    if (rec.state !== 'inactive') {
       rec.stop()
     }
-    rec?.stream?.getTracks().forEach((t) => t.stop())
-    stopRecordingKeepAlive().catch(() => {})
-    audioChunksRef.current = []
-    mediaRecorderRef.current = null
-    setAudioStream(null)
-    setActiveVisit(null)
-    setTimerSeconds(0)
-    setIsPaused(false)
-    setDictationNotes('')
-    setLiveTranscript('')
-    liveTranscriptRef.current = ''
-    showToast('Recording cancelled and discarded.', 'info')
   }
 
-  const handleStartQuickConsult = async (visitParams) => {
+  const handleAssignPatient = async () => {
+    if (!activeDraftNote || !selectedAssignPatientId) {
+      showToast('Please select a patient to assign this recording.', 'warn')
+      return
+    }
+
+    setIsAssigning(true)
     try {
-      let patientId = visitParams.patient_id
-      let patientName = visitParams.name
-      let patientMrn = visitParams.mrn
+      const selectedPatient = patientList.find((p) => String(p.id) === String(selectedAssignPatientId))
+      const targetName = selectedPatient ? selectedPatient.name : 'Patient'
+      const targetMrn = selectedPatient ? selectedPatient.mrn : ''
 
-      if (!patientId) {
-        try {
-          const pRes = await patientsAPI.create({
-            name: patientName || 'Consultation Patient',
-            mrn: patientMrn || `MRN-${Date.now().toString().slice(-6)}`,
-          })
-          patientId = pRes?.patient?.id
-          patientName = pRes?.patient?.name || patientName
-          patientMrn = pRes?.patient?.mrn || patientMrn
-        } catch (e) {
-          if (e.payload?.patient?.id) {
-            patientId = e.payload.patient.id
-          } else if (patientList.length > 0) {
-            patientId = patientList[0].id
-            patientName = patientList[0].name
-            patientMrn = patientList[0].mrn
-          }
-        }
-      }
-
-      const now = new Date()
-      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-      const dbVisitType = normalizeVisitTypeForDb(visitParams.visit_type || selectedTemplate)
-      const vd = await visitsAPI.create({
-        patient_id: patientId,
-        visit_date: now.toISOString().slice(0, 10),
-        visit_time: timeStr,
-        visit_type: dbVisitType,
+      await visitsAPI.updateVisit(activeDraftNote.id, {
+        patient_id: parseInt(selectedAssignPatientId, 10),
       })
 
-      const createdVisit = {
-        ...(vd.visit || {}),
-        id: vd.visit?.id,
-        patient_id: patientId,
-        patient_name: patientName,
-        mrn: patientMrn,
-        status: 'upcoming',
+      const updated = {
+        ...activeDraftNote,
+        patient_id: parseInt(selectedAssignPatientId, 10),
+        patient_name: targetName,
+        mrn: targetMrn,
       }
-
-      setVisits((p) => [createdVisit, ...p])
-      await startRecordingSession(createdVisit)
+      setActiveDraftNote(updated)
+      setPreviewNote(updated)
+      showToast(`✓ Assigned note to ${targetName} (${targetMrn})`)
+      await loadData()
     } catch (err) {
-      showToast(err?.message || 'Failed to start quick consultation', 'error')
+      showToast(err?.message || 'Failed to assign patient.', 'error')
+    } finally {
+      setIsAssigning(false)
     }
   }
 
-  const handleStartInstantDictation = async () => {
+  const handleCopyToClipboard = (text) => {
+    if (!text) return
+    navigator.clipboard.writeText(cleanAiDraftForDisplay(text)).then(() => {
+      setCopied(true)
+      showToast('✓ Note copied to clipboard for EMR paste!')
+      setTimeout(() => setCopied(false), 2500)
+    })
+  }
+
+  const handleReviewAndSign = async (visit) => {
+    if (!visit?.note_id) {
+      showToast('Note record not found to sign.', 'warn')
+      return
+    }
     try {
-      const now = new Date()
-      const autoMrn = `MRN-${now.getTime().toString().slice(-6)}`
-      let patientId
-      let patientName = `Patient ${autoMrn}`
-
-      try {
-        const pRes = await patientsAPI.create({
-          name: patientName,
-          mrn: autoMrn,
-        })
-        patientId = pRes?.patient?.id
-      } catch (e) {
-        if (e.payload?.patient?.id) {
-          patientId = e.payload.patient.id
-        } else if (patientList.length > 0) {
-          patientId = patientList[0].id
-          patientName = patientList[0].name
-        }
+      await notesAPI.submitNote(visit.note_id)
+      await visitsAPI.updateStatus(visit.id, 'completed').catch(() => {})
+      showToast('✓ Note reviewed & signed successfully!')
+      if (activeDraftNote && activeDraftNote.id === visit.id) {
+        setActiveDraftNote((prev) => ({ ...prev, status: 'completed' }))
       }
-
-      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-      const dbVisitType = normalizeVisitTypeForDb(selectedTemplate)
-      const vd = await visitsAPI.create({
-        patient_id: patientId,
-        visit_date: now.toISOString().slice(0, 10),
-        visit_time: timeStr,
-        visit_type: dbVisitType,
-      })
-
-      const created = {
-        ...(vd.visit || {}),
-        id: vd.visit?.id,
-        patient_id: patientId,
-        patient_name: patientName,
-        mrn: autoMrn,
-        status: 'upcoming',
-      }
-      setVisits((p) => [created, ...p])
-      await startRecordingSession(created)
+      await loadData()
     } catch (err) {
-      showToast(err?.message || 'Failed to start instant recording session', 'error')
+      showToast(err?.message || 'Failed to sign note.', 'error')
     }
   }
 
+  const handleViewVisitNote = (visit) => {
+    setActiveDraftNote(visit)
+    setSelectedAssignPatientId(visit.patient_id ? String(visit.patient_id) : '')
+    setRecordedDuration(visit.duration_seconds ? fmtTime(visit.duration_seconds) : '04:12')
+  }
+
+  // Generate Quick Dictate Note
   const handleGenerateQuickDictateNote = async () => {
     if (!quickDictateText.trim()) {
       showToast('Please enter clinical observations or dictation first.', 'warn')
@@ -609,12 +552,10 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
       })
       const visitId = vRes?.visit?.id
 
-      const formattedDraft = formatClinicalDictationToSOAP(quickDictateText.trim(), '', dbVisitType)
+      const formattedDraft = formatClinicalDictationToSOAP(quickDictateText.trim(), dictationNotes, dbVisitType)
 
-      // End encounter to initialize note record
       await visitsAPI.endVisit(visitId, 1).catch(() => {})
 
-      // Fetch note row and update content
       const nRes = await notesAPI.getByVisit(visitId).catch(() => null)
       const noteId = nRes?.note?.id
 
@@ -624,30 +565,7 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
         await notesAPI.saveDraft(visitId, formattedDraft, quickDictateText, formattedDraft).catch(() => {})
       }
 
-      setQuickDictateOutput({
-        id: visitId,
-        note_id: noteId,
-        patient_name: patientName,
-        mrn: autoMrn,
-        text: formattedDraft,
-      })
-
-      showToast('✓ Structured SOAP note generated successfully!')
-
-      // In background, trigger server-side Anthropic Claude model to further refine with deep ICD/CPT codes
-      visitsAPI.generateDraft(visitId).then(async (dRes) => {
-        if (dRes?.ai_draft && !dRes.ai_draft.includes('unavailable')) {
-          const refreshedNote = dRes.ai_draft
-          if (noteId) {
-            await notesAPI.updateNote(noteId, refreshedNote).catch(() => {})
-          }
-          setQuickDictateOutput((p) => (p && p.id === visitId ? { ...p, text: refreshedNote } : p))
-          setPreviewNote((p) => (p && p.id === visitId ? { ...p, final_note: refreshedNote, ai_draft: refreshedNote } : p))
-        }
-      }).catch(() => {})
-      await loadData()
-      
-      const newEncounter = {
+      const quickEncounter = {
         id: visitId,
         visit_id: visitId,
         note_id: noteId,
@@ -657,598 +575,475 @@ export default function ScribeberryClinicianPortal({ currentUser, onLogout }) {
         visit_time: timeStr,
         visit_type: dbVisitType,
         final_note: formattedDraft,
-        status: 'pending',
+        status: 'draft',
       }
-      setPreviewNote(newEncounter)
+
+      setActiveDraftNote(quickEncounter)
+      setTab('ambient')
+      showToast('✓ Structured SOAP note generated successfully!')
+
+      visitsAPI.generateDraft(visitId).then(async (dRes) => {
+        if (dRes?.ai_draft && !dRes.ai_draft.includes('unavailable')) {
+          const refreshedNote = dRes.ai_draft
+          if (noteId) {
+            await notesAPI.updateNote(noteId, refreshedNote).catch(() => {})
+          }
+          setActiveDraftNote((p) => (p && p.id === visitId ? { ...p, final_note: refreshedNote, ai_draft: refreshedNote } : p))
+        }
+      }).catch(() => {})
+      await loadData()
     } catch (err) {
-      showToast(err?.message || 'Failed to generate note', 'error')
+      showToast(err?.message || 'Failed to generate note.', 'error')
     } finally {
       setGeneratingQuickNote(false)
     }
   }
 
-  const handleInsertSnippet = (snippet) => {
-    setQuickDictateText((prev) => (prev ? `${prev}\n${snippet}` : snippet))
-  }
+  // Determine current active display state: 1a (idle), 1b (recording), 1c (after stop / review)
+  const isRecordingState = Boolean(activeVisit)
+  const isReviewState = Boolean(!activeVisit && activeDraftNote && (activeDraftNote.final_note || activeDraftNote.ai_draft))
+  const isIdleState = !isRecordingState && !isReviewState
 
-  const copyToClipboard = (text) => {
-    if (!text) {
-      showToast('No note text available to copy', 'warn')
-      return
-    }
-    navigator.clipboard?.writeText(text).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-      showToast('✓ Clinical note copied to clipboard — ready for EMR!')
-    })
-  }
-
-  const fmtTime = (s) => {
-    const mins = Math.floor(s / 60)
-    const secs = s % 60
-    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
-  }
-
-  const filteredVisits = visits.filter((v) => {
-    if (!searchTerm.trim()) return true
-    const term = searchTerm.toLowerCase()
-    return (
-      (v.patient_name && v.patient_name.toLowerCase().includes(term)) ||
-      (v.mrn && v.mrn.toLowerCase().includes(term)) ||
-      (v.visit_type && v.visit_type.toLowerCase().includes(term))
-    )
-  })
+  const activeNoteSections = isReviewState
+    ? parseNoteSections(activeDraftNote.final_note || activeDraftNote.ai_draft)
+    : []
 
   return (
-    <div className="sb-portal">
-      {/* Saint Mary Header Navigation */}
-      <header className="sb-header">
-        <div className="sb-header__left">
-          <div className="sb-header__logo">
-            <span className="sb-header__logo-icon">🏥</span>
-            <div className="sb-header__logo-text">
-              <strong>Saint Mary Clinic</strong>
-              <span className="sb-header__clinic-badge">Saint Mary Clinic, Alberta</span>
-            </div>
+    <div className="sm-app">
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`sm-toast sm-toast--${toast.type}`}>
+          {toast.msg}
+        </div>
+      )}
+
+      {/* Global Saint Mary Header */}
+      <header className="sm-topbar">
+        <div className="sm-topbar__left">
+          <div className="sm-logo-box">
+            <span className="sm-logo-icon" />
+            <span className="sm-logo-title">Saint Mary</span>
           </div>
 
-          <nav className="sb-nav">
+          <div className="sm-topbar__divider" />
+
+          <nav className="sm-nav-tabs">
             <button
               type="button"
-              className={`sb-nav__item ${tab === 'ambient' ? 'sb-nav__item--active' : ''}`}
+              className={`sm-tab-btn ${tab === 'ambient' ? 'sm-tab-btn--active' : ''}`}
               onClick={() => setTab('ambient')}
             >
-              🎙 Ambient Scribe
+              Ambient Scribe
             </button>
             <button
               type="button"
-              className={`sb-nav__item ${tab === 'dictate' ? 'sb-nav__item--active' : ''}`}
+              className={`sm-tab-btn ${tab === 'dictate' ? 'sm-tab-btn--active' : ''}`}
               onClick={() => setTab('dictate')}
             >
-              ⚡ Quick Dictate
+              Quick Dictate
             </button>
             <button
               type="button"
-              className={`sb-nav__item ${tab === 'history' ? 'sb-nav__item--active' : ''}`}
+              className={`sm-tab-btn ${tab === 'history' ? 'sm-tab-btn--active' : ''}`}
               onClick={() => setTab('history')}
             >
-              📁 Note History ({visits.length})
+              Note History
             </button>
           </nav>
         </div>
 
-        <div className="sb-header__right">
-          {activeVisit && (
-            <div className="sb-header__capsule">
-              <span className="sb-header__capsule-dot" />
-              <span>{isPaused ? 'PAUSED' : 'RECORDING'}</span>
-              <strong>{fmtTime(timerSeconds)}</strong>
-              <button type="button" className="sb-header__capsule-btn" onClick={handlePauseResume}>
-                {isPaused ? '▶' : '⏸'}
-              </button>
-              <button type="button" className="sb-header__capsule-finish" onClick={handleEndVisit}>
-                ■ Done
-              </button>
+        <div className="sm-topbar__right">
+          {isRecordingState && (
+            <div className="sm-rec-badge">
+              <span className="sm-rec-dot" />
+              <span>REC</span>
             </div>
           )}
 
-          <div className="sb-header__user">
-            <div className="sb-header__avatar">Dr</div>
-            <div className="sb-header__user-meta">
-              <span className="sb-header__user-name">{currentUser?.name || 'Physician'}</span>
-              <span className="sb-header__user-clinic">Saint Mary Clinic</span>
-            </div>
+          <span className="sm-user-name">{currentUser?.name || 'Dr Celina Provencio'}</span>
+          <div className="sm-user-avatar">
+            {currentUser?.name ? currentUser.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() : 'CP'}
           </div>
 
-          <button type="button" className="sb-header__logout" onClick={onLogout} title="Sign out">
+          <button type="button" className="sm-logout-btn" onClick={onLogout} title="Sign Out">
             Sign out
           </button>
         </div>
       </header>
 
-      {/* Main Workspace */}
-      <main className="sb-main">
-        {uploading && (
-          <div className="sb-banner sb-banner--uploading">
-            <span className="sb-spinner" /> {uploadStatus}
-          </div>
-        )}
+      {/* Main 2-Column Workspace */}
+      <main className="sm-main-layout">
+        {/* ─── LEFT COLUMN: WORKSPACE (1a, 1b, 1c) ─── */}
+        <section className="sm-left-canvas">
+          {/* TAB 1: AMBIENT SCRIBE */}
+          {tab === 'ambient' && (
+            <>
+              {/* STATE 1a: Idle — ready to record */}
+              {isIdleState && (
+                <div className="sm-idle-panel">
+                  <div className="sm-idle-center">
+                    <button
+                      type="button"
+                      className="sm-mic-circle sm-mic-circle--idle"
+                      onClick={handleStartInstantDictation}
+                      title="Click to start consultation"
+                    >
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#1D68CD" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                        <line x1="12" y1="19" x2="12" y2="22" />
+                      </svg>
+                    </button>
 
-        {/* ─── TAB 1: AMBIENT SCRIBE (Concept 1 Hybrid) ─── */}
-        {tab === 'ambient' && (
-          <div className="sb-hybrid-grid">
-            {/* Left Card: Ambient Recording Console */}
-            <section className="sb-card sb-ambient-card">
-              <div className="sb-ambient-status-bar">
-                <span className={`sb-status-pill ${activeVisit ? (isPaused ? 'sb-status-pill--paused' : 'sb-status-pill--recording') : ''}`}>
-                  <span className="sb-status-dot" />
-                  {activeVisit ? (isPaused ? 'Recording Paused' : 'Recording Active') : 'Ready for Consultation'}
-                </span>
-                <span className="sb-clinic-tag">Saint Mary AI</span>
-              </div>
+                    <div className="sm-timer-display">00:00</div>
+                    <div className="sm-status-caption">Ready for consultation</div>
 
-              {/* Minimalist Visualizer Console */}
-              <div className="sb-ambient-console">
-                <div className={`sb-ambient-mic-wrap ${activeVisit ? (isPaused ? 'sb-ambient-mic-wrap--paused' : 'sb-ambient-mic-wrap--recording') : ''}`}>
-                  <div className="sb-ambient-mic-circle">
-                    🎙
-                  </div>
-                  {activeVisit && (
-                    <div className="sb-ambient-waveform-overlay">
-                      <RecordingVisualizer stream={audioStream} isPaused={isPaused} barCount={16} theme="primary" />
-                    </div>
-                  )}
-                </div>
+                    <button
+                      type="button"
+                      className="sm-btn sm-btn--primary-record"
+                      onClick={handleStartInstantDictation}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                        <line x1="12" y1="19" x2="12" y2="22" />
+                      </svg>
+                      Start recording
+                    </button>
 
-                <div className="sb-ambient-timer-box">
-                  <div className="sb-ambient-timer">{fmtTime(timerSeconds)}</div>
-                  <div className="sb-ambient-caption">
-                    {activeVisit
-                      ? (isPaused ? 'Encounter paused' : `Listening to ${activeVisit.patient_name || 'Patient'}…`)
-                      : 'Ambient Scribe (Recording Patient Consultation)'}
-                  </div>
-                </div>
+                    <div className="sm-helper-text">No patient needed — assign after</div>
 
-                <div className="sb-ambient-controls">
-                  <div className="sb-template-row">
-                    <label htmlFor="sb-tmpl">Select Template:</label>
-                    <select id="sb-tmpl" value={selectedTemplate} onChange={(e) => setSelectedTemplate(e.target.value)}>
-                      <option value="SOAP Note">[SOAP Note - Adult]</option>
-                      <option value="Comprehensive Exam">[Physical Exam - Comprehensive]</option>
-                      <option value="Follow-up Encounter">[Follow-up Visit]</option>
-                      <option value="Consultation Note">[Consultation Note]</option>
-                      <option value="H&P (History & Physical)">[H&amp;P Complete]</option>
-                    </select>
-                  </div>
-
-                  {!activeVisit ? (
-                    <div className="sb-record-button-group">
-                      <button
-                        type="button"
-                        className="sb-btn sb-btn--record-hero"
-                        onClick={handleStartInstantDictation}
+                    <div className="sm-template-bar">
+                      <span className="sm-template-label">Template</span>
+                      <select
+                        className="sm-template-select"
+                        value={selectedTemplate}
+                        onChange={(e) => setSelectedTemplate(e.target.value)}
                       >
-                        🎙 1-Click Instant Record
-                      </button>
-                      <button
-                        type="button"
-                        className="sb-btn sb-btn--outline"
-                        onClick={() => setQuickRecOpen(true)}
-                      >
-                        Select Scheduled Patient ({visits.filter((v) => v.status === 'upcoming').length})
-                      </button>
+                        <option value="SOAP Note — Adult">SOAP Note — Adult ▾</option>
+                        <option value="SOAP Note — Pediatric">SOAP Note — Pediatric ▾</option>
+                        <option value="Comprehensive Exam">Comprehensive Exam ▾</option>
+                        <option value="Follow-up Visit">Follow-up Visit ▾</option>
+                        <option value="Consultation Note">Consultation Note ▾</option>
+                      </select>
                     </div>
-                  ) : (
-                    <div className="sb-active-button-group">
+                  </div>
+                </div>
+              )}
+
+              {/* STATE 1b: Recording — mic is live */}
+              {isRecordingState && (
+                <div className="sm-recording-panel">
+                  <div className="sm-recording-center">
+                    <div className={`sm-mic-circle sm-mic-circle--recording ${isPaused ? 'sm-mic-circle--paused' : ''}`}>
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                        <line x1="12" y1="19" x2="12" y2="22" />
+                      </svg>
+                    </div>
+
+                    <div className="sm-timer-display">{fmtTime(timerSeconds)}</div>
+                    <div className="sm-status-caption">
+                      {isPaused ? 'Recording paused' : 'Listening — ambient scribe active'}
+                    </div>
+
+                    {/* Animated audio waveform */}
+                    <div className="sm-waveform-container">
+                      <RecordingVisualizer stream={audioStream} isPaused={isPaused} barCount={20} theme="danger" />
+                    </div>
+
+                    {/* Live speech preview if available */}
+                    {liveTranscript && (
+                      <div className="sm-live-speech-pill">
+                        <span className="sm-live-speech-text">“{liveTranscript}”</span>
+                      </div>
+                    )}
+
+                    <div className="sm-recording-btn-row">
                       <button
                         type="button"
-                        className={`sb-btn ${isPaused ? 'sb-btn--resume' : 'sb-btn--pause'}`}
+                        className="sm-btn sm-btn--pause"
                         onClick={handlePauseResume}
                       >
                         {isPaused ? '▶ Resume' : '⏸ Pause'}
                       </button>
+
                       <button
                         type="button"
-                        className="sb-btn sb-btn--finish"
+                        className="sm-btn sm-btn--stop-generate"
                         onClick={handleEndVisit}
                       >
-                        ■ Stop &amp; Generate Note
+                        <span className="sm-btn-square-icon" />
+                        Stop & generate
                       </button>
-                      <button
-                        type="button"
-                        className="sb-btn sb-btn--cancel"
-                        onClick={handleCancelRecording}
+                    </div>
+
+                    <div className="sm-template-bar">
+                      <span className="sm-template-label">Template</span>
+                      <select
+                        className="sm-template-select"
+                        value={selectedTemplate}
+                        onChange={(e) => setSelectedTemplate(e.target.value)}
                       >
-                        Discard
-                      </button>
-                    </div>
-                  )}
-
-                  {activeVisit && liveTranscript && (
-                    <div className="sb-live-transcript-box">
-                      <div className="sb-live-indicator">
-                        <span className="sb-live-pulse-dot" />
-                        <strong>Live Speech Dictation:</strong>
-                      </div>
-                      <p className="sb-live-text">"{liveTranscript}"</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Ambient Observations Scratchpad */}
-              <div className="sb-ambient-scratchpad">
-                <div className="sb-scratchpad__header">
-                  <label className="sb-scratchpad__label" htmlFor="sb-scratch-amb">
-                    📝 Real-time Observation Scratchpad
-                  </label>
-                  {dictationNotes && (
-                    <button
-                      type="button"
-                      className="sb-scratchpad__clear"
-                      onClick={() => setDictationNotes('')}
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
-                <textarea
-                  id="sb-scratch-amb"
-                  className="sb-scratchpad__textarea"
-                  placeholder="Type any clinical findings, vitals, or medication changes during the visit. Saint Mary AI will merge this directly into the final note…"
-                  value={dictationNotes}
-                  onChange={(e) => setDictationNotes(e.target.value)}
-                  rows={3}
-                />
-              </div>
-            </section>
-
-            {/* Right Card: Generated Clinical Note + Patient Queue (Concept 1) */}
-            <aside className="sb-card sb-note-card">
-              {previewNote ? (
-                <div className="sb-note-container">
-                  {/* Patient Header Box */}
-                  <div className="sb-patient-header-box">
-                    <div>
-                      <span className="sb-patient-label">PATIENT:</span>
-                      <h3 className="sb-patient-name">{previewNote.patient_name || 'Patient Encounter'}</h3>
-                      <span className="sb-patient-sub">
-                        (MRN: {previewNote.mrn || 'Auto-generated'} · {previewNote.visit_type || 'Encounter'})
-                      </span>
-                    </div>
-                    <div>
-                      <span className="sb-status-badge-soft">
-                        {generatingAiNoteId ? '✨ AI Generating...' : (previewNote.final_note || previewNote.ai_draft ? 'Draft (AI Scribed)' : 'Encounter Finished')}
-                      </span>
+                        <option value="SOAP Note — Adult">SOAP Note — Adult ▾</option>
+                        <option value="SOAP Note — Pediatric">SOAP Note — Pediatric ▾</option>
+                        <option value="Comprehensive Exam">Comprehensive Exam ▾</option>
+                        <option value="Follow-up Visit">Follow-up Visit ▾</option>
+                        <option value="Consultation Note">Consultation Note ▾</option>
+                      </select>
                     </div>
                   </div>
-
-                  {/* Formatted SOAP Display or AI Generating State */}
-                  {generatingAiNoteId ? (
-                    <div className="sb-soap-generating-box">
-                      <div className="sb-ai-pulse-spinner" />
-                      <h4>✨ Saint Mary AI is generating your clinical note…</h4>
-                      <p>Deepgram is transcribing conversation audio and Claude AI is structuring your SOAP documentation.</p>
-                      <div className="sb-ai-progress-bar"><div className="sb-ai-progress-fill" /></div>
-                    </div>
-                  ) : (
-                    <div className="sb-soap-body" onClick={() => handleViewNote(previewNote)}>
-                      <pre>{cleanAiDraftForDisplay(previewNote.final_note || previewNote.ai_draft || `Chief Complaint:\nFollow-up & Clinical Consultation\n\nHPI:\nPatient consulted at Saint Mary Clinic. Audio captured and archived.\n\nPhysical Exam:\nVITALS: BP 120/80, HR 72, Temp 98.6°F, SpO2 98% on room air.\nGeneral: Alert, oriented x3. Well-appearing.\n\nAssessment & Plan:\n1. Structured documentation completed via Saint Mary AI.\n2. Follow up as scheduled.`)}</pre>
-                    </div>
-                  )}
-
-                  {/* Primary Note Actions */}
-                  <div className="sb-note-actions-bar">
-                    <button
-                      type="button"
-                      className={`sb-btn sb-btn--copy-hero ${copied ? 'sb-btn--copied' : ''}`}
-                      onClick={() => copyToClipboard(previewNote.final_note || previewNote.ai_draft)}
-                      disabled={generatingAiNoteId}
-                    >
-                      {copied ? '✓ Copied' : '📋 Copy to EMR'}
-                    </button>
-                    <button
-                      type="button"
-                      className="sb-btn sb-btn--outline"
-                      onClick={() => handleViewNote(previewNote)}
-                      disabled={generatingAiNoteId}
-                    >
-                      ✏️ Review &amp; Sign
-                    </button>
-                    {!previewNote.final_note && !previewNote.ai_draft && !generatingAiNoteId && (
-                      <button
-                        type="button"
-                        className="sb-btn sb-btn--primary-blue"
-                        onClick={async () => {
-                          showToast('Formatting clinical note...', 'info')
-                          const draft = `Chief Complaint:\nFollow-up & Clinical Consultation\n\nHPI:\nPatient consulted at Saint Mary Clinic. Audio captured and archived.\n\nPhysical Exam:\nVITALS: BP 120/80, HR 72, Temp 98.6°F, SpO2 98% on room air.\nGeneral: Alert, oriented x3. Well-appearing.\n\nAssessment & Plan:\n1. Structured documentation completed via Saint Mary AI.\n2. Follow up as scheduled.`
-                          if (previewNote.note_id) {
-                            await notesAPI.updateNote(previewNote.note_id, draft).catch(() => {})
-                          }
-                          setPreviewNote((p) => ({ ...p, final_note: draft }))
-                          showToast('✓ Structured note ready!')
-                        }}
-                      >
-                        ⚡ Generate Note
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="sb-empty-preview">
-                  <span className="sb-empty-icon">📋</span>
-                  <h4>No Active Note Preview</h4>
-                  <p>Start an ambient recording on the left. Once completed, your structured note will instantly appear here.</p>
                 </div>
               )}
 
-              {/* Compact Patient Queue */}
-              <div className="sb-queue-box">
-                <div className="sb-queue-header">
-                  <h4>Patient Queue ({visits.length})</h4>
-                  <span className="sb-queue-date">Today at Saint Mary Clinic</span>
-                </div>
-                <div className="sb-queue-items">
-                  {visits.length === 0 ? (
-                    <p className="sb-queue-none">No patients scheduled for today.</p>
-                  ) : (
-                    visits.slice(0, 5).map((v) => (
-                      <div
-                        key={v.id}
-                        className={`sb-queue-row ${previewNote?.id === v.id ? 'sb-queue-row--active' : ''}`}
-                        onClick={() => handleViewNote(v)}
-                      >
-                        <div className="sb-queue-row__info">
-                          <strong>{v.patient_name}</strong>
-                          <span>{v.visit_time || 'Today'} · {v.visit_type}</span>
-                        </div>
-                        <span className={`sb-badge-pill sb-badge-pill--${v.status}`}>
-                          {v.status === 'upcoming' ? 'Scheduled' : 'Ready'}
+              {/* STATE 1c: After stop — assign & review the note */}
+              {isReviewState && (
+                <div className="sm-review-panel">
+                  {/* Top Amber Assign Banner */}
+                  <div className="sm-assign-banner">
+                    <div className="sm-assign-banner__left">
+                      <div className="sm-assign-icon">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9A3412" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                          <circle cx="9" cy="7" r="4" />
+                          <line x1="19" y1="8" x2="19" y2="14" />
+                          <line x1="22" y1="11" x2="16" y2="11" />
+                        </svg>
+                      </div>
+                      <div className="sm-assign-meta">
+                        <strong>Assign this recording</strong>
+                        <span>
+                          {recordedDuration || '04:12'} recording · {selectedTemplate || 'SOAP Note — Adult'}
                         </span>
                       </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </aside>
-          </div>
-        )}
-
-        {/* ─── TAB 2: QUICK DICTATE (Concept 2 Hybrid: Side-by-Side Workspace) ─── */}
-        {tab === 'dictate' && (
-          <div className="sb-hybrid-grid">
-            {/* Left Pane: Dictation Scratchpad & Smart Macros */}
-            <section className="sb-card sb-dictate-left-card">
-              <div className="sb-card__header">
-                <div>
-                  <h3 className="sb-card__title">Quick Dictate</h3>
-                  <p className="sb-card__sub">Type, paste, or dictate encounter notes</p>
-                </div>
-                <div className="sb-template-picker">
-                  <select value={selectedTemplate} onChange={(e) => setSelectedTemplate(e.target.value)}>
-                    <option value="SOAP Note">SOAP Note</option>
-                    <option value="Comprehensive Exam">Comprehensive Exam</option>
-                    <option value="Follow-up Encounter">Follow-up Encounter</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="sb-dictate-pad">
-                <textarea
-                  className="sb-dictate-textarea-hybrid"
-                  placeholder="Start dictating here...
-
-Patient is a 54-year-old presenting with symptoms for 3 days. Denies fever. Vitals normal. 
-
-Assessment & Plan..."
-                  value={quickDictateText}
-                  onChange={(e) => setQuickDictateText(e.target.value)}
-                />
-
-                {/* Smart Macro Chips */}
-                <div className="sb-macro-bar">
-                  <button type="button" className="sb-chip" onClick={() => handleInsertSnippet('Vitals: BP 118/76, HR 72, Temp 98.6°F, SpO2 99% on room air.')}>+ Normal Vitals</button>
-                  <button type="button" className="sb-chip" onClick={() => handleInsertSnippet('Physical Exam: Alert, oriented x3. Lungs clear to auscultation. Heart regular rate/rhythm.')}>+ Exam Stable</button>
-                  <button type="button" className="sb-chip" onClick={() => handleInsertSnippet('Assessment: Chronic conditions stable. Refilled standard medications.')}>+ Refill Meds</button>
-                  <button type="button" className="sb-chip" onClick={() => handleInsertSnippet('Plan: Return to clinic in 4 weeks or sooner if symptoms worsen.')}>+ 4-Wk Follow-up</button>
-                </div>
-
-                <div className="sb-dictate-footer-actions">
-                  <button
-                    type="button"
-                    className="sb-btn sb-btn--outline"
-                    onClick={() => setQuickDictateText('')}
-                    disabled={!quickDictateText || generatingQuickNote}
-                  >
-                    Clear Text
-                  </button>
-                  <button
-                    type="button"
-                    className="sb-btn sb-btn--primary-blue"
-                    onClick={handleGenerateQuickDictateNote}
-                    disabled={!quickDictateText.trim() || generatingQuickNote}
-                  >
-                    {generatingQuickNote ? 'Generating Note…' : '⚡ Generate Structured SOAP Note'}
-                  </button>
-                </div>
-              </div>
-            </section>
-
-            {/* Right Pane: Live Side-by-Side SOAP Note Preview */}
-            <aside className="sb-card sb-dictate-right-card">
-              <div className="sb-card__header">
-                <div>
-                  <h3 className="sb-card__title">Preview: SOAP Note</h3>
-                  <p className="sb-card__sub">Structured Saint Mary documentation</p>
-                </div>
-                {quickDictateOutput && (
-                  <span className="sb-status-badge-soft">Ready for EMR</span>
-                )}
-              </div>
-
-              <div className="sb-dictate-preview-box">
-                {quickDictateOutput ? (
-                  <div className="sb-soap-output">
-                    <pre>{quickDictateOutput.text}</pre>
-                  </div>
-                ) : (
-                  <div className="sb-soap-placeholder">
-                    <div className="sb-soap-section">
-                      <strong>[S]ubjective</strong>
-                      <p>Type or dictate encounter notes on the left to see your formatted subjective history.</p>
                     </div>
-                    <div className="sb-soap-section">
-                      <strong>[O]bjective</strong>
-                      <p>Physical examination findings and vital signs will be structured here.</p>
-                    </div>
-                    <div className="sb-soap-section">
-                      <strong>[A]ssessment</strong>
-                      <p>Numbered diagnoses and clinical assessment.</p>
-                    </div>
-                    <div className="sb-soap-section">
-                      <strong>[P]lan</strong>
-                      <p>Treatment steps, medication refills, and follow-up timeline.</p>
+
+                    <div className="sm-assign-banner__right">
+                      <select
+                        className="sm-assign-select"
+                        value={selectedAssignPatientId}
+                        onChange={(e) => setSelectedAssignPatientId(e.target.value)}
+                      >
+                        <option value="">{activeDraftNote?.mrn ? `${activeDraftNote.mrn} likely ▾` : 'Select Patient ▾'}</option>
+                        {patientList.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name} ({p.mrn})
+                          </option>
+                        ))}
+                      </select>
+
+                      <button
+                        type="button"
+                        className="sm-btn sm-btn--assign"
+                        onClick={handleAssignPatient}
+                        disabled={isAssigning}
+                      >
+                        {isAssigning ? 'Assigning...' : 'Assign'}
+                      </button>
                     </div>
                   </div>
-                )}
+
+                  {/* Draft Note Header */}
+                  <div className="sm-note-header">
+                    <div className="sm-note-header__left">
+                      <h2>Draft note</h2>
+                      <span className="sm-badge sm-badge--ai-scribed">AI SCRIBED</span>
+                    </div>
+
+                    <div className="sm-note-header__right">
+                      <button
+                        type="button"
+                        className="sm-btn sm-btn--copy"
+                        onClick={() => handleCopyToClipboard(activeDraftNote.final_note || activeDraftNote.ai_draft)}
+                      >
+                        {copied ? '✓ Copied!' : 'Copy to EMR'}
+                      </button>
+
+                      <button
+                        type="button"
+                        className="sm-btn sm-btn--sign"
+                        onClick={() => handleReviewAndSign(activeDraftNote)}
+                      >
+                        Review & sign
+                      </button>
+
+                      <button
+                        type="button"
+                        className="sm-btn sm-btn--new-rec"
+                        onClick={handleStartInstantDictation}
+                        title="Start another consultation"
+                      >
+                        + New
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Structured Clinical Note Document */}
+                  <div className="sm-note-body">
+                    {activeNoteSections.map((sec, idx) => (
+                      <div key={idx} className="sm-note-section">
+                        <div className="sm-note-section__header">{sec.header}</div>
+                        <div className="sm-note-section__content">{sec.content}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* TAB 2: QUICK DICTATE */}
+          {tab === 'dictate' && (
+            <div className="sm-quick-dictate-canvas">
+              <div className="sm-quick-header">
+                <h2>⚡ Quick Clinical Dictation</h2>
+                <p>Dictate or type clinical notes directly for instant AI SOAP note structuring with ICD-10 & CPT codes.</p>
               </div>
 
-              <div className="sb-dictate-preview-actions">
-                <button
-                  type="button"
-                  className={`sb-btn sb-btn--copy-hero ${copied ? 'sb-btn--copied' : ''}`}
-                  onClick={() => copyToClipboard(quickDictateOutput?.text || previewNote?.final_note || quickDictateText)}
-                >
-                  {copied ? '✓ Copied' : '📋 Copy to EMR'}
-                </button>
-                <button
-                  type="button"
-                  className="sb-btn sb-btn--outline"
-                  onClick={() => {
-                    if (previewNote) handleViewNote(previewNote)
-                    else showToast('Please generate a note first', 'info')
-                  }}
-                >
-                  ✏️ Edit in Modal
-                </button>
-              </div>
-            </aside>
-          </div>
-        )}
+              <textarea
+                className="sm-quick-textarea"
+                placeholder="Dictate or type clinical observations (e.g. 36yo male presenting with right knee pain after bike fall, tender MCL, mild OA on X-ray, start Ibuprofen BID...)"
+                value={quickDictateText}
+                onChange={(e) => setQuickDictateText(e.target.value)}
+                rows={8}
+              />
 
-        {/* ─── TAB 3: NOTE HISTORY ─── */}
-        {tab === 'history' && (
-          <section className="sb-card sb-history-card">
-            <div className="sb-card__header">
-              <div>
-                <h2 className="sb-card__title">Clinical Note Archive — Saint Mary Clinic</h2>
-                <p className="sb-card__sub">All patient documentation and transcription records ({visits.length} total)</p>
+              <div className="sm-quick-actions">
+                <button
+                  type="button"
+                  className="sm-btn sm-btn--primary-record"
+                  onClick={handleGenerateQuickDictateNote}
+                  disabled={generatingQuickNote || !quickDictateText.trim()}
+                >
+                  {generatingQuickNote ? 'Generating Note...' : '⚡ Generate Structured SOAP Note'}
+                </button>
               </div>
-              <div className="sb-search-wrap">
+            </div>
+          )}
+
+          {/* TAB 3: NOTE HISTORY */}
+          {tab === 'history' && (
+            <div className="sm-history-canvas">
+              <div className="sm-history-header">
+                <h2>📁 Consultation & Note History</h2>
                 <input
                   type="text"
-                  className="sb-search-input"
-                  placeholder="Search by patient, MRN, or type…"
+                  className="sm-search-input"
+                  placeholder="Search by patient name, MRN, date..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
+
+              <div className="sm-history-list">
+                {visits
+                  .filter((v) => !searchTerm || (v.patient_name || '').toLowerCase().includes(searchTerm.toLowerCase()) || (v.mrn || '').toLowerCase().includes(searchTerm.toLowerCase()))
+                  .map((v) => (
+                    <div key={v.id} className="sm-history-item" onClick={() => handleViewVisitNote(v)}>
+                      <div className="sm-history-item__left">
+                        <strong>{v.patient_name || 'Patient'}</strong>
+                        <span>{v.visit_date} · {v.visit_time || '10:00'} · {v.visit_type} ({v.mrn || 'No MRN'})</span>
+                      </div>
+                      <div className="sm-history-item__right">
+                        <span className={`sm-badge ${v.status === 'completed' ? 'sm-badge--ready' : 'sm-badge--draft'}`}>
+                          {v.status === 'completed' ? 'SIGNED' : (v.final_note || v.ai_draft ? 'DRAFT' : 'RECORDED')}
+                        </span>
+                        <button type="button" className="sm-btn sm-btn--view" onClick={(e) => { e.stopPropagation(); setSelectedNoteModal(v) }}>
+                          View
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+        </section>
+
+        {/* ─── RIGHT COLUMN: SIDEBAR ─── */}
+        <aside className="sm-right-sidebar">
+          {/* Today's Visits Card */}
+          <div className="sm-side-card">
+            <div className="sm-side-card__header">
+              <span className="sm-side-card__title">Today's visits</span>
+              <span className="sm-side-card__count">{visits.length}</span>
             </div>
 
-            <div className="sb-history-table-wrap">
-              {filteredVisits.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '3rem', color: '#64748B' }}>
-                  <span style={{ fontSize: '32px', display: 'block', marginBottom: '8px' }}>📁</span>
-                  <p>No clinical encounters found matching your criteria.</p>
-                </div>
+            <div className="sm-visit-list">
+              {visits.length === 0 ? (
+                <div className="sm-empty-visits">No visits scheduled today</div>
               ) : (
-                <table className="sb-history-table">
-                  <thead>
-                    <tr>
-                      <th>Patient</th>
-                      <th>Date &amp; Time</th>
-                      <th>Encounter Type</th>
-                      <th>Status</th>
-                      <th style={{ textAlign: 'right' }}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredVisits.map((v) => (
-                      <tr key={v.id}>
-                        <td>
-                          <strong>{v.patient_name}</strong>
-                          {v.mrn && <span className="sb-table-sub">{v.mrn}</span>}
-                        </td>
-                        <td>{v.visit_date ? `${String(v.visit_date).slice(0, 10)} ${v.visit_time || ''}` : (v.visit_time || 'Today')}</td>
-                        <td>{v.visit_type || 'Consultation'}</td>
-                        <td>
-                          <span className={`sb-badge-pill sb-badge-pill--${v.status}`}>
-                            {v.status}
+                visits.map((v) => {
+                  const hasNote = Boolean(v.final_note || v.ai_draft)
+                  const isCompleted = v.status === 'completed'
+                  const isCurrent = activeDraftNote?.id === v.id
+                  let dotColor = '#CBD5E1'
+                  let badgeText = v.visit_time || '10:00'
+                  let badgeType = 'time'
+
+                  if (isCompleted || (hasNote && v.status === 'ready')) {
+                    dotColor = '#10B981'
+                    badgeText = 'READY'
+                    badgeType = 'ready'
+                  } else if (hasNote) {
+                    dotColor = '#3B82F6'
+                    badgeText = 'DRAFT'
+                    badgeType = 'draft'
+                  }
+
+                  return (
+                    <div
+                      key={v.id}
+                      className={`sm-visit-row ${isCurrent ? 'sm-visit-row--active' : ''}`}
+                      onClick={() => handleViewVisitNote(v)}
+                    >
+                      <div className="sm-visit-row__left">
+                        <span className="sm-visit-dot" style={{ background: dotColor }} />
+                        <div className="sm-visit-info">
+                          <span className="sm-visit-patient">{v.patient_name || `Patient ${v.mrn || ''}`}</span>
+                          <span className="sm-visit-meta">
+                            {v.visit_time || '08:25'} · {v.visit_type || 'Follow-up'}
                           </span>
-                        </td>
-                        <td style={{ textAlign: 'right' }}>
-                          <button
-                            type="button"
-                            className="sb-btn sb-btn--sm sb-btn--outline"
-                            onClick={() => handleViewNote(v)}
-                          >
-                            👁 View Note
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        </div>
+                      </div>
+
+                      <div className="sm-visit-row__right">
+                        {badgeType === 'ready' && <span className="sm-status-tag sm-status-tag--ready">READY</span>}
+                        {badgeType === 'draft' && <span className="sm-status-tag sm-status-tag--draft">DRAFT</span>}
+                        {badgeType === 'time' && <span className="sm-status-tag sm-status-tag--time">{badgeText}</span>}
+                      </div>
+                    </div>
+                  )
+                })
               )}
             </div>
-          </section>
-        )}
+          </div>
+
+          {/* Scratchpad Card */}
+          <div className="sm-side-card sm-side-card--scratchpad">
+            <div className="sm-side-card__header">
+              <span className="sm-side-card__title">Scratchpad</span>
+            </div>
+
+            <textarea
+              className="sm-scratchpad-input"
+              placeholder="Type vitals, meds, findings..."
+              value={dictationNotes}
+              onChange={(e) => setDictationNotes(e.target.value)}
+              rows={4}
+            />
+          </div>
+        </aside>
       </main>
 
-      {/* Floating Scribeberry Dock for Multi-screen Safety */}
-      <ScribeberryRecordingDock
-        activeVisit={activeVisit}
-        isPaused={isPaused}
-        timerSeconds={timerSeconds}
-        stream={audioStream}
-        onPauseResume={handlePauseResume}
-        onEndVisit={handleEndVisit}
-        onCancel={handleCancelRecording}
-        mode="primary"
-      />
-
-      {/* Quick Consultation / Patient Selector */}
-      <QuickConsultationModal
-        isOpen={quickRecOpen}
-        onClose={() => setQuickRecOpen(false)}
-        upcomingVisits={visits}
-        patients={patientList}
-        onStartScheduledVisit={startRecordingSession}
-        onStartQuickVisit={handleStartQuickConsult}
-        onStartInstantVisit={handleStartInstantDictation}
-      />
-
-      {/* Comprehensive Saint Mary Clinical Note Viewer Modal */}
+      {/* Note Viewer Modal */}
       {selectedNoteModal && (
         <SaintMaryNoteViewerModal
-          noteData={selectedNoteModal}
+          note={selectedNoteModal}
+          currentUser={currentUser}
           onClose={() => setSelectedNoteModal(null)}
-          onNoteUpdated={(updated) => {
-            setSelectedNoteModal(updated)
-            setPreviewNote(updated)
-            setVisits((prev) =>
-              prev.map((v) => (v.id === updated.id || v.id === updated.visit_id ? { ...v, ...updated } : v))
-            )
-          }}
-          showToast={showToast}
+          onNoteUpdated={loadData}
         />
-      )}
-
-      {/* Toast Notification */}
-      {toast && (
-        <div className={`sb-toast sb-toast--${toast.type || 'success'}`}>
-          {toast.msg}
-        </div>
       )}
     </div>
   )
