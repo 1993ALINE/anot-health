@@ -245,14 +245,9 @@ export default function Login() {
           setPhase('form')
         }
       })
-      .catch((err) => {
+      .catch(() => {
         if (cancelled) {return}
         authAPI.logout()
-        if (isLikelyNetworkFailure(err)) {
-          setError(networkErrorMessage())
-        } else if (err?.status && err.status !== 401 && err.status !== 403) {
-          setError('Could not verify your session. Please sign in again.')
-        }
         setPhase('form')
       })
       .finally(() => {

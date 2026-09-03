@@ -53,8 +53,8 @@ export function isAbortError(err) {
 /** True when `fetch` did not get a normal HTTP response (backend down, DNS, CORS, blocked port, etc.). */
 export function isLikelyNetworkFailure(err) {
   if (!err) {return false}
+  if (isAbortError(err)) {return false}
   if (err.name === 'TypeError') {return true}
-  if (err.name === 'AbortError') {return true}
   const m = String(err.message || '').toLowerCase()
   return (
     m === 'failed to fetch' ||
