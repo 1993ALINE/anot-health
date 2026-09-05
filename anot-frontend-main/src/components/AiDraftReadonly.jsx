@@ -26,9 +26,14 @@ export default function AiDraftReadonly({
     return (
       <div
         className="scribe-ai-draft-unavailable"
-        style={{ padding: '12px 14px', fontSize: 13, lineHeight: 1.75, color: '#64748b' }}
+        style={{ padding: '16px', fontSize: 13, lineHeight: 1.75, color: '#64748B' }}
       >
-        {aiDraft}
+        <div style={{ fontWeight: 600, color: '#1E293B', marginBottom: 6 }}>
+          ⚡ AI Note Draft Ready to Generate
+        </div>
+        <div>
+          Click <strong>Generate AI Draft</strong> above to synthesize structured SOAP clinical documentation from the visit transcription.
+        </div>
       </div>
     )
   }

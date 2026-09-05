@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, useSidebarOffCanvasMode, portalSidebarAriaHidden, portalSidebarInert, ConfirmDialog, PortalSidebarBrand, parseTranscriptionBlocks } from '../shared'
 import { authAPI, usersAPI, visitsAPI, notesAPI, isAbortError } from '../../services/api'
 import { POLL_INTERVAL_MS } from '../../services/transcriptionService'
+import { formatClinicalDictationToSOAP } from '../../utils/clinicalSoapSynthesizer'
 import { useBranding } from '../../services/branding'
 import SystemProfileManager from '../../components/SystemProfileManager'
 import PortalAudioPlayer from '../../components/PortalAudioPlayer'
@@ -748,11 +749,50 @@ function Scribe() {
     if (!selectedRec?.id || generatingDraft || noteDone) {return}
     setGeneratingDraft(true)
     try {
-      const data = await visitsAPI.generateDraft(selectedRec.id)
-      const draft = data.ai_draft || ''
-      setNote((prev) => (prev ? { ...prev, ai_draft: draft } : { ai_draft: draft, visit_id: selectedRec.id }))
-    } catch {
-      showNotif('Failed to generate. Check API key in Admin settings.', 'red')
+      let draft = ''
+      // 1. Try backend AI generation first
+      try {
+        const data = await visitsAPI.generateDraft(selectedRec.id)
+        if (data?.ai_draft && !data.ai_draft.includes('unavailable')) {
+          draft = data.ai_draft
+        }
+      } catch (e) {
+        console.warn('Backend AI draft generation fallback:', e)
+      }
+
+      // 2. If backend AI did not return a valid draft, synthesize directly from transcript
+      if (!draft) {
+        const transcriptText = txSegments.filter(Boolean).join('\n\n') || note?.transcription || selectedRec?.transcription || finalNote || ''
+        if (transcriptText.trim()) {
+          draft = formatClinicalDictationToSOAP(
+            transcriptText,
+            '',
+            selectedRec?.visit_type || 'Follow-up',
+            {
+              patientName: selectedRec?.patient_name || note?.patient_name,
+              patientAge: selectedRec?.patient_age || selectedRec?.age || note?.patient_age,
+              mrn: selectedRec?.mrn || note?.mrn,
+            }
+          )
+        }
+      }
+
+      if (draft) {
+        // Persist the generated AI draft to the server so it's saved in DB
+        const transPayload = txSegments.length > 0 ? JSON.stringify(txSegments) : (note?.transcription || undefined)
+        await notesAPI.saveDraft(selectedRec.id, finalNote || draft, transPayload, draft).catch(() => {})
+        
+        setNote((prev) => (prev ? { ...prev, ai_draft: draft } : { ai_draft: draft, visit_id: selectedRec.id }))
+        // If final note is currently empty, also auto-populate it with the clean draft for the scribe to review/edit
+        if (!finalNote.trim()) {
+          setFinalNote(draft)
+        }
+        showNotif('✓ AI Note Draft generated successfully!')
+      } else {
+        showNotif('No transcription text available to generate note from. Please dictate or paste a transcript first.', 'amber')
+      }
+    } catch (err) {
+      showNotif(`Generation failed: ${err?.message || 'Unknown error'}`, 'red')
     } finally {
       setGeneratingDraft(false)
     }
@@ -1663,20 +1703,23 @@ function Scribe() {
             title="AI Draft"
             allowExpand={false}
             badges={
-              !isDone && !hasAiDraft ? (
+              !isDone ? (
                 <button
                   type="button"
                   className="scribe-generate-draft-btn"
                   onClick={runGenerateDraft}
                   disabled={generatingDraft || loadingNote || !selectedRec?.id}
+                  title={hasAiDraft ? 'Re-generate AI draft from transcript' : 'Generate structured AI draft'}
                 >
                   {generatingDraft ? (
                     <>
                       <span className="scribe-generate-draft-spin" aria-hidden />
                       Generating...
                     </>
+                  ) : hasAiDraft ? (
+                    '↺ Regenerate Draft'
                   ) : (
-                    'Generate AI Draft'
+                    '✨ Generate AI Draft'
                   )}
                 </button>
               ) : null
