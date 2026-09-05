@@ -10,7 +10,7 @@ router.use(protect)
 router.get('/',     restrict('clinician', 'scribe', 'qps', 'admin', 'super_admin'), getAllPatients)
 // Adding patients is a clinician-only action, but admins need it for testing/management.
 router.post('/',    restrict('clinician', 'admin', 'super_admin'),                  createPatient)
-router.delete('/bulk/all', restrict('super_admin'), bulkDeleteAllPatients)
+router.delete('/bulk/all', restrict('admin', 'super_admin'), bulkDeleteAllPatients)
 router.get('/:id',  restrict('clinician', 'scribe', 'qps', 'admin', 'super_admin'), getPatient)
 router.delete('/:id', restrict('admin', 'super_admin'), deletePatient)
 

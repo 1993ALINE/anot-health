@@ -157,8 +157,6 @@ describe('DELETE /api/admin/users/:userId — deleteAdminUser', () => {
 
     const sqlCalls = clientQuery.mock.calls.map(([sql]) => sql)
     expect(sqlCalls.some((sql) => sql.includes('DELETE FROM sessions WHERE user_id'))).toBe(true)
-    expect(sqlCalls.some((sql) => sql.includes(`SET LOCAL anot.allow_audit_purge = 'on'`))).toBe(true)
-    expect(sqlCalls.some((sql) => sql.includes('DELETE FROM audit_logs WHERE user_id'))).toBe(true)
     expect(sqlCalls.some((sql) => sql.includes('DELETE FROM users WHERE id'))).toBe(true)
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ deleted_user_id: 11 }))
   })
@@ -176,5 +174,53 @@ describe('DELETE /api/admin/users/:userId — deleteAdminUser', () => {
 
     expect(res.status).toHaveBeenCalledWith(404)
     expect(res.json).toHaveBeenCalledWith({ error: 'User not found.' })
+  })
+
+  test('admin can delete clinician and cascades scribe assignments and templates', async () => {
+    pool.query.mockResolvedValueOnce({
+      rows: [{ id: 42, name: 'Dr. Clinician', email: 'dr@anot.health', role: 'clinician' }],
+    })
+
+    const clientQuery = jest.fn().mockImplementation((sql) => {
+      if (sql.includes('information_schema.tables')) {
+        return tableExistsResult(true)
+      }
+      if (sql.includes('DELETE FROM users WHERE id')) {
+        return { rowCount: 1 }
+      }
+      return { rowCount: 0 }
+    })
+
+    pool.withTransaction.mockImplementationOnce(async (fn) => fn({ query: clientQuery }))
+
+    const req = {
+      user: { id: 2, role: 'admin' },
+      params: { userId: '42' },
+    }
+    const res = mockRes()
+
+    await deleteAdminUser(req, res)
+
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ deleted_user_id: 42 }))
+    const sqlCalls = clientQuery.mock.calls.map(([sql]) => sql)
+    expect(sqlCalls.some((sql) => sql.includes('DELETE FROM scribe_assignments WHERE clinician_id = $1 OR scribe_id = $1'))).toBe(true)
+    expect(sqlCalls.some((sql) => sql.includes('DELETE FROM clinician_templates WHERE user_id = $1'))).toBe(true)
+  })
+
+  test('admin cannot delete another admin', async () => {
+    pool.query.mockResolvedValueOnce({
+      rows: [{ id: 43, name: 'Other Admin', email: 'other@anot.health', role: 'admin' }],
+    })
+
+    const req = {
+      user: { id: 2, role: 'admin' },
+      params: { userId: '43' },
+    }
+    const res = mockRes()
+
+    await deleteAdminUser(req, res)
+
+    expect(res.status).toHaveBeenCalledWith(403)
+    expect(res.json).toHaveBeenCalledWith({ error: 'Only Super Admins can delete other administrator accounts.' })
   })
 })

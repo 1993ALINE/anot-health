@@ -14,7 +14,7 @@ const { protect, restrict } = require('../middleware/auth')
 const { deleteAdminUser } = require('../controllers/adminDeleteUserController')
 
 router.use(protect)
-router.use(restrict('super_admin'))
+router.use(restrict('super_admin', 'admin'))
 
 router.delete('/users/:userId', deleteAdminUser)
 

@@ -253,17 +253,58 @@ const deletePatient = async (req, res) => {
     }
 }
 
+async function tableExists(client, tableName) {
+    try {
+        const { rows } = await client.query(
+            `SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = $1`,
+            [tableName],
+        )
+        return rows.length > 0
+    } catch {
+        return false
+    }
+}
+
 // ─── BULK DELETE ALL PATIENTS (Super Admin Only) ──────────────────────────────
 
 const bulkDeleteAllPatients = async (req, res) => {
     try {
         const client = await pool.connect()
+        let deletedCounts = { patients: 0, visits: 0, notes: 0 }
         try {
             await client.query('BEGIN')
-            await client.query('DELETE FROM notes')
-            await client.query('DELETE FROM patient_consent_logs').catch(() => {})
-            await client.query('DELETE FROM visits')
-            await client.query('DELETE FROM patients')
+
+            if (await tableExists(client, 'grades')) {
+                await client.query('DELETE FROM grades').catch(() => {})
+            }
+            if (await tableExists(client, 'qps_reviews')) {
+                await client.query('DELETE FROM qps_reviews').catch(() => {})
+            }
+            if (await tableExists(client, 'notes')) {
+                const nRes = await client.query('DELETE FROM notes')
+                deletedCounts.notes = nRes.rowCount || 0
+            }
+            if (await tableExists(client, 'patient_consent_logs')) {
+                await client.query('DELETE FROM patient_consent_logs').catch(() => {})
+            }
+            if (await tableExists(client, 'patient_ehr_ids')) {
+                await client.query('DELETE FROM patient_ehr_ids').catch(() => {})
+            }
+            if (await tableExists(client, 'ehr_patient_mappings')) {
+                await client.query('DELETE FROM ehr_patient_mappings').catch(() => {})
+            }
+            if (await tableExists(client, 'claude_usage_log')) {
+                await client.query('DELETE FROM claude_usage_log').catch(() => {})
+            }
+            if (await tableExists(client, 'visits')) {
+                const vRes = await client.query('DELETE FROM visits')
+                deletedCounts.visits = vRes.rowCount || 0
+            }
+            if (await tableExists(client, 'patients')) {
+                const pRes = await client.query('DELETE FROM patients')
+                deletedCounts.patients = pRes.rowCount || 0
+            }
+
             await client.query('COMMIT')
         } catch (txErr) {
             await client.query('ROLLBACK')
@@ -277,11 +318,21 @@ const bulkDeleteAllPatients = async (req, res) => {
             'ALL_PATIENTS_DELETED',
             'patient',
             'all',
-            'Super admin wiped all patient records and encounters',
-            { req, module_key: 'clinical', action_category: 'delete', status: 'success' }
+            `Super admin wiped all patient records and encounters (${deletedCounts.patients} patients, ${deletedCounts.visits} visits, ${deletedCounts.notes} notes)`,
+            {
+                req,
+                module_key: 'clinical',
+                action_category: 'delete',
+                status: 'success',
+                metadata: deletedCounts,
+            }
         ).catch(reportAuditFailure)
 
-        res.status(200).json({ message: 'All patients, visits, and notes successfully deleted.' })
+        res.status(200).json({
+            status: 'success',
+            message: 'All previous patients, visits, and clinical notes successfully deleted.',
+            deleted: deletedCounts,
+        })
     } catch (err) {
         sendHttpError(res, 500, err, { context: 'patient.bulk_delete', req })
     }

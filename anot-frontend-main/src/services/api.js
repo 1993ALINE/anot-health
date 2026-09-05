@@ -404,6 +404,7 @@ export const usersAPI = {
 export const patientsAPI = {
   getAll: async () => apiFetch('/patients'),
   create: async (patientData) => apiMutate('POST', '/patients', { body: patientData }),
+  bulkDeleteAll: async () => apiMutate('DELETE', '/patients/bulk/all'),
 }
 
 // ─── VISITS ───────────────────────────────────────────────────────────────────

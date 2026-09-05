@@ -615,11 +615,14 @@ function AdminTableToolbar({ cfg, search, filter, filteredCount, refreshing, onS
 }
 
 function AdminUserTableRow({
-    u, role, roleClass, isNew, isSuperAdminViewer, semantic,
+    u, role, roleClass, isNew, isSuperAdminViewer, currentUser, semantic,
     onEdit, onOpenModulePermissions, onReset, onToggleStatus, onDelete,
 }) {
     const isSystemSuperRow = u.role === 'super_admin'
-    const canDelete = isSuperAdminViewer && !isSystemSuperRow && !isProtectedSuperAdminEmail(u.email)
+    const isSelf = String(u.id) === String(currentUser?.id)
+    const canDelete = !isSystemSuperRow && !isProtectedSuperAdminEmail(u.email) && !isSelf && (
+        isSuperAdminViewer || (currentUser?.role === 'admin' && u.role !== 'admin')
+    )
     return (
         <div className={`adm-table__row adm-table__row--${roleClass}${isNew ? ' adm-table__row--new' : ''}`}>
             <div className="adm-td" data-label="Name" style={{ flex: 2 }}>
@@ -720,6 +723,7 @@ function AdminUserTable({
     refreshing,
     highlightUserId,
     isSuperAdminViewer,
+    currentUser,
     onOpenModulePermissions,
     setEditUser,
     setResetUser,
@@ -788,6 +792,7 @@ function AdminUserTable({
                             roleClass={roleClass}
                             isNew={highlightUserId !== null && highlightUserId !== undefined && String(u.id) === String(highlightUserId)}
                             isSuperAdminViewer={isSuperAdminViewer}
+                            currentUser={currentUser}
                             semantic={getRoleSemantic(u, u.role || role)}
                             onEdit={(user) => setEditUser({ ...user })}
                             onOpenModulePermissions={(user) => onOpenModulePermissions({ ...user })}
@@ -1508,6 +1513,7 @@ function Admin() {
         try {
             await adminAPI.deleteUser(user.id)
             setUsers((prev) => prev.filter((u) => u.id !== user.id))
+            setAssignments((prev) => prev.filter((a) => a.clinician_id !== user.id && a.scribe_id !== user.id))
             showToast(`${user.name} has been permanently deleted`)
         } catch (err) {
             showToast(err.message, 'error')
@@ -1516,12 +1522,32 @@ function Admin() {
     }
 
     const requestDeleteUser = (user) => {
+        const roleLabel = getRoleSemantic(user, user.role || 'user')?.value || user.role || 'user'
         setConfirmDialog({
-            title: 'Delete user permanently',
-            message: `Are you sure you want to delete ${user.name}? This cannot be undone.`,
+            title: `Delete ${roleLabel} account`,
+            message: `Are you sure you want to permanently delete ${user.name} from the ${roleLabel} role? This will remove their credentials, assignments, and portal access. This action cannot be undone.`,
             confirmText: 'Delete Permanently',
             tone: 'danger',
             onConfirm: () => performDeleteUser(user),
+        })
+    }
+
+    const requestPurgeAllPatientData = () => {
+        setConfirmDialog({
+            title: 'Purge All Previous Patient Data',
+            message: 'Are you sure you want to permanently delete ALL patients, visits, and clinical SOAP notes? Staff accounts and system settings will NOT be deleted. This cannot be undone.',
+            confirmText: 'Wipe All Patient Data',
+            tone: 'danger',
+            onConfirm: async () => {
+                try {
+                    const res = await patientsAPI.bulkDeleteAll()
+                    showToast(res.message || 'All patient and encounter records deleted')
+                    loadAll()
+                } catch (err) {
+                    showToast(err.message || 'Failed to purge patient data', 'error')
+                    throw err
+                }
+            },
         })
     }
 
@@ -1814,6 +1840,7 @@ function Admin() {
         refreshing: usersRefreshing,
         highlightUserId: recentlyAddedUserId,
         isSuperAdminViewer: isSuperAdmin(currentUser),
+        currentUser,
         onOpenModulePermissions: setModulePermUser,
         setEditUser,
         setResetUser,
@@ -2708,6 +2735,33 @@ function Admin() {
                                         )}
                                     </div>
 
+                                    {(isSuperAdmin(currentUser) || currentUser?.role === 'admin') && (
+                                        <div className="adm-form-card" style={{ borderColor: '#FECACA', background: '#FFF5F5', marginTop: 24 }}>
+                                            <div className="adm-form-card__title" style={{ color: '#991B1B' }}>Clinical Data Reset & Cleanup</div>
+                                            <p style={{ fontSize: 13, color: '#7F1D1D', margin: '0 0 16px', lineHeight: 1.5 }}>
+                                                Permanently delete all previous test patient records, encounter sessions, SOAP notes, and recording consent logs from the platform before going live.
+                                                All clinician, scribe, and administrator accounts, rates, and configurations will remain active.
+                                            </p>
+                                            <button
+                                                type="button"
+                                                className="adm-btn-danger"
+                                                style={{
+                                                    background: '#DC2626',
+                                                    color: '#fff',
+                                                    padding: '10px 20px',
+                                                    borderRadius: 8,
+                                                    fontWeight: 700,
+                                                    cursor: 'pointer',
+                                                    border: 'none',
+                                                    boxShadow: '0 2px 6px rgba(220, 38, 38, 0.25)',
+                                                }}
+                                                onClick={requestPurgeAllPatientData}
+                                            >
+                                                🗑 Purge All Patient & Visit Data
+                                            </button>
+                                        </div>
+                                    )}
+
                                     {settingsError && <div className="adm-err">⚠ {settingsError}</div>}
                                     <div className="adm-settings-actions">
                                         <button type="button" className="adm-btn-primary" onClick={saveSettings} disabled={settingsSaving}>
@@ -2934,11 +2988,35 @@ function Admin() {
                             </div>
                             {editError && <div className="adm-err">⚠ {editError}</div>}
                         </div>
-                        <div className="adm-modal__footer adm-modal__footer--action">
-                            <button type="button" className="adm-btn-primary adm-btn-primary--modal-action" onClick={requestSaveEdit} disabled={editLoading}>
-                                {editLoading ? 'Saving…' : 'Save changes'}
-                            </button>
-                            <button type="button" className="adm-btn-ghost adm-btn-ghost--modal-action" onClick={() => setEditUser(null)}>Cancel</button>
+                        <div className="adm-modal__footer adm-modal__footer--action" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                            {!isProtectedSuperAdminEmail(editUser.email) && editUser.role !== 'super_admin' && String(editUser.id) !== String(currentUser?.id) && (
+                                <button
+                                    type="button"
+                                    className="adm-btn-action"
+                                    style={{
+                                        color: '#DC2626',
+                                        background: '#FEF2F2',
+                                        border: '1px solid #FECACA',
+                                        borderRadius: 8,
+                                        padding: '7px 14px',
+                                        fontWeight: 600,
+                                        fontSize: 13,
+                                    }}
+                                    onClick={() => {
+                                        const toDel = editUser
+                                        setEditUser(null)
+                                        requestDeleteUser(toDel)
+                                    }}
+                                >
+                                    🗑 Delete User
+                                </button>
+                            )}
+                            <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+                                <button type="button" className="adm-btn-primary adm-btn-primary--modal-action" onClick={requestSaveEdit} disabled={editLoading}>
+                                    {editLoading ? 'Saving…' : 'Save changes'}
+                                </button>
+                                <button type="button" className="adm-btn-ghost adm-btn-ghost--modal-action" onClick={() => setEditUser(null)}>Cancel</button>
+                            </div>
                         </div>
                     </div>
                 </div>
