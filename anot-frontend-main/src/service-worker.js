@@ -1,10 +1,11 @@
 
-const CACHE_NAME = 'anot-v1'
-const urlsToCache = ['/', '/index.html']
+const CACHE_NAME = 'anot-v4'
+const PRECACHE_URLS = ['/favicon.png', '/brand/anot-logo.png']
 
 self.addEventListener('install', (event) => {
+  self.skipWaiting()
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(urlsToCache)).then(() => self.skipWaiting()),
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS).catch(() => {})),
   )
 })
 
@@ -17,8 +18,13 @@ self.addEventListener('activate', (event) => {
 })
 
 self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting()
+  }
   if (event.data?.type === 'CLEAR_CACHE') {
-    event.waitUntil(caches.delete(CACHE_NAME))
+    event.waitUntil(
+      caches.keys().then((keys) => Promise.all(keys.map((key) => caches.delete(key)))),
+    )
   }
 })
 
@@ -28,15 +34,33 @@ self.addEventListener('fetch', (event) => {
 
   if (request.method !== 'GET') { return }
 
-  // Never cache API responses — they may contain PHI.
+  // 1. Never cache API responses — they may contain PHI.
   if (url.pathname.includes('/api/')) {
     return
   }
 
+  // 2. Navigation / HTML requests: ALWAYS NETWORK-FIRST
+  // This guarantees fresh index.html is loaded immediately on deploy.
+  if (request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('.html')) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response && response.ok) {
+            const clone = response.clone()
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone))
+          }
+          return response
+        })
+        .catch(() => caches.match(request)),
+    )
+    return
+  }
+
+  // 3. Static assets with content hashes: Cache-First
   if (url.pathname.includes('/assets/') || /\.(js|css|png|jpg|jpeg|svg|webp|woff2?)$/i.test(url.pathname)) {
     event.respondWith(
       caches.match(request).then((cached) => cached || fetch(request).then((response) => {
-        if (response.ok) {
+        if (response && response.ok) {
           const clone = response.clone()
           caches.open(CACHE_NAME).then((cache) => cache.put(request, clone))
         }

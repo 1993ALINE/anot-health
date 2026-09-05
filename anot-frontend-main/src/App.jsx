@@ -142,7 +142,9 @@ function App() {
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/service-worker.js').catch((err) => {
+      navigator.serviceWorker.register('/service-worker.js').then((reg) => {
+        reg.update().catch(() => {})
+      }).catch((err) => {
         console.warn('[App] Service worker registration failed:', err?.message || 'unknown')
       })
     }

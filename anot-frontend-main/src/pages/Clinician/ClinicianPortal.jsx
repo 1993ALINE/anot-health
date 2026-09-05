@@ -970,7 +970,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
             </div>
             <div className="sm-clinician-meta">
               <span className="sm-clinician-name">{currentUser?.name || 'Doctor'}</span>
-              <span className="sm-clinician-role">{currentUser?.clinic_name || 'Anot Health • Clinical Portal'}</span>
+              <span className="sm-clinician-role">{currentUser?.specialty ? `${currentUser.specialty} • Anot Health` : 'Anot Health • Clinical Portal'}</span>
             </div>
           </div>
 

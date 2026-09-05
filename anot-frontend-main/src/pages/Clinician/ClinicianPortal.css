@@ -112,15 +112,16 @@
 .sm-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .sm-brand__logo {
-  height: 32px;
+  height: 38px;
   width: auto;
-  max-width: 36px;
+  max-width: 140px;
   object-fit: contain;
-  border-radius: 6px;
+  border-radius: 8px;
+  display: block;
 }
 
 .sm-brand__icon {

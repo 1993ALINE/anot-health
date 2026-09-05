@@ -99,7 +99,7 @@ describe('Clinician and Scribe Render Test', () => {
         </MemoryRouter>
       )
     })
-    expect(div.innerHTML).toContain('Saint Mary')
+    expect(div.innerHTML).toContain('Anot Health')
     expect(div.innerHTML).not.toContain('Something went wrong')
   })
 })
