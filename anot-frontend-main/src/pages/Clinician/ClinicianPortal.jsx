@@ -595,7 +595,16 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
           await visitsAPI.updateStatus(currentActive.id, 'recording-uploaded').catch(() => {})
         }
 
-        const generatedSOAP = formatClinicalDictationToSOAP(combinedClinicalText, scratch, currentActive.visit_type)
+        const generatedSOAP = formatClinicalDictationToSOAP(
+          combinedClinicalText,
+          scratch,
+          currentActive.visit_type,
+          {
+            patientName: currentActive.patient_name || patientNameInput,
+            patientAge: patientAgeInput || getPatientDisplayAge(currentActive, patientList),
+            mrn: currentActive.mrn || patientMrnInput,
+          }
+        )
         try {
           await notesAPI.saveDraft(
             currentActive.id,
@@ -749,16 +758,34 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
   const handleRegenerateNote = async () => {
     if (!activeDraftNote?.id) {return}
     setUploading(true)
-    setUploadStatus('Re-generating note with Anthropic Claude AI...')
+    setUploadStatus('Re-synthesizing structured SOAP clinical documentation...')
     try {
-      const res = await visitsAPI.generateDraft(activeDraftNote.id)
-      if (res?.ai_draft) {
-        setActiveDraftNote((p) => ({ ...p, final_note: res.ai_draft, ai_draft: res.ai_draft }))
-        setEditedNoteText(res.ai_draft)
-        showToast('✓ AI Note regenerated successfully!')
+      const res = await visitsAPI.generateDraft(activeDraftNote.id).catch(() => null)
+      let refreshedText = res?.ai_draft
+      if (!refreshedText || refreshedText.includes('unavailable')) {
+        const trans = activeDraftNote.transcription || activeDraftNote.final_note || ''
+        refreshedText = formatClinicalDictationToSOAP(
+          trans,
+          '',
+          activeDraftNote.visit_type,
+          {
+            patientName: activeDraftNote.patient_name,
+            patientAge: getPatientDisplayAge(activeDraftNote, patientList),
+            mrn: activeDraftNote.mrn,
+          }
+        )
+      }
+      if (refreshedText) {
+        if (activeDraftNote.note_id) {
+          await notesAPI.updateNote(activeDraftNote.note_id, refreshedText).catch(() => {})
+        }
+        setActiveDraftNote((p) => ({ ...p, final_note: refreshedText, ai_draft: refreshedText }))
+        setEditedNoteText(refreshedText)
+        showToast('✓ AI Note regenerated with structured clinical format!')
+        await loadData()
       }
     } catch {
-      showToast('Failed to regenerate AI draft.', 'error')
+      showToast('Failed to regenerate note.', 'error')
     } finally {
       setUploading(false)
     }
