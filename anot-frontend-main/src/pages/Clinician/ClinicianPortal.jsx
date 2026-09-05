@@ -49,6 +49,12 @@ const DEFAULT_MACROS = [
     content: 'PLAN:\n1. Outpatient orthopedic surgery referral ordered for advanced subspecialty evaluation.\n2. Right knee MRI without contrast ordered to assess meniscal and ligamentous status.\n3. Activity modification and avoid high-impact pivoting activities.',
   },
   {
+    id: 'm_headache',
+    name: 'Headache / Migraine Plan',
+    shortcut: '.headache',
+    content: 'PLAN:\n1. Rest in a quiet, dark, well-ventilated room; maintain adequate hydration and sleep schedule.\n2. Acetaminophen 500-1000 mg PO PRN or ibuprofen 400-600 mg PO TID with meals for acute symptom relief.\n3. Red-flag warning signs reviewed: seek emergency care for sudden severe thunderclap headache, high fever, neck stiffness, or focal neurological deficits.\n4. Clinic follow-up in 1-2 weeks or PRN.',
+  },
+  {
     id: 'm_followup',
     name: '2-Week Follow-up',
     shortcut: '.followup',
@@ -143,13 +149,30 @@ function getPatientDisplayAge(visitOrPatient, patientList = []) {
   return '36 yrs'
 }
 
+export function getLocalDateStr(d = new Date()) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+export function isCompletedVisit(v) {
+  if (!v) return false
+  return (
+    v.status === 'completed' ||
+    v.status === 'uploaded' ||
+    v.note_status === 'uploaded' ||
+    Boolean(v.locked_at)
+  )
+}
+
 export default function ClinicianPortal({ currentUser, onLogout }) {
   const [tab, setTab] = useState('ambient') // 'ambient' | 'history'
   const [visits, setVisits] = useState([])
   const [patientList, setPatientList] = useState([])
   const [toast, setToast] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
-  const [scheduleFilter, setScheduleFilter] = useState('all') // 'all' | 'ready' | 'draft' | 'upcoming'
+  const [scheduleFilter, setScheduleFilter] = useState('all') // 'all' | 'pending' | 'ready' | 'draft'
 
   // Selected Patient for next/active encounter
   const [selectedPatientIdForEncounter, setSelectedPatientIdForEncounter] = useState('')
@@ -222,34 +245,54 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
 
   const loadData = useCallback(async () => {
     try {
-      const today = new Date().toISOString().slice(0, 10)
+      const today = getLocalDateStr()
       const [vRes, pRes] = await Promise.all([
-        visitsAPI.getByDate(today).catch(() => ({ visits: [] })),
-        patientsAPI.getAll().catch(() => ({ patients: [] })),
+        visitsAPI.getByDate(today).catch(() => null),
+        patientsAPI.getAll().catch(() => null),
       ])
 
-      const fetchedVisits = vRes?.visits || []
-      const fetchedPatients = pRes?.patients || []
-
-      setVisits(fetchedVisits)
-      setPatientList(fetchedPatients)
-
-      if (activeDraftNote) {
-        const found = fetchedVisits.find((v) => v.id === activeDraftNote.id)
-        if (found && (found.final_note || found.ai_draft)) {
-          setActiveDraftNote((prev) => ({
-            ...prev,
-            final_note: found.final_note || found.ai_draft || prev.final_note,
-            ai_draft: found.ai_draft || prev.ai_draft,
-            status: found.status || prev.status,
-          }))
+      let fetchedVisits = null
+      if (Array.isArray(vRes?.visits) && vRes.visits.length > 0) {
+        fetchedVisits = vRes.visits
+      } else {
+        // Fallback: If no visits strictly match today's date or getByDate returned null/empty,
+        // query all visits for clinician so schedule never empties
+        const allRes = await visitsAPI.getAll().catch(() => null)
+        if (Array.isArray(allRes?.visits) && allRes.visits.length > 0) {
+          fetchedVisits = allRes.visits
+        } else if (Array.isArray(vRes?.visits)) {
+          fetchedVisits = vRes.visits
         }
       }
-      return fetchedVisits
+
+      if (fetchedVisits) {
+        setVisits((prev) => (fetchedVisits.length > 0 ? fetchedVisits : (prev.length > 0 ? prev : fetchedVisits)))
+      }
+
+      if (Array.isArray(pRes?.patients)) {
+        setPatientList(pRes.patients)
+      }
+
+      if (fetchedVisits) {
+        setActiveDraftNote((prev) => {
+          if (!prev) {return null}
+          const found = fetchedVisits.find((v) => v.id === prev.id)
+          if (found && (found.final_note || found.ai_draft)) {
+            return {
+              ...prev,
+              final_note: found.final_note || found.ai_draft || prev.final_note,
+              ai_draft: found.ai_draft || prev.ai_draft,
+              status: found.status || prev.status,
+            }
+          }
+          return prev
+        })
+      }
+      return fetchedVisits || []
     } catch {
       return []
     }
-  }, [activeDraftNote])
+  }, [])
 
   useEffect(() => {
     let mounted = true
@@ -264,6 +307,17 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
       clearInterval(id)
     }
   }, [loadData])
+
+  useEffect(() => {
+    const handleSessionExpired = (e) => {
+      const msg = e.detail?.message || 'Your session has ended. Please sign in again.'
+      showToast(msg, 'error')
+    }
+    window.addEventListener('anot:session-expired', handleSessionExpired)
+    return () => {
+      window.removeEventListener('anot:session-expired', handleSessionExpired)
+    }
+  }, [showToast])
 
   useEffect(() => {
     return () => {
@@ -502,7 +556,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
       if (!visitId) {
         const vRes = await visitsAPI.create({
           patient_id: patientId || undefined,
-          visit_date: now.toISOString().slice(0, 10),
+          visit_date: getLocalDateStr(now),
           visit_time: timeStr,
           visit_type: dbVisitType,
         })
@@ -517,7 +571,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
         patient_name: patientName,
         mrn: patientMrn,
         age: patientAge,
-        visit_date: now.toISOString().slice(0, 10),
+        visit_date: getLocalDateStr(now),
         visit_time: timeStr,
         visit_type: dbVisitType,
         status: 'in-progress',
@@ -609,7 +663,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
           await notesAPI.saveDraft(
             currentActive.id,
             generatedSOAP,
-            capturedSpeech || combinedClinicalText,
+            combinedClinicalText || capturedSpeech,
             generatedSOAP
           )
           const nRes = await notesAPI.getByVisit(currentActive.id)
@@ -628,7 +682,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
             visit_time: currentActive.visit_time,
             final_note: generatedSOAP,
             ai_draft: generatedSOAP,
-            transcription: capturedSpeech || combinedClinicalText,
+            transcription: combinedClinicalText || capturedSpeech,
             status: 'draft',
             duration: durationFormatted,
           }
@@ -640,7 +694,12 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
 
           // Background Claude enhancement
           visitsAPI.generateDraft(currentActive.id).then(async (dRes) => {
-            if (dRes?.ai_draft && !dRes.ai_draft.includes('unavailable')) {
+            const isUnavailable = !dRes?.ai_draft || dRes.ai_draft.includes('unavailable')
+            const isGenericDegrade = dRes?.ai_draft &&
+              (dRes.ai_draft.includes('Clinical Consultation and Evaluation') || dRes.ai_draft.includes('Clinical Consultation')) &&
+              (generatedSOAP.includes('Headache') || generatedSOAP.includes('migraine') || generatedSOAP.includes('Knee') || generatedSOAP.includes('VITAL SIGNS:'))
+
+            if (dRes?.ai_draft && !isUnavailable && !isGenericDegrade) {
               const refreshedNote = dRes.ai_draft
               if (nRes?.note?.id) {
                 await notesAPI.updateNote(nRes.note.id, refreshedNote).catch(() => {})
@@ -746,10 +805,37 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
       // Call the official clinician lock endpoint POST /api/visits/:id/lock-note
       await visitsAPI.lockNote(target.id)
       showToast('✓ Note locked & signed by clinician!')
+
       if (activeDraftNote && activeDraftNote.id === target.id) {
-        setActiveDraftNote((prev) => ({ ...prev, status: 'uploaded' }))
+        setActiveDraftNote((prev) => ({ ...prev, status: 'uploaded', locked_at: new Date().toISOString() }))
       }
-      await loadData()
+
+      const freshVisits = await loadData()
+      const allVisits = Array.isArray(freshVisits) && freshVisits.length > 0 ? freshVisits : visits
+
+      // Reset filter to 'all' so signed encounters are visible in schedule
+      setScheduleFilter('all')
+
+      // Filter remaining pending visits (not completed/signed)
+      const remainingPending = allVisits.filter(
+        (v) => String(v.id) !== String(target.id) && !isCompletedVisit(v)
+      )
+
+      if (remainingPending.length > 0) {
+        const nextPatient = remainingPending[0]
+        showToast(`Next encounter ready: ${nextPatient.patient_name || 'Patient'}`)
+        await handleSelectVisitFromSchedule(nextPatient)
+      } else {
+        setSelectedPatientIdForEncounter('')
+        setPatientNameInput('')
+        setPatientMrnInput('')
+        setPatientAgeInput('')
+        setActiveDraftNote(null)
+        setIsEditingNote(false)
+        setEditedNoteText('')
+        setDictationNotes('')
+        setTab('ambient')
+      }
     } catch (err) {
       showToast(err?.message || 'Failed to lock note.', 'error')
     }
@@ -761,8 +847,12 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
     setUploadStatus('Re-synthesizing structured SOAP clinical documentation...')
     try {
       const res = await visitsAPI.generateDraft(activeDraftNote.id).catch(() => null)
-      let refreshedText = res?.ai_draft
-      if (!refreshedText || refreshedText.includes('unavailable')) {
+      const isGenericConsult = refreshedText &&
+        (refreshedText.includes('Clinical Consultation and Evaluation') || refreshedText.includes('Clinical Consultation')) &&
+        (String(activeDraftNote.transcription || activeDraftNote.final_note || '').toLowerCase().includes('headache') ||
+         String(activeDraftNote.transcription || activeDraftNote.final_note || '').toLowerCase().includes('knee'))
+
+      if (!refreshedText || refreshedText.includes('unavailable') || isGenericConsult) {
         const trans = activeDraftNote.transcription || activeDraftNote.final_note || ''
         refreshedText = formatClinicalDictationToSOAP(
           trans,
@@ -881,6 +971,12 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
       return
     }
 
+    // Immediately purge previous encounter note, editing state, and scratchpad
+    setActiveDraftNote(null)
+    setIsEditingNote(false)
+    setEditedNoteText('')
+    setDictationNotes('')
+
     const pAge = getPatientDisplayAge(visit, patientList)
     setSelectedPatientIdForEncounter(`visit-${visit.id}`)
     setPatientNameInput(visit.patient_name || '')
@@ -913,13 +1009,17 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
         setSelectedAssignPatientId(visit.patient_id ? String(visit.patient_id) : '')
         setRecordedDuration(visit.duration_seconds ? fmtTime(visit.duration_seconds) : '04:12')
       } else {
-        // Pending / Scheduled visit: stay on Idle recording view, ready to record!
+        // Pending / Scheduled visit: stay on clean Idle recording view, ready to record!
         setActiveDraftNote(null)
+        setEditedNoteText('')
+        setDictationNotes('')
         showToast(`✓ Selected ${visit.patient_name || 'Patient'} · Ready to record!`)
       }
       setTab('ambient')
     } catch {
       setActiveDraftNote(null)
+      setEditedNoteText('')
+      setDictationNotes('')
       setTab('ambient')
       showToast(`✓ Selected ${visit.patient_name || 'Patient'} · Ready to record!`)
     }
@@ -957,7 +1057,8 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
   // Filter today's visits list
   const filteredVisits = visits.filter((v) => {
     const hasNote = Boolean(v.final_note || v.ai_draft)
-    const isCompleted = v.status === 'completed' || v.status === 'uploaded' || v.note_status === 'uploaded' || Boolean(v.locked_at)
+    const isCompleted = isCompletedVisit(v)
+    if (scheduleFilter === 'pending' && isCompleted) {return false}
     if (scheduleFilter === 'ready' && !(isCompleted || (hasNote && v.status === 'ready'))) {return false}
     if (scheduleFilter === 'draft' && !(hasNote && !isCompleted)) {return false}
     if (scheduleFilter === 'upcoming' && (hasNote || isCompleted)) {return false}
@@ -1299,6 +1400,21 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                       onClick={() => {
                         setActiveDraftNote(null)
                         setIsEditingNote(false)
+                        setEditedNoteText('')
+                        const currentId = selectedPatientIdForEncounter.replace('visit-', '')
+                        const currVisit = visits.find((v) => String(v.id) === String(currentId))
+                        if (currVisit && isCompletedVisit(currVisit)) {
+                          const nextPending = visits.find((v) => String(v.id) !== String(currVisit.id) && !isCompletedVisit(v))
+                          if (nextPending) {
+                            handleSelectVisitFromSchedule(nextPending)
+                          } else {
+                            setSelectedPatientIdForEncounter('')
+                            setPatientNameInput('')
+                            setPatientMrnInput('')
+                            setPatientAgeInput('')
+                            setDictationNotes('')
+                          }
+                        }
                       }}
                       title="Return to Ready to Record"
                     >
@@ -1323,7 +1439,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                         <div className="sm-patient-name-row">
                           <h2 className="sm-patient-name-title">{activeDraftNote?.patient_name || 'Patient'}</h2>
                           {(() => {
-                            const isNoteSigned = activeDraftNote?.status === 'completed' || activeDraftNote?.status === 'uploaded' || activeDraftNote?.note_status === 'uploaded' || Boolean(activeDraftNote?.locked_at)
+                            const isNoteSigned = isCompletedVisit(activeDraftNote)
                             return (
                               <span className={`sm-patient-status-chip ${isNoteSigned ? 'sm-patient-status-chip--signed' : 'sm-patient-status-chip--draft'}`}>
                                 {isNoteSigned ? '🔒 Signed & Locked' : 'Draft Note'}
@@ -1338,7 +1454,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                           <span className="sm-meta-divider">•</span>
                           <span className="sm-meta-item"><strong>Encounter:</strong> {activeDraftNote?.visit_type || selectedTemplate}</span>
                           <span className="sm-meta-divider">•</span>
-                          <span className="sm-meta-item"><strong>Date:</strong> {activeDraftNote?.visit_date || new Date().toISOString().slice(0, 10)}</span>
+                          <span className="sm-meta-item"><strong>Date:</strong> {activeDraftNote?.visit_date || getLocalDateStr()}</span>
                         </div>
                       </div>
                     </div>
@@ -1353,7 +1469,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                       </button>
 
                       {(() => {
-                        const isNoteSigned = activeDraftNote?.status === 'completed' || activeDraftNote?.status === 'uploaded' || activeDraftNote?.note_status === 'uploaded' || Boolean(activeDraftNote?.locked_at)
+                        const isNoteSigned = isCompletedVisit(activeDraftNote)
                         return (
                           <>
                             <button
@@ -1384,7 +1500,16 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                         onClick={() => {
                           setActiveDraftNote(null)
                           setIsEditingNote(false)
-                          handleStartInstantDictation()
+                          setEditedNoteText('')
+                          setDictationNotes('')
+                          setSelectedPatientIdForEncounter('')
+                          setPatientNameInput('')
+                          setPatientMrnInput('')
+                          setPatientAgeInput('')
+                          const nextPending = visits.find((v) => !isCompletedVisit(v))
+                          if (nextPending) {
+                            handleSelectVisitFromSchedule(nextPending)
+                          }
                         }}
                         title="Start another patient consultation"
                       >
@@ -1508,10 +1633,17 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                 </button>
                 <button
                   type="button"
+                  className={`sm-filter-pill ${scheduleFilter === 'pending' ? 'sm-filter-pill--active' : ''}`}
+                  onClick={() => setScheduleFilter('pending')}
+                >
+                  Pending
+                </button>
+                <button
+                  type="button"
                   className={`sm-filter-pill ${scheduleFilter === 'ready' ? 'sm-filter-pill--active' : ''}`}
                   onClick={() => setScheduleFilter('ready')}
                 >
-                  Ready
+                  Signed
                 </button>
                 <button
                   type="button"
@@ -1525,17 +1657,33 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
 
             <div className="sm-visits-container">
               {filteredVisits.length === 0 ? (
-                <div className="sm-empty-state">No scheduled encounters matching filter</div>
+                <div className="sm-empty-state">
+                  <p>No scheduled encounters matching filter</p>
+                  {scheduleFilter !== 'all' && (
+                    <button
+                      type="button"
+                      className="sm-btn-mini-chip"
+                      style={{ marginTop: 8 }}
+                      onClick={() => setScheduleFilter('all')}
+                    >
+                      Show All Visits ({visits.length})
+                    </button>
+                  )}
+                </div>
               ) : (
                 filteredVisits.map((v) => {
                   const hasNote = Boolean(v.final_note || v.ai_draft)
-                  const isCompleted = v.status === 'completed' || v.status === 'uploaded' || v.note_status === 'uploaded' || Boolean(v.locked_at)
+                  const isCompleted = isCompletedVisit(v)
                   const isSelected = selectedPatientIdForEncounter === `visit-${v.id}` || activeDraftNote?.id === v.id || activeVisit?.id === v.id
                   let dotColor = '#CBD5E1'
                   let badgeText = v.visit_time || '10:00'
                   let badgeType = 'time'
 
-                  if (isCompleted || (hasNote && v.status === 'ready')) {
+                  if (isCompleted) {
+                    dotColor = '#10B981'
+                    badgeText = 'SIGNED'
+                    badgeType = 'signed'
+                  } else if (hasNote && v.status === 'ready') {
                     dotColor = '#10B981'
                     badgeText = 'READY'
                     badgeType = 'ready'
@@ -1563,6 +1711,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
 
                       <div className="sm-visit-item__right">
                         {isSelected && <span className="sm-tag sm-tag--selected">ACTIVE</span>}
+                        {badgeType === 'signed' && <span className="sm-tag sm-tag--ready">SIGNED</span>}
                         {badgeType === 'ready' && <span className="sm-tag sm-tag--ready">READY</span>}
                         {badgeType === 'draft' && <span className="sm-tag sm-tag--draft">DRAFT</span>}
                         {badgeType === 'time' && <span className="sm-tag sm-tag--time">{badgeText}</span>}
@@ -1635,6 +1784,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
           onClose={() => setScheduleModalOpen(false)}
           onVisitCreated={handleAfterVisitCreated}
           showToast={showToast}
+          onLogout={onLogout}
         />
       )}
 
@@ -1665,12 +1815,13 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
  * ScheduleVisitModal
  * Allows clinicians to quickly schedule an encounter for Today with an existing or new patient
  */
-function ScheduleVisitModal({ isOpen, onClose, patientList, onVisitCreated, showToast }) {
+function ScheduleVisitModal({ isOpen, onClose, patientList, onVisitCreated, showToast, onLogout }) {
   const [patientMode, setPatientMode] = useState('existing')
   const [selectedPatientId, setSelectedPatientId] = useState(patientList[0]?.id ? String(patientList[0].id) : '')
   const [newName, setNewName] = useState('')
   const [newAge, setNewAge] = useState('')
   const [newMrn, setNewMrn] = useState('')
+  const [modalError, setModalError] = useState(null)
   const [visitTime, setVisitTime] = useState(() => {
     const now = new Date()
     return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
@@ -1682,6 +1833,7 @@ function ScheduleVisitModal({ isOpen, onClose, patientList, onVisitCreated, show
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    setModalError(null)
     setSubmitting(true)
     try {
       let patientId = selectedPatientId
@@ -1703,7 +1855,7 @@ function ScheduleVisitModal({ isOpen, onClose, patientList, onVisitCreated, show
         patientId = pRes?.patient?.id
       }
 
-      const today = new Date().toISOString().slice(0, 10)
+      const today = getLocalDateStr()
       const dbVisitType = normalizeVisitTypeForDb(visitType)
       const vRes = await visitsAPI.create({
         patient_id: patientId || undefined,
@@ -1718,7 +1870,14 @@ function ScheduleVisitModal({ isOpen, onClose, patientList, onVisitCreated, show
       }
       onClose()
     } catch (err) {
-      showToast(err?.message || 'Failed to schedule visit', 'error')
+      const isAuthErr = err?.status === 401 || err?.code === 'SESSION_TERMINATED'
+      const msg = err?.message || (isAuthErr ? 'Session expired. Please sign in again.' : 'Failed to schedule visit')
+      setModalError(msg)
+      if (isAuthErr) {
+        showToast(msg, 'error')
+      } else {
+        showToast(msg, 'error')
+      }
     } finally {
       setSubmitting(false)
     }
@@ -1739,6 +1898,31 @@ function ScheduleVisitModal({ isOpen, onClose, patientList, onVisitCreated, show
 
         <form onSubmit={handleSubmit} className="sm-schedule-form">
           <div className="sm-schedule-form-body">
+            {modalError && (
+              <div className="sm-modal-error-banner" role="alert">
+                <span>⚠️ {modalError}</span>
+                {(modalError.toLowerCase().includes('session') ||
+                  modalError.toLowerCase().includes('device') ||
+                  modalError.toLowerCase().includes('sign in') ||
+                  modalError.toLowerCase().includes('authorized') ||
+                  modalError.toLowerCase().includes('authenticat')) && (
+                  <a
+                    href="/login"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      if (onLogout) {
+                        onLogout()
+                      } else {
+                        globalThis.location.replace('/login')
+                      }
+                    }}
+                  >
+                    Sign In Again →
+                  </a>
+                )}
+              </div>
+            )}
+
             {/* Patient Mode Selection */}
             <div className="sm-form-group">
               <label className="sm-form-label">Patient Option</label>
@@ -1746,14 +1930,20 @@ function ScheduleVisitModal({ isOpen, onClose, patientList, onVisitCreated, show
                 <button
                   type="button"
                   className={`sm-segmented-btn ${patientMode === 'existing' ? 'sm-segmented-btn--active' : ''}`}
-                  onClick={() => setPatientMode('existing')}
+                  onClick={() => {
+                    setPatientMode('existing')
+                    setModalError(null)
+                  }}
                 >
                   👥 Registered Patient
                 </button>
                 <button
                   type="button"
                   className={`sm-segmented-btn ${patientMode === 'new' ? 'sm-segmented-btn--active' : ''}`}
-                  onClick={() => setPatientMode('new')}
+                  onClick={() => {
+                    setPatientMode('new')
+                    setModalError(null)
+                  }}
                 >
                   ➕ New Patient
                 </button>
@@ -1766,7 +1956,10 @@ function ScheduleVisitModal({ isOpen, onClose, patientList, onVisitCreated, show
                 <select
                   className="sm-form-select"
                   value={selectedPatientId}
-                  onChange={(e) => setSelectedPatientId(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedPatientId(e.target.value)
+                    setModalError(null)
+                  }}
                   required
                 >
                   {patientList.length === 0 && <option value="">No patients found</option>}
@@ -1786,7 +1979,10 @@ function ScheduleVisitModal({ isOpen, onClose, patientList, onVisitCreated, show
                     className="sm-form-input"
                     placeholder="e.g. Eleanor Vance"
                     value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
+                    onChange={(e) => {
+                      setNewName(e.target.value)
+                      setModalError(null)
+                    }}
                     required
                   />
                 </div>
@@ -1797,7 +1993,10 @@ function ScheduleVisitModal({ isOpen, onClose, patientList, onVisitCreated, show
                     className="sm-form-input"
                     placeholder="e.g. 52 yrs"
                     value={newAge}
-                    onChange={(e) => setNewAge(e.target.value)}
+                    onChange={(e) => {
+                      setNewAge(e.target.value)
+                      setModalError(null)
+                    }}
                   />
                 </div>
                 <div className="sm-form-group">
@@ -1807,7 +2006,10 @@ function ScheduleVisitModal({ isOpen, onClose, patientList, onVisitCreated, show
                     className="sm-form-input"
                     placeholder="e.g. MRN-948123"
                     value={newMrn}
-                    onChange={(e) => setNewMrn(e.target.value)}
+                    onChange={(e) => {
+                      setNewMrn(e.target.value)
+                      setModalError(null)
+                    }}
                   />
                 </div>
               </div>
@@ -1820,7 +2022,10 @@ function ScheduleVisitModal({ isOpen, onClose, patientList, onVisitCreated, show
                   type="time"
                   className="sm-form-input"
                   value={visitTime}
-                  onChange={(e) => setVisitTime(e.target.value)}
+                  onChange={(e) => {
+                    setVisitTime(e.target.value)
+                    setModalError(null)
+                  }}
                   required
                 />
               </div>
@@ -1830,7 +2035,10 @@ function ScheduleVisitModal({ isOpen, onClose, patientList, onVisitCreated, show
                 <select
                   className="sm-form-select"
                   value={visitType}
-                  onChange={(e) => setVisitType(e.target.value)}
+                  onChange={(e) => {
+                    setVisitType(e.target.value)
+                    setModalError(null)
+                  }}
                 >
                   {CLINICAL_TEMPLATES.map((t) => (
                     <option key={t.id} value={t.label}>

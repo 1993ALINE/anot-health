@@ -350,10 +350,83 @@
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset, 0 14px 32px rgba(15, 23, 42, 0.14);
 }
 
-.login-page__chip svg {
-  flex-shrink: 0;
-  color: #e0e7ff;
-  opacity: 0.95;
+/* Dual-Jurisdiction Showcase Cards in Hero */
+.login-page__dual-jurisdiction {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--lp-space-sm);
+  margin: var(--lp-space-md) 0 var(--lp-space-lg);
+}
+
+.login-page__market-card {
+  display: flex;
+  flex-direction: column;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  user-select: none;
+}
+
+.login-page__market-card:hover {
+  transform: translateY(-2px);
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.45);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.14);
+}
+
+.login-page__market-card--selected {
+  background: rgba(255, 255, 255, 0.24);
+  border-color: #ffffff;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.5), 0 10px 28px rgba(15, 23, 42, 0.18);
+}
+
+.login-page__market-head {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 0.35rem;
+}
+
+.login-page__market-flag-lg {
+  font-size: 1.45rem;
+  line-height: 1;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15));
+}
+
+.login-page__market-meta {
+  display: flex;
+  flex-direction: column;
+}
+
+.login-page__market-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #ffffff;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.login-page__market-sub {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.88);
+  letter-spacing: 0.02em;
+}
+
+.login-page__market-details {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.75);
+  letter-spacing: 0.01em;
+  margin-top: 0.25rem;
+  line-height: 1.35;
 }
 
 .login-page__hero-foot {
@@ -441,6 +514,59 @@
   margin: 0;
   max-width: 100%;
   text-wrap: pretty;
+}
+
+/* Regional Jurisdiction Selector in Form Card */
+.login-page__country-selector {
+  margin-bottom: var(--lp-space-md);
+}
+
+.login-page__country-tabs {
+  display: flex;
+  background: #f1f5f9;
+  border-radius: 12px;
+  padding: 4px;
+  gap: 4px;
+  border: 1px solid #e2e8f0;
+}
+
+.login-page__country-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #64748b;
+  border-radius: 9px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+}
+
+.login-page__country-tab:hover:not(.login-page__country-tab--active) {
+  color: #1e293b;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.login-page__country-tab--active {
+  color: #0f172a;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1), 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.login-page__country-tab-flag {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.login-page__country-tab-icon {
+  font-size: 0.95rem;
+  line-height: 1;
 }
 
 .login-page__hint {
@@ -619,6 +745,38 @@
   transform: none;
 }
 
+/* Security Trust Badges Row */
+.login-page__trust-badges {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.85rem;
+  margin-top: var(--lp-space-md);
+  padding: 0.55rem 0.85rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.login-page__trust-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #475569;
+  letter-spacing: 0.01em;
+}
+
+.login-page__trust-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+}
+
 .login-page__footer {
   text-align: center;
   margin-top: var(--lp-space-lg);
@@ -689,6 +847,10 @@
 
   .login-page__chips {
     justify-content: center;
+  }
+
+  .login-page__dual-jurisdiction {
+    grid-template-columns: 1fr;
   }
 
   .login-page__hero-foot {

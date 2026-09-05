@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'anot-v8'
+const CACHE_NAME = 'anot-v9'
 const PRECACHE_URLS = ['/favicon.png', '/brand/anot-logo.png']
 
 self.addEventListener('install', (event) => {

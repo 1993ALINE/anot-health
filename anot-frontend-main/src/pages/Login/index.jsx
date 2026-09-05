@@ -216,6 +216,13 @@ export default function Login() {
   const [phiTrainingToken, setPhiTrainingToken] = useState(null)
   const [passwordChangeToken, setPasswordChangeToken] = useState(null)
   const [csrfTokenFetched, setCsrfTokenFetched] = useState(false)
+  const [region, setRegion] = useState(() => {
+    try {
+      return localStorage.getItem('anot_selected_jurisdiction') || 'both'
+    } catch {
+      return 'both'
+    }
+  })
   const csrfReady = phase === 'form' && csrfTokenFetched
   const reducedMotion = usePrefersReducedMotion()
 
@@ -358,30 +365,76 @@ export default function Login() {
         <div className="login-page__grid">
           <header className="login-page__hero">
             <div className="login-page__panel-inner">
-              <TypewriterLine text={branding.system_description || HERO_PRODUCT} className="login-page__product login-page__product--hero" reducedMotion={reducedMotion} />
+              <TypewriterLine text={branding.system_description || 'Clinical documentation platform · US & Canada'} className="login-page__product login-page__product--hero" reducedMotion={reducedMotion} />
 
               <AnimatedHeadline text={HERO_HEADLINE} reduced={reducedMotion} />
               <p className="login-page__lede">
-                A secure workspace for physicians, scribes, quality teams, and staff — intelligent notes, visit audio, and
-                role-aware dashboards in one place.
+                A secure ambient AI workspace crafted for American and Canadian clinicians — intelligent clinical notes, visit audio, and EMR/EHR charting in one place.
               </p>
 
+              {/* Dual-Jurisdiction Showcase Cards */}
+              <div className="login-page__dual-jurisdiction">
+                <div 
+                  className={`login-page__market-card ${region === 'us' ? 'login-page__market-card--selected' : ''}`}
+                  onClick={() => {
+                    setRegion('us')
+                    try { localStorage.setItem('anot_selected_jurisdiction', 'us') } catch {}
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  title="Click to select US healthcare mode"
+                >
+                  <div className="login-page__market-head">
+                    <span className="login-page__market-flag-lg" aria-hidden="true">🇺🇸</span>
+                    <div className="login-page__market-meta">
+                      <div className="login-page__market-title">United States</div>
+                      <div className="login-page__market-sub">HIPAA &amp; HITECH Safeguards</div>
+                    </div>
+                  </div>
+                  <div className="login-page__market-details">
+                    ICD-10-CM Coding · 1-Click EHR Export
+                  </div>
+                </div>
+
+                <div 
+                  className={`login-page__market-card ${region === 'ca' ? 'login-page__market-card--selected' : ''}`}
+                  onClick={() => {
+                    setRegion('ca')
+                    try { localStorage.setItem('anot_selected_jurisdiction', 'ca') } catch {}
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  title="Click to select Canadian healthcare mode"
+                >
+                  <div className="login-page__market-head">
+                    <span className="login-page__market-flag-lg" aria-hidden="true">🇨🇦</span>
+                    <div className="login-page__market-meta">
+                      <div className="login-page__market-title">Canada</div>
+                      <div className="login-page__market-sub">PIPEDA &amp; PHIPA Safeguards</div>
+                    </div>
+                  </div>
+                  <div className="login-page__market-details">
+                    ICD-10-CA Coding · 1-Click EMR Export
+                  </div>
+                </div>
+              </div>
+
               <div className="login-page__chips">
-                <span className="login-page__chip">
+                <span className="login-page__chip" title="HIPAA (US) & PIPEDA / PHIPA (Canada) Compliant">
                   <IconShield />
-                  HIPAA-minded access
+                  HIPAA &amp; PIPEDA / PHIPA
                 </span>
                 <span className="login-page__chip">
                   <IconPulse />
-                  Real-time workflows
+                  Real-time ambient scribing
                 </span>
                 <span className="login-page__chip">
                   <IconUsers />
-                  Built for care teams
+                  Built for US &amp; Canadian care teams
                 </span>
               </div>
 
-              <p className="login-page__hero-foot">© {new Date().getFullYear()} {branding.system_name || 'Anot'} · Clinical documentation</p>
+              <p className="login-page__hero-foot">© {new Date().getFullYear()} {branding.system_name || 'Anot'} · Clinical documentation · United States &amp; Canada</p>
             </div>
           </header>
 
@@ -403,14 +456,71 @@ export default function Login() {
                   </p>
                 </div>
 
-                <p className="login-page__hint">
-                  <strong className="login-page__hint-label">Tip:</strong> Accounts and roles are managed by your administrator.
-                </p>
+                {/* Regional Jurisdiction Toggle */}
+                <div className="login-page__country-selector">
+                  <div className="login-page__country-tabs" role="tablist" aria-label="Healthcare Jurisdiction">
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={region === 'both'}
+                      className={`login-page__country-tab ${region === 'both' ? 'login-page__country-tab--active' : ''}`}
+                      onClick={() => {
+                        setRegion('both')
+                        try { localStorage.setItem('anot_selected_jurisdiction', 'both') } catch {}
+                      }}
+                    >
+                      <span className="login-page__country-tab-icon">🌐</span>
+                      <span>All Clinicians</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={region === 'us'}
+                      className={`login-page__country-tab ${region === 'us' ? 'login-page__country-tab--active' : ''}`}
+                      onClick={() => {
+                        setRegion('us')
+                        try { localStorage.setItem('anot_selected_jurisdiction', 'us') } catch {}
+                      }}
+                    >
+                      <span className="login-page__country-tab-flag">🇺🇸</span>
+                      <span>United States</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={region === 'ca'}
+                      className={`login-page__country-tab ${region === 'ca' ? 'login-page__country-tab--active' : ''}`}
+                      onClick={() => {
+                        setRegion('ca')
+                        try { localStorage.setItem('anot_selected_jurisdiction', 'ca') } catch {}
+                      }}
+                    >
+                      <span className="login-page__country-tab-flag">🇨🇦</span>
+                      <span>Canada</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="login-page__hint">
+                  {region === 'ca' ? (
+                    <span>
+                      <strong className="login-page__hint-label">🇨🇦 Canadian Practice:</strong> Compliant with PIPEDA, Ontario PHIPA, Alberta HIA, and BC PIPA. 1-click note export to your clinic&apos;s EMR.
+                    </span>
+                  ) : region === 'us' ? (
+                    <span>
+                      <strong className="login-page__hint-label">🇺🇸 US Practice:</strong> Compliant with HIPAA &amp; HITECH standards under signed BAA. 1-click note export to your clinic&apos;s EHR.
+                    </span>
+                  ) : (
+                    <span>
+                      <strong className="login-page__hint-label">🇺🇸 🇨🇦 US &amp; Canada:</strong> Dual-jurisdiction clinical platform. Formats notes for easy 1-click transfer to any EHR or EMR.
+                    </span>
+                  )}
+                </div>
 
                 <form onSubmit={handleLogin} noValidate aria-busy={loading}>
                   <div className="login-page__field">
                     <label className="login-page__label" htmlFor="login-email">
-                      Work email
+                      {region === 'ca' ? 'Work email (Health Authority / Clinic)' : region === 'us' ? 'Work email (Hospital / Health System)' : 'Work email'}
                     </label>
                     <div className="login-page__input-wrap">
                       <span className="login-page__input-icon">
@@ -420,7 +530,13 @@ export default function Login() {
                         id="login-email"
                         className="login-page__input"
                         type="email"
-                        placeholder="you@healthsystem.org"
+                        placeholder={
+                          region === 'ca'
+                            ? 'you@healthauthority.ca or you@clinic.ca'
+                            : region === 'us'
+                            ? 'you@healthsystem.org or you@hospital.edu'
+                            : 'you@healthsystem.org or you@healthauthority.ca'
+                        }
                         value={email}
                         onChange={(e) => {
                           setEmail(e.target.value)
@@ -488,6 +604,22 @@ export default function Login() {
                     </button>
                   )}
                 </form>
+
+                {/* Trust Badges */}
+                <div className="login-page__trust-badges">
+                  <span className="login-page__trust-pill">
+                    <span className="login-page__trust-dot" />
+                    <span>🇺🇸 HIPAA BAA</span>
+                  </span>
+                  <span className="login-page__trust-pill">
+                    <span className="login-page__trust-dot" />
+                    <span>🇨🇦 PIPEDA / PHIPA</span>
+                  </span>
+                  <span className="login-page__trust-pill">
+                    <span className="login-page__trust-dot" />
+                    <span>🔒 AES-256</span>
+                  </span>
+                </div>
 
                 <p className="login-page__footer">
                   Need an account? <strong>{branding.support_contact || 'Contact your administrator'}</strong>

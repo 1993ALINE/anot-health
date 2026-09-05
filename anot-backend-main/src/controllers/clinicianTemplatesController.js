@@ -11,7 +11,7 @@ const DEFAULT_TEMPLATES = [
         color: '#E3F2FD',
         accent: '#1565C0',
         content:
-            'CHIEF COMPLAINT:\n\n\nHISTORY OF PRESENT ILLNESS (HPI):\n\n\nPAST MEDICAL HISTORY:\n\n\nFAMILY HISTORY:\n\n\nSOCIAL HISTORY:\n\n\nREVIEW OF SYSTEMS:\n\n\nPHYSICAL EXAMINATION:\n\n\nIMAGING:\n\n\nASSESSMENT & PLAN (A&P):\n',
+            'CHIEF COMPLAINT:\n\n\nHISTORY OF PRESENT ILLNESS (HPI):\n\n\nVITAL SIGNS:\n\n\nPAST MEDICAL HISTORY:\n\n\nFAMILY HISTORY:\n\n\nSOCIAL HISTORY:\n\n\nREVIEW OF SYSTEMS:\n\n\nPHYSICAL EXAMINATION:\n\n\nIMAGING:\n\n\nASSESSMENT & PLAN (A&P):\n',
     },
     {
         id: 'follow-up',
@@ -20,7 +20,7 @@ const DEFAULT_TEMPLATES = [
         color: '#E8F5E9',
         accent: '#2E7D32',
         content:
-            'REASON FOR VISIT:\n\n\nINTERVAL HISTORY:\n\n\nCURRENT MEDICATIONS:\n\n\nPHYSICAL EXAMINATION:\n\n\nIMAGING:\n\n\nASSESSMENT & PLAN:\n',
+            'REASON FOR VISIT:\n\n\nINTERVAL HISTORY:\n\n\nVITAL SIGNS:\n\n\nCURRENT MEDICATIONS:\n\n\nPHYSICAL EXAMINATION:\n\n\nIMAGING:\n\n\nASSESSMENT & PLAN:\n',
     },
     {
         id: 'virtual-visit',
@@ -29,7 +29,7 @@ const DEFAULT_TEMPLATES = [
         color: '#EDE9FE',
         accent: '#4527A0',
         content:
-            'CHIEF COMPLAINT:\n\n\nHISTORY OF PRESENT ILLNESS (HPI):\n\n\nREVIEW OF SYSTEMS:\n\n\nCURRENT MEDICATIONS:\n\n\nIMAGING / LAB RESULTS:\n\n\nASSESSMENT & PLAN (A&P):\n\nNOTE: This visit was conducted via telemedicine. Physical examination was not performed.\n',
+            'CHIEF COMPLAINT:\n\n\nHISTORY OF PRESENT ILLNESS (HPI):\n\n\nVITAL SIGNS:\n\n\nREVIEW OF SYSTEMS:\n\n\nCURRENT MEDICATIONS:\n\n\nIMAGING / LAB RESULTS:\n\n\nASSESSMENT & PLAN (A&P):\n\nNOTE: This visit was conducted via telemedicine. Physical examination was not performed.\n',
     },
     {
         id: 'other',
@@ -37,7 +37,7 @@ const DEFAULT_TEMPLATES = [
         icon: '📋',
         color: '#FFF8E1',
         accent: '#F57F17',
-        content: 'VISIT TYPE:\n\n\nCHIEF COMPLAINT:\n\n\nHISTORY:\n\n\nEXAMINATION:\n\n\nASSESSMENT & PLAN:\n',
+        content: 'VISIT TYPE:\n\n\nCHIEF COMPLAINT:\n\n\nVITAL SIGNS:\n\n\nHISTORY:\n\n\nEXAMINATION:\n\n\nASSESSMENT & PLAN:\n',
     },
 ]
 

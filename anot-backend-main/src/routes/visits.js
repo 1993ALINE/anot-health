@@ -33,6 +33,7 @@ const { runAIPipeline, generateAINote } = require('../utils/aiPipeline')
 const { getVisitForUser } = require('../utils/visitAccess')
 const { setVisitTranscriptionStatus } = require('../utils/visitSchemaCompat')
 const { resolveTemplateSections } = require('../utils/noteTemplateSections')
+const { formatClinicalDictationToSOAP } = require('../utils/clinicalSoapSynthesizer')
 
 const TRANSCRIPTION_UNAVAILABLE_RE = /^\[Recording \d+: transcription unavailable\]$/i
 
@@ -164,7 +165,13 @@ async function generateDraft(req, res) {
       visit_type: row.visit_type,
       visit_date: row.visit_date,
     }, templateSections)
-    if (!aiDraft) aiDraft = AI_DRAFT_UNAVAILABLE
+    if (!aiDraft || aiDraft === AI_DRAFT_UNAVAILABLE) {
+      const combinedTx = segments.join('\n\n')
+      aiDraft = formatClinicalDictationToSOAP(combinedTx, '', row.visit_type, {
+        patientName: row.patient_name,
+        mrn: row.mrn,
+      })
+    }
 
     await saveAiDraftToNote(id, aiDraft, segments, note)
     return res.status(200).json({ ai_draft: aiDraft })

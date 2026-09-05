@@ -36,24 +36,26 @@ describe('extractDictatedPatientDetails', () => {
 })
 
 describe('buildAnthropicNotePrompt', () => {
-  test('falls back to the default 5-section format when no template sections are given, plus coding sections', () => {
+  test('falls back to the default format when no template sections are given, plus coding sections', () => {
     const prompt = buildAnthropicNotePrompt(patientInfo, 'transcript text')
     expect(prompt).toContain('CHIEF COMPLAINT:')
     expect(prompt).toContain('HISTORY OF PRESENT ILLNESS (HPI):')
+    expect(prompt).toContain('VITAL SIGNS:')
     expect(prompt).toContain('PHYSICAL EXAMINATION (PE):')
     expect(prompt).toContain('IMAGING:')
     expect(prompt).toContain('ASSESSMENT & PLAN (A&P):')
     expect(prompt).toContain('ICD-10 CODES:')
     expect(prompt).toContain('CPT CODES:')
-    expect(prompt).toContain('Use EXACTLY these 7 plain-text section headers')
+    expect(prompt).toContain('Use EXACTLY these 8 plain-text section headers')
   })
 
   test('falls back to the default format when given an empty template sections array', () => {
     const prompt = buildAnthropicNotePrompt(patientInfo, 'transcript text', [])
     expect(prompt).toContain('CHIEF COMPLAINT:')
+    expect(prompt).toContain('VITAL SIGNS:')
     expect(prompt).toContain('ICD-10 CODES:')
     expect(prompt).toContain('CPT CODES:')
-    expect(prompt).toContain('Use EXACTLY these 7 plain-text section headers')
+    expect(prompt).toContain('Use EXACTLY these 8 plain-text section headers')
   })
 
   test('uses the clinician template sections, in order, and appends coding sections at the end', () => {

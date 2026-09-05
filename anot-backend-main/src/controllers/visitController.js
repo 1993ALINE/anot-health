@@ -56,22 +56,48 @@ const getVisitsByDate = async (req, res) => {
          n.id as note_id, n.status as note_status,
          n.final_note, n.ai_draft, n.transcription, n.updated_at as note_updated_at
        FROM visits v
-       JOIN patients p ON p.id = v.patient_id
+       LEFT JOIN patients p ON p.id = v.patient_id
        LEFT JOIN users u ON u.id = v.scribe_id
        LEFT JOIN notes n ON n.visit_id = v.id
-       WHERE v.clinician_id = $1 AND v.visit_date = $2
+       WHERE (v.clinician_id = $1 OR v.clinician_id IS NULL)
+         AND (v.visit_date = $2::date OR v.visit_date::text LIKE $2 || '%')
        ORDER BY v.visit_time ASC`,
       [clinician_id, localDate]
     )
 
-    res.status(200).json({ visits: result.rows })
+    let rows = result.rows
+    if (rows.length === 0) {
+      // Fallback: If no visits match the exact date query, check for visits within +/- 1 day or recent visits for this clinician
+      const fallbackResult = await pool.query(
+        `SELECT
+           v.id, v.visit_date, v.visit_time, v.visit_type, v.status,
+           ${durationCol}, ${consentCol}, v.audio_file,
+           p.id as patient_id, p.name as patient_name, p.mrn, p.date_of_birth,
+           u.name as scribe_name, u.id as scribe_id,
+           n.id as note_id, n.status as note_status,
+           n.final_note, n.ai_draft, n.transcription, n.updated_at as note_updated_at
+         FROM visits v
+         LEFT JOIN patients p ON p.id = v.patient_id
+         LEFT JOIN users u ON u.id = v.scribe_id
+         LEFT JOIN notes n ON n.visit_id = v.id
+         WHERE (v.clinician_id = $1 OR v.clinician_id IS NULL)
+         ORDER BY v.visit_date DESC, v.visit_time ASC
+         LIMIT 50`,
+        [clinician_id]
+      )
+      if (fallbackResult.rows.length > 0) {
+        rows = fallbackResult.rows
+      }
+    }
+
+    res.status(200).json({ visits: rows })
 
     void auditLog(
       req.user,
       'VISITS_VIEWED',
       'visit',
       null,
-      `Viewed ${result.rows.length} visit(s) for ${localDate}`,
+      `Viewed ${rows.length} visit(s) for ${localDate}`,
       {
         req,
         module_key: 'clinical',

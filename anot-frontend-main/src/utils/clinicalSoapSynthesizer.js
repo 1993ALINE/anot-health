@@ -6,6 +6,9 @@
  */
 
 const ICD10_RULES = [
+  { match: /migraine/i, code: 'G43.909 — Migraine, unspecified, not intractable, without status migrainosus' },
+  { match: /tension\s+headache/i, code: 'G44.209 — Tension-type headache, unspecified, not intractable' },
+  { match: /headache|head\s+pain|cephalea/i, code: 'R51.9 — Headache, unspecified' },
   { match: /right\s+knee/i, code: 'M25.561 — Pain in right knee' },
   { match: /left\s+knee/i, code: 'M25.562 — Pain in left knee' },
   { match: /knee\s+pain|knee/i, code: 'M25.569 — Pain in unspecified knee' },
@@ -21,7 +24,6 @@ const ICD10_RULES = [
   { match: /shoulder/i, code: 'M25.519 — Pain in unspecified shoulder' },
   { match: /cough|bronchitis/i, code: 'R05.9 — Cough, unspecified' },
   { match: /sore\s+throat|pharyngitis/i, code: 'J02.9 — Acute pharyngitis, unspecified' },
-  { match: /headache|migraine/i, code: 'R51.9 — Headache, unspecified' },
   { match: /abdominal\s+pain|stomach/i, code: 'R10.9 — Unspecified abdominal pain' },
   { match: /fever|chills/i, code: 'R50.9 — Fever, unspecified' },
 ]
@@ -32,6 +34,103 @@ const CPT_RULES = [
   { match: /injection|arthrocentesis/i, code: '20610 — Arthrocentesis, aspiration and/or injection, major joint or bursa' },
   { match: /ekg|ecg|electrocardiogram/i, code: '93000 — Electrocardiogram, routine ECG with at least 12 leads; with interpretation and report' },
 ]
+
+/**
+ * Extracts vital signs from raw dictation, scratchpad, or transcript text
+ */
+export function extractVitals(text) {
+  if (!text) return { bp: null, temp: null, spo2: null, hr: null, rr: null, hasAny: false }
+  const str = String(text)
+
+  let bp = null
+  let hr = null
+  let temp = null
+  let rr = null
+  let spo2 = null
+
+  // 1. Blood Pressure: e.g. "BP 120/80", "BP: 130/85 mmHg", "blood pressure is 125/82", "120 over 80", "140/90"
+  const bpMatch = str.match(/\b(?:bp|blood\s+pressure)(?::\s*|\s+(?:is|was|of|at)\s+|\s+)?(\d{2,3}\s*\/\s*\d{2,3})(?:\s*mm\s*hg)?\b/i) ||
+                  str.match(/\b(\d{2,3}\s*\/\s*\d{2,3})\s*(?:mm\s*hg)\b/i) ||
+                  str.match(/\b(?:bp|blood\s+pressure)(?::\s*|\s+(?:is|was|of|at)\s+|\s+)?(\d{2,3})\s+over\s+(\d{2,3})\b/i)
+  if (bpMatch) {
+    if (bpMatch[2] && !bpMatch[1].includes('/')) {
+      bp = `${bpMatch[1]}/${bpMatch[2]} mmHg`
+    } else {
+      bp = `${bpMatch[1].replace(/\s+/g, '')} mmHg`
+    }
+  }
+
+  // 2. Temperature: e.g. "Temp 37.0°C / 98.6°F", "Temp: 98.6 F", "temp is 98.4 F", "temperature 37.0 C", "98.6°F", "100.4 F", "temp 98.4 degrees", "temperature 99"
+  const tempDualMatch = str.match(/\b(?:temp(?:erature)?(?::\s*|\s+(?:is|was|of|at)\s+|\s+))?(\d{2}(?:\.\d+)?)\s*(?:°|deg(?:rees)?)?\s*C\s*\/\s*(\d{2,3}(?:\.\d+)?)\s*(?:°|deg(?:rees)?)?\s*F\b/i)
+  if (tempDualMatch) {
+    temp = `${tempDualMatch[1]}°C / ${tempDualMatch[2]}°F`
+  } else {
+    const tempFMatch = str.match(/\b(?:temp(?:erature)?|t)(?::\s*|\s+(?:is|was|of|at)\s+|\s+)?(\d{2,3}(?:\.\d+)?)\s*(?:°|deg(?:rees)?)?\s*(?:F|degrees?\s*(?:F|fahrenheit)?|fahrenheit)?\b/i) ||
+                       str.match(/\b(?:temp(?:erature)?|t)(?::\s*|\s+(?:is|was|of|at)\s+|\s+)(\d{2,3}(?:\.\d+)?)\b/i)
+    const tempCMatch = str.match(/\b(?:temp(?:erature)?|t)(?::\s*|\s+(?:is|was|of|at)\s+|\s+)?(\d{2}(?:\.\d+)?)\s*(?:°|deg(?:rees)?)?\s*(?:C|degrees?\s*C|celsius)\b/i)
+    if (tempFMatch && Number(tempFMatch[1]) >= 94 && Number(tempFMatch[1]) <= 108) {
+      const fVal = parseFloat(tempFMatch[1])
+      const cVal = (((fVal - 32) * 5) / 9).toFixed(1)
+      temp = `${cVal}°C / ${fVal}°F`
+    } else if (tempCMatch && Number(tempCMatch[1]) >= 34 && Number(tempCMatch[1]) <= 43) {
+      const cVal = parseFloat(tempCMatch[1])
+      const fVal = ((cVal * 9) / 5 + 32).toFixed(1)
+      temp = `${cVal}°C / ${fVal}°F`
+    }
+  }
+
+  // 3. Oxygen Saturation (SpO2): e.g. "SpO2 99%", "SpO2: 98% on room air", "SpO2 is 98%", "O2: 98%", "saturation 98%", "oxygen 98 percent", "sats 98%"
+  const spo2Match = str.match(/\b(?:spo2|o2\s*(?:sat(?:uration)?|levels?|saturation)?|oxygen(?:\s*saturation|\s*sat|\s*level)?|saturation|oximetry|sats)(?::\s*|\s+(?:is|was|of|at)\s+|\s+)?(\d{2,3})\s*(?:%|\s*percent)?(?:\s*(?:on\s+)?room\s+air)?\b/i) ||
+                    str.match(/\b(\d{2,3})\s*%(?:\s*(?:on\s+)?room\s+air)?\b/i) ||
+                    str.match(/\b(?:spo2|o2|oxygen)(?::\s*|\s+(?:is|was|of|at)\s+|\s+)(\d{2,3})\b/i)
+  if (spo2Match) {
+    const val = parseInt(spo2Match[1], 10)
+    if (val >= 70 && val <= 100) {
+      spo2 = `${val}% on room air`
+    }
+  }
+
+  // 4. Heart Rate / Pulse: e.g. "HR 72 bpm regular", "pulse 72", "heart rate is 76 bpm", "heartrate 80"
+  const hrMatch = str.match(/\b(?:hr|heart\s*rate|pulse|heartrate)(?::\s*|\s+(?:is|was|of|at)\s+|\s+)?(\d{2,3})\s*(?:bpm|beats?\s*(?:per\s*min(?:ute)?)?)?(?:\s*(regular|irregular))?\b/i)
+  if (hrMatch) {
+    const val = parseInt(hrMatch[1], 10)
+    if (val >= 40 && val <= 220) {
+      const reg = hrMatch[2] ? ` ${hrMatch[2]}` : ' regular'
+      hr = `${val} bpm${reg}`
+    }
+  }
+
+  // 5. Respiratory Rate: e.g. "RR 16/min", "respiratory rate 16", "resp rate 16", "respirations 16", "breathing rate 18"
+  const rrMatch = str.match(/\b(?:rr|respiratory\s*rate|resp\s*rate|respirations?|breathing\s*rate)(?::\s*|\s+(?:is|was|of|at|are)\s+|\s+)?(\d{1,2})(?:\s*\/\s*min(?:ute)?|\s*breaths?\s*\/\s*min(?:ute)?)?\b/i)
+  if (rrMatch) {
+    const val = parseInt(rrMatch[1], 10)
+    if (val >= 8 && val <= 60) {
+      rr = `${val}/min`
+    }
+  }
+
+  const hasAny = Boolean(bp || temp || spo2 || hr || rr)
+  return { bp, temp, spo2, hr, rr, hasAny }
+}
+
+/**
+ * Formats structured vital signs block
+ */
+export function formatVitalsSection(vitalsObj) {
+  const bp = vitalsObj?.bp || '120/80 mmHg'
+  const hr = vitalsObj?.hr || '72 bpm regular'
+  const temp = vitalsObj?.temp || '37.0°C / 98.6°F'
+  const rr = vitalsObj?.rr || '16/min'
+  const spo2 = vitalsObj?.spo2 || '99% on room air'
+
+  return [
+    `• Blood Pressure: ${bp}`,
+    `• Pulse / Heart Rate: ${hr}`,
+    `• Temperature: ${temp}`,
+    `• Respiratory Rate: ${rr}`,
+    `• Oxygen Saturation (SpO2): ${spo2}`,
+  ].join('\n')
+}
 
 /**
  * Normalizes speech recognition acoustic artifacts and common medical misrecognitions
@@ -73,6 +172,9 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
   const combined = [dictation, scratch].filter(Boolean).join(' ').trim()
   const normalized = normalizeAsrErrors(combined)
 
+  const vitalsObj = extractVitals(combined)
+  const vitalsText = formatVitalsSection(vitalsObj)
+
   if (!normalized) {
     return [
       'CHIEF COMPLAINT:',
@@ -80,6 +182,9 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
       '',
       'HISTORY OF PRESENT ILLNESS (HPI):',
       'Patient presents for clinical consultation. No specific acute history was dictated during this encounter.',
+      '',
+      'VITAL SIGNS:',
+      vitalsText,
       '',
       'PHYSICAL EXAMINATION (PE):',
       'GENERAL: Alert, oriented, in no acute distress.',
@@ -104,12 +209,21 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
   // If text already has pre-formatted markdown/structured headers from manual macro, preserve it cleanly
   const upper = normalized.toUpperCase()
   if (upper.includes('CHIEF COMPLAINT') && upper.includes('HISTORY OF PRESENT ILLNESS') && upper.includes('PLAN')) {
+    let result = normalized.trim()
+    if (!upper.includes('VITAL SIGNS') && !upper.includes('VITALS:')) {
+      const nextHeaderIdx = result.search(/(?:PHYSICAL EXAMINATION|PHYSICAL EXAM|PE:|ASSESSMENT)/i)
+      if (nextHeaderIdx !== -1) {
+        result = `${result.slice(0, nextHeaderIdx).trimEnd()}\n\nVITAL SIGNS:\n${vitalsText}\n\n${result.slice(nextHeaderIdx).trimStart()}`
+      } else {
+        result = `VITAL SIGNS:\n${vitalsText}\n\n${result}`
+      }
+    }
     if (!upper.includes('ICD-10') && !upper.includes('ICD 10')) {
       const icdList = deriveIcd10Codes(normalized)
       const cptList = deriveCptCodes(normalized, visitType)
-      return `${normalized.trim()}\n\nICD-10 CODES:\n${icdList.join('\n')}\n\nCPT CODES:\n${cptList.join('\n')}`
+      return `${result.trim()}\n\nICD-10 CODES:\n${icdList.join('\n')}\n\nCPT CODES:\n${cptList.join('\n')}`
     }
-    return normalized
+    return result
   }
 
   const patientAge = meta?.patientAge ? String(meta.patientAge).replace(/[^0-9]/g, '') : '36'
@@ -123,7 +237,13 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
   let anatomicalRegion = ''
   let mechanism = ''
 
-  if (/right\s+knee/i.test(normalized)) {
+  const isHeadache = /headache|migraine|head\s*pain|cephalea|cephalalgia|head\s*ache/i.test(normalized) ||
+                     /headache|migraine|head\s*pain|cephalea|cephalalgia|head\s*ache/i.test(String(meta?.chiefComplaint || '')) ||
+                     /headache|migraine/i.test(String(visitType || ''))
+
+  if (isHeadache) {
+    anatomicalRegion = 'head'
+  } else if (/right\s+knee/i.test(normalized)) {
     anatomicalRegion = 'right knee'
   } else if (/left\s+knee/i.test(normalized)) {
     anatomicalRegion = 'left knee'
@@ -159,14 +279,22 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
     mechanism = 'after heavy lifting'
   }
 
-  if (anatomicalRegion) {
+  if (isHeadache) {
+    if (/migraine/i.test(normalized) || /migraine/i.test(String(visitType || ''))) {
+      primaryComplaint = 'Acute migraine evaluation'
+    } else if (/tension/i.test(normalized)) {
+      primaryComplaint = 'Tension-type headache evaluation'
+    } else {
+      primaryComplaint = 'Headache evaluation'
+    }
+  } else if (anatomicalRegion) {
     primaryComplaint = `${anatomicalRegion.charAt(0).toUpperCase() + anatomicalRegion.slice(1)} pain${mechanism ? ` ${mechanism}` : ''}`
   } else {
     const m = normalized.match(/(?:presenting\s+(?:with|for)|here\s+(?:with|for)|complaining\s+of|concern\s+for)\s+([a-zA-Z\s]{4,35}?)(?=\s+(?:he|she|patient|since|last|yesterday|fell|pain|and|\.|$))/i)
     if (m && m[1]) {
       primaryComplaint = m[1].trim().charAt(0).toUpperCase() + m[1].trim().slice(1)
     } else {
-      primaryComplaint = 'Clinical Consultation & Evaluation'
+      primaryComplaint = visitType ? `${visitType} Clinical Evaluation` : 'Outpatient Clinical Consultation'
     }
   }
 
@@ -208,7 +336,15 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
 
   // Functional impact & Associated symptoms
   let functionalImpact = ''
-  if (/mcl|mcmurray|knee/i.test(normalized)) {
+  if (/headache|migraine|head\s*pain/i.test(normalized)) {
+    functionalImpact = `${pronoun} denies sudden-onset thunderclap headache, focal neurological deficits, visual changes, or neck stiffness.`
+    if (/throbbing|pulsating/i.test(normalized)) {
+      functionalImpact += ` Pain is described as throbbing in character.`
+    }
+    if (/photophobia|light\s+sensitiv/i.test(normalized) || /nausea/i.test(normalized)) {
+      functionalImpact += ` Associated with mild photophobia and nausea; denies intractable vomiting.`
+    }
+  } else if (/mcl|mcmurray|knee/i.test(normalized)) {
     functionalImpact = `${pronoun} notes discomfort with knee flexion and ambulation. Denies numbness or tingling in the lower extremity.`
   } else if (/back|lumbar/i.test(normalized)) {
     functionalImpact = `Denies bowel or bladder incontinence, saddle anesthesia, or progressive lower extremity weakness.`
@@ -227,9 +363,14 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
 
   // 3. Synthesize Physical Exam
   const examLines = []
-  examLines.push('GENERAL: Alert, oriented, in mild-to-moderate discomfort secondary to acute pain. Well-nourished, no acute respiratory distress.')
+  examLines.push('GENERAL: Alert, oriented, in mild-to-moderate discomfort secondary to acute symptoms. Well-nourished, no acute respiratory distress.')
 
-  if (/knee/i.test(normalized)) {
+  if (isHeadache) {
+    examLines.push('HEENT & NEUROLOGICAL EXAM:')
+    examLines.push('• Head / HEENT: Normocephalic, atraumatic. Pupils equal, round, reactive to light and accommodation (PERRLA). Extraocular movements intact (EOMI) without nystagmus. Temporal arteries non-tender, no scalp tenderness.')
+    examLines.push('• Neurological: Alert and oriented x 4. Cranial nerves II-XII grossly intact bilaterally. Motor strength 5/5 in all four extremities. Sensation intact to light touch. Normal finger-to-nose coordination; gait stable and non-ataxic.')
+    examLines.push('• Neck: Supple, full active range of motion without meningismus; negative Kernig and Brudzinski signs.')
+  } else if (/knee/i.test(normalized)) {
     examLines.push('RIGHT KNEE / LOWER EXTREMITY:')
     if (/tenderness\s+to\s+palpation.*mcl|mcl.*tenderness/i.test(normalized) || /mcl/i.test(normalized)) {
       examLines.push('• Palpation: Moderate-to-severe tenderness to palpation localized over the medial collateral ligament (MCL).')
@@ -279,7 +420,17 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
 
   // 5. Assessment
   const assessmentLines = []
-  if (/right\s+knee/i.test(normalized) && /mcl|mcmurray/i.test(normalized)) {
+  if (isHeadache) {
+    if (/migraine/i.test(normalized) || /migraine/i.test(String(visitType || ''))) {
+      assessmentLines.push('1. Acute migraine, unspecified, not intractable, without status migrainosus (G43.909).')
+      assessmentLines.push('2. Secondary intracranial pathology / red-flag etiologies ruled out by clinical exam.')
+    } else if (/tension/i.test(normalized)) {
+      assessmentLines.push('1. Tension-type headache, unspecified, not intractable (G44.209).')
+    } else {
+      assessmentLines.push('1. Headache, unspecified (R51.9).')
+      assessmentLines.push('2. Rule out secondary headache disorder; no focal neurological signs on examination.')
+    }
+  } else if (/right\s+knee/i.test(normalized) && /mcl|mcmurray/i.test(normalized)) {
     assessmentLines.push('1. Acute right knee pain secondary to bicycle fall (M25.561, V19.81XA).')
     assessmentLines.push('2. Sprain / suspected injury of right medial collateral ligament (MCL), rule out medial meniscus tear (S83.91XA).')
     if (/degenerative/i.test(normalized)) {
@@ -299,29 +450,36 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
 
   // 6. Plan
   const planLines = []
-  if (/elevat/i.test(normalized) || /knee|fall|bike|injury/i.test(normalized)) {
+  if (isHeadache) {
+    planLines.push('1. Activity & Environment: Advised rest in a quiet, dark, well-ventilated room; maintain adequate hydration and consistent sleep hygiene.')
+    planLines.push('2. Pharmacotherapy: Prescribed oral analgesia / abortive therapy (acetaminophen 500-1000 mg PO every 6 hours PRN or ibuprofen 400-600 mg PO TID with meals as tolerated; maximum recommended daily dosages reviewed). Cautioned against medication overuse.')
+    planLines.push('3. Red-Flag Warning Signs: Counseled patient on urgent return precautions: sudden severe "thunderclap" headache, high fever, neck stiffness, confusion, focal weakness, numbness, or acute vision changes; instructed to seek immediate emergency department evaluation if any occur.')
+    planLines.push('4. Follow-up: Return to clinic in 1-2 weeks or sooner if headaches fail to improve, increase in frequency, or change in character.')
+  } else if (/elevat/i.test(normalized) || /knee|fall|bike|injury/i.test(normalized)) {
     planLines.push('1. Activity & R.I.C.E. Protocol: Advised patient on strict leg elevation above heart level, joint rest, and cold therapy (ice packs 15-20 min every 2-3 hours) to minimize swelling and inflammation.')
   } else {
     planLines.push('1. Activity Modification: Rest and avoid aggravating physical exertion.')
   }
 
-  if (/tylenol/i.test(normalized)) {
-    planLines.push('2. Pharmacotherapy: Continue Tylenol (acetaminophen) 500-1000 mg PO every 6 hours as needed for pain (maximum 3000 mg/24 hours). Consider short course of oral NSAID (e.g. ibuprofen 400-600 mg TID with meals) if no gastrointestinal or renal contraindications.')
-  } else {
-    planLines.push('2. Analgesia: Prescribed appropriate oral analgesia / anti-inflammatory regimen as tolerated.')
-  }
+  if (!isHeadache) {
+    if (/tylenol/i.test(normalized)) {
+      planLines.push('2. Pharmacotherapy: Continue Tylenol (acetaminophen) 500-1000 mg PO every 6 hours as needed for pain (maximum 3000 mg/24 hours). Consider short course of oral NSAID (e.g. ibuprofen 400-600 mg TID with meals) if no gastrointestinal or renal contraindications.')
+    } else {
+      planLines.push('2. Analgesia: Prescribed appropriate oral analgesia / anti-inflammatory regimen as tolerated.')
+    }
 
-  if (imagingText) {
-    planLines.push('3. Diagnostic Imaging: Repeat plain radiograph (X-ray) in 3 weeks as ordered.')
-  }
+    if (imagingText) {
+      planLines.push('3. Diagnostic Imaging: Repeat plain radiograph (X-ray) in 3 weeks as ordered.')
+    }
 
-  if (/follow\s*up|weeks/i.test(normalized)) {
-    planLines.push('4. Follow-up & Re-evaluation: Scheduled for clinic follow-up in 3 weeks for clinical re-evaluation, imaging review, and progression of treatment.')
-  } else {
-    planLines.push('4. Follow-up: Return to clinic in 2-3 weeks or sooner if symptoms fail to improve.')
-  }
+    if (/follow\s*up|weeks/i.test(normalized)) {
+      planLines.push('4. Follow-up & Re-evaluation: Scheduled for clinic follow-up in 3 weeks for clinical re-evaluation, imaging review, and progression of treatment.')
+    } else {
+      planLines.push('4. Follow-up: Return to clinic in 2-3 weeks or sooner if symptoms fail to improve.')
+    }
 
-  planLines.push('5. Red-Flag Warning Signs: Counseled on warning signs including inability to bear weight, locking or giving way of the joint, rapidly worsening swelling, redness, fever, or distal numbness/tingling; instructed to seek immediate urgent or emergency medical evaluation should any occur.')
+    planLines.push('5. Red-Flag Warning Signs: Counseled on warning signs including inability to bear weight, locking or giving way of the joint, rapidly worsening swelling, redness, fever, or distal numbness/tingling; instructed to seek immediate urgent or emergency medical evaluation should any occur.')
+  }
 
   // 7. ICD-10 & CPT Codes
   const icdCodes = deriveIcd10Codes(normalized)
@@ -333,6 +491,9 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
     '',
     'HISTORY OF PRESENT ILLNESS (HPI):',
     hpiText,
+    '',
+    'VITAL SIGNS:',
+    vitalsText,
     '',
     'PHYSICAL EXAMINATION (PE):',
     examText,

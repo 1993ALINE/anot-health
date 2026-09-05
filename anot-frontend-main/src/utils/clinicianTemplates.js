@@ -7,7 +7,7 @@ const DEFAULT_BY_TYPE = {
 const FALLBACK = {
   name: 'General note',
   content:
-    'CHIEF COMPLAINT:\n\n\nHISTORY OF PRESENT ILLNESS (HPI):\n\n\nPHYSICAL EXAMINATION:\n\n\nASSESSMENT & PLAN:\n',
+    'CHIEF COMPLAINT:\n\n\nHISTORY OF PRESENT ILLNESS (HPI):\n\n\nVITAL SIGNS:\n\n\nPHYSICAL EXAMINATION:\n\n\nASSESSMENT & PLAN:\n',
 }
 
 let cachedTemplates = null

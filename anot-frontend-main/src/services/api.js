@@ -222,11 +222,28 @@ async function fetchWithTransientRetry(run) {
   return res
 }
 
+function isTechnicalError(msg) {
+  if (typeof msg !== 'string') {return true}
+  const lower = msg.toLowerCase()
+  return (
+    lower.includes('syntax error') ||
+    lower.includes('database error') ||
+    lower.includes('violates foreign key') ||
+    lower.includes('pg_') ||
+    lower.includes('select *') ||
+    lower.includes('stack trace') ||
+    lower.includes('node_modules')
+  )
+}
+
 function sanitizeClientError(data, res) {
-  if (import.meta.env.PROD) {
-    return CLIENT_STATUS_MESSAGES[res.status] || CLIENT_STATUS_MESSAGES[500]
+  if (data?.error && typeof data.error === 'string' && !isTechnicalError(data.error)) {
+    return data.error
   }
-  return data.error || CLIENT_STATUS_MESSAGES[res.status] || `Request failed (${res.status})`
+  if (res?.status === 401) {
+    return 'Session expired. Please sign in again.'
+  }
+  return CLIENT_STATUS_MESSAGES[res?.status] || CLIENT_STATUS_MESSAGES[500] || `Request failed (${res?.status})`
 }
 
 /**
@@ -236,6 +253,7 @@ function createApiError(data, res) {
   const err = new Error(sanitizeClientError(data, res))
   err.status = res.status
   err.payload = data
+  err.code = data?.code
   return err
 }
 
@@ -245,7 +263,23 @@ function createApiError(data, res) {
 const handleResponse = async (res) => {
   const text = await res.text()
   const data = parseResponseBody(text, res)
-  if (!res.ok) {throw createApiError(data, res)}
+  if (!res.ok) {
+    if (res.status === 401 && typeof window !== 'undefined' && hasValidSession()) {
+      try {
+        window.dispatchEvent(
+          new CustomEvent('anot:session-expired', {
+            detail: {
+              message: sanitizeClientError(data, res),
+              code: data?.code,
+            },
+          })
+        )
+      } catch {
+        /* ignore */
+      }
+    }
+    throw createApiError(data, res)
+  }
   return data
 }
 

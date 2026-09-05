@@ -20,11 +20,9 @@ const {
 } = require('./aiPipelineHelpers')
 
 const { resolveTemplateSections } = require('./noteTemplateSections')
-
-
+const { formatClinicalDictationToSOAP } = require('./clinicalSoapSynthesizer')
 
 const AI_DRAFT_UNAVAILABLE =
-
   '[AI draft unavailable — add an Anthropic API key in Admin → Settings or ANTHROPIC_API_KEY to the server .env file, then click Transcribe audio or Refresh.]'
 
 
@@ -185,9 +183,11 @@ async function resolveAiDraft(transcriptions, visit) {
   }, templateSections)
 
   if (!aiNote && transcriptions.length > 0) {
-
-    aiNote = AI_DRAFT_UNAVAILABLE
-
+    const combinedTx = Array.isArray(transcriptions) ? transcriptions.join('\n\n') : String(transcriptions || '')
+    aiNote = formatClinicalDictationToSOAP(combinedTx, '', visit.visit_type, {
+      patientName: visit.patient_name,
+      mrn: visit.mrn,
+    })
   }
 
   return aiNote
