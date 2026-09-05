@@ -27,7 +27,6 @@ const GRANTABLE_ADMIN_MODULE_KEYS = [
     'qps',
     'admins',
     'assignments',
-    'saint-mary-clinic',
     'payroll',
     'audit',
     'settings',

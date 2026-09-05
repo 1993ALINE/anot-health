@@ -2374,25 +2374,74 @@
     box-shadow:
         0 6px 20px rgba(15, 23, 42, 0.05),
         0 0 0 1px rgba(255, 255, 255, 0.9) inset;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.adm-sidebar-footer__identity {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
 }
 
 .adm-sidebar-footer__eyebrow {
-    margin: 0 0 4px;
-    font-size: 0.5625rem;
+    margin: 0;
+    font-size: 0.625rem;
     font-weight: 800;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: #94a3b8;
+    color: #186DF6;
+    line-height: 1.2;
+}
+
+.adm-sidebar-footer__user-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+
+.adm-sidebar-footer__avatar {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #186DF6, #0284C7);
+    color: #FFFFFF;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    box-shadow: 0 2px 6px rgba(24, 109, 246, 0.25);
+    flex-shrink: 0;
+}
+
+.adm-sidebar-footer__user-meta {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .adm-sidebar-footer__who {
     margin: 0;
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     font-weight: 700;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.01em;
     color: #0f172a;
-    line-height: 1.3;
-    word-break: break-word;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.adm-sidebar-footer__role-tag {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: #64748b;
+    line-height: 1.2;
 }
 
 .adm-sidebar-footer__actions {

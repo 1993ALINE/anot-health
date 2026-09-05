@@ -1,3 +1,8 @@
+const dns = require('dns')
+if (typeof dns.setDefaultResultOrder === 'function') {
+  dns.setDefaultResultOrder('ipv4first')
+}
+
 // ─── SECRETS BOOTSTRAP (must run first) ───────────────────────────────────────
 // loadSecrets() hydrates process.env from SSM (prod) or .env (local) BEFORE any
 // module that reads process.env at require-time is loaded. instrument.js reads

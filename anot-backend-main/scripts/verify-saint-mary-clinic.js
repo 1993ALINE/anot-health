@@ -33,7 +33,7 @@ async function run() {
       UPDATE users 
       SET clinic_code = 'saint_mary', 
           clinic_name = 'Saint Mary Clinic, Alberta', 
-          ui_mode = 'scribeberry'
+          ui_mode = 'saint_mary'
       WHERE id = $1
     `, [testDoc.id])
 
@@ -44,7 +44,7 @@ async function run() {
     `, [testDoc.id])
 
     console.log('✓ Enrolled Doctor Record:', updated.rows[0])
-    console.log('✓ UI Mode is Scribeberry App:', updated.rows[0].ui_mode === 'scribeberry')
+    console.log('✓ UI Mode is Saint Mary Clinic App:', updated.rows[0].ui_mode === 'saint_mary')
     console.log('✓ Clinic is Saint Mary Clinic, Alberta:', updated.rows[0].clinic_name === 'Saint Mary Clinic, Alberta')
   }
 

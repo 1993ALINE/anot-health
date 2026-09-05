@@ -7,7 +7,6 @@ import SystemProfileManager from '../../components/SystemProfileManager'
 import PasswordStrengthMeter from '../../components/PasswordStrengthMeter'
 import { validatePassword } from '../../utils/passwordPolicy'
 import AdminModulePermissionsModal from '../../components/AdminModulePermissionsModal'
-import SaintMaryClinicModule from '../../components/SaintMaryClinicModule'
 import AdminAuditDashboard from './AdminAuditDashboard'
 import SystemHealth from './SystemHealth'
 import { SfAccountMenu, useSidebar, Overlay, usePortalDrawerMode, portalSidebarAriaHidden, portalSidebarInert, PortalSidebarBrand } from '../shared'
@@ -204,7 +203,6 @@ const NAV = [
     { key: 'qps',         icon: '✅', label: 'QPS Staff' },
     { key: 'admins',      icon: '⚙️', label: 'Admins' },
     { key: 'assignments', icon: '🔗', label: 'Assignments' },
-    { key: 'saint-mary-clinic', icon: '🏥', label: 'Saint Mary Clinic' },
     { key: 'payroll',     icon: '💳', label: 'Payroll' },
     { key: 'audit',       icon: '🔍', label: 'Audit Logs' },
     { key: 'health',      icon: '💓', label: 'System Health' },
@@ -219,7 +217,6 @@ const MODULE_META = {
     qps:           { tagline: 'Quality scoring and note review oversight.' },
     admins:        { tagline: 'Elevated operators — Super Admins manage Admin access and modules.' },
     assignments:   { tagline: 'Who documents whom — keep pairs accurate and current.' },
-    'saint-mary-clinic': { tagline: 'Clinic doctor roster, Saint Mary custom interface, and ambient workflow oversight.' },
     payroll:       { tagline: 'Compensation tied to completed notes and agreed rates.' },
     audit:         { tagline: 'Enterprise activity monitoring, security analytics, and immutable compliance exports.' },
     health:        { tagline: 'Live status of core services, API integrations, and platform metrics.' },
@@ -532,8 +529,18 @@ function AdminSidebar({ tab, onSelectTab, currentUser, onRequestSignOut, badges,
             </nav>
             <div className="sf-sidebar-footer sf-sidebar-rich__footer adm-sidebar-footer">
                 <div className="adm-sidebar-footer__card">
-                    <p className="adm-sidebar-footer__eyebrow">Account</p>
-                    <p className="adm-sidebar-footer__who">{currentUser.name || 'Administrator'}</p>
+                    <div className="adm-sidebar-footer__identity">
+                        <span className="adm-sidebar-footer__eyebrow">Account</span>
+                        <div className="adm-sidebar-footer__user-row">
+                            <div className="adm-sidebar-footer__avatar" aria-hidden>
+                                {currentUser.name ? currentUser.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() : 'AD'}
+                            </div>
+                            <div className="adm-sidebar-footer__user-meta">
+                                <p className="adm-sidebar-footer__who">{currentUser.name || 'Administrator'}</p>
+                                <span className="adm-sidebar-footer__role-tag">{isSuperAdmin(currentUser) ? 'Super Admin' : 'Admin'}</span>
+                            </div>
+                        </div>
+                    </div>
                     <button type="button" className="adm-sidebar-footer__btn" onClick={onRequestSignOut}>
                         <span className="adm-sidebar-footer__btn-ico" aria-hidden>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -1783,11 +1790,6 @@ function Admin() {
                     { label: 'Page', value: auditDashMeta?.page !== null && auditDashMeta?.page !== undefined ? String(auditDashMeta.page) : '—' },
                     { label: 'Alerts', value: auditDashMeta?.alerts !== null && auditDashMeta?.alerts !== undefined ? String(auditDashMeta.alerts) : '—' },
                 ]
-            case 'saint-mary-clinic':
-                return [
-                    { label: 'Clinic', value: 'Saint Mary Clinic, AB' },
-                    { label: 'Interface', value: 'Saint Mary Clinic UI' },
-                ]
             case 'settings':
                 return [
                     { label: 'Environment', value: 'Production' },
@@ -2017,11 +2019,6 @@ function Admin() {
                     {tab === 'qps'        && <AdminUserTable {...userTableProps} userList={qpsStaff}   role="qps" />}
                     {tab === 'admins' && (isSuperAdmin(currentUser) || adminMayOpenTab(currentUser, 'admins')) && (
                         <AdminUserTable {...userTableProps} userList={portalAdmins} role="elevated" />
-                    )}
-
-                    {/* ── SAINT MARY CLINIC, ALBERTA ───────────── */}
-                    {tab === 'saint-mary-clinic' && (
-                        <SaintMaryClinicModule currentUser={currentUser} showToast={showToast} />
                     )}
 
                     {/* ── ASSIGNMENTS ───────────────────────────── */}
@@ -2540,9 +2537,12 @@ function Admin() {
                                             <div className="adm-form-group">
                                                 <label className="adm-form-label">Model</label>
                                                 <select className="adm-input" value={settingsForm.anthropic_model} onChange={(e) => handleSettingInput('anthropic_model', e.target.value)}>
-                                                    <option value="claude-haiku-4-5">claude-haiku-4-5 (Fast, recommended)</option>
-                                                    <option value="claude-sonnet-4-5">claude-sonnet-4-5 (Balanced)</option>
-                                                    <option value="claude-opus-4-5">claude-opus-4-5 (Most capable)</option>
+                                                    <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet (Highest accuracy, recommended)</option>
+                                                    <option value="claude-3-7-sonnet-20250219">Claude 3.7 Sonnet (Advanced clinical reasoning)</option>
+                                                    <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku (Fastest)</option>
+                                                    <option value="claude-haiku-4-5">claude-haiku-4-5 (Legacy alias → Claude 3.5 Haiku)</option>
+                                                    <option value="claude-sonnet-4-5">claude-sonnet-4-5 (Legacy alias → Claude 3.5 Sonnet)</option>
+                                                    <option value="claude-opus-4-5">claude-opus-4-5 (Legacy alias → Claude 3.7 Sonnet)</option>
                                                 </select>
                                             </div>
                                         </div>

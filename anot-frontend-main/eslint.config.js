@@ -66,8 +66,6 @@ export default defineConfig([
   {
     files: [
       'src/pages/Admin/**/*.jsx',
-      'src/pages/Clinician/AudioQueuePanel.jsx',
-      'src/pages/Clinician/OfflineIndicator.jsx',
       'src/components/PortalAudioPlayer.jsx',
       'src/utils/useSessionTimeout.jsx',
     ],

@@ -5,17 +5,24 @@ const anthropic = new Anthropic({
   apiKey: process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY
 });
 
-// Optimized system prompt (SHORT, focused)
-const MEDICAL_SYSTEM_PROMPT = `You are a professional medical note generator.
-Generate concise SOAP notes from medical visit transcripts.
-Format: Chief Complaint, HPI, Exam Findings, Assessment, Plan.
-Be concise and medically accurate.`;
+// Structured medical system prompt — concise but covers full SOAP format
+const MEDICAL_SYSTEM_PROMPT = `You are a clinical documentation specialist. Generate a complete, structured SOAP note from the provided medical visit transcript.
+
+Format strictly as:
+CHIEF COMPLAINT: [1 sentence]
+HISTORY OF PRESENT ILLNESS: [2-4 sentences covering onset, duration, severity, associated symptoms]
+PHYSICAL EXAMINATION: [Key findings only, or "Not documented" if not in transcript]
+ASSESSMENT: [Primary diagnosis/impression, numbered if multiple]
+PLAN: [Numbered action items — medications with doses, follow-up, referrals, patient instructions]
+ICD-10 CODES: [1-3 most relevant codes with descriptions]
+
+Rules: Use only information from the transcript. Be concise and medically precise. Do not invent findings.`;
 
 // ════════════════════════════════════════════════════════════
 // COST TRACKING & MONITORING
 // ════════════════════════════════════════════════════════════
 
-// Claude 3.5 Haiku pricing (as of 2024)
+// Claude 3.5 Haiku pricing (current)
 const CLAUDE_COSTS = {
   input: 0.80 / 1_000_000,   // $0.80 per 1M input tokens
   output: 4.00 / 1_000_000,  // $4.00 per 1M output tokens
@@ -199,16 +206,23 @@ function resetDailyCost() {
   return yesterday;
 }
 
-// Extract key info from transcript (reduce input tokens)
+// Smart transcript preparation — keeps full content but removes filler
+// A 30-min visit transcript is ~6,000-10,000 chars (1,500-2,500 tokens)
+// Haiku can handle 200k context — sending full transcript is still very cheap
 function extractKeyMedicalInfo(transcript) {
   if (!transcript || transcript.length < 50) {
     return transcript;
   }
-  
-  // Keep first 3000 chars (typically includes: patient info, chief complaint, key findings)
-  // This drastically reduces input tokens while keeping important info
-  // For longer transcripts, this gives ~95% cost reduction on input tokens
-  return transcript.substring(0, 3000);
+
+  // Remove excessive whitespace/repeated filler words but keep all clinical content
+  const cleaned = transcript
+    .replace(/\b(um|uh|like|you know|so|basically|literally)\b/gi, '')
+    .replace(/\s{3,}/g, '  ')
+    .trim()
+
+  // Hard cap at 80,000 chars (~20,000 tokens) — well within Haiku's 200k context
+  // A 30-min visit is ~8,000 chars. This cap only activates for 5+ hour recordings.
+  return cleaned.substring(0, 80000);
 }
 
 /**
@@ -253,19 +267,20 @@ async function generateMedicalNotes(transcript, visitId) {
     const keyInfo = extractKeyMedicalInfo(transcript);
     
     const startTime = Date.now();
-    
-    // Optimized API call (minimal tokens, maximum quality)
+
+    // Full transcript sent — Haiku is cheap enough that truncation hurts more than it saves
+    // A typical 30-min visit: ~2,000 input tokens = $0.0016. Full note saves scribe editing time.
     const response = await anthropic.messages.create({
       model: CLAUDE_COSTS.model,
-      max_tokens: 512, // Reduced from 1024 (shorter notes)
+      max_tokens: 1200, // Enough for a complete structured SOAP note with ICD-10 codes
       system: [{
         type: 'text',
         text: MEDICAL_SYSTEM_PROMPT,
-        cache_control: { type: 'ephemeral' } // Cache system prompt!
+        cache_control: { type: 'ephemeral' } // Cache system prompt across calls
       }],
       messages: [{
         role: 'user',
-        content: `Generate SOAP note from this visit:\n\n${keyInfo}`
+        content: `Generate a complete SOAP note from this clinical visit transcript:\n\n${keyInfo}`
       }]
     });
     

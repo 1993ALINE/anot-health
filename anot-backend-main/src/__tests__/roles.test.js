@@ -26,8 +26,11 @@ describe('roles utilities', () => {
     expect(isElevatedAccount('clinician')).toBe(false)
   })
 
-  test('GRANTABLE_ADMIN_MODULE_KEYS contains saint-mary-clinic', () => {
+  test('GRANTABLE_ADMIN_MODULE_KEYS does not contain saint-mary-clinic (module retired)', () => {
     const { GRANTABLE_ADMIN_MODULE_KEYS } = require('../utils/roles')
-    expect(GRANTABLE_ADMIN_MODULE_KEYS).toContain('saint-mary-clinic')
+    expect(GRANTABLE_ADMIN_MODULE_KEYS).not.toContain('saint-mary-clinic')
+    expect(GRANTABLE_ADMIN_MODULE_KEYS).toContain('overview')
+    expect(GRANTABLE_ADMIN_MODULE_KEYS).toContain('assignments')
+    expect(GRANTABLE_ADMIN_MODULE_KEYS).toContain('payroll')
   })
 })

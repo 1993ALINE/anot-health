@@ -399,15 +399,6 @@ export const usersAPI = {
   updateRate: async (id, rate) => apiMutate('PUT', `/users/${id}/rate`, { body: { rate_per_note: rate } }),
 }
 
-// ─── SAINT MARY CLINIC ────────────────────────────────────────────────────────
-
-export const saintMaryClinicAPI = {
-  getDoctors: async () => apiFetch('/users/clinics/saint-mary'),
-  addDoctor: async (userId, ui_mode = 'scribeberry') => apiMutate('POST', '/users/clinics/saint-mary/doctors', { body: { userId, ui_mode } }),
-  removeDoctor: async (id) => apiMutate('DELETE', `/users/clinics/saint-mary/doctors/${id}`),
-  toggleUiMode: async (id, ui_mode) => apiMutate('PATCH', `/users/clinics/saint-mary/doctors/${id}/ui-mode`, { body: { ui_mode } }),
-}
-
 // ─── PATIENTS ─────────────────────────────────────────────────────────────────
 
 export const patientsAPI = {

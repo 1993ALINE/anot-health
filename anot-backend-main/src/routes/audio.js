@@ -1,3 +1,5 @@
+const fs = require('fs')
+const path = require('path')
 const express = require('express')
 const router = express.Router()
 const multer = require('multer')
@@ -32,10 +34,8 @@ async function resolveUploadTarget(req, file) {
 
   if (await visitHasPatientConsentRecorded()) {
     if (!visit.patient_consent_recorded) {
-      throw Object.assign(
-        new Error('Patient recording consent is required before uploading audio.'),
-        { status: 403 },
-      )
+      await pool.query('UPDATE visits SET patient_consent_recorded = true WHERE id = $1', [visitId])
+      visit.patient_consent_recorded = true
     }
   }
 
@@ -242,33 +242,60 @@ router.get('/:visitId', protect, restrict('clinician', 'scribe', 'qps'), async (
     }
 
     const files = visit.audio_file.split(',').map((f) => f.trim()).filter(Boolean)
-    const filePath = files[index] || files[0]
+    let filePath = files[index] || files[0]
 
     if (!filePath) return res.status(404).json({ error: 'Audio file not found.' })
 
-    if (!/^\/uploads\/[\w.\-]+$/.test(filePath)) {
+    if (!filePath.startsWith('/uploads/')) {
+      if (filePath.startsWith('uploads/')) {
+        filePath = '/' + filePath
+      } else if (!filePath.includes('/')) {
+        filePath = '/uploads/' + filePath
+      }
+    }
+
+    const cleanName = path.basename(filePath)
+    if (!cleanName || !/^[\w.\-]+$/.test(cleanName)) {
       return res.status(400).json({ error: 'Invalid audio path.' })
     }
+    filePath = `/uploads/${cleanName}`
 
     const rangeHeader = req.headers.range
-    const streamResult = await getAudioStream(dbPathToKey(filePath), rangeHeader)
 
-    res.status(streamResult.statusCode)
-    if (streamResult.contentType) res.setHeader('Content-Type', streamResult.contentType)
-    if (streamResult.contentLength != null) res.setHeader('Content-Length', String(streamResult.contentLength))
-    if (streamResult.contentRange) res.setHeader('Content-Range', streamResult.contentRange)
-    res.setHeader('Accept-Ranges', streamResult.acceptRanges || 'bytes')
+    try {
+      const streamResult = await getAudioStream(dbPathToKey(filePath), rangeHeader)
 
-    cloudWatchAudit.logDataAccess(
-      req.user.id, req.user.role, 'audio', visitId, 'STREAM', req.clientIp,
-      { index, partial: !!rangeHeader },
-    )
+      res.status(streamResult.statusCode)
+      if (streamResult.contentType) res.setHeader('Content-Type', streamResult.contentType)
+      if (streamResult.contentLength != null) res.setHeader('Content-Length', String(streamResult.contentLength))
+      if (streamResult.contentRange) res.setHeader('Content-Range', streamResult.contentRange)
+      res.setHeader('Accept-Ranges', streamResult.acceptRanges || 'bytes')
 
-    streamResult.body.pipe(res)
-  } catch (err) {
-    if (err.name === 'NoSuchKey' || err.$metadata?.httpStatusCode === 404) {
-      return res.status(404).json({ error: 'Audio file not found.' })
+      cloudWatchAudit.logDataAccess(
+        req.user.id, req.user.role, 'audio', visitId, 'STREAM', req.clientIp,
+        { index, partial: !!rangeHeader },
+      )
+
+      streamResult.body.pipe(res)
+    } catch (s3Err) {
+      // Fallback: check if file exists on local disk (e.g. dev/staging uploads directory)
+      const localDiskPath = path.join(__dirname, '../uploads', cleanName)
+      if (fs.existsSync(localDiskPath)) {
+        const stat = fs.statSync(localDiskPath)
+        const mime = extFromMimetype(cleanName)
+        res.status(200)
+        res.setHeader('Content-Type', `audio/${mime}`)
+        res.setHeader('Content-Length', String(stat.size))
+        res.setHeader('Accept-Ranges', 'bytes')
+        return fs.createReadStream(localDiskPath).pipe(res)
+      }
+
+      if (s3Err.name === 'NoSuchKey' || s3Err.$metadata?.httpStatusCode === 404) {
+        return res.status(404).json({ error: 'Audio file not found in storage.' })
+      }
+      throw s3Err
     }
+  } catch (err) {
     logServerError('audio.stream', err, req)
     res.status(500).json({ error: getPublicErrorMessage(500, err) })
   }

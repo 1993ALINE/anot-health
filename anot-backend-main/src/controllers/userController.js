@@ -681,7 +681,7 @@ const getSaintMaryDoctors = async (req, res) => {
         const returning = await userSelectList()
         const result = await pool.query(`
             SELECT ${returning} FROM users
-            WHERE clinic_code = 'saint_mary' OR (role = 'clinician' AND ui_mode = 'scribeberry')
+            WHERE clinic_code = 'saint_mary' OR (role = 'clinician' AND ui_mode = 'saint_mary')
             ORDER BY name ASC
         `)
         res.status(200).json({ doctors: result.rows })
@@ -693,7 +693,7 @@ const getSaintMaryDoctors = async (req, res) => {
 const addSaintMaryDoctor = async (req, res) => {
     try {
         await ensureUserProfileSchema()
-        const { userId, ui_mode = 'scribeberry' } = req.body
+        const { userId, ui_mode = 'saint_mary' } = req.body
         if (!userId) {
             return res.status(400).json({ error: 'userId is required.' })
         }
@@ -705,7 +705,7 @@ const addSaintMaryDoctor = async (req, res) => {
                 ui_mode = $1
             WHERE id = $2
             RETURNING ${returning}
-        `, [ui_mode || 'scribeberry', userId])
+        `, [ui_mode || 'saint_mary', userId])
 
         if (!result.rows[0]) {
             return res.status(404).json({ error: 'Doctor not found.' })
@@ -746,7 +746,7 @@ const toggleDoctorUiMode = async (req, res) => {
         await ensureUserProfileSchema()
         const { id } = req.params
         const { ui_mode } = req.body
-        const newMode = ui_mode === 'scribeberry' ? 'scribeberry' : 'standard'
+        const newMode = ui_mode === 'saint_mary' ? 'saint_mary' : 'standard'
         const returning = await userSelectList()
         const result = await pool.query(`
             UPDATE users

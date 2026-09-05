@@ -137,7 +137,8 @@ const getAllVisits = async (req, res) => {
     if (userRole === 'scribe') {
       params.push(user_id)
       query += ` AND (
-        v.clinician_id IN (
+        v.scribe_id = $${params.length}
+        OR v.clinician_id IN (
           SELECT clinician_id FROM scribe_assignments WHERE scribe_id = $${params.length}
         )
         OR v.id IN (SELECT visit_id FROM notes WHERE submitted_by = $${params.length})
@@ -273,7 +274,7 @@ const updateVisitStatus = async (req, res) => {
     const { id } = req.params
     const { status } = req.body
 
-    const validStatuses = ['scheduled', 'upcoming', 'in-progress', 'recording-uploaded', 'note-ready', 'done', 'uploaded']
+    const validStatuses = ['scheduled', 'upcoming', 'in-progress', 'recording-uploaded', 'note-ready', 'done', 'uploaded', 'completed']
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ error: 'Invalid status.' })
     }
@@ -289,10 +290,11 @@ const updateVisitStatus = async (req, res) => {
     const ALLOWED_TRANSITIONS = {
       scheduled: ['upcoming', 'in-progress'],
       upcoming: ['scheduled', 'in-progress'],
-      'in-progress': ['upcoming', 'recording-uploaded'],
-      'recording-uploaded': ['in-progress', 'note-ready'],
-      'note-ready': ['recording-uploaded', 'done', 'uploaded'],
-      done: ['uploaded'],
+      'in-progress': ['upcoming', 'recording-uploaded', 'completed'],
+      'recording-uploaded': ['in-progress', 'note-ready', 'completed'],
+      'note-ready': ['recording-uploaded', 'done', 'uploaded', 'completed'],
+      done: ['uploaded', 'completed'],
+      completed: ['uploaded'],
       uploaded: [],
     }
     const current = accessible.status

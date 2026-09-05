@@ -73,7 +73,7 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
     .filter(Boolean)
 
   // 1. Extract Chief Complaint strictly from text
-  let chiefComplaint = ''
+  let chiefComplaint
   const ccMatch = raw.match(/(?:presenting|presents|here\s+today|complaining\s+of|chief\s+complaint|concern\s+is|reason\s+for\s+visit)\s+(?:here\s+today\s+)?(?:for|with)?\s*([^.,;\n]+)/i)
   if (ccMatch && ccMatch[1]) {
     chiefComplaint = ccMatch[1].trim().replace(/^(a|an|the)\s+/i, '')
@@ -111,7 +111,7 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
   )
   
   let assessmentText = `1. Clinical evaluation for ${chiefComplaint.toLowerCase()}.`
-  let planText = ''
+  let planText
   if (planSentences.length > 0) {
     planText = `${assessmentText}\n\nPLAN:\n${planSentences.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
   } else {

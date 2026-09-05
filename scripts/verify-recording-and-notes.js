@@ -135,7 +135,7 @@ async function run() {
   const clinicianChunkRes = await client.request('GET', '/assets/Clinician-Cmj2OWxQ.js');
   assert(clinicianChunkRes.status === 200, 'Clinician JS chunk loads from CloudFront CDN (200 OK)');
   assert(clinicianChunkRes.body?.raw?.includes('wakeLock'), 'Live Clinician bundle contains screen wakeLock recording keep-alive!');
-  assert(clinicianChunkRes.body?.raw?.includes('Record') || clinicianChunkRes.body?.raw?.includes('scribeberry-rec'), 'Live Clinician bundle contains prominent Record button action!');
+  assert(clinicianChunkRes.body?.raw?.includes('Record'), 'Live Clinician bundle contains prominent Record button action!');
 
   // Step 2: Clinician Authentication
   console.log('\n--- Step 2: Testing Clinician Authentication on Live API ---');

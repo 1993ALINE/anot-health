@@ -19,7 +19,7 @@ export default function SaintMaryClinicModule({ showToast }) {
   // Add doctor modal state
   const [showAddModal, setShowAddModal] = useState(false)
   const [selectedDoctorId, setSelectedDoctorId] = useState('')
-  const [selectedUiMode, setSelectedUiMode] = useState('scribeberry')
+  const [selectedUiMode, setSelectedUiMode] = useState('saint_mary')
   const [savingAdd, setSavingAdd] = useState(false)
 
   // Remove confirmation modal
@@ -82,7 +82,7 @@ export default function SaintMaryClinicModule({ showToast }) {
         (d.specialty || '').toLowerCase().includes(q)
       const matchesUi =
         uiFilter === 'all' ||
-        (uiFilter === 'saint_mary' && d.ui_mode === 'scribeberry') ||
+        (uiFilter === 'saint_mary' && d.ui_mode === 'saint_mary') ||
         (uiFilter === 'standard' && (d.ui_mode === 'standard' || !d.ui_mode))
       return matchesQuery && matchesUi
     })
@@ -91,7 +91,7 @@ export default function SaintMaryClinicModule({ showToast }) {
   const handleOpenAddModal = () => {
     const firstAvailable = availableClinicians[0]?.id || ''
     setSelectedDoctorId(firstAvailable)
-    setSelectedUiMode('scribeberry')
+    setSelectedUiMode('saint_mary')
     setShowAddModal(true)
   }
 
@@ -107,7 +107,7 @@ export default function SaintMaryClinicModule({ showToast }) {
       showToast?.('✓ Doctor successfully enrolled in Saint Mary Clinic, Alberta')
       setShowAddModal(false)
       setSelectedDoctorId('')
-      setSelectedUiMode('scribeberry')
+      setSelectedUiMode('saint_mary')
       await loadData()
     } catch (err) {
       showToast?.(err?.message || 'Failed to add doctor to clinic', 'error')
@@ -117,14 +117,14 @@ export default function SaintMaryClinicModule({ showToast }) {
   }
 
   const handleToggleUiMode = async (doc) => {
-    const newMode = doc.ui_mode === 'scribeberry' ? 'standard' : 'scribeberry'
+    const newMode = doc.ui_mode === 'saint_mary' ? 'standard' : 'saint_mary'
     try {
       await saintMaryClinicAPI.toggleUiMode(doc.id, newMode)
       setDoctors((prev) =>
         prev.map((d) => (d.id === doc.id ? { ...d, ui_mode: newMode } : d))
       )
       showToast?.(
-        `✓ UI mode updated for Dr. ${doc.name}: ${newMode === 'scribeberry' ? 'Saint Mary Clinic UI' : 'Standard Anot UI'}`
+        `✓ UI mode updated for Dr. ${doc.name}: ${newMode === 'saint_mary' ? 'Saint Mary Clinic UI' : 'Standard Anot UI'}`
       )
     } catch (err) {
       showToast?.(err?.message || 'Failed to update UI mode', 'error')
@@ -146,7 +146,7 @@ export default function SaintMaryClinicModule({ showToast }) {
     }
   }
 
-  const saintMaryUiCount = doctors.filter((d) => d.ui_mode === 'scribeberry').length
+  const saintMaryUiCount = doctors.filter((d) => d.ui_mode === 'saint_mary').length
 
   return (
     <div className="sm-clinic">
@@ -253,7 +253,7 @@ export default function SaintMaryClinicModule({ showToast }) {
             </thead>
             <tbody>
               {filteredDoctors.map((doc) => {
-                const isSaintMaryUi = doc.ui_mode === 'scribeberry'
+                const isSaintMaryUi = doc.ui_mode === 'saint_mary'
                 return (
                   <tr key={doc.id}>
                     <td>
@@ -278,7 +278,7 @@ export default function SaintMaryClinicModule({ showToast }) {
                     <td>
                       <div className="sm-clinic__ui-control">
                         <span
-                          className={`sm-clinic__ui-badge ${isSaintMaryUi ? 'sm-clinic__ui-badge--scribeberry' : 'sm-clinic__ui-badge--standard'}`}
+                          className={`sm-clinic__ui-badge ${isSaintMaryUi ? 'sm-clinic__ui-badge--saint-mary' : 'sm-clinic__ui-badge--standard'}`}
                         >
                           {isSaintMaryUi ? '⚡ Saint Mary Clinic UI' : 'Standard Anot UI'}
                         </span>
@@ -365,12 +365,12 @@ export default function SaintMaryClinicModule({ showToast }) {
                 <div className="sm-modal__field">
                   <label className="sm-modal__label">Assigned Interface *</label>
                   <div className="sm-modal__ui-options">
-                    <label className={`sm-modal__ui-option ${selectedUiMode === 'scribeberry' ? 'sm-modal__ui-option--active' : ''}`}>
+                    <label className={`sm-modal__ui-option ${selectedUiMode === 'saint_mary' ? 'sm-modal__ui-option--active' : ''}`}>
                       <input
                         type="radio"
                         name="ui_mode"
-                        value="scribeberry"
-                        checked={selectedUiMode === 'scribeberry'}
+                        value="saint_mary"
+                        checked={selectedUiMode === 'saint_mary'}
                         onChange={(e) => setSelectedUiMode(e.target.value)}
                       />
                       <div>

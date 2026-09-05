@@ -20,7 +20,32 @@ const {
 
 
 
-const ANTHROPIC_MODELS = new Set(['claude-haiku-4-5', 'claude-sonnet-4-5', 'claude-opus-4-5'])
+const ANTHROPIC_MODEL_ALIASES = {
+  'claude-haiku-4-5': 'claude-3-5-haiku-20241022',
+  'claude-sonnet-4-5': 'claude-3-5-sonnet-20241022',
+  'claude-opus-4-5': 'claude-3-7-sonnet-20250219',
+  'claude-3-5-sonnet': 'claude-3-5-sonnet-20241022',
+  'claude-3-5-haiku': 'claude-3-5-haiku-20241022',
+  'claude-3-7-sonnet': 'claude-3-7-sonnet-20250219',
+  'claude-3-opus': 'claude-3-opus-20240229',
+}
+
+function resolveCanonicalAnthropicModel(model) {
+  const m = String(model || '').trim()
+  if (ANTHROPIC_MODEL_ALIASES[m]) return ANTHROPIC_MODEL_ALIASES[m]
+  if (m.startsWith('claude-')) return m
+  return 'claude-3-5-sonnet-20241022'
+}
+
+const ANTHROPIC_MODELS = new Set([
+  'claude-3-5-sonnet-20241022',
+  'claude-3-7-sonnet-20250219',
+  'claude-3-5-haiku-20241022',
+  'claude-3-opus-20240229',
+  'claude-haiku-4-5',
+  'claude-sonnet-4-5',
+  'claude-opus-4-5',
+])
 const DEEPGRAM_MODELS = new Set(['nova-3-medical', 'nova-3', 'nova-2'])
 
 function normalizeDeepgramModel(value) {
@@ -28,35 +53,28 @@ function normalizeDeepgramModel(value) {
   return DEEPGRAM_MODELS.has(model) ? model : DEFAULTS.deepgram_model
 }
 
-
-
 const DEFAULTS = {
-
   transcribe_enabled: false,
-
   transcribe_language: 'en-US',
-
   transcribe_medical_specialty: 'PRIMARYCARE',
-
+  // Speaker labels ON by default — required for doctor vs patient separation in SOAP notes
+  // Deepgram diarizes to "Speaker 0: ..." / "Speaker 1: ..." — Claude uses this to split HPI from Exam
   transcribe_show_speaker_labels: true,
-
   transcribe_auto_transcribe_on_upload: true,
-
   deepgram_model: 'nova-3-medical',
-
   anthropic_enabled: true,
+  // Haiku is the most cost-efficient model — sufficient for structured SOAP note generation
+  anthropic_model: 'claude-3-5-haiku-20241022',
 
-  anthropic_model: 'claude-haiku-4-5',
-
-  ffmpeg_enabled: false,
-
-  ffmpeg_target_format: 'mp3',
-
-  ffmpeg_compression: 5,
-
+  // FFmpeg preprocessing: enabled by default to strip silence before Deepgram
+  // Reads from FFMPEG_ENABLED env if DB hasn't overridden it
+  ffmpeg_enabled: String(process.env.FFMPEG_ENABLED || '').toLowerCase() === 'true',
+  ffmpeg_target_format: process.env.FFMPEG_TARGET_FORMAT || 'mp3',
+  // compression 7 = ~64kbps MP3 mono — great for speech, reduces file size
+  ffmpeg_compression: parseInt(process.env.FFMPEG_COMPRESSION || '7', 10),
   ffmpeg_max_upload_mb: 500,
-
-  ffmpeg_preprocess_before_transcribe: true,
+  ffmpeg_preprocess_before_transcribe:
+    String(process.env.FFMPEG_PREPROCESS_BEFORE_TRANSCRIBE || 'true').toLowerCase() !== 'false',
 
   transcribe_timeout_ms: 300000,
 
@@ -66,7 +84,6 @@ const DEFAULTS = {
   deepgram_redact_pii: false,
   deepgram_remove_filler_words: true,
   deepgram_custom_vocabulary: [],
-
 }
 
 
@@ -393,12 +410,13 @@ module.exports = {
   defaultRuntimeSettings,
 
   DEFAULTS,
+  ANTHROPIC_MODELS,
   DEEPGRAM_MODELS,
   TRANSCRIBE_LANGUAGES,
   MAX_CUSTOM_VOCABULARY_TERMS,
+  resolveCanonicalAnthropicModel,
   normalizeDeepgramModel,
   normalizeTranscribeLanguage,
   parseCustomVocabulary,
-
 }
 

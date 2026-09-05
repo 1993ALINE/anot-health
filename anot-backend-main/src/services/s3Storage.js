@@ -52,7 +52,12 @@ const s3 = new S3Client({ region: AWS_REGION })
  * "uploads/visit_<id>_<ts>.<ext>".
  */
 function dbPathToKey(dbPath) {
-  return String(dbPath).replace(/^\//, '')
+  let cleaned = String(dbPath || '').replace(/^\/+/, '').trim()
+  if (!cleaned) return ''
+  if (!cleaned.startsWith('uploads/')) {
+    cleaned = 'uploads/' + cleaned
+  }
+  return cleaned
 }
 
 async function s3SendWithRetry(command, label) {

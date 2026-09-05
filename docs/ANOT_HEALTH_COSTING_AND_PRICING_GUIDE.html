@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Anot Health — Clinic Operational Costing & Commercial Pricing Guide</title>
+<style>
+  @page {
+    size: A4 portrait;
+    margin: 10mm 12mm 10mm 12mm;
+  }
+  * {
+    box-sizing: border-box;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    color: #0f172a;
+    background: #ffffff;
+    line-height: 1.38;
+    font-size: 11px;
+    margin: 0;
+    padding: 0;
+  }
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #2563eb;
+    padding-bottom: 6px;
+    margin-bottom: 8px;
+  }
+  .brand {
+    font-size: 19px;
+    font-weight: 800;
+    color: #1e3a8a;
+    letter-spacing: -0.5px;
+  }
+  .brand span {
+    color: #2563eb;
+  }
+  .doc-title {
+    font-size: 10px;
+    text-transform: uppercase;
+    color: #64748b;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-align: right;
+  }
+  .doc-date {
+    font-size: 9px;
+    color: #94a3b8;
+  }
+  h1 {
+    font-size: 16px;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0 0 2px 0;
+  }
+  .subtitle {
+    font-size: 10.5px;
+    color: #475569;
+    margin-bottom: 8px;
+  }
+  .badge-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .badge {
+    display: inline-block;
+    padding: 2.5px 6.5px;
+    border-radius: 4px;
+    font-size: 9.5px;
+    font-weight: 600;
+  }
+  .badge-blue { background: #dbeafe; color: #1e40af; }
+  .badge-emerald { background: #d1fae5; color: #065f46; }
+  .badge-purple { background: #f3e8ff; color: #6b21a8; }
+  .badge-amber { background: #fef3c7; color: #92400e; }
+  .badge-slate { background: #f1f5f9; color: #334155; }
+
+  .section-title {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #1e3a8a;
+    border-bottom: 1.5px solid #e2e8f0;
+    padding-bottom: 2px;
+    margin-top: 8px;
+    margin-bottom: 5px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 7px;
+    font-size: 10px;
+  }
+  th {
+    background: #f8fafc;
+    color: #334155;
+    font-weight: 700;
+    text-align: left;
+    padding: 4.5px 6.5px;
+    border-top: 1px solid #cbd5e1;
+    border-bottom: 2px solid #94a3b8;
+  }
+  td {
+    padding: 4px 6.5px;
+    border-bottom: 1px solid #e2e8f0;
+    vertical-align: top;
+  }
+  tr:nth-child(even) td {
+    background: #fcfdfe;
+  }
+  .num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  .highlight-row td {
+    font-weight: 700;
+    background: #eff6ff !important;
+    color: #1e40af;
+    border-top: 1.5px solid #bfdbfe;
+    border-bottom: 2px solid #2563eb;
+  }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 7px;
+    margin-bottom: 8px;
+  }
+  .grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 7px;
+    margin-bottom: 8px;
+  }
+  .card {
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 6px 8px;
+    background: #ffffff;
+  }
+  .card-primary {
+    border-color: #bfdbfe;
+    background: #f8fafc;
+  }
+  .card h3 {
+    margin: 0 0 2px 0;
+    font-size: 10.5px;
+    color: #1e3a8a;
+  }
+  .card p {
+    margin: 0;
+    font-size: 9.5px;
+    color: #475569;
+    line-height: 1.35;
+  }
+
+  .pricing-deck {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 7px;
+    margin-bottom: 8px;
+  }
+  .price-card {
+    border: 1px solid #cbd5e1;
+    border-radius: 5px;
+    padding: 7px;
+    background: #ffffff;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .price-card.featured {
+    border: 2px solid #2563eb;
+    background: #f0f7ff;
+  }
+  .price-card h4 {
+    margin: 0 0 1px 0;
+    font-size: 10.5px;
+    color: #0f172a;
+  }
+  .price-tag {
+    font-size: 15px;
+    font-weight: 800;
+    color: #1e3a8a;
+    margin: 2px 0;
+  }
+  .price-sub {
+    font-size: 9px;
+    color: #64748b;
+    margin-bottom: 3px;
+  }
+  .price-card ul {
+    margin: 0;
+    padding-left: 11px;
+    font-size: 9px;
+    color: #334155;
+  }
+  .price-card li {
+    margin-bottom: 2px;
+  }
+
+  .callout {
+    background: #f0fdf4;
+    border-left: 3.5px solid #16a34a;
+    padding: 5px 8px;
+    border-radius: 3px;
+    font-size: 9.5px;
+    color: #166534;
+    margin-top: 6px;
+    margin-bottom: 6px;
+  }
+
+  .footer {
+    margin-top: 8px;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 4px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 8.5px;
+    color: #94a3b8;
+  }
+
+  .page-break {
+    page-break-before: always;
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!-- PAGE 1: 30 DOCTORS × 30 MIN VISITS × 30 PATIENTS/DAY × 24 DAYS + GOOGLE WS -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+
+<div class="header">
+  <div class="brand">ANOT <span>HEALTH</span></div>
+  <div class="doc-title">
+    Clinic Operational Costing & Google Workspace Analysis<br>
+    <span class="doc-date">Generated September 2026 · Confidential Brief</span>
+  </div>
+</div>
+
+<h1>30-Doctor Clinic Costing: 30 Min/Visit · 30 Patients/Day · 24 Days/Mo</h1>
+<div class="subtitle">Complete unit costing including AI infrastructure, audio processing, cloud storage, and Google Workspace for a 30-physician healthcare organization.</div>
+
+<div class="badge-row">
+  <span class="badge badge-purple">Headcount: 30 Doctors</span>
+  <span class="badge badge-blue">Schedule: 24 Days / Month</span>
+  <span class="badge badge-amber">Daily Pace: 30 Patients / Doctor / Day</span>
+  <span class="badge badge-emerald">Encounter Length: 30 Mins / Visit</span>
+  <span class="badge badge-slate">Includes Google Workspace</span>
+</div>
+
+<div class="section-title">1. Operational Parameters & Total Clinical Volume</div>
+<div class="grid-3">
+  <div class="card card-primary">
+    <h3>Individual Doctor Metrics</h3>
+    <p>
+      • <strong>Daily Patients:</strong> 30 visits/day<br>
+      • <strong>Working Days:</strong> 24 days/month<br>
+      • <strong>Monthly Visits:</strong> <strong>720 visits</strong><br>
+      • <strong>Audio per Visit:</strong> 30 minutes<br>
+      • <strong>Monthly Audio:</strong> <strong>21,600 minutes</strong> (360 hrs)
+    </p>
+  </div>
+  <div class="card card-primary">
+    <h3>All 30 Doctors Combined</h3>
+    <p>
+      • <strong>Total Daily Visits:</strong> 900 visits/day<br>
+      • <strong>Total Monthly Visits:</strong> <strong>21,600 visits</strong><br>
+      • <strong>Total Monthly Audio:</strong> <strong>648,000 minutes</strong><br>
+      • <strong>Total Clinical Hours:</strong> 10,800 audio hours<br>
+      • <strong>Note:</strong> 324k mins = exactly 12 clinic days
+    </p>
+  </div>
+  <div class="card card-primary">
+    <h3>Google Workspace Options</h3>
+    <p>
+      • <strong>Business Starter:</strong> $7.20 / user / mo<br>
+      • <strong>Business Standard (HIPAA):</strong> $14.40 / user / mo<br>
+      • <strong>HIPAA BAA:</strong> Available on Standard+<br>
+      • <strong>Storage:</strong> 2 TB pooled cloud storage/user<br>
+      • <strong>Google Meet:</strong> Recording & noise cancel
+    </p>
+  </div>
+</div>
+
+<div class="section-title">2. Exact Cost Breakdown Per Doctor & All 30 Doctors Combined</div>
+<table>
+  <thead>
+    <tr>
+      <th>Service / Component</th>
+      <th>Unit Rate Formula (PAYG)</th>
+      <th class="num">Per Patient Visit (30 min)</th>
+      <th class="num">Per Doctor / Month (720 visits / 21.6k min)</th>
+      <th class="num">All 30 Doctors / Month (21.6k visits / 648k min)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Deepgram Medical STT</strong><br><span style="color:#64748b; font-size:8.5px;">nova-3-medical (Realtime/Batch)</span></td>
+      <td>$0.00430 / audio minute<br>(30 mins = $0.1290 / visit)</td>
+      <td class="num">$0.1290</td>
+      <td class="num"><strong>$92.88</strong></td>
+      <td class="num"><strong>$2,786.40</strong></td>
+    </tr>
+    <tr>
+      <td><strong>Claude 3.5 Haiku AI Notes</strong><br><span style="color:#64748b; font-size:8.5px;">SOAP Generation + ICD/CPT coding</span></td>
+      <td>~7.5k in tokens ($1.00/M) + 1k out ($5.00/M)<br>= $0.0125 / visit</td>
+      <td class="num">$0.0125</td>
+      <td class="num"><strong>$9.00</strong></td>
+      <td class="num"><strong>$270.00</strong></td>
+    </tr>
+    <tr>
+      <td><strong>AWS S3 Encrypted Storage</strong><br><span style="color:#64748b; font-size:8.5px;">Opus audio (5.4 MB/visit) + PUT API</span></td>
+      <td>$0.023/GB-mo storage<br>+ $0.005/1,000 PUT requests</td>
+      <td class="num">$0.0001</td>
+      <td class="num"><strong>$0.10</strong></td>
+      <td class="num"><strong>$3.00</strong></td>
+    </tr>
+    <tr>
+      <td><strong>AWS Core Cloud Platform</strong><br><span style="color:#64748b; font-size:8.5px;">RDS Postgres + EC2 Beanstalk + CDN</span></td>
+      <td>Shared cluster scaled for 30 docs<br>($160.00/mo total base)</td>
+      <td class="num">$0.0074</td>
+      <td class="num"><strong>$5.33</strong></td>
+      <td class="num"><strong>$160.00</strong></td>
+    </tr>
+    <tr>
+      <td><strong>Google Workspace Business Standard</strong><br><span style="color:#64748b; font-size:8.5px;">HIPAA BAA Compliant Email + 2TB Drive</span></td>
+      <td>$14.40 / user / month<br>($7.20 / mo if Business Starter)</td>
+      <td class="num">$0.0200</td>
+      <td class="num"><strong>$14.40</strong></td>
+      <td class="num"><strong>$432.00</strong></td>
+    </tr>
+    <tr class="highlight-row">
+      <td><strong>TOTAL OPERATIONAL COST (with Google WS)</strong></td>
+      <td><strong>Full Tech Stack + Google Workspace</strong></td>
+      <td class="num"><strong>$0.1690 / visit</strong></td>
+      <td class="num"><strong>$121.71 / doctor</strong></td>
+      <td class="num"><strong>$3,651.40 / month</strong></td>
+    </tr>
+    <tr>
+      <td style="color:#64748b;"><em>Alternative: With Google WS Starter ($7.20/user)</em></td>
+      <td style="color:#64748b;"><em>Email + 30GB Drive (No BAA)</em></td>
+      <td class="num" style="color:#64748b;"><em>$0.1590 / visit</em></td>
+      <td class="num" style="color:#64748b;"><em>$114.51 / doctor</em></td>
+      <td class="num" style="color:#64748b;"><em>$3,435.40 / month</em></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="section-title">3. Unit Economics Summary</div>
+<div class="grid-2">
+  <div class="card">
+    <h3>Cost per Patient Encounter</h3>
+    <p>For a complete <strong>30-minute doctor consultation</strong>, including real-time medical transcription, clinical SOAP note generation, audio archiving, cloud hosting, and HIPAA Google Workspace email, the total cost is only <strong>$0.169 (under 17 cents per visit)</strong>.</p>
+  </div>
+  <div class="card">
+    <h3>Cost per Doctor per Day</h3>
+    <p>A doctor seeing 30 patients across a 15-hour clinical day costs <strong>$5.07 per day</strong> to support with ambient AI notes and enterprise Google Workspace. At standard physician compensation, this cost is recovered in the first 2 minutes of the day.</p>
+  </div>
+</div>
+
+<div class="callout">
+  <strong>Key Volume Insight on 324,000 Minutes:</strong> At 30 min/visit and 30 patients/day, 30 doctors generate 648,000 minutes in a 24-day month. If your contract or pre-purchased pool is exactly <strong>324,000 minutes</strong>, this covers <strong>12 full clinic days for all 30 doctors</strong> (or 24 days for 15 doctors), costing Anot Health exactly <strong>$1,825.70</strong> including Google Workspace.
+</div>
+
+<div class="footer">
+  <div>Anot Health Commercial Report · Confidential</div>
+  <div>Page 1 of 2 · 30-Doctor High-Volume Operational Costing</div>
+</div>
+
+<div class="page-break"></div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+<!-- PAGE 2: COMMERCIAL ASKING PRICE & REVENUE PROJECTIONS FOR 30 DOCTORS      -->
+<!-- ══════════════════════════════════════════════════════════════════════════ -->
+
+<div class="header">
+  <div class="brand">ANOT <span>HEALTH</span></div>
+  <div class="doc-title">Clinic Commercial Strategy & Asking Price</div>
+</div>
+
+<h1>Commercial Asking Price to the Clinic (30 Doctors)</h1>
+<div class="subtitle">Recommended pricing models, revenue realization, and doctor value proposition for high-volume practices.</div>
+
+<div class="section-title">4. Recommended Asking Price Packages for 30 Doctors</div>
+
+<div class="pricing-deck">
+  <div class="price-card">
+    <h4>Package A: High-Volume AI</h4>
+    <div class="price-sub">Ambient AI Scribing + Google WS</div>
+    <div class="price-tag">$299 <span style="font-size:9px; font-weight:normal; color:#64748b;">/doc/mo</span></div>
+    <div class="price-sub">Clinic Total: <strong>$8,970 / month</strong></div>
+    <ul>
+      <li>Unlimited 30-min ambient encounters</li>
+      <li>Instant AI SOAP note generation</li>
+      <li>ICD-10 & CPT automated coding</li>
+      <li>HIPAA Google Workspace license</li>
+      <li>1-Click EMR Clipboard push</li>
+    </ul>
+    <div style="margin-top:5px; font-size:9px; font-weight:bold; color:#059669;">
+      Cost: $121.71/doc · Margin: <strong>59.3%</strong><br>
+      Net Profit: <strong>+$5,318.60 / mo</strong> ($63.8k/yr)
+    </div>
+  </div>
+
+  <div class="price-card featured">
+    <h4>Package B: Professional Clinic (Recommended)</h4>
+    <div class="price-sub">Full Scribe Platform + Templates</div>
+    <div class="price-tag">$399 <span style="font-size:9px; font-weight:normal; color:#64748b;">/doc/mo</span></div>
+    <div class="price-sub">Clinic Total: <strong>$11,970 / month</strong></div>
+    <ul>
+      <li>Everything in Package A</li>
+      <li>Custom clinic specialty SOAP macros</li>
+      <li>Saint Mary Clinic Multi-provider portal</li>
+      <li>Audit logging & physician analytics</li>
+      <li>Dedicated onboarding & training</li>
+    </ul>
+    <div style="margin-top:5px; font-size:9px; font-weight:bold; color:#059669;">
+      Cost: $121.71/doc · Margin: <strong>69.5%</strong><br>
+      Net Profit: <strong>+$8,318.60 / mo</strong> ($99.8k/yr)
+    </div>
+  </div>
+
+  <div class="price-card">
+    <h4>Package C: Enterprise + Human QA</h4>
+    <div class="price-sub">AI + Dedicated Scribe QA Support</div>
+    <div class="price-tag">$599 <span style="font-size:9px; font-weight:normal; color:#64748b;">/doc/mo</span></div>
+    <div class="price-sub">Clinic Total: <strong>$17,970 / month</strong></div>
+    <ul>
+      <li>Everything in Package B</li>
+      <li>Human Scribe QA spot-checks</li>
+      <li>QPS accuracy scoring reports</li>
+      <li>EMR direct API integration bridge</li>
+      <li>24/7 priority SLA support</li>
+    </ul>
+    <div style="margin-top:5px; font-size:9px; font-weight:bold; color:#059669;">
+      Cost: ~$185/doc · Margin: <strong>69.1%</strong><br>
+      Net Profit: <strong>+$12,420.00 / mo</strong> ($149k/yr)
+    </div>
+  </div>
+</div>
+
+<div class="section-title">5. Clinic Financial Comparison & Profit Breakdown</div>
+<table>
+  <thead>
+    <tr>
+      <th>Commercial Model</th>
+      <th class="num">Per Doctor / Mo</th>
+      <th class="num">Clinic Gross Revenue</th>
+      <th class="num">Total Monthly Cost</th>
+      <th class="num">Net Monthly Profit</th>
+      <th class="num">Annual Net Profit (ARR)</th>
+      <th class="num">Gross Margin</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Package A (Standard AI @ $299)</strong></td>
+      <td class="num">$299.00</td>
+      <td class="num">$8,970.00</td>
+      <td class="num">$3,651.40</td>
+      <td class="num"><strong style="color:#059669;">+$5,318.60</strong></td>
+      <td class="num"><strong>$63,823 / year</strong></td>
+      <td class="num">59.3%</td>
+    </tr>
+    <tr class="highlight-row">
+      <td><strong>Package B (Recommended @ $399)</strong></td>
+      <td class="num"><strong>$399.00</strong></td>
+      <td class="num"><strong>$11,970.00</strong></td>
+      <td class="num"><strong>$3,651.40</strong></td>
+      <td class="num"><strong style="color:#059669;">+$8,318.60</strong></td>
+      <td class="num"><strong>$99,823 / year</strong></td>
+      <td class="num"><strong>69.5%</strong></td>
+    </tr>
+    <tr>
+      <td><strong>Package C (Enterprise QA @ $599)</strong></td>
+      <td class="num">$599.00</td>
+      <td class="num">$17,970.00</td>
+      <td class="num">~$5,550.00</td>
+      <td class="num"><strong style="color:#059669;">+$12,420.00</strong></td>
+      <td class="num"><strong>$149,040 / year</strong></td>
+      <td class="num">69.1%</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="section-title">6. Pitching to the Clinic Management (The Value Equation)</div>
+<div class="grid-2">
+  <div class="card">
+    <h3>The Time Burn Problem</h3>
+    <p>At 30 patients a day with 30-minute consultations, doctors are working 15 hours of patient care daily. Charting notes manually would require an extra <strong>2.5 to 3 hours every night per doctor</strong>. Across 30 doctors, that is <strong>75 to 90 hours of overtime charting every day</strong>.</p>
+  </div>
+  <div class="card">
+    <h3>The Clinic ROI</h3>
+    <p>Anot Health generates the full SOAP note in real-time as the visit concludes. By saving 2.5 hours per doctor daily across 24 days, you reclaim <strong>1,800 hours of clinical time per month</strong>. Valued at $150/hr, that represents <strong>$270,000 in monthly clinical value</strong> for an investment of only $11,970.</p>
+  </div>
+</div>
+
+<div class="footer">
+  <div>Anot Health Commercial Report · Confidential & Proprietary</div>
+  <div>Page 2 of 2 · Tech Stack: Deepgram Nova-3 Medical, Claude 3.5 Haiku, AWS S3/RDS, Google Workspace</div>
+</div>
+
+</body>
+</html>

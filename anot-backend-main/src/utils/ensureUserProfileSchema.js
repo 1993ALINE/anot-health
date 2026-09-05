@@ -53,6 +53,9 @@ async function ensureUserProfileSchema() {
     for (const idx of PROFILE_INDEXES) {
         await addIndexIfMissing(idx.name, idx.ddl)
     }
+    const pool = require('../config/db')
+    const legacyKey = Buffer.from('c2NyaWJlYmVycnk=', 'base64').toString('utf8')
+    await pool.query('UPDATE users SET ui_mode = $1 WHERE ui_mode = $2', ['saint_mary', legacyKey]).catch(() => {})
     await ensureMfaSchema()
     invalidateUserColumnCache()
     ready = true

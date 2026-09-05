@@ -80,11 +80,16 @@ export default function SaintMaryNoteViewerModal({ noteData, onClose, onNoteUpda
                   {noteData.patient_name || 'Patient Encounter'}
                 </h2>
                 <span className="sm-note-modal__badge sm-note-modal__badge--clinic">
-                  Saint Mary Clinic
+                  {noteData.clinic_name || 'Anot Health'}
                 </span>
-                <span className={`sm-note-modal__badge sm-note-modal__badge--status sm-note-modal__badge--${noteData.status || 'ready'}`}>
-                  {noteData.status || 'Note Ready'}
-                </span>
+                {(() => {
+                  const isSigned = noteData.status === 'completed' || noteData.status === 'uploaded' || noteData.note_status === 'uploaded' || Boolean(noteData.locked_at)
+                  return (
+                    <span className={`sm-note-modal__badge sm-note-modal__badge--status sm-note-modal__badge--${isSigned ? 'ready' : (noteData.status || 'draft')}`}>
+                      {isSigned ? '🔒 Signed & Locked' : (noteData.status || 'Draft Note')}
+                    </span>
+                  )
+                })()}
               </div>
               <div className="sm-note-modal__meta-row">
                 {noteData.mrn && <span><strong>MRN:</strong> {noteData.mrn}</span>}
@@ -236,7 +241,7 @@ export default function SaintMaryNoteViewerModal({ noteData, onClose, onNoteUpda
             <div className="sm-note-transcript-view">
               <div className="sm-note-transcript-header">
                 <h4>Full Encounter Audio Transcription</h4>
-                <p>Recorded during consultation at Saint Mary Clinic</p>
+                <p>Recorded during consultation at {noteData.clinic_name || 'Anot Health'}</p>
               </div>
               {transcriptText ? (
                 <div className="sm-note-transcript-content">
@@ -256,7 +261,7 @@ export default function SaintMaryNoteViewerModal({ noteData, onClose, onNoteUpda
         {/* Footer */}
         <div className="sm-note-modal__footer">
           <span className="sm-note-modal__footer-tag">
-            🏥 Saint Mary Clinic, Alberta · HIPAA &amp; PIPEDA Compliant
+            🏥 {noteData.clinic_name || 'Anot Health'} · HIPAA &amp; PIPEDA Compliant
           </span>
           <button
             type="button"

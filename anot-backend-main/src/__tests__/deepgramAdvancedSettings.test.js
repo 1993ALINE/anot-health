@@ -48,7 +48,7 @@ describe('buildListenOptions', () => {
     expect(opts.numerals).toBe(true)
     expect(opts.filler_words).toBe(false)
     expect(opts.profanity_filter).toBe(false)
-    expect(opts.redact).toEqual(['pii', 'numbers'])
+    expect(opts.redact).toEqual(['pii'])
     expect(opts.keyterm).toEqual(['Dr. Smith', 'Sunrise Clinic'])
   })
 

@@ -65,11 +65,14 @@ Date: ${patientInfo.visit_date}
 TRANSCRIPTION(S) & CLINICIAN NOTES:
 ${combinedTranscription}
 
-Start directly with the first section header below — no title, no patient header, no markdown. Use EXACTLY these ${headers.length} plain-text section headers ending with a colon, in this exact order. Under each header, write the content a clinician would expect for a section with that name, based STRICTLY AND ONLY on the transcription and notes above. 
-
-CRITICAL FACTUALITY RULE: Do NOT invent, assume, or hallucinate physical exams, vitals, normal organ systems, imaging results, or medications that were not explicitly stated in the transcription. If an exam, system, or plan element was not dictated or discussed, write "Not dictated."
-
-For any section about ICD-10, CPT, or E&M/MDM codes specifically: do not just scan the transcript for literal code mentions (clinicians rarely dictate codes aloud). Instead, act as a certified medical coder — review the diagnoses, findings, and plan you just documented elsewhere in this note, and assign the ICD-10-CM diagnosis codes and CPT (including E&M) codes that those documented facts actually support. List each as "CODE — short description" on its own line, most relevant first. Base any E&M level strictly on the documented history/exam/medical decision-making complexity — do not upcode. Only write "Not mentioned" if the note truly contains no diagnosis or billable service. These are coder-assist suggestions for the clinician to verify before billing, not a final determination.
+INSTRUCTIONS:
+1. Start directly with the first section header below — no title, no patient header, no markdown. Use EXACTLY these ${headers.length} plain-text section headers ending with a colon, in this exact order.
+2. Under each header, write the concise, professional clinical content expected for that section.
+3. The transcript may include speaker-labeled dialogue (e.g. Speaker 0, Speaker 1). Determine who is the clinician and who is the patient based on context.
+4. Distinguish carefully between what the patient reports (Subjective / HPI) and what the clinician finds, measures, or observes (Objective / Exam).
+5. Document all medications with dosages, frequencies, and durations if stated.
+6. CRITICAL FACTUALITY RULE: Do NOT invent, assume, or hallucinate physical exams, vitals, normal organ systems, imaging results, or medications that were not explicitly stated in the transcription. If an exam, system, or plan element was not dictated or discussed, write "Not dictated."
+7. For ICD-10 and CPT/E&M coding: act as a certified medical coder — review the documented clinical diagnoses, findings, and care plan, and assign standard, accurate ICD-10-CM and CPT codes (e.g., "M54.5 — Low back pain"). Base any E&M level strictly on documented complexity — do not upcode.
 
 ${sectionList}`
 }
@@ -80,16 +83,27 @@ ${sectionList}`
 async function transcribeAudioSegment(audioPath, settings, visitId, idx) {
   const placeholder = `[Recording ${idx + 1}: transcription unavailable]`
 
-  if (!/^\/uploads\/[\w.\-]+$/.test(audioPath)) {
+  let normalizedPath = String(audioPath || '').trim()
+  if (!normalizedPath.startsWith('/uploads/')) {
+    if (normalizedPath.startsWith('uploads/')) {
+      normalizedPath = '/' + normalizedPath
+    } else if (!normalizedPath.includes('/')) {
+      normalizedPath = '/uploads/' + normalizedPath
+    }
+  }
+
+  const cleanName = path.basename(normalizedPath)
+  if (!cleanName || !/^[\w.\-]+$/.test(cleanName)) {
     console.warn(`Skipping invalid audio path for visit ${visitId}: ${audioPath}`)
     return { text: placeholder, success: false }
   }
+  normalizedPath = `/uploads/${cleanName}`
 
   const needsFfmpeg = settings.ffmpeg_enabled && settings.ffmpeg_preprocess_before_transcribe
 
   if (!needsFfmpeg) {
-    console.log(`🎙 Transcribing from S3: ${path.basename(audioPath)}`)
-    const text = await transcribeFile(null, settings, visitId, { fromS3: true, s3Path: audioPath })
+    console.log(`🎙 Transcribing from S3: ${path.basename(normalizedPath)}`)
+    const text = await transcribeFile(null, settings, visitId, { fromS3: true, s3Path: normalizedPath })
     if (text) return { text, success: true }
     console.warn(`[transcription] Segment ${idx + 1} failed for visit ${visitId} — Deepgram returned no text`)
     return { text: placeholder, success: false }
@@ -97,7 +111,7 @@ async function transcribeAudioSegment(audioPath, settings, visitId, idx) {
 
   let fullPath
   try {
-    fullPath = await downloadAudioToTemp(dbPathToKey(audioPath))
+    fullPath = await downloadAudioToTemp(dbPathToKey(normalizedPath))
   } catch (e) {
     console.warn(`Audio not found in S3 for visit ${visitId} (${audioPath}):`, e.message)
     return { text: placeholder, success: false }

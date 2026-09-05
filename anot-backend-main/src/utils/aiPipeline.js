@@ -2,7 +2,8 @@ const pool = require('../config/db')
 
 const { auditLog } = require('./auditLogger')
 
-const { loadAiSettings, getAnthropicKey, useDeepgram } = require('../services/aiSettings')
+const { loadAiSettings, getAnthropicKey, useDeepgram, resolveCanonicalAnthropicModel } = require('../services/aiSettings')
+const { withRetry } = require('./retry')
 
 const { setVisitTranscriptionStatus, claimVisitTranscription } = require('./visitSchemaCompat')
 
@@ -69,21 +70,18 @@ async function loadAnthropicClient(settings) {
  */
 
 async function callAnthropicForNote(anthropic, settings, prompt) {
-
-  return anthropic.messages.create({
-
-    model: settings.anthropic_model || 'claude-haiku-4-5',
-
-    max_tokens: 1800,
-
-    system:
-
-      'You are a medical scribe assistant. Generate structured clinical notes from visit transcriptions. Use plain text only — no markdown, no bold markers, no # headers, no separator lines. Be professional, concise and clinically accurate. Only include clinical information present in the transcription — never invent or assume clinical details. The one exception is any ICD-10/CPT/E&M coding section: there, follow the coding-specific instructions in the user prompt, which derive codes from the diagnoses and plan you documented rather than from verbatim transcript mentions.',
-
-    messages: [{ role: 'user', content: prompt }],
-
-  })
-
+  const model = resolveCanonicalAnthropicModel(settings?.anthropic_model)
+  console.log(`[aiPipeline] Calling Anthropic with model: ${model}`)
+  return withRetry(
+    () => anthropic.messages.create({
+      model,
+      max_tokens: 3000,
+      system:
+        'You are an expert board-certified medical scribe and clinical documentation specialist. Generate structured, clinically precise clinical notes from visit transcriptions. Use plain text only — do NOT use markdown symbols, do NOT use bold markers or asterisks, do NOT use # headers, and do NOT use separator lines. Be thorough, professional, and clinically accurate. Distinguish clearly between patient symptoms/history (Subjective) and clinician findings/vitals/exam (Objective). Document specific medications with dosages, routes, frequencies, and durations if stated. Never fabricate or assume clinical details that were not discussed. For ICD-10 and CPT coding, assign standard codes and descriptions strictly supported by the documented diagnoses and care delivered.',
+      messages: [{ role: 'user', content: prompt }],
+    }),
+    { maxAttempts: 3, label: 'Anthropic Claude Note Generation', baseDelayMs: 1000 }
+  )
 }
 
 

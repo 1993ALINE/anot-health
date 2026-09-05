@@ -59,8 +59,8 @@ const getAllPatients = async (req, res) => {
         } else if (role === 'clinician') {
             result = await pool.query(
                 `SELECT DISTINCT p.* FROM patients p
-                 INNER JOIN visits v ON v.patient_id = p.id
-                 WHERE v.clinician_id = $1
+                 LEFT JOIN visits v ON v.patient_id = p.id
+                 WHERE v.clinician_id = $1 OR v.id IS NULL
                  ORDER BY p.name ASC`,
                 [id]
             )

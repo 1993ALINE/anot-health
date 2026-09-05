@@ -37,6 +37,7 @@ async function getVisitForUser(visitId, user, client = pool) {
             OR v.clinician_id IN (
               SELECT clinician_id FROM scribe_assignments WHERE scribe_id = $2
             )
+            OR v.id IN (SELECT visit_id FROM notes WHERE submitted_by = $2)
           )`,
       [id, user.id]
     )

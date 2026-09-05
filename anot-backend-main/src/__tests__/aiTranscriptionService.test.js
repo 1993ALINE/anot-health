@@ -6,13 +6,24 @@ const {
 const { parseDeepgramOutput } = require('../services/deepgramService')
 
 describe('calculateTranscribeTimeout', () => {
-  const originalEnv = process.env.DEEPGRAM_TIMEOUT_MS
+  const originalDeepgramEnv = process.env.DEEPGRAM_TIMEOUT_MS
+  const originalTranscribeEnv = process.env.TRANSCRIBE_TIMEOUT_MS
 
-  afterEach(() => {
-    if (originalEnv === undefined) {
+  beforeEach(() => {
+    delete process.env.DEEPGRAM_TIMEOUT_MS
+    delete process.env.TRANSCRIBE_TIMEOUT_MS
+  })
+
+  afterAll(() => {
+    if (originalDeepgramEnv === undefined) {
       delete process.env.DEEPGRAM_TIMEOUT_MS
     } else {
-      process.env.DEEPGRAM_TIMEOUT_MS = originalEnv
+      process.env.DEEPGRAM_TIMEOUT_MS = originalDeepgramEnv
+    }
+    if (originalTranscribeEnv === undefined) {
+      delete process.env.TRANSCRIBE_TIMEOUT_MS
+    } else {
+      process.env.TRANSCRIBE_TIMEOUT_MS = originalTranscribeEnv
     }
   })
 
@@ -35,6 +46,11 @@ describe('calculateTranscribeTimeout', () => {
 })
 
 describe('resolveTranscribeTimeoutMs', () => {
+  beforeEach(() => {
+    delete process.env.DEEPGRAM_TIMEOUT_MS
+    delete process.env.TRANSCRIBE_TIMEOUT_MS
+  })
+
   test('uses dynamic timeout for empty settings', () => {
     expect(resolveTranscribeTimeoutMs({}, 0)).toBe(156000)
     expect(resolveTranscribeTimeoutMs({}, 1024 * 1024)).toBe(169000)

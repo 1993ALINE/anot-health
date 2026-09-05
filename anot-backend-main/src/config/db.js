@@ -184,5 +184,6 @@ async function withTransaction(fn) {
 }
 
 module.exports = pool
+module.exports.pool = pool
 module.exports.withTransaction = withTransaction
 module.exports.verifyDatabaseConnection = verifyDatabaseConnection

@@ -78,7 +78,17 @@ function prepareValidatedStream(source, mimetype, maxBytes) {
       pass.end()
     })
 
+    source.on('close', () => {
+      if (!validated || !pass.writableEnded) {
+        pass.destroy()
+        limiter.destroy()
+        reject(Object.assign(new Error('Upload connection closed prematurely.'), { status: 499 }))
+      }
+    })
+
     source.on('error', (err) => {
+      pass.destroy()
+      limiter.destroy()
       reject(err)
     })
 

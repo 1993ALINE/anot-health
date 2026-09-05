@@ -1,5 +1,56 @@
 /* mobile-responsive-patch.css — global mobile tap targets & overflow fixes */
 
+/* ─── BASELINE: prevent horizontal overflow on every viewport ─────────── */
+html,
+body,
+#root {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+/* ─── iOS INPUT ZOOM PREVENTION: font-size ≥ 16px on all inputs ────────── */
+@media (max-width: 768px) {
+  input,
+  select,
+  textarea,
+  .sm-intake-input,
+  .sm-patient-quick-dropdown,
+  .sm-template-pill__select,
+  .sf-input,
+  .sf-select,
+  .sf-textarea,
+  .adm-input,
+  .adm-input--select-compact,
+  .cl-input,
+  .qps-input {
+    font-size: 16px !important;
+  }
+}
+
+/* ─── MINIMUM 44px TAP TARGETS: all interactive elements ─────────────── */
+@media (max-width: 768px) {
+  button,
+  a.btn,
+  [role="button"],
+  .sm-nav__btn,
+  .sm-btn-action,
+  .sm-btn-hero-record,
+  .sm-idle-mic-btn,
+  .sm-logout-link,
+  .sf-audio-bar__tab,
+  .adm-btn-primary,
+  .adm-btn-action,
+  .sf-btn,
+  .cl-btn,
+  .qps-btn,
+  select,
+  .sm-patient-quick-dropdown,
+  .sm-template-pill__select {
+    min-height: 44px !important;
+    touch-action: manipulation;
+  }
+}
+
 @media (max-width: 768px) {
   html,
   body {
@@ -7,7 +58,7 @@
     max-width: 100vw;
   }
 
-  /* Login page (outside .sf-portal) */
+  /* Login page */
   .login-page,
   .login-page__shell,
   .login-page__grid,
@@ -25,11 +76,13 @@
     touch-action: manipulation;
   }
 
+  /* Portal base */
   .sf-portal,
   .sf-portal .sf-body,
   .sf-portal .sf-main,
   .sf-portal .sf-main-fixed,
-  .sf-portal .sf-portal__main {
+  .sf-portal .sf-portal__main,
+  .sm-portal {
     max-width: 100vw;
     overflow-x: hidden;
   }
@@ -42,37 +95,284 @@
     height: auto;
   }
 
-  .sf-portal .sf-table-wrap,
-  .sf-portal .adm-table-wrap {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-
-  .sf-portal [class*="panel"],
-  .sf-portal [class*="grid"],
-  .sf-portal [class*="row"] {
-    min-width: 0;
-  }
-
-  .sf-portal .btn,
-  .sf-portal button,
-  .sf-portal a.btn {
-    min-height: 44px;
-    touch-action: manipulation;
-  }
-
-  .sf-portal .sf-panels {
+  /* ─── CLINICIAN PORTAL (sm-*) ─────────────────────────────────────────── */
+  .sm-portal {
     display: flex;
     flex-direction: column;
   }
 
-  .sf-portal .sf-panel {
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
+  /* Header: compact on mobile */
+  .sm-header {
+    height: auto;
+    min-height: 56px;
+    padding: 8px 12px;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
-  /* Audio player — touch-friendly controls */
+  .sm-brand__name {
+    font-size: 14px;
+  }
+
+  .sm-brand__sub,
+  .sm-clinician-meta {
+    display: none;
+  }
+
+  .sm-nav {
+    gap: 2px;
+    flex-wrap: wrap;
+  }
+
+  .sm-nav__btn {
+    padding: 10px 10px;
+    font-size: 12px;
+    min-height: 44px;
+  }
+
+  .sm-header__divider {
+    display: none;
+  }
+
+  /* Main workspace: single column on mobile */
+  .sm-workspace {
+    grid-template-columns: 1fr !important;
+    gap: 12px;
+    padding: 12px;
+  }
+
+  /* Canvas: reduce padding */
+  .sm-canvas {
+    padding: 16px;
+    min-height: auto;
+  }
+
+  /* Patient intake: stack form fields */
+  .sm-patient-intake-inputs-row {
+    grid-template-columns: 1fr !important;
+    gap: 10px;
+  }
+
+  .sm-patient-intake-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .sm-patient-quick-select {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .sm-patient-quick-dropdown {
+    width: 100%;
+    max-width: 100%;
+    font-size: 16px !important;
+  }
+
+  /* Recording action buttons: touch-friendly row */
+  .sm-rec-actions-row {
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+  }
+
+  .sm-btn-action--pause,
+  .sm-btn-action--stop {
+    flex: 1;
+    min-width: 120px;
+  }
+
+  /* After-recording note actions: wrap into 2 columns */
+  .sm-note-actions-row,
+  [class*="sm-note-actions"] {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  /* Macro chips: horizontal scroll */
+  .sm-smart-chips-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+
+  .sm-smart-chip {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  /* Schedule modal / new patient modal: full width */
+  .sm-schedule-modal,
+  .sm-macro-modal,
+  .sm-note-viewer,
+  [class*="sm-modal"] {
+    width: 95vw !important;
+    max-width: 95vw !important;
+    max-height: 90vh;
+    overflow-y: auto;
+    margin: 20px auto;
+  }
+
+  /* Form grids inside modals: single column */
+  .sm-form-grid-2,
+  .sm-form-grid-3,
+  [class*="sm-form-grid"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* History table: horizontal scroll wrapper */
+  .sm-history-table,
+  [class*="sm-history"] {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Clock display: smaller on mobile */
+  .sm-clock-display {
+    font-size: 32px;
+    letter-spacing: 1px;
+  }
+
+  /* ─── ADMIN PORTAL (adm-*) ────────────────────────────────────────────── */
+
+  /* Admin sidebar */
+  .sf-sidebar,
+  .sf-sidebar--rich,
+  .adm-sidebar {
+    transform: translateX(-100%);
+    width: 280px !important;
+    max-width: 85vw;
+    z-index: 400;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100%;
+  }
+
+  .sf-sidebar.open,
+  .sf-sidebar--rich.open {
+    transform: translateX(0);
+  }
+
+  .sf-hamburger {
+    display: flex !important;
+    z-index: 450;
+  }
+
+  /* Global Topbar */
+  .sf-topbar {
+    padding-left: 4rem;
+    height: auto;
+    min-height: 60px;
+  }
+
+  /* Admin overview stat cards: 1 column */
+  .adm-stat-cards,
+  .adm-grid,
+  .adm-overview-cards {
+    grid-template-columns: 1fr !important;
+    gap: 12px;
+  }
+
+  /* Admin tables: horizontal scroll */
+  .adm-table-wrap,
+  .adm-table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+  }
+
+  .adm-table__head,
+  .adm-table__row {
+    min-width: 600px;
+  }
+
+  /* Admin toolbar: stack */
+  .adm-toolbar {
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+  }
+
+  .adm-toolbar__actions {
+    margin-left: 0 !important;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .adm-btn-primary {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .adm-input,
+  .adm-input--narrow,
+  .adm-input--select-compact {
+    width: 100%;
+    font-size: 16px !important;
+  }
+
+  /* Admin user management modals */
+  .adm-modal,
+  .adm-modal-content,
+  [class*="adm-modal"] {
+    width: 95vw !important;
+    max-width: 95vw !important;
+    max-height: 90vh;
+    overflow-y: auto;
+    margin: 20px auto;
+  }
+
+  /* Module permissions modal */
+  .adm-module-permissions-modal {
+    width: 95vw;
+    max-width: 95vw;
+  }
+
+  /* Force grids to single column */
+  .adm-grid,
+  .cl-grid,
+  .sf-grid,
+  .sf-form-grid,
+  .cl-schedule .sf-form-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Stack flex containers */
+  .sf-stats,
+  .sf-panels,
+  .cl-panels,
+  .adm-panels {
+    flex-direction: column !important;
+    gap: 1rem !important;
+  }
+
+  /* Tables */
+  .sf-table-wrap,
+  .adm-table-wrap,
+  .cl-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .sf-table,
+  .adm-table {
+    min-width: 700px;
+  }
+
+  /* Modals */
+  .sf-modal,
+  .sf-modal-content {
+    width: 95vw !important;
+    max-width: 95vw !important;
+    margin: 10px auto !important;
+  }
+
+  /* ─── AUDIO PLAYER ────────────────────────────────────────────────────── */
   .sf-audio-bar__tab {
     min-height: 44px;
     padding: 0.5rem 0.875rem;
@@ -96,7 +396,7 @@
     font-size: 16px;
   }
 
-  /* Note detail readability */
+  /* Note cards */
   .cl-note-detail-header,
   .cl-note-detail-chip,
   .sf-note-pre,
@@ -109,93 +409,9 @@
   .cl-note-detail-actions .btn {
     min-height: 44px;
   }
-
-  /* Patient add form — single column, full-width actions */
-  .cl-schedule .sf-form-grid {
-    grid-template-columns: 1fr !important;
-  }
-
-  .cl-schedule .sf-form-actions {
-    flex-direction: column;
-  }
-
-  .cl-schedule .sf-form-actions .btn {
-    width: 100%;
-    justify-content: center;
-  }
-
-  /* DOB calendar trigger — 44px tap target */
-  .cl-schedule .sf-form-group button[aria-label="Open date picker"] {
-    min-width: 44px;
-    min-height: 44px;
-    padding: 10px !important;
-  }
 }
 
-@media (max-width: 768px) {
-  /* Sidebar toggle and hamburger display */
-  .sf-sidebar, .sf-sidebar--rich {
-    transform: translateX(-100%);
-    width: 280px !important;
-    max-width: 85vw;
-    z-index: 400;
-  }
-  .sf-sidebar.open, .sf-sidebar--rich.open {
-    transform: translateX(0);
-  }
-  .sf-hamburger {
-    display: flex !important;
-    z-index: 450;
-  }
-
-  /* Global Topbar */
-  .sf-topbar {
-    padding-left: 4rem;
-    height: auto;
-    min-height: 60px;
-  }
-
-  /* Force grids to single column */
-  .adm-grid, 
-  .cl-grid, 
-  .sf-grid, 
-  .sf-form-grid,
-  .cl-schedule .sf-form-grid {
-    grid-template-columns: 1fr !important;
-  }
-
-  /* Stack flex containers */
-  .sf-stats,
-  .sf-panels,
-  .cl-panels,
-  .adm-panels {
-    flex-direction: column !important;
-    gap: 1rem !important;
-  }
-
-  /* Ensure tables can scroll */
-  .sf-table-wrap, 
-  .adm-table-wrap, 
-  .cl-table-wrap {
-    width: 100%;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-  
-  .sf-table, 
-  .adm-table {
-    min-width: 700px;
-  }
-
-  /* Modals */
-  .sf-modal, 
-  .sf-modal-content {
-    width: 95vw !important;
-    max-width: 95vw !important;
-    margin: 10px auto !important;
-  }
-}
-
+/* ─── EXTRA SMALL PHONES (360px-375px) ───────────────────────────────── */
 @media (max-width: 375px) {
   .sf-portal .sf-body {
     padding-left: 12px;
@@ -205,5 +421,57 @@
   .sf-portal .sf-topbar {
     padding-left: 3.5rem;
     padding-right: 0.75rem;
+  }
+
+  .sm-header {
+    padding: 6px 8px;
+  }
+
+  .sm-workspace {
+    padding: 8px;
+    gap: 8px;
+  }
+
+  .sm-canvas {
+    padding: 12px;
+  }
+
+  .sm-clock-display {
+    font-size: 26px;
+  }
+
+  .sm-idle-hub {
+    padding: 8px 0;
+  }
+
+  .sm-idle-mic-btn {
+    width: 68px;
+    height: 68px;
+  }
+
+  .adm-stat-card__value {
+    font-size: 24px;
+  }
+}
+
+/* ─── TABLET BREAKPOINT (769px-1080px) ───────────────────────────────── */
+@media (min-width: 769px) and (max-width: 1080px) {
+  .sm-workspace {
+    grid-template-columns: 1fr !important;
+    padding: 16px;
+    gap: 16px;
+  }
+
+  .sm-canvas {
+    padding: 24px;
+  }
+
+  .sm-patient-intake-inputs-row {
+    grid-template-columns: 2fr 1fr !important;
+  }
+
+  .adm-stat-cards,
+  .adm-overview-cards {
+    grid-template-columns: 1fr 1fr !important;
   }
 }

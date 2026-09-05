@@ -82,22 +82,28 @@ function buildListenOptions(settings, callbackUrl) {
   const opts = {
     model: resolveDeepgramModel(settings),
     language: settings?.transcribe_language || settings?.deepgram_language || 'en-US',
+    detect_language: false,        // explicit: skip language detection (saves compute)
     smart_format: true,
     punctuate: settings?.deepgram_punctuate !== false,
     numerals: settings?.deepgram_numerals !== false,
     filler_words: settings?.deepgram_remove_filler_words === false,
     profanity_filter: !!settings?.deepgram_profanity_filter,
+    // paragraphs: removed — Claude reformats the note output anyway
   }
 
+  // Speaker diarization: ALWAYS ON — the transcript is formatted as "Speaker 0: ..." / "Speaker 1: ..."
+  // Claude uses these labels to distinguish doctor speech (Objective/Plan) from patient speech (Subjective/HPI)
+  // Without this, SOAP notes cannot separate what the DOCTOR said vs what the PATIENT reported
   if (settings?.transcribe_show_speaker_labels !== false) {
     opts.diarize = true
-    opts.utterances = true
+    opts.utterances = true  // required: deepgramPayload.js reads results.utterances for speaker-labeled transcript
   } else {
     opts.diarize = false
   }
 
   if (settings?.deepgram_redact_pii) {
-    opts.redact = ['pii', 'numbers']
+    opts.redact = ['pii']
+    // 'numbers' redaction removed — we need medication dosages in the transcript
   }
 
   const keyterms = parseCustomVocabulary(settings?.deepgram_custom_vocabulary)

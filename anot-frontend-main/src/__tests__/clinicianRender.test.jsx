@@ -88,7 +88,7 @@ describe('Clinician and Scribe Render Test', () => {
       role: 'clinician',
       clinic_code: 'saint_mary',
       clinic_name: 'Saint Mary Clinic, Alberta',
-      ui_mode: 'scribeberry',
+      ui_mode: 'saint_mary',
     })
     const div = document.createElement('div')
     const root = createRoot(div)
