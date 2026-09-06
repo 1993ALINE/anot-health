@@ -888,6 +888,8 @@ function Admin() {
     const [settingsError, setSettingsError] = useState('')
     const [deepgramTestLoading, setDeepgramTestLoading] = useState(false)
     const [deepgramTestResult, setDeepgramTestResult] = useState(null)
+    const [anthropicTestLoading, setAnthropicTestLoading] = useState(false)
+    const [anthropicTestResult, setAnthropicTestResult] = useState(null)
 
     // EHR connections live in their own small state, separate from the big
     // settingsForm/PUT-/settings flow above (avoids threading multi-EHR fields
@@ -1210,6 +1212,28 @@ function Admin() {
             showToast(err.message || 'Deepgram test failed.', 'error')
         } finally {
             setDeepgramTestLoading(false)
+        }
+    }
+
+    const testAnthropicApiKey = async () => {
+        try {
+            setAnthropicTestLoading(true)
+            setAnthropicTestResult(null)
+            const payload = {}
+            if (settingsForm.anthropic_api_key?.trim()) {
+                payload.anthropic_api_key = settingsForm.anthropic_api_key.trim()
+            }
+            if (settingsForm.anthropic_model) {
+                payload.anthropic_model = settingsForm.anthropic_model
+            }
+            const data = await settingsAPI.testAnthropic(payload)
+            setAnthropicTestResult(data)
+            showToast(data.message || 'Anthropic Claude API connected successfully!')
+        } catch (err) {
+            setAnthropicTestResult({ ok: false, error: err.message || 'Anthropic API test failed.' })
+            showToast(err.message || 'Anthropic API test failed.', 'error')
+        } finally {
+            setAnthropicTestLoading(false)
         }
     }
 
@@ -2573,6 +2597,28 @@ function Admin() {
                                                 </select>
                                             </div>
                                         </div>
+
+                                        <div className="adm-settings-actions" style={{ marginTop: 12, marginBottom: 8 }}>
+                                            <button
+                                                type="button"
+                                                className="adm-btn-ghost"
+                                                onClick={testAnthropicApiKey}
+                                                disabled={anthropicTestLoading}
+                                            >
+                                                {anthropicTestLoading ? 'Testing Anthropic connection…' : 'Test Anthropic connection'}
+                                            </button>
+                                        </div>
+
+                                        {anthropicTestResult && (
+                                            <div className="adm-form-card" style={{ marginTop: 12, background: anthropicTestResult.ok ? '#f0fdf4' : '#fef2f2', border: `1px solid ${anthropicTestResult.ok ? '#bbf7d0' : '#fecaca'}` }}>
+                                                <div style={{ fontSize: 14, fontWeight: 600, color: anthropicTestResult.ok ? '#166534' : '#991b1b', marginBottom: 4 }}>
+                                                    {anthropicTestResult.ok ? '✓ Anthropic Claude API connected' : '✕ Anthropic connection failed'}
+                                                </div>
+                                                <p className="adm-settings-note" style={{ margin: 0, color: anthropicTestResult.ok ? '#15803d' : '#b91c1c' }}>
+                                                    {anthropicTestResult.ok ? (anthropicTestResult.message || 'API key is valid and ready.') : (anthropicTestResult.error || 'Failed to authenticate with Anthropic.')}
+                                                </p>
+                                            </div>
+                                        )}
                                         <div className="adm-form-card__title" style={{ fontSize: 15, marginTop: 20 }}>FFmpeg (audio preprocessing)</div>
                                         <div className="adm-form-grid">
                                             <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>

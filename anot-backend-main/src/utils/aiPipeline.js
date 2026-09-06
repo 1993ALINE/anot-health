@@ -35,15 +35,21 @@ const AI_DRAFT_UNAVAILABLE =
 
 async function loadAnthropicClient(settings) {
 
-  if (!settings.anthropic_enabled) {
+  const key = await getAnthropicKey()
+
+  // If the key comes from the environment variable, the operator explicitly
+  // configured it — skip the DB-level anthropic_enabled flag so a stale
+  // DB toggle can never block a valid env key.
+  const envKey = (process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY || '').trim()
+  const keyIsFromEnv = !!envKey && key === envKey
+
+  if (!keyIsFromEnv && !settings.anthropic_enabled) {
 
     console.warn('[aiPipeline] Anthropic AI note generation disabled in settings')
 
     return null
 
   }
-
-  const key = await getAnthropicKey()
 
   if (!key) {
 
@@ -70,16 +76,31 @@ async function loadAnthropicClient(settings) {
 async function callAnthropicForNote(anthropic, settings, prompt) {
   const model = resolveCanonicalAnthropicModel(settings?.anthropic_model)
   console.log(`[aiPipeline] Calling Anthropic with model: ${model}`)
-  return withRetry(
-    () => anthropic.messages.create({
-      model,
-      max_tokens: 3000,
-      system:
-        'You are an expert board-certified medical scribe and clinical documentation specialist. Generate structured, clinically precise clinical notes from visit transcriptions. Use plain text only — do NOT use markdown symbols, do NOT use bold markers or asterisks, do NOT use # headers, and do NOT use separator lines. Be thorough, professional, and clinically accurate. Distinguish clearly between patient symptoms/history (Subjective) and clinician findings/vitals/exam (Objective). Document specific medications with dosages, routes, frequencies, and durations if stated. Never fabricate or assume clinical details that were not discussed. For ICD-10 and CPT coding, assign standard codes and descriptions strictly supported by the documented diagnoses and care delivered.',
-      messages: [{ role: 'user', content: prompt }],
-    }),
-    { maxAttempts: 3, label: 'Anthropic Claude Note Generation', baseDelayMs: 1000 }
-  )
+  try {
+    return await withRetry(
+      () => anthropic.messages.create({
+        model,
+        max_tokens: 3000,
+        system:
+          'You are an expert board-certified medical scribe and clinical documentation specialist. Generate structured, clinically precise clinical notes from visit transcriptions. Use plain text only — do NOT use markdown symbols, do NOT use bold markers or asterisks, do NOT use # headers, and do NOT use separator lines. Be thorough, professional, and clinically accurate. Distinguish clearly between patient symptoms/history (Subjective) and clinician findings/vitals/exam (Objective). Document specific medications with dosages, routes, frequencies, and durations if stated. Never fabricate or assume clinical details that were not discussed. For ICD-10 and CPT coding, assign standard codes and descriptions strictly supported by the documented diagnoses and care delivered.',
+        messages: [{ role: 'user', content: prompt }],
+      }),
+      { maxAttempts: 2, label: 'Anthropic Claude Note Generation', baseDelayMs: 1000 }
+    )
+  } catch (err) {
+    if (err?.status === 404 || String(err?.message || '').toLowerCase().includes('model')) {
+      const fallbackModel = model.includes('haiku') ? 'claude-3-5-sonnet-20241022' : 'claude-3-5-haiku-20241022'
+      console.warn(`[aiPipeline] Model ${model} failed (${err.message}). Retrying with fallback model: ${fallbackModel}`)
+      return anthropic.messages.create({
+        model: fallbackModel,
+        max_tokens: 3000,
+        system:
+          'You are an expert board-certified medical scribe and clinical documentation specialist. Generate structured, clinically precise clinical notes from visit transcriptions. Use plain text only — do NOT use markdown symbols, do NOT use bold markers or asterisks, do NOT use # headers, and do NOT use separator lines. Be thorough, professional, and clinically accurate. Distinguish clearly between patient symptoms/history (Subjective) and clinician findings/vitals/exam (Objective). Document specific medications with dosages, routes, frequencies, and durations if stated. Never fabricate or assume clinical details that were not discussed. For ICD-10 and CPT coding, assign standard codes and descriptions strictly supported by the documented diagnoses and care delivered.',
+        messages: [{ role: 'user', content: prompt }],
+      })
+    }
+    throw err
+  }
 }
 
 
@@ -124,7 +145,17 @@ async function generateAINote(transcriptions, patientInfo, templateSections) {
 
   } catch (err) {
 
-    console.error('AI note generation error:', err.message)
+    const status = err?.status || err?.statusCode || '?'
+    const errType = err?.error?.type || err?.type || ''
+    const errMsg = err?.error?.message || err?.message || String(err)
+    console.error(`[aiPipeline] AI note generation failed — HTTP ${status}${errType ? ' (' + errType + ')' : ''}: ${errMsg}`)
+    if (status === 401 || errType === 'authentication_error') {
+      console.error('[aiPipeline] ⚠ ANTHROPIC API KEY IS INVALID. Go to Admin → Settings and update the Anthropic API key.')
+    } else if (status === 429 || errType === 'rate_limit_error') {
+      console.error('[aiPipeline] ⚠ ANTHROPIC RATE LIMIT hit. Wait a moment or upgrade your plan.')
+    } else if (status === 529 || errType === 'overloaded_error') {
+      console.error('[aiPipeline] ⚠ ANTHROPIC API is overloaded. Will retry automatically next time.')
+    }
 
     return null
 

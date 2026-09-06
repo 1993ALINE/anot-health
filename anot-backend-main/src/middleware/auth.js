@@ -50,9 +50,23 @@ function extractBearerToken(authHeader) {
  * Extract Bearer token from Authorization header, or HttpOnly session cookie.
  */
 function extractAuthToken(req) {
+    const bearer = extractBearerToken(req.headers?.authorization)
+    if (bearer) {
+        try {
+            const decodedBearer = jwt.decode(bearer)
+            if (decodedBearer && (
+                decodedBearer.require_password_change === true ||
+                decodedBearer.requirePhiTraining === true ||
+                decodedBearer.requireMfa === true ||
+                decodedBearer.requireMfaEnrollment === true
+            )) {
+                return bearer
+            }
+        } catch (_) {}
+    }
     const fromCookie = readSessionCookieToken(req)
     if (fromCookie) return fromCookie
-    return extractBearerToken(req.headers.authorization)
+    return bearer
 }
 
 /**

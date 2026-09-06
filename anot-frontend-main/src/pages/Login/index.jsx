@@ -634,6 +634,7 @@ export default function Login() {
         <PasswordChangeModal
           temporaryToken={passwordChangeToken}
           onPasswordChanged={handlePasswordChanged}
+          onCancel={() => setPasswordChangeToken(null)}
         />
       ) : null}
 

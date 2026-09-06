@@ -328,19 +328,23 @@ export const authAPI = {
     clearSession()
     clearCsrfToken()
 
-    // 2. Fire server logout in the background (fire-and-forget)
+    // 2. Fire server logout
     const serverLogoutPromise = apiMutate('POST', '/auth/logout').catch(() => {})
 
-    // 3. Purge storage in the background
+    // 3. Purge storage
     const storagePurgePromise = purgeClientPhiStorage().catch(() => {})
 
-    // 4. Instant navigation without waiting on network or IndexedDB locks
+    // Allow the server logout request to reach backend and clear session cookie before reload
+    await Promise.race([
+      Promise.allSettled([serverLogoutPromise, storagePurgePromise]),
+      new Promise((r) => setTimeout(r, 400)),
+    ])
+
+    // 4. Navigation
     if (reload && typeof globalThis.location !== 'undefined') {
       globalThis.location.replace('/login')
       return
     }
-
-    await Promise.allSettled([serverLogoutPromise, storagePurgePromise])
   },
   getCurrentUser: () => {
     const user = readStoredUser()
@@ -378,7 +382,7 @@ export const authAPI = {
     return apiMutate('PUT', '/auth/change-password', {
       includeAuth: false,
       extraHeaders: { Authorization: `Bearer ${temporaryToken}` },
-      body: { newPassword },
+      body: { newPassword, temporaryToken },
     })
   },
 }
@@ -544,6 +548,7 @@ export const settingsAPI = {
   updateTranscription: async (settings) => apiMutate('PUT', '/settings/transcription', { body: { settings } }),
   update: async (settings) => apiMutate('PUT', '/settings', { body: settings }),
   testDeepgramAdvanced: async (settings) => apiMutate('POST', '/settings/deepgram/test', { body: { settings } }),
+  testAnthropic: async (payload = {}) => apiMutate('POST', '/settings/anthropic/test', { body: payload }),
   getClinicianTemplates: async () => apiFetch('/settings/clinician-templates'),
   saveClinicianTemplates: async (templates) =>
     apiMutate('POST', '/settings/clinician-templates', { body: { templates } }),

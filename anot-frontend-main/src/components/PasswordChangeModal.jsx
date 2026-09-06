@@ -18,7 +18,7 @@ import {
  * session, so the parent re-authenticates with the new password to continue
  * (which may then surface the PHI training gate).
  */
-export default function PasswordChangeModal({ temporaryToken, onPasswordChanged }) {
+export default function PasswordChangeModal({ temporaryToken, onPasswordChanged, onCancel }) {
   const [newPassword, setNewPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [showPass, setShowPass] = useState(false)
@@ -162,7 +162,16 @@ export default function PasswordChangeModal({ temporaryToken, onPasswordChanged 
           </ul>
 
           {error ? (
-            <div style={S.error} role="alert">{error}</div>
+            <div style={{ margin: '12px 0 0', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={S.error} role="alert">{error}</div>
+              <button
+                type="button"
+                onClick={() => (onCancel ? onCancel() : window.location.reload())}
+                style={S.secondaryButton}
+              >
+                Sign in again
+              </button>
+            </div>
           ) : null}
 
           <button
@@ -285,4 +294,17 @@ const S = {
     transition: 'opacity 0.15s ease',
   },
   buttonDisabled: { opacity: 0.5, cursor: 'not-allowed' },
+  secondaryButton: {
+    width: '100%',
+    padding: '11px 16px',
+    borderRadius: '12px',
+    border: '1px solid #cbd5e1',
+    background: '#f8fafc',
+    color: '#334155',
+    fontSize: '0.92rem',
+    fontWeight: 600,
+    cursor: 'pointer',
+    textAlign: 'center',
+    transition: 'background 0.15s ease',
+  },
 }

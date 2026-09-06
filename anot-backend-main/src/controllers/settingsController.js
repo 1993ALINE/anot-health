@@ -4,7 +4,7 @@ const { getPublicErrorMessage, sendHttpError } = require('../utils/errorMessages
 const pool = require('../config/db')
 const cloudWatchAudit = require('../utils/logger')
 const { encryptString } = require('../utils/settingsEncryption')
-const { invalidateAiSettingsCache, normalizeDeepgramModel, loadAiSettings } = require('../services/aiSettings')
+const { invalidateAiSettingsCache, normalizeDeepgramModel, loadAiSettings, getAnthropicKey } = require('../services/aiSettings')
 const {
   normalizeTranscribeLanguage,
   parseCustomVocabulary,
@@ -688,6 +688,56 @@ const testDeepgramAdvancedSettings = async (req, res) => {
   }
 }
 
+async function testAnthropicSettings(req, res) {
+  try {
+    const rawKey = req.body?.anthropic_api_key
+    const key = (rawKey && String(rawKey).trim().replace(/^["']|["']$/g, '')) || await getAnthropicKey()
+
+    if (!key) {
+      return res.status(400).json({ ok: false, error: 'No Anthropic/Claude API key configured. Enter a key or add ANTHROPIC_API_KEY to .env.' })
+    }
+
+    const controller = new AbortController()
+    const t = setTimeout(() => controller.abort(), 10000)
+
+    try {
+      const response = await fetch('https://api.anthropic.com/v1/models?limit=1', {
+        method: 'GET',
+        headers: {
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+        },
+        signal: controller.signal,
+      }).finally(() => clearTimeout(t))
+
+      const data = await response.json().catch(() => ({}))
+
+      if (response.ok) {
+        return res.status(200).json({
+          ok: true,
+          message: 'Anthropic Claude API connected successfully! Note generation is ready.',
+          status: response.status,
+        })
+      }
+
+      const errMsg = data?.error?.message || `API returned HTTP ${response.status}`
+      return res.status(response.status >= 400 && response.status < 500 ? response.status : 502).json({
+        ok: false,
+        error: `Anthropic API error: ${errMsg}`,
+        details: data?.error,
+      })
+    } catch (fetchErr) {
+      clearTimeout(t)
+      return res.status(502).json({
+        ok: false,
+        error: fetchErr.name === 'AbortError' ? 'Connection to Anthropic timed out.' : `Network error connecting to Anthropic: ${fetchErr.message}`,
+      })
+    }
+  } catch (err) {
+    sendHttpError(res, 500, err, { context: 'settings.testAnthropicSettings', req })
+  }
+}
+
 module.exports = {
   getPublicSettings,
   getInternalSettings,
@@ -695,5 +745,6 @@ module.exports = {
   updateTranscriptionSettings,
   updateSettings,
   testDeepgramAdvancedSettings,
+  testAnthropicSettings,
   ensureSettingsTable,
 }

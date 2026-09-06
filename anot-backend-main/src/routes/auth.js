@@ -41,6 +41,12 @@ router.get('/me', protect, getMe)
 router.put('/me', protect, updateMe)
 
 // PUT /api/auth/change-password
-router.put('/change-password', protect, passwordLimiter, changePassword)
+// The short-lived temporaryToken (require_password_change claim) is accepted
+// in the body and/or Authorization header so the forced-change gate can work
+// even when the session cookie is present but stale. `protect` is used when
+// no temporaryToken is in the body (i.e. the user is changing their own
+// password from inside the portal — requires current password).
+const { changePasswordGate } = require('../middleware/changePasswordGate')
+router.put('/change-password', changePasswordGate, passwordLimiter, changePassword)
 
 module.exports = router

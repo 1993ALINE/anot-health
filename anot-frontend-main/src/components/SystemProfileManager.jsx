@@ -251,7 +251,7 @@ export default function SystemProfileManager({
         {!readOnly ? (
         <>
         <div className="pm-group">
-          <label className="pm-label">Current password</label>
+          <label className="pm-label">Current password <span style={{ fontWeight: 400, opacity: 0.75, fontSize: '0.85em' }}>(required when setting a new password)</span></label>
           <div className="pm-pass-wrap">
             <input className="pm-input pm-input--has-toggle" type={passVisible.current ? 'text' : 'password'} value={form.currentPassword} onChange={(e) => setField('currentPassword', e.target.value)} />
             <button type="button" className="pm-pass-toggle" onClick={() => setPassVisible((p) => ({ ...p, current: !p.current }))}>

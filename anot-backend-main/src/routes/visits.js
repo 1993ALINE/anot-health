@@ -165,7 +165,9 @@ async function generateDraft(req, res) {
       visit_type: row.visit_type,
       visit_date: row.visit_date,
     }, templateSections)
+    let aiUsed = true
     if (!aiDraft || aiDraft === AI_DRAFT_UNAVAILABLE) {
+      aiUsed = false
       const combinedTx = segments.join('\n\n')
       aiDraft = formatClinicalDictationToSOAP(combinedTx, '', row.visit_type, {
         patientName: row.patient_name,
@@ -174,7 +176,11 @@ async function generateDraft(req, res) {
     }
 
     await saveAiDraftToNote(id, aiDraft, segments, note)
-    return res.status(200).json({ ai_draft: aiDraft })
+    return res.status(200).json({
+      ai_draft: aiDraft,
+      ai_used: aiUsed,
+      ai_warning: aiUsed ? undefined : 'AI note generation failed or is not configured. This note was generated using the template synthesizer. Please check Admin → Settings → Anthropic API key.',
+    })
   } catch (err) {
     handleGenerateDraftError(res, err)
   }

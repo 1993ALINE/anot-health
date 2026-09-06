@@ -353,22 +353,26 @@ const useTranscribe = useDeepgram
 
 
 
+function cleanApiKey(key) {
+  if (!key) return null
+  const str = String(key).trim().replace(/^["']|["']$/g, '')
+  return str.length > 0 ? str : null
+}
+
 async function getAnthropicKey() {
-
   try {
-
+    // Environment variable takes precedence over DB-stored key.
+    // This allows server operators to set/rotate the key via .env without
+    // needing DB access. If no env key is set, fall back to the DB key
+    // (set via Admin → Settings UI).
+    const fromEnv = cleanApiKey(process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY)
+    if (fromEnv) return fromEnv
     const settings = await loadAiSettings()
-
-    return settings.anthropic_api_key || process.env.ANTHROPIC_API_KEY || null
-
+    return cleanApiKey(settings?.anthropic_api_key) || null
   } catch (err) {
-
     console.warn('[aiSettings] getAnthropicKey fallback:', err.message)
-
-    return process.env.ANTHROPIC_API_KEY || null
-
+    return cleanApiKey(process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY) || null
   }
-
 }
 
 

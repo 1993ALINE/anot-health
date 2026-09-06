@@ -14,7 +14,7 @@ const { incrementTokenVersion } = require('../utils/tokenVersion')
 const { loginRequiresMfa, issueAndSendCode, verifyMfaCode, maskDestination, isMfaFullyEnrolled, PHI_ROLES } = require('../services/mfaService')
 const { setSessionCookie, clearSessionCookie } = require('../utils/sessionCookie')
 const { isLocked, lockoutMessage, recordFailedLogin, resetFailedLogins } = require('../services/accountLockout')
-const { invalidateUserAuthCache } = require('../middleware/auth')
+const { invalidateUserAuthCache, extractBearerToken } = require('../middleware/auth')
 
 const SESSION_INACTIVITY_MS = 15 * 60 * 1000 // 15 minutes of inactivity timeout
 
@@ -51,7 +51,7 @@ const generateToken = (user, extraClaims = {}) => {
 }
 
 /** Short-lived token scoped to a single pre-session gate (password change, PHI training, MFA). */
-const generateTemporaryToken = (user, claim, expiresIn = '15m') => {
+const generateTemporaryToken = (user, claim, expiresIn = '1h') => {
     return jwt.sign(
         {
             id: user.id,
@@ -68,6 +68,7 @@ const generateTemporaryToken = (user, claim, expiresIn = '15m') => {
 /** Issue full session or the next mandatory gate after password verification. */
 async function buildPostPasswordLoginResponse(user, req, res) {
     if (user.force_password_change) {
+        clearSessionCookie(res)
         const temporaryToken = generateTemporaryToken(user, 'require_password_change')
         void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_PASSWORD_CHANGE_REQUIRED', 'auth', String(user.id), 'Login requires password change', { req, module_key: 'authentication', status: 'warning', action_category: 'authentication' }).catch(reportAuditFailure)
         cloudWatchAudit.logLogin(user.id, user.email, user.role, req.clientIp, 'success')
@@ -84,6 +85,7 @@ async function buildPostPasswordLoginResponse(user, req, res) {
     }
 
     if (needsPhiTraining(user)) {
+        clearSessionCookie(res)
         const temporaryToken = generateTemporaryToken(user, 'requirePhiTraining')
         void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_PHI_TRAINING_REQUIRED', 'auth', String(user.id), 'Login requires PHI training acknowledgment', { req, module_key: 'authentication', status: 'warning', action_category: 'authorization' }).catch(reportAuditFailure)
         cloudWatchAudit.logLogin(user.id, user.email, user.role, req.clientIp, 'success')
@@ -110,6 +112,7 @@ async function buildPostPasswordLoginResponse(user, req, res) {
     })
 
     if (mfaStatus === 'ENROLLMENT_REQUIRED') {
+        clearSessionCookie(res)
         const temporaryToken = generateTemporaryToken(user, 'requireMfaEnrollment', '15m')
         void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_MFA_ENROLLMENT_REQUIRED', 'auth', String(user.id), 'Login requires MFA enrollment for PHI access', { req, module_key: 'authentication', status: 'warning', action_category: 'authentication' }).catch(reportAuditFailure)
         cloudWatchAudit.logLogin(user.id, user.email, user.role, req.clientIp, 'success')
@@ -127,6 +130,7 @@ async function buildPostPasswordLoginResponse(user, req, res) {
     }
 
     if (mfaStatus === true) {
+        clearSessionCookie(res)
         const temporaryToken = generateTemporaryToken(user, 'requireMfa', '10m')
         void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_MFA_REQUIRED', 'auth', String(user.id), 'Login requires MFA verification', { req, module_key: 'authentication', status: 'warning', action_category: 'authentication' }).catch(reportAuditFailure)
         cloudWatchAudit.logLogin(user.id, user.email, user.role, req.clientIp, 'success')
@@ -625,12 +629,58 @@ const updateMe = async (req, res) => {
 const changePassword = async (req, res) => {
     try {
         await ensureUserProfileSchema()
-        const { currentPassword, newPassword } = req.body
+        const { currentPassword, newPassword, temporaryToken: bodyTemporaryToken } = req.body || {}
 
         // A forced first-login change is authorized by the short-lived token
         // issued at login (require_password_change claim), so the current
         // password is not required in that flow.
-        const isTemporaryPasswordChange = req.user.require_password_change === true
+        let isTemporaryPasswordChange = req.user?.require_password_change === true
+        let targetUserId = req.user?.id
+
+        // Accept temporaryToken from body or Authorization Bearer header.
+        // When the token is expired we still decode it (without verification)
+        // so we can extract the userId and fall through to the DB
+        // force_password_change check at line 663.
+        const rawToken = bodyTemporaryToken || extractBearerToken(req.headers?.authorization)
+        if (rawToken) {
+            try {
+                const decodedTemp = jwt.verify(rawToken, process.env.JWT_SECRET)
+                if (decodedTemp && decodedTemp.require_password_change === true) {
+                    isTemporaryPasswordChange = true
+                    targetUserId = decodedTemp.id || decodedTemp.userId
+                }
+            } catch (verifyErr) {
+                // If the token is merely expired (not forged), decode the payload
+                // so we can still resolve the userId and honour the DB flag.
+                if (verifyErr?.name === 'TokenExpiredError') {
+                    try {
+                        const decodedExpired = jwt.decode(rawToken)
+                        if (decodedExpired && decodedExpired.require_password_change === true) {
+                            const expiredId = decodedExpired.id || decodedExpired.userId
+                            if (expiredId && !targetUserId) {
+                                targetUserId = expiredId
+                            }
+                        }
+                    } catch (_) {}
+                }
+            }
+        }
+
+        if (!targetUserId) {
+            return res.status(401).json({ error: 'Session invalid. Please sign in again.' })
+        }
+
+        // Get user from database
+        const result = await pool.query('SELECT * FROM users WHERE id = $1', [targetUserId])
+        const user = result.rows[0]
+        if (!user) {
+            return res.status(401).json({ error: 'Session invalid. Please sign in again.' })
+        }
+
+        // If the account has force_password_change = true in DB, current password is not required
+        if (user.force_password_change === true) {
+            isTemporaryPasswordChange = true
+        }
 
         if (!newPassword || (!isTemporaryPasswordChange && !currentPassword)) {
             return res.status(400).json({ error: 'Current and new password are required.' })
@@ -641,18 +691,11 @@ const changePassword = async (req, res) => {
             return res.status(400).json({ error: pwCheck.message })
         }
 
-        // Get user from database
-        const result = await pool.query('SELECT * FROM users WHERE id = $1', [req.user.id])
-        const user = result.rows[0]
-        if (!user) {
-            return res.status(401).json({ error: 'Session invalid. Please sign in again.' })
-        }
-
         // Verify current password (skipped only for the forced temp-password flow)
         if (!isTemporaryPasswordChange) {
             const match = await bcrypt.compare(currentPassword, user.password)
             if (!match) {
-                void auditLog(req.user, 'SELF_PASSWORD_CHANGE_FAILED', 'user', String(req.user.id), 'Current password incorrect', { req, module_key: 'authentication', status: 'failed', action_category: 'authorization' }).catch(reportAuditFailure)
+                void auditLog(req.user, 'SELF_PASSWORD_CHANGE_FAILED', 'user', String(targetUserId), 'Current password incorrect', { req, module_key: 'authentication', status: 'failed', action_category: 'authorization' }).catch(reportAuditFailure)
                 return res.status(401).json({ error: 'Current password is incorrect.' })
             }
         }
@@ -660,11 +703,13 @@ const changePassword = async (req, res) => {
         const hashed = await bcrypt.hash(newPassword, getBcryptRounds())
 
         // Always clear the forced-change flag once a new password is set.
-        await pool.query('UPDATE users SET password = $1, force_password_change = false WHERE id = $2', [hashed, req.user.id])
+        await pool.query('UPDATE users SET password = $1, force_password_change = false WHERE id = $2', [hashed, targetUserId])
 
-        await incrementTokenVersion(req.user.id)
+        await incrementTokenVersion(targetUserId)
+        invalidateUserAuthCache(targetUserId)
+        clearSessionCookie(res)
 
-        void auditLog(req.user, 'SELF_PASSWORD_CHANGED', 'user', String(req.user.id), 'User changed their own password', { req, module_key: 'authentication', status: 'success', action_category: 'authorization', metadata: { self: true, forced: isTemporaryPasswordChange } }).catch(reportAuditFailure)
+        void auditLog(req.user || { id: targetUserId, name: user.name, role: user.role }, 'SELF_PASSWORD_CHANGED', 'user', String(targetUserId), 'User changed their own password', { req, module_key: 'authentication', status: 'success', action_category: 'authorization', metadata: { self: true, forced: isTemporaryPasswordChange } }).catch(reportAuditFailure)
 
         res.status(200).json({ message: 'Password changed successfully.' })
     } catch (err) {

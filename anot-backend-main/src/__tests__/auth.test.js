@@ -30,6 +30,15 @@ describe('auth helpers', () => {
     expect(extractAuthToken(req)).toBe('cookie-jwt')
   })
 
+  test('extractAuthToken prefers temporary gate Bearer token over session cookie', () => {
+    const gateToken = jwt.sign({ id: 2, role: 'clinician', require_password_change: true }, process.env.JWT_SECRET)
+    const req = {
+      cookies: { anot_session: 'cookie-jwt' },
+      headers: { authorization: `Bearer ${gateToken}` },
+    }
+    expect(extractAuthToken(req)).toBe(gateToken)
+  })
+
   test('extractAuthToken falls back to Bearer when no cookie', () => {
     expect(extractAuthToken({ cookies: {}, headers: { authorization: 'Bearer abc' } })).toBe('abc')
   })
