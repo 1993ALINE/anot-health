@@ -117,19 +117,26 @@ export function extractVitals(text) {
  * Formats structured vital signs block
  */
 export function formatVitalsSection(vitalsObj) {
-  const bp = vitalsObj?.bp || '120/80 mmHg'
-  const hr = vitalsObj?.hr || '72 bpm regular'
-  const temp = vitalsObj?.temp || '37.0°C / 98.6°F'
-  const rr = vitalsObj?.rr || '16/min'
-  const spo2 = vitalsObj?.spo2 || '99% on room air'
-
-  return [
-    `• Blood Pressure: ${bp}`,
-    `• Pulse / Heart Rate: ${hr}`,
-    `• Temperature: ${temp}`,
-    `• Respiratory Rate: ${rr}`,
-    `• Oxygen Saturation (SpO2): ${spo2}`,
-  ].join('\n')
+  const lines = []
+  if (vitalsObj?.bp) {
+    lines.push(`• Blood Pressure: ${vitalsObj.bp}`)
+  }
+  if (vitalsObj?.hr) {
+    lines.push(`• Pulse / Heart Rate: ${vitalsObj.hr}`)
+  }
+  if (vitalsObj?.temp) {
+    lines.push(`• Temperature: ${vitalsObj.temp}`)
+  }
+  if (vitalsObj?.rr) {
+    lines.push(`• Respiratory Rate: ${vitalsObj.rr}`)
+  }
+  if (vitalsObj?.spo2) {
+    lines.push(`• Oxygen Saturation (SpO2): ${vitalsObj.spo2}`)
+  }
+  if (lines.length === 0) {
+    return '• Vital signs: Not documented / Not dictated in this encounter.'
+  }
+  return lines.join('\n')
 }
 
 /**
@@ -361,49 +368,21 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
 
   const hpiText = hpiParagraphs.join(' ')
 
-  // 3. Synthesize Physical Exam
+  // 3. Synthesize Physical Exam (only actual observations dictated, no fabricated normal exams)
   const examLines = []
-  examLines.push('GENERAL: Alert, oriented, in mild-to-moderate discomfort secondary to acute symptoms. Well-nourished, no acute respiratory distress.')
-
-  if (isHeadache) {
-    examLines.push('HEENT & NEUROLOGICAL EXAM:')
-    examLines.push('• Head / HEENT: Normocephalic, atraumatic. Pupils equal, round, reactive to light and accommodation (PERRLA). Extraocular movements intact (EOMI) without nystagmus. Temporal arteries non-tender, no scalp tenderness.')
-    examLines.push('• Neurological: Alert and oriented x 4. Cranial nerves II-XII grossly intact bilaterally. Motor strength 5/5 in all four extremities. Sensation intact to light touch. Normal finger-to-nose coordination; gait stable and non-ataxic.')
-    examLines.push('• Neck: Supple, full active range of motion without meningismus; negative Kernig and Brudzinski signs.')
-  } else if (/knee/i.test(normalized)) {
-    examLines.push('RIGHT KNEE / LOWER EXTREMITY:')
-    if (/tenderness\s+to\s+palpation.*mcl|mcl.*tenderness/i.test(normalized) || /mcl/i.test(normalized)) {
-      examLines.push('• Palpation: Moderate-to-severe tenderness to palpation localized over the medial collateral ligament (MCL).')
-    } else {
-      examLines.push('• Palpation: Tenderness to palpation along joint line.')
+  if (/exam|palpat|tender|swelling|inspect|rom|range of motion/i.test(normalized)) {
+    if (/swelling/i.test(normalized)) {
+      examLines.push(/no\s+swelling/i.test(normalized) ? '• Inspection: No visible swelling or acute deformity.' : '• Inspection: Swelling observed as noted in encounter.')
     }
-    if (/positive\s+mcmurray|mcmurray/i.test(normalized)) {
-      examLines.push('• McMurray Test: Positive on medial joint rotation / provocative click.')
+    if (/tender|pain on palpation/i.test(normalized)) {
+      examLines.push('• Palpation: Tenderness to palpation noted as dictated.')
     }
-    if (/degenerative/i.test(normalized)) {
-      examLines.push('• Structural Exam: Mild crepitus and baseline degenerative joint changes noted.')
+    if (/range of motion|rom|flexion|extension/i.test(normalized)) {
+      examLines.push('• Range of Motion: Assessed as dictated.')
     }
-    examLines.push('• Range of Motion: Limited active flexion secondary to discomfort; extension preserved.')
-    examLines.push('• Neurovascular: Distal dorsalis pedis and posterior tibial pulses 2+ and symmetric; sensation intact to light touch throughout right lower extremity dermatomes.')
-  } else if (/shoulder/i.test(normalized)) {
-    examLines.push('SHOULDER EXAM:')
-    examLines.push('• Palpation: Localized tenderness over joint and periarticular structures.')
-    examLines.push('• Range of Motion: Active motion limited by pain; passive motion preserved.')
-    examLines.push('• Neurovascular: Radial pulse 2+, sensation intact to light touch.')
-  } else if (/back/i.test(normalized)) {
-    examLines.push('LUMBAR SPINE EXAM:')
-    examLines.push('• Palpation: Paraspinal musculature tenderness without midline bony step-off.')
-    examLines.push('• Straight Leg Raise: Negative bilaterally.')
-    examLines.push('• Neurological: Deep tendon reflexes 2+ and symmetric, motor strength 5/5 bilateral lower extremities.')
-  } else if (/cough|respiratory|throat/i.test(normalized)) {
-    examLines.push('HEENT & RESPIRATORY EXAM:')
-    examLines.push('• Oropharynx: Mild mucosal erythema without purulent exudates.')
-    examLines.push('• Lungs: Clear to auscultation bilaterally; no wheezes, rales, or rhonchi.')
-  } else {
-    examLines.push('FOCUSED CLINICAL EXAM:')
-    examLines.push('• Inspection: Localized site inspected; no erythema, ecchymosis, or open wounds.')
-    examLines.push('• Palpation: Tenderness localized to the dictated area of concern.')
-    examLines.push('• Mobility & Function: Functional motion intact, limited mildly by discomfort.')
+  }
+  if (examLines.length === 0) {
+    examLines.push('Focused physical examination not documented / Not dictated in this encounter.')
   }
 
   const examText = examLines.join('\n')
@@ -448,37 +427,19 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
     assessmentLines.push(`1. Clinical evaluation for ${primaryComplaint.toLowerCase()}.`)
   }
 
-  // 6. Plan
+  // 6. Plan (only document what was discussed or dictated)
   const planLines = []
-  if (isHeadache) {
-    planLines.push('1. Activity & Environment: Advised rest in a quiet, dark, well-ventilated room; maintain adequate hydration and consistent sleep hygiene.')
-    planLines.push('2. Pharmacotherapy: Prescribed oral analgesia / abortive therapy (acetaminophen 500-1000 mg PO every 6 hours PRN or ibuprofen 400-600 mg PO TID with meals as tolerated; maximum recommended daily dosages reviewed). Cautioned against medication overuse.')
-    planLines.push('3. Red-Flag Warning Signs: Counseled patient on urgent return precautions: sudden severe "thunderclap" headache, high fever, neck stiffness, confusion, focal weakness, numbness, or acute vision changes; instructed to seek immediate emergency department evaluation if any occur.')
-    planLines.push('4. Follow-up: Return to clinic in 1-2 weeks or sooner if headaches fail to improve, increase in frequency, or change in character.')
-  } else if (/elevat/i.test(normalized) || /knee|fall|bike|injury/i.test(normalized)) {
-    planLines.push('1. Activity & R.I.C.E. Protocol: Advised patient on strict leg elevation above heart level, joint rest, and cold therapy (ice packs 15-20 min every 2-3 hours) to minimize swelling and inflammation.')
+  if (/follow\s*up|return|week|month/i.test(normalized)) {
+    const fuMatch = normalized.match(/follow.?up\s+(?:in\s+)?([a-zA-Z0-9\s]+?)(?:\.|$)/i)
+    planLines.push(`1. Follow-up: ${fuMatch ? fuMatch[0] : 'Follow up as directed by clinician.'}`)
   } else {
-    planLines.push('1. Activity Modification: Rest and avoid aggravating physical exertion.')
+    planLines.push('1. Follow up as needed if symptoms worsen or fail to improve.')
   }
-
-  if (!isHeadache) {
-    if (/tylenol/i.test(normalized)) {
-      planLines.push('2. Pharmacotherapy: Continue Tylenol (acetaminophen) 500-1000 mg PO every 6 hours as needed for pain (maximum 3000 mg/24 hours). Consider short course of oral NSAID (e.g. ibuprofen 400-600 mg TID with meals) if no gastrointestinal or renal contraindications.')
-    } else {
-      planLines.push('2. Analgesia: Prescribed appropriate oral analgesia / anti-inflammatory regimen as tolerated.')
-    }
-
-    if (imagingText) {
-      planLines.push('3. Diagnostic Imaging: Repeat plain radiograph (X-ray) in 3 weeks as ordered.')
-    }
-
-    if (/follow\s*up|weeks/i.test(normalized)) {
-      planLines.push('4. Follow-up & Re-evaluation: Scheduled for clinic follow-up in 3 weeks for clinical re-evaluation, imaging review, and progression of treatment.')
-    } else {
-      planLines.push('4. Follow-up: Return to clinic in 2-3 weeks or sooner if symptoms fail to improve.')
-    }
-
-    planLines.push('5. Red-Flag Warning Signs: Counseled on warning signs including inability to bear weight, locking or giving way of the joint, rapidly worsening swelling, redness, fever, or distal numbness/tingling; instructed to seek immediate urgent or emergency medical evaluation should any occur.')
+  if (imagingText) {
+    planLines.push(`2. ${imagingText}`)
+  }
+  if (/rest|ice|elevat/i.test(normalized)) {
+    planLines.push('3. Supportive care measures as discussed with clinician.')
   }
 
   // 7. ICD-10 & CPT Codes

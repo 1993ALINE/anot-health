@@ -124,7 +124,9 @@ const getNoteByVisit = async (req, res) => {
        JOIN patients p  ON p.id  = v.patient_id
        JOIN users    c  ON c.id  = v.clinician_id
        LEFT JOIN users s  ON s.id  = v.scribe_id
-       LEFT JOIN notes n  ON n.visit_id = v.id
+       LEFT JOIN LATERAL (
+         SELECT * FROM notes WHERE visit_id = v.id ORDER BY updated_at DESC, id DESC LIMIT 1
+       ) n ON true
        LEFT JOIN users sb ON sb.id = n.submitted_by
        WHERE v.id = $1`,
       [visitId]

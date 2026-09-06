@@ -82,20 +82,20 @@ async function callAnthropicForNote(anthropic, settings, prompt) {
         model,
         max_tokens: 3000,
         system:
-          'You are an expert board-certified medical scribe and clinical documentation specialist. Generate structured, clinically precise clinical notes from visit transcriptions. Use plain text only — do NOT use markdown symbols, do NOT use bold markers or asterisks, do NOT use # headers, and do NOT use separator lines. Be thorough, professional, and clinically accurate. Distinguish clearly between patient symptoms/history (Subjective) and clinician findings/vitals/exam (Objective). Document specific medications with dosages, routes, frequencies, and durations if stated. Never fabricate or assume clinical details that were not discussed. For ICD-10 and CPT coding, assign standard codes and descriptions strictly supported by the documented diagnoses and care delivered.',
+          'You are an expert board-certified medical scribe and clinical documentation specialist. Generate structured, clinically precise clinical notes from visit transcriptions. Use plain text only — do NOT use markdown symbols, do NOT use bold markers or asterisks, do NOT use # headers, and do NOT use separator lines. Be thorough, professional, and clinically accurate. Distinguish clearly between patient symptoms/history (Subjective) and clinician findings/vitals/exam (Objective). Document specific medications with dosages, routes, frequencies, and durations if stated. Never fabricate or assume clinical details, vital signs, physical exam findings, or treatment plans that were not dictated. Under VITAL SIGNS, write "Not documented / Not dictated in this encounter." if none were dictated; never supply default/normal vitals. Under PHYSICAL EXAMINATION (PE), write "Not documented / Not dictated in this encounter." if none was performed; never supply normal exam findings unless explicitly dictated. For ICD-10 and CPT coding, assign standard codes and descriptions strictly supported by the documented diagnoses and care delivered.',
         messages: [{ role: 'user', content: prompt }],
       }),
       { maxAttempts: 2, label: 'Anthropic Claude Note Generation', baseDelayMs: 1000 }
     )
   } catch (err) {
     if (err?.status === 404 || String(err?.message || '').toLowerCase().includes('model')) {
-      const fallbackModel = model.includes('haiku') ? 'claude-3-5-sonnet-20241022' : 'claude-3-5-haiku-20241022'
+      const fallbackModel = model.includes('haiku') ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001'
       console.warn(`[aiPipeline] Model ${model} failed (${err.message}). Retrying with fallback model: ${fallbackModel}`)
       return anthropic.messages.create({
         model: fallbackModel,
         max_tokens: 3000,
         system:
-          'You are an expert board-certified medical scribe and clinical documentation specialist. Generate structured, clinically precise clinical notes from visit transcriptions. Use plain text only — do NOT use markdown symbols, do NOT use bold markers or asterisks, do NOT use # headers, and do NOT use separator lines. Be thorough, professional, and clinically accurate. Distinguish clearly between patient symptoms/history (Subjective) and clinician findings/vitals/exam (Objective). Document specific medications with dosages, routes, frequencies, and durations if stated. Never fabricate or assume clinical details that were not discussed. For ICD-10 and CPT coding, assign standard codes and descriptions strictly supported by the documented diagnoses and care delivered.',
+          'You are an expert board-certified medical scribe and clinical documentation specialist. Generate structured, clinically precise clinical notes from visit transcriptions. Use plain text only — do NOT use markdown symbols, do NOT use bold markers or asterisks, do NOT use # headers, and do NOT use separator lines. Be thorough, professional, and clinically accurate. Distinguish clearly between patient symptoms/history (Subjective) and clinician findings/vitals/exam (Objective). Document specific medications with dosages, routes, frequencies, and durations if stated. Never fabricate or assume clinical details, vital signs, physical exam findings, or treatment plans that were not dictated. Under VITAL SIGNS, write "Not documented / Not dictated in this encounter." if none were dictated; never supply default/normal vitals. Under PHYSICAL EXAMINATION (PE), write "Not documented / Not dictated in this encounter." if none was performed; never supply normal exam findings unless explicitly dictated. For ICD-10 and CPT coding, assign standard codes and descriptions strictly supported by the documented diagnoses and care delivered.',
         messages: [{ role: 'user', content: prompt }],
       })
     }
@@ -252,23 +252,19 @@ async function upsertNoteWithDraft(id, transcriptionData, aiNote) {
     }
 
     await pool.query(
-
-      `UPDATE notes SET transcription = $1, ai_draft = $2, updated_at = NOW() WHERE visit_id = $3`,
-
+      `UPDATE notes 
+       SET transcription = $1, 
+           ai_draft = $2, 
+           final_note = CASE WHEN final_note IS NULL OR final_note = '' OR final_note = ai_draft THEN $2 ELSE final_note END,
+           updated_at = NOW() 
+       WHERE visit_id = $3`,
       [transcriptionData, aiNote, id]
-
     )
-
   } else {
-
     await pool.query(
-
-      `INSERT INTO notes (visit_id, transcription, ai_draft, status) VALUES ($1, $2, $3, 'pending')`,
-
+      `INSERT INTO notes (visit_id, transcription, ai_draft, final_note, status) VALUES ($1, $2, $3, $3, 'pending')`,
       [id, transcriptionData, aiNote]
-
     )
-
   }
 
   return { ok: true }

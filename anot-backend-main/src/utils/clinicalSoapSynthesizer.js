@@ -237,68 +237,49 @@ function formatClinicalDictationToSOAP(dictation = '', scratchpad = '', visitTyp
   }
 
   // Build Physical Exam
+  // Build Physical Exam (only if dictated, no hallucinated normal exams)
   const examLines = []
-  examLines.push('GENERAL: Alert, oriented, in no acute distress.')
-  if (isHeadache) {
-    examLines.push('HEENT & NEUROLOGICAL EXAM:')
-    examLines.push('• Head / HEENT: Normocephalic, atraumatic. Pupils equal, round, reactive to light and accommodation (PERRLA). Extraocular movements intact (EOMI) without nystagmus. Temporal arteries non-tender, no scalp tenderness.')
-    examLines.push('• Neurological: Alert and oriented x 4. Cranial nerves II-XII grossly intact bilaterally. Motor strength 5/5 in all four extremities. Sensation intact to light touch. Normal finger-to-nose coordination; gait stable and non-ataxic.')
-    examLines.push('• Neck: Supple, full active range of motion without meningismus; negative Kernig and Brudzinski signs.')
-  } else if (isKneePain) {
-    const sideLabel = /right/i.test(normalized) ? 'RIGHT KNEE' : 'LEFT KNEE'
-    examLines.push(`${sideLabel} EXAMINATION:`)
-    examLines.push('• Inspection: Mild swelling, no erythema or open wounds.')
-    examLines.push('• Palpation: Moderate tenderness to palpation along the medial collateral ligament (MCL) and joint line.')
-    examLines.push('• Special Tests: McMurray maneuver positive for medial joint pain. Lachman test negative, stable to varus/valgus stress testing.')
-    examLines.push('• Neurovascular: Distal dorsalis pedis and posterior tibial pulses 2+ symmetric. Sensation intact across L3-S1 dermatomes.')
-  } else {
-    examLines.push('CARDIOVASCULAR: Regular rate and rhythm, normal S1/S2, no murmurs.')
-    examLines.push('PULMONARY: Clear to auscultation bilaterally, no wheezes or rales.')
-    examLines.push('ABDOMEN: Soft, non-tender, non-distended.')
+  if (/exam|palpat|tender|swelling|inspect|rom|range of motion/i.test(normalized)) {
+    if (/swelling/i.test(normalized)) {
+      examLines.push(/no\s+swelling/i.test(normalized) ? '• Inspection: No visible swelling or acute deformity.' : '• Inspection: Swelling observed as noted in encounter.')
+    }
+    if (/tender|pain on palpation/i.test(normalized)) {
+      examLines.push('• Palpation: Tenderness to palpation noted as dictated.')
+    }
+    if (/range of motion|rom|flexion|extension/i.test(normalized)) {
+      examLines.push('• Range of Motion: Assessed as dictated.')
+    }
+  }
+  if (examLines.length === 0) {
+    examLines.push('Focused physical examination not documented / Not dictated in this encounter.')
   }
 
   // Build Assessment
   const assessmentLines = []
-  if (isHeadache) {
-    if (/migraine/i.test(normalized)) {
-      assessmentLines.push('1. Migraine, unspecified, not intractable, without status migrainosus (G43.909).')
-    } else {
-      assessmentLines.push('1. Headache, unspecified (R51.9).')
-    }
-    assessmentLines.push('2. Rule out secondary headache disorder; no focal neurological signs on examination.')
-  } else if (isKneePain) {
-    assessmentLines.push('1. Sprain of unspecified ligament of right knee, initial encounter (S83.91XA).')
-    assessmentLines.push('2. Suspected meniscal pathology versus collateral ligament strain.')
-  } else {
-    assessmentLines.push(`1. ${chiefComplaint} — clinical evaluation completed.`)
-  }
+  assessmentLines.push(`1. ${chiefComplaint}.`)
 
-  // Build Plan
+  // Build Plan (only document what was discussed)
   const planLines = []
-  if (isHeadache) {
-    planLines.push('1. Activity & Environment: Advised rest in a quiet, dark, well-ventilated room; maintain adequate hydration and consistent sleep hygiene.')
-    planLines.push('2. Pharmacotherapy: Prescribed oral analgesia / abortive therapy (acetaminophen 500-1000 mg PO PRN or ibuprofen 400-600 mg PO TID with meals as tolerated; maximum daily doses reviewed). Cautioned against medication overuse.')
-    planLines.push('3. Red-Flag Warning Signs: Counseled patient on urgent return precautions: sudden severe "thunderclap" headache, high fever, neck stiffness, confusion, focal weakness, numbness, or acute vision changes; instructed to seek immediate emergency department evaluation if any occur.')
-    planLines.push('4. Follow-up: Return to clinic in 1-2 weeks or sooner if headaches fail to improve, increase in frequency, or change in character.')
-  } else if (isKneePain) {
-    planLines.push('1. Diagnostic Imaging: Order repeat diagnostic plain radiographs (right knee 2-3 views) to assess osseous structures and joint alignment.')
-    planLines.push('2. Conservative Therapy: Conservative management with rest, ice application 15-20 minutes 3-4 times daily, gentle elevation, and compressive sleeve support as tolerated.')
-    planLines.push('3. Pharmacotherapy: Ibuprofen 600 mg PO BID with meals as needed for inflammation and analgesia, accompanied by gastrointestinal precautions.')
-    planLines.push('4. Red Flags & Follow-up: Return to clinic in 7-10 days for follow-up evaluation and imaging review. Warned on emergency signs: acute neurovascular changes, calf swelling/erythema, or inability to bear weight.')
+  if (/follow.?up|return/i.test(normalized)) {
+    const fuMatch = normalized.match(/follow.?up\s+(?:in\s+)?([a-zA-Z0-9\s]+?)(?:\.|$)/i)
+    planLines.push(`1. Follow-up: ${fuMatch ? fuMatch[0] : 'Follow up as directed by clinician.'}`)
   } else {
-    planLines.push('1. Clinical findings discussed with patient in detail.')
-    planLines.push('2. Prescribed appropriate conservative care and lifestyle modifications.')
-    planLines.push('3. Follow-up scheduled in 1-2 weeks or PRN if symptoms worsen.')
+    planLines.push('1. Follow up as needed if symptoms worsen or fail to improve.')
+  }
+  if (/rest|ice|elevat/i.test(normalized)) {
+    planLines.push('2. Supportive care measures as discussed with clinician.')
   }
 
-  // Build Vitals Section
-  const vitalsLines = [
-    `• Blood Pressure: ${vitals.bp || '120/80 mmHg'}`,
-    `• Pulse / Heart Rate: ${vitals.hr || '72 bpm regular'}`,
-    `• Temperature: ${vitals.temp || '37.0°C / 98.6°F'}`,
-    `• Respiratory Rate: ${vitals.rr || '16/min'}`,
-    `• Oxygen Saturation (SpO2): ${vitals.spo2 || '98% on room air'}`
-  ]
+  // Build Vitals Section (only actual measurements dictated, never fake normal numbers)
+  const vitalsLines = []
+  if (vitals.bp) vitalsLines.push(`• Blood Pressure: ${vitals.bp}`)
+  if (vitals.hr) vitalsLines.push(`• Pulse / Heart Rate: ${vitals.hr}`)
+  if (vitals.temp) vitalsLines.push(`• Temperature: ${vitals.temp}`)
+  if (vitals.rr) vitalsLines.push(`• Respiratory Rate: ${vitals.rr}`)
+  if (vitals.spo2) vitalsLines.push(`• Oxygen Saturation (SpO2): ${vitals.spo2}`)
+  if (vitalsLines.length === 0) {
+    vitalsLines.push('• Vital signs: Not documented / Not dictated in this encounter.')
+  }
 
   // Derive Codes
   const icdCodes = deriveIcd10Codes(fullText)

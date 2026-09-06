@@ -118,12 +118,16 @@ function validateNoteEditableForDraft(note) {
 async function saveAiDraftToNote(visitId, aiDraft, segments, existingNote) {
   if (existingNote) {
     await pool.query(
-      `UPDATE notes SET ai_draft = $1, updated_at = NOW() WHERE visit_id = $2`,
+      `UPDATE notes 
+       SET ai_draft = $1, 
+           final_note = CASE WHEN final_note IS NULL OR final_note = '' OR final_note = ai_draft THEN $1 ELSE final_note END,
+           updated_at = NOW() 
+       WHERE visit_id = $2`,
       [aiDraft, visitId],
     )
   } else {
     await pool.query(
-      `INSERT INTO notes (visit_id, transcription, ai_draft, status) VALUES ($1, $2, $3, 'pending')`,
+      `INSERT INTO notes (visit_id, transcription, ai_draft, final_note, status) VALUES ($1, $2, $3, $3, 'pending')`,
       [visitId, JSON.stringify(segments), aiDraft],
     )
   }

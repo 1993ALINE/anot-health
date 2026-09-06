@@ -58,7 +58,9 @@ const getVisitsByDate = async (req, res) => {
        FROM visits v
        LEFT JOIN patients p ON p.id = v.patient_id
        LEFT JOIN users u ON u.id = v.scribe_id
-       LEFT JOIN notes n ON n.visit_id = v.id
+       LEFT JOIN LATERAL (
+         SELECT * FROM notes WHERE visit_id = v.id ORDER BY updated_at DESC, id DESC LIMIT 1
+       ) n ON true
        WHERE (v.clinician_id = $1 OR v.clinician_id IS NULL)
          AND (v.visit_date = $2::date OR v.visit_date::text LIKE $2 || '%')
        ORDER BY v.visit_time ASC`,
@@ -79,7 +81,9 @@ const getVisitsByDate = async (req, res) => {
          FROM visits v
          LEFT JOIN patients p ON p.id = v.patient_id
          LEFT JOIN users u ON u.id = v.scribe_id
-         LEFT JOIN notes n ON n.visit_id = v.id
+         LEFT JOIN LATERAL (
+           SELECT * FROM notes WHERE visit_id = v.id ORDER BY updated_at DESC, id DESC LIMIT 1
+         ) n ON true
          WHERE (v.clinician_id = $1 OR v.clinician_id IS NULL)
          ORDER BY v.visit_date DESC, v.visit_time ASC
          LIMIT 50`,
@@ -142,7 +146,9 @@ const getAllVisits = async (req, res) => {
       JOIN patients p ON p.id = v.patient_id
       JOIN users c    ON c.id = v.clinician_id
       LEFT JOIN users s ON s.id = v.scribe_id
-      LEFT JOIN notes n ON n.visit_id = v.id
+      LEFT JOIN LATERAL (
+        SELECT * FROM notes WHERE visit_id = v.id ORDER BY updated_at DESC, id DESC LIMIT 1
+      ) n ON true
       WHERE 1=1
     `
 
@@ -572,7 +578,9 @@ const getVisitHistory = async (req, res) => {
        FROM visits v
        JOIN patients p ON p.id = v.patient_id
        LEFT JOIN users s  ON s.id  = v.scribe_id
-       LEFT JOIN notes n  ON n.visit_id = v.id
+       LEFT JOIN LATERAL (
+         SELECT * FROM notes WHERE visit_id = v.id ORDER BY updated_at DESC, id DESC LIMIT 1
+       ) n ON true
        LEFT JOIN users sb ON sb.id = n.submitted_by
        WHERE v.clinician_id = $1
          AND v.status IN ('done', 'recording-uploaded', 'note-ready', 'uploaded')
@@ -669,7 +677,9 @@ const lockNote = async (req, res) => {
        FROM visits v
        JOIN patients p ON p.id = v.patient_id
        LEFT JOIN users s  ON s.id  = v.scribe_id
-       LEFT JOIN notes n  ON n.visit_id = v.id
+       LEFT JOIN LATERAL (
+         SELECT * FROM notes WHERE visit_id = v.id ORDER BY updated_at DESC, id DESC LIMIT 1
+       ) n ON true
        LEFT JOIN users sb ON sb.id = n.submitted_by
        WHERE v.id = $1 AND v.clinician_id = $2`,
       [id, req.user.id]

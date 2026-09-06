@@ -21,30 +21,43 @@ const {
 
 
 const ANTHROPIC_MODEL_ALIASES = {
-  'claude-haiku-4-5': 'claude-3-5-haiku-20241022',
-  'claude-sonnet-4-5': 'claude-3-5-sonnet-20241022',
-  'claude-opus-4-5': 'claude-3-7-sonnet-20250219',
-  'claude-3-5-sonnet': 'claude-3-5-sonnet-20241022',
-  'claude-3-5-haiku': 'claude-3-5-haiku-20241022',
-  'claude-3-7-sonnet': 'claude-3-7-sonnet-20250219',
-  'claude-3-opus': 'claude-3-opus-20240229',
+  'claude-haiku-4-5': 'claude-haiku-4-5-20251001',
+  'claude-haiku-4-5-20251001': 'claude-haiku-4-5-20251001',
+  'claude-sonnet-4-5': 'claude-sonnet-4-5-20250929',
+  'claude-sonnet-4-5-20250929': 'claude-sonnet-4-5-20250929',
+  'claude-sonnet-4-6': 'claude-sonnet-4-6',
+  'claude-opus-4-6': 'claude-opus-4-6',
+  'claude-sonnet-5': 'claude-sonnet-5',
+  // Legacy aliases mapped to modern equivalents
+  'claude-3-5-sonnet': 'claude-sonnet-4-6',
+  'claude-3-5-sonnet-20241022': 'claude-sonnet-4-6',
+  'claude-3-7-sonnet': 'claude-sonnet-4-6',
+  'claude-3-7-sonnet-20250219': 'claude-sonnet-4-6',
+  'claude-3-5-haiku': 'claude-haiku-4-5-20251001',
+  'claude-3-5-haiku-20241022': 'claude-haiku-4-5-20251001',
+  'claude-3-haiku-20240307': 'claude-haiku-4-5-20251001',
+  'claude-3-opus': 'claude-opus-4-6',
+  'claude-3-opus-20240229': 'claude-opus-4-6',
 }
 
 function resolveCanonicalAnthropicModel(model) {
   const m = String(model || '').trim()
   if (ANTHROPIC_MODEL_ALIASES[m]) return ANTHROPIC_MODEL_ALIASES[m]
   if (m.startsWith('claude-')) return m
-  return 'claude-3-5-sonnet-20241022'
+  return 'claude-sonnet-4-6'
 }
 
 const ANTHROPIC_MODELS = new Set([
-  'claude-3-5-sonnet-20241022',
-  'claude-3-7-sonnet-20250219',
-  'claude-3-5-haiku-20241022',
-  'claude-3-opus-20240229',
+  'claude-sonnet-4-6',
+  'claude-haiku-4-5-20251001',
+  'claude-sonnet-4-5-20250929',
+  'claude-opus-4-6',
+  'claude-sonnet-5',
   'claude-haiku-4-5',
   'claude-sonnet-4-5',
   'claude-opus-4-5',
+  'claude-3-5-sonnet',
+  'claude-3-5-haiku',
 ])
 const DEEPGRAM_MODELS = new Set(['nova-3-medical', 'nova-3', 'nova-2'])
 
@@ -63,8 +76,7 @@ const DEFAULTS = {
   transcribe_auto_transcribe_on_upload: true,
   deepgram_model: 'nova-3-medical',
   anthropic_enabled: true,
-  // Haiku is the most cost-efficient model — sufficient for structured SOAP note generation
-  anthropic_model: 'claude-3-5-haiku-20241022',
+  anthropic_model: 'claude-sonnet-4-6',
 
   // FFmpeg preprocessing: enabled by default to strip silence before Deepgram
   // Reads from FFMPEG_ENABLED env if DB hasn't overridden it
