@@ -39,7 +39,7 @@ const CPT_RULES = [
  * Extracts vital signs from raw dictation, scratchpad, or transcript text
  */
 export function extractVitals(text) {
-  if (!text) return { bp: null, temp: null, spo2: null, hr: null, rr: null, hasAny: false }
+  if (!text) { return { bp: null, temp: null, spo2: null, hr: null, rr: null, hasAny: false } }
   const str = String(text)
 
   let bp = null
@@ -136,7 +136,7 @@ export function formatVitalsSection(vitalsObj) {
  * Normalizes speech recognition acoustic artifacts and common medical misrecognitions
  */
 export function normalizeAsrErrors(text) {
-  if (!text) return ''
+  if (!text) { return '' }
   return String(text)
     .replace(/\b(?:her|hear)\s+today\b/gi, 'here today')
     .replace(/\bpatients?\s+that\b/gi, 'patient states that')
@@ -233,7 +233,7 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
   const possessive = isFemale ? 'her' : 'his'
 
   // 1. Identify primary anatomical region and symptom
-  let primaryComplaint = ''
+  let primaryComplaint
   let anatomicalRegion = ''
   let mechanism = ''
 

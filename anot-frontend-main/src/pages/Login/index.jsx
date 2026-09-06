@@ -134,8 +134,15 @@ function IconAlert() {
   )
 }
 
-const HERO_PRODUCT = 'Clinical documentation platform'
 const HERO_HEADLINE = 'Documentation that keeps pace with care.'
+
+function saveJurisdiction(val) {
+  try {
+    localStorage.setItem('anot_selected_jurisdiction', val)
+  } catch {
+    // Storage access may be blocked in private browsing
+  }
+}
 
 function usePrefersReducedMotion() {
   const [reduced, setReduced] = useState(() =>
@@ -378,7 +385,7 @@ export default function Login() {
                   className={`login-page__market-card ${region === 'us' ? 'login-page__market-card--selected' : ''}`}
                   onClick={() => {
                     setRegion('us')
-                    try { localStorage.setItem('anot_selected_jurisdiction', 'us') } catch {}
+                    saveJurisdiction('us')
                   }}
                   role="button"
                   tabIndex={0}
@@ -400,7 +407,7 @@ export default function Login() {
                   className={`login-page__market-card ${region === 'ca' ? 'login-page__market-card--selected' : ''}`}
                   onClick={() => {
                     setRegion('ca')
-                    try { localStorage.setItem('anot_selected_jurisdiction', 'ca') } catch {}
+                    saveJurisdiction('ca')
                   }}
                   role="button"
                   tabIndex={0}
@@ -466,7 +473,7 @@ export default function Login() {
                       className={`login-page__country-tab ${region === 'both' ? 'login-page__country-tab--active' : ''}`}
                       onClick={() => {
                         setRegion('both')
-                        try { localStorage.setItem('anot_selected_jurisdiction', 'both') } catch {}
+                        saveJurisdiction('both')
                       }}
                     >
                       <span className="login-page__country-tab-icon">🌐</span>
@@ -479,7 +486,7 @@ export default function Login() {
                       className={`login-page__country-tab ${region === 'us' ? 'login-page__country-tab--active' : ''}`}
                       onClick={() => {
                         setRegion('us')
-                        try { localStorage.setItem('anot_selected_jurisdiction', 'us') } catch {}
+                        saveJurisdiction('us')
                       }}
                     >
                       <span className="login-page__country-tab-flag">🇺🇸</span>
@@ -492,7 +499,7 @@ export default function Login() {
                       className={`login-page__country-tab ${region === 'ca' ? 'login-page__country-tab--active' : ''}`}
                       onClick={() => {
                         setRegion('ca')
-                        try { localStorage.setItem('anot_selected_jurisdiction', 'ca') } catch {}
+                        saveJurisdiction('ca')
                       }}
                     >
                       <span className="login-page__country-tab-flag">🇨🇦</span>

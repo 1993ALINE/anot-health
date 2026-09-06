@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, lazy, Suspense, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { authAPI, usersAPI, adminAPI, settingsAPI, assignmentsAPI, ehrAPI, API_BASE } from '../../services/api'
+import { authAPI, usersAPI, adminAPI, settingsAPI, assignmentsAPI, ehrAPI, API_BASE, patientsAPI } from '../../services/api'
 import { fetchCsrfToken } from '../../utils/csrf'
 import { setBranding, useBranding } from '../../services/branding'
 import SystemProfileManager from '../../components/SystemProfileManager'

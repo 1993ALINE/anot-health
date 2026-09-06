@@ -5,6 +5,7 @@ import { startRecordingKeepAlive, stopRecordingKeepAlive } from '../../utils/rec
 import { cleanAiDraftForDisplay } from '../../utils/aiDraftFormat'
 import { formatClinicalDictationToSOAP } from '../../utils/clinicalSoapSynthesizer'
 import * as offlineAudioQueue from '../../utils/offlineAudioQueue'
+import SaintMaryNoteViewerModal from '../../components/SaintMaryNoteViewerModal'
 import './ClinicianPortal.css'
 
 const CLINICAL_TEMPLATES = [
@@ -149,15 +150,15 @@ function getPatientDisplayAge(visitOrPatient, patientList = []) {
   return '36 yrs'
 }
 
-export function getLocalDateStr(d = new Date()) {
+function getLocalDateStr(d = new Date()) {
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
 }
 
-export function isCompletedVisit(v) {
-  if (!v) return false
+function isCompletedVisit(v) {
+  if (!v) { return false }
   return (
     v.status === 'completed' ||
     v.status === 'uploaded' ||
