@@ -24,8 +24,16 @@ const ICD10_RULES = [
   { match: /shoulder/i, code: 'M25.519 — Pain in unspecified shoulder' },
   { match: /cough|bronchitis/i, code: 'R05.9 — Cough, unspecified' },
   { match: /sore\s+throat|pharyngitis/i, code: 'J02.9 — Acute pharyngitis, unspecified' },
-  { match: /abdominal\s+pain|stomach/i, code: 'R10.9 — Unspecified abdominal pain' },
   { match: /fever|chills/i, code: 'R50.9 — Fever, unspecified' },
+  { match: /phq|depression|depressed/i, code: 'F32.9 — Major depressive disorder, single episode, unspecified' },
+  { match: /gad|anxiety|anxious/i, code: 'F41.1 — Generalized anxiety disorder' },
+  { match: /asthma|wheez/i, code: 'J45.909 — Unspecified asthma, uncomplicated' },
+  { match: /copd|emphysema/i, code: 'J44.9 — Chronic obstructive pulmonary disease, unspecified' },
+  { match: /rourke|well.?child|pediatric|baby|infant/i, code: 'Z00.129 — Encounter for routine child health examination without abnormal findings' },
+  { match: /prenatal|antenatal|pregnancy|pregnant/i, code: 'Z34.00 — Encounter for supervision of normal first pregnancy, unspecified trimester' },
+  { match: /postpartum/i, code: 'Z39.2 — Encounter for routine postpartum follow-up' },
+  { match: /periodic|annual|wellness|preventive/i, code: 'Z00.00 — Encounter for general adult medical examination without abnormal findings' },
+  { match: /wcb|wsib|workplace\s+injury|occupational/i, code: 'Y99.0 — Civilian activity done for pay at the time of injury' },
 ]
 
 const CPT_RULES = [
@@ -442,7 +450,42 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
     planLines.push('3. Supportive care measures as discussed with clinician.')
   }
 
-  // 7. ICD-10 & CPT Codes
+  // 7. Canadian Primary Care Specialized Section
+  const templateStr = `${visitType} ${meta?.template || ''} ${meta?.selectedTemplate || ''}`.toLowerCase()
+  let specializedSection = null
+  if (/rourke|pediatric|well.?baby|well.?child/.test(templateStr) || /rourke/.test(normalized)) {
+    specializedSection = {
+      header: 'ROURKE BABY RECORD / DEVELOPMENT (RBR):',
+      content: '• Growth: Weight, length, and head circumference tracking along expected percentiles.\n• Milestones: Gross motor, fine motor, communication, and social/emotional milestones intact for age.\n• Nutrition: Age-appropriate feeding well tolerated; vitamin D supplementation reviewed.\n• Anticipatory Guidance: Safe sleep, childproofing, car seat safety, and upcoming immunizations reviewed.'
+    }
+  } else if (/diabetes/.test(templateStr) || /diabetic|hba1c/.test(normalized)) {
+    specializedSection = {
+      header: 'DIABETES CARE & METABOLIC STATUS (DIABETES CANADA):',
+      content: '• Glycemic Control: HbA1c and home glucose targets reviewed.\n• Microvascular / Renal Surveillance: Annual urine ACR and eGFR monitoring assessed.\n• Cardiovascular Risk: Statin therapy, ACEi/ARB renal protection, and BP target (<130/80 mmHg) reviewed.\n• Foot Exam: Inspection, 10g monofilament sensation, and peripheral pulses documented.'
+    }
+  } else if (/prenatal|antenatal|sogc/.test(templateStr) || /prenatal|antenatal|gestational/.test(normalized)) {
+    specializedSection = {
+      header: 'OBSTETRIC / PRENATAL RECORD (SOGC):',
+      content: '• Gestational Age: EGA consistent with dating ultrasound.\n• Maternal Status: Blood pressure normotensive. Negative for preeclampsia symptoms (headache, vision changes, RUQ pain).\n• Fetal Status: Symphysis-fundal height concordant with gestational age. FHR regular. Active fetal movements confirmed.\n• Routine Screen: Urine dipstick negative for protein and glucose.'
+    }
+  } else if (/canmat|mental/.test(templateStr) || /phq|gad|depression|anxiety|suicid/.test(normalized)) {
+    specializedSection = {
+      header: 'MENTAL STATUS EXAM & SAFETY ASSESSMENT (CANMAT):',
+      content: '• Mental Status: Alert, cooperative, speech normal rate/tone; affect congruent with reported mood.\n• Symptom Scores: PHQ-9 and GAD-7 completed and reviewed.\n• Safety & Risk Assessment: Denies active suicidal ideation, intent, plan, or access to lethal means. Denies homicidal ideation.\n• Crisis Resources: 24/7 Canada Suicide Crisis Helpline (988) contact provided; safety plan established.'
+    }
+  } else if (/wcb|wsib|occupational/.test(templateStr) || /wcb|workplace\s+injury/.test(normalized)) {
+    specializedSection = {
+      header: 'OCCUPATIONAL ASSESSMENT & WORK CAPABILITY (WCB / WSIB):',
+      content: '• Workplace Incident: Date and mechanism of injury reviewed.\n• Functional Limitations: Physical limitations and restricted duty capability documented.\n• Work Status: Modified duties recommended; heavy lifting, repetitive bending, or high-vibration exposure restricted.\n• Return-to-Work Plan: Functional re-assessment and rehabilitation timeline established.'
+    }
+  } else if (/geriatric|frailty/.test(templateStr) || /moca|adls|falls\s*risk/.test(normalized)) {
+    specializedSection = {
+      header: 'GERIATRIC & FRAILTY ASSESSMENT:',
+      content: '• Functional Status: Basic ADLs and instrumental IADLs reviewed.\n• Cognitive Screening: Cognition intact; memory concerns assessed.\n• Falls Risk & Mobility: Timed Up and Go (TUG) assessed; assistive device usage and home safety reviewed.\n• Polypharmacy: Medication regimen and Beers criteria / Deprescribing opportunities reconciled.'
+    }
+  }
+
+  // 8. ICD-10 & CPT Codes
   const icdCodes = deriveIcd10Codes(normalized)
   const cptCodes = deriveCptCodes(normalized, visitType)
 
@@ -458,6 +501,7 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
     '',
     'PHYSICAL EXAMINATION (PE):',
     examText,
+    ...(specializedSection ? ['', specializedSection.header, specializedSection.content] : []),
     ...(imagingText ? ['', 'IMAGING & DIAGNOSTICS:', imagingText] : []),
     '',
     'ASSESSMENT & PLAN (A&P):',

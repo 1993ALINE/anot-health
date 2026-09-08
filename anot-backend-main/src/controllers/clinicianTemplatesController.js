@@ -6,7 +6,7 @@ const { visitTypeToTemplateId } = require('../utils/noteTemplateSections')
 const DEFAULT_TEMPLATES = [
     {
         id: 'new-patient',
-        name: 'New Patient Visit',
+        name: 'New Patient Comprehensive Intake (H&P)',
         icon: '🆕',
         color: '#E3F2FD',
         accent: '#1565C0',
@@ -14,22 +14,148 @@ const DEFAULT_TEMPLATES = [
             'CHIEF COMPLAINT:\n\n\nHISTORY OF PRESENT ILLNESS (HPI):\n\n\nVITAL SIGNS:\n\n\nPAST MEDICAL HISTORY:\n\n\nFAMILY HISTORY:\n\n\nSOCIAL HISTORY:\n\n\nREVIEW OF SYSTEMS:\n\n\nPHYSICAL EXAMINATION:\n\n\nIMAGING:\n\n\nASSESSMENT & PLAN (A&P):\n',
     },
     {
+        id: 'soap-adult',
+        name: 'SOAP Note — Adult (Standard / Episodic)',
+        icon: '🩺',
+        color: '#E3F2FD',
+        accent: '#0284C7',
+        content:
+            'CHIEF COMPLAINT:\n\n\nHISTORY OF PRESENT ILLNESS (HPI):\n\n\nVITAL SIGNS:\n\n\nPHYSICAL EXAMINATION (PE):\n\n\nASSESSMENT & PLAN (A&P):\n',
+    },
+    {
         id: 'follow-up',
-        name: 'Follow-Up Visit',
+        name: 'Follow-Up / Chronic Disease Review',
         icon: '🔄',
         color: '#E8F5E9',
         accent: '#2E7D32',
         content:
-            'REASON FOR VISIT:\n\n\nINTERVAL HISTORY:\n\n\nVITAL SIGNS:\n\n\nCURRENT MEDICATIONS:\n\n\nPHYSICAL EXAMINATION:\n\n\nIMAGING:\n\n\nASSESSMENT & PLAN:\n',
+            'REASON FOR VISIT:\n\n\nINTERVAL HISTORY:\n\n\nVITAL SIGNS & BIOMETRICS:\n\n\nCURRENT MEDICATIONS & ADHERENCE:\n\n\nPHYSICAL EXAMINATION:\n\n\nASSESSMENT & PLAN:\n',
+    },
+    {
+        id: 'periodic-health',
+        name: 'Periodic Health Review (CTFPHC Guidelines)',
+        icon: '📋',
+        color: '#F3E8FF',
+        accent: '#7E22CE',
+        content:
+            'REASON FOR VISIT / PREVENTIVE REVIEW:\n\n\nRISK FACTORS & LIFESTYLE:\n\n\nPREVENTIVE SCREENING STATUS (FIT, MAMMOGRAPHY, CERVICAL, BONE DENSITY):\n\n\nIMMUNIZATIONS:\n\n\nVITAL SIGNS & BMI:\n\n\nPHYSICAL EXAMINATION:\n\n\nASSESSMENT & PREVENTIVE PLAN:\n',
+    },
+    {
+        id: 'rourke-pediatric',
+        name: 'Well-Baby / Well-Child (Rourke Baby Record)',
+        icon: '👶',
+        color: '#FEF3C7',
+        accent: '#D97706',
+        content:
+            'AGE & VISIT INTERVAL (ROURKE BABY RECORD):\n\n\nNUTRITION & FEEDING:\n\n\nGROWTH PERCENTILES (WEIGHT, LENGTH, HEAD CIRCUMFERENCE):\n\n\nDEVELOPMENTAL MILESTONES (MOTOR, COGNITIVE, SPEECH, SOCIAL):\n\n\nPHYSICAL EXAMINATION:\n\n\nIMMUNIZATIONS & ANTICIPATORY GUIDANCE:\n\n\nASSESSMENT & PLAN:\n',
+    },
+    {
+        id: 'geriatric-frailty',
+        name: 'Comprehensive Geriatric & Frailty Assessment',
+        icon: '🧓',
+        color: '#E0E7FF',
+        accent: '#4338CA',
+        content:
+            'REASON FOR ASSESSMENT:\n\n\nCOGNITIVE SCREENING (MOCA / MMSE):\n\n\nFUNCTIONAL STATUS (ADLS & IADLS):\n\n\nFALLS RISK & MOBILITY:\n\n\nMEDICATION REVIEW & POLYPHARMACY:\n\n\nVITAL SIGNS & ORTHOSTATICS:\n\n\nPHYSICAL EXAMINATION:\n\n\nASSESSMENT & MULTIDISCIPLINARY CARE PLAN:\n',
+    },
+    {
+        id: 'diabetes-cdm',
+        name: 'Diabetes Mellitus Care (Diabetes Canada)',
+        icon: '🩸',
+        color: '#FEE2E2',
+        accent: '#B91C1C',
+        content:
+            'REASON FOR VISIT:\n\n\nGLYCEMIC CONTROL (A1C, HOME SMBG, HYPOGLYCEMIA HISTORY):\n\n\nCARDIOVASCULAR & RENAL RISK (ACR, EGFR, STATIN):\n\n\nDIABETIC FOOT EXAMINATION (10G MONOFILAMENT, PULSES):\n\n\nMEDICATION RECONCILIATION:\n\n\nVITAL SIGNS (BP TARGET < 130/80):\n\n\nASSESSMENT & MANAGEMENT PLAN:\n',
+    },
+    {
+        id: 'hypertension-cvd',
+        name: 'Hypertension & Cardiovascular (Hypertension Canada)',
+        icon: '❤️',
+        color: '#FFE4E6',
+        accent: '#BE123C',
+        content:
+            'REASON FOR VISIT:\n\n\nBLOOD PRESSURE LOG (HOME BP / CLINIC BP):\n\n\nCARDIOVASCULAR RISK EVALUATION (FRAMINGHAM / CVS):\n\n\nLIFESTYLE MODIFICATIONS (DASH DIET, SODIUM, EXERCISE):\n\n\nCURRENT ANTIHYPERTENSIVE THERAPY & ADHERENCE:\n\n\nTARGETED EXAM & VITAL SIGNS:\n\n\nASSESSMENT & TREATMENT PLAN:\n',
+    },
+    {
+        id: 'respiratory-cts',
+        name: 'Asthma & COPD Action Visit (CTS Guidelines)',
+        icon: '🫁',
+        color: '#E0F2FE',
+        accent: '#0369A1',
+        content:
+            'REASON FOR VISIT:\n\n\nSYMPTOM CONTROL (ACT SCORE / CAT / MMRC):\n\n\nEXACERBATIONS & RESCUE INHALER FREQUENCY:\n\n\nTRIGGER IDENTIFICATION & INHALER TECHNIQUE:\n\n\nPULMONARY EXAM & PEAK FLOW / SPIROMETRY:\n\n\nASSESSMENT & ASTHMA/COPD ACTION PLAN:\n',
+    },
+    {
+        id: 'chronic-pain-msk',
+        name: 'Chronic Pain & MSK Management Visit',
+        icon: '🦴',
+        color: '#FEF9C3',
+        accent: '#A16207',
+        content:
+            'CHIEF COMPLAINT / PAIN REGION:\n\n\nPAIN ASSESSMENT & FUNCTIONAL IMPACT (PEG SCORE):\n\n\nNON-PHARMACOLOGIC & PHYSICAL THERAPY RESPONSE:\n\n\nMEDICATION RECONCILIATION & OPIOID RISK ASSESSMENT:\n\n\nFOCUSED MSK / NEUROLOGICAL EXAM:\n\n\nASSESSMENT & PAIN MANAGEMENT PLAN:\n',
+    },
+    {
+        id: 'mental-health-canmat',
+        name: 'Mental Health Assessment (CANMAT Guidelines)',
+        icon: '🧠',
+        color: '#EDE9FE',
+        accent: '#6D28D9',
+        content:
+            'CHIEF COMPLAINT & PRESENTING CRISIS:\n\n\nSYMPTOM BURDEN & SCORES (PHQ-9 / GAD-7):\n\n\nPSYCHOSOCIAL STRESSORS & SLEEP HYGIENE:\n\n\nSAFETY & SUICIDE RISK ASSESSMENT:\n\n\nMENTAL STATUS EXAMINATION (MSE):\n\n\nASSESSMENT & PSYCHOTHERAPY / PHARMACOTHERAPY PLAN:\n',
+    },
+    {
+        id: 'addictions-oat',
+        name: 'Substance Use & Addictions / OAT Encounter',
+        icon: '💊',
+        color: '#F1F5F9',
+        accent: '#475569',
+        content:
+            'SUBSTANCE INVOLVED & PATTERN OF USE:\n\n\nWITHDRAWAL & CRAVINGS ASSESSMENT:\n\n\nOPIOID AGONIST THERAPY (METHADONE / SUBOXONE / BUPRENORPHINE):\n\n\nHARM REDUCTION & TOXICOLOGY / UDS:\n\n\nPHYSICAL & MENTAL STATUS EXAM:\n\n\nASSESSMENT & RECOVERY CARE PLAN:\n',
+    },
+    {
+        id: 'prenatal-sogc',
+        name: 'Prenatal / Antenatal Visit (SOGC Guidelines)',
+        icon: '🤰',
+        color: '#FCE7F3',
+        accent: '#BE185D',
+        content:
+            'ESTIMATED GESTATIONAL AGE (EGA) & SYMPTOMS:\n\n\nFETAL MOVEMENT & MATERNAL WELLBEING:\n\n\nMATERNAL VITAL SIGNS (BP, WEIGHT):\n\n\nSYMPHYSIS-FUNDAL HEIGHT (SFH) & FETAL HEART RATE (FHR):\n\n\nINVESTIGATIONS & ULTRASOUND REVIEW:\n\n\nASSESSMENT & ANTENATAL CARE PLAN:\n',
+    },
+    {
+        id: 'postpartum-6wk',
+        name: 'Postpartum & Newborn 6-Week Examination',
+        icon: '🤱',
+        color: '#FFEDD5',
+        accent: '#C2410C',
+        content:
+            'REASON FOR VISIT / POSTPARTUM INTERVAL:\n\n\nMATERNAL PHYSICAL RECOVERY (LOCHIA, PERINEUM / INCISION):\n\n\nPERINATAL MOOD & EDINBURGH SCREENING (EPDS):\n\n\nINFANT FEEDING & PEDIATRIC PROGRESS:\n\n\nCONTRACEPTION & CERVICAL SCREENING:\n\n\nEXAMINATION (MATERNAL & INFANT):\n\n\nASSESSMENT & PLAN:\n',
     },
     {
         id: 'virtual-visit',
-        name: 'Virtual Visit',
+        name: 'Virtual Care / Telehealth Encounter (CMPA)',
         icon: '💻',
         color: '#EDE9FE',
         accent: '#4527A0',
         content:
-            'CHIEF COMPLAINT:\n\n\nHISTORY OF PRESENT ILLNESS (HPI):\n\n\nVITAL SIGNS:\n\n\nREVIEW OF SYSTEMS:\n\n\nCURRENT MEDICATIONS:\n\n\nIMAGING / LAB RESULTS:\n\n\nASSESSMENT & PLAN (A&P):\n\nNOTE: This visit was conducted via telemedicine. Physical examination was not performed.\n',
+            'VIRTUAL CARE INFORMED CONSENT & PATIENT LOCATION:\n\n\nTECHNOLOGY MODALITY (PHONE / VIDEO):\n\n\nCHIEF COMPLAINT & HISTORY:\n\n\nVIRTUAL OBSERVATION & REVIEW OF SYSTEMS:\n\n\nRED FLAGS & IN-PERSON CLINIC ESCALATION CRITERIA:\n\n\nASSESSMENT & TREATMENT PLAN:\n\nNOTE: This visit was conducted via telemedicine. Physical examination was not performed.\n',
+    },
+    {
+        id: 'specialist-referral',
+        name: 'Specialist Referral & Consultation Request',
+        icon: '✉️',
+        color: '#CCFBF1',
+        accent: '#0F766E',
+        content:
+            'REFERRING PHYSICIAN & SPECIALTY REQUESTED:\n\n\nCLINICAL QUESTION / REASON FOR CONSULTATION:\n\n\nPERTINENT CLINICAL HISTORY & PRIOR INVESTIGATIONS:\n\n\nCURRENT MEDICATIONS & ALLERGIES:\n\n\nPREVIOUS TREATMENTS TRIED & OUTCOMES:\n\n\nPROVISIONAL DIAGNOSIS & CLINICAL URGENCY:\n',
+    },
+    {
+        id: 'wcb-occupational',
+        name: "Occupational Injury / Worker's Comp (WCB / WSIB)",
+        icon: '👷',
+        color: '#FEF08A',
+        accent: '#854D0E',
+        content:
+            'WORKPLACE INJURY INCIDENT DETAILS & DATE:\n\n\nMECHANISM OF INJURY & SYMPTOM ONSET:\n\n\nOBJECTIVE PHYSICAL FINDINGS & FUNCTIONAL LIMITATIONS:\n\n\nMODIFIED DUTIES & WORK CAPABILITY ASSESSMENT:\n\n\nESTIMATED RETURN TO WORK TIMELINE:\n\n\nASSESSMENT, DIAGNOSIS & REHABILITATION PLAN:\n',
     },
     {
         id: 'other',
@@ -86,7 +212,13 @@ async function getTemplateForVisitType(userId, visitType) {
   await ensureClinicianTemplatesSchema()
   const templates = await listTemplatesForUser(userId)
   const templateId = visitTypeToTemplateId(visitType)
-  return templates.find((t) => t.id === templateId) || null
+  return (
+    templates.find((t) => t.id === templateId) ||
+    templates.find((t) => t.id === visitType) ||
+    templates.find((t) => t.name.toLowerCase() === String(visitType || '').trim().toLowerCase()) ||
+    templates.find((t) => t.name.toLowerCase().includes(String(visitType || '').trim().toLowerCase())) ||
+    null
+  )
 }
 
 const getClinicianTemplates = async (req, res) => {

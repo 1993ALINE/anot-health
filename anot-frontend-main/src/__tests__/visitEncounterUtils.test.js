@@ -3,6 +3,7 @@ import {
   getSiblingVisits,
   getPatientVisitIndex,
   visitHasAudio,
+  formatEncounterDate,
 } from '../utils/visitEncounterUtils'
 
 describe('visitEncounterUtils', () => {
@@ -34,5 +35,14 @@ describe('visitEncounterUtils', () => {
     expect(visitHasAudio({ audio_file: '/uploads/x.webm' })).toBe(true)
     expect(visitHasAudio({ audio_file: '' })).toBe(false)
     expect(visitHasAudio({})).toBe(false)
+  })
+
+  it('formats ISO visit dates to human readable dates', () => {
+    expect(formatEncounterDate('2026-09-06T00:00:00.000Z')).toBe('Sep 6, 2026')
+    expect(formatEncounterDate('2026-09-06')).toBe('Sep 6, 2026')
+    expect(formatEncounterDate('2026-01-15')).toBe('Jan 15, 2026')
+    expect(formatEncounterDate('')).toBe('Unknown Date')
+    expect(formatEncounterDate(null)).toBe('Unknown Date')
+    expect(formatEncounterDate(undefined)).toBe('Unknown Date')
   })
 })

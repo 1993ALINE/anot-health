@@ -5,31 +5,192 @@ import { startRecordingKeepAlive, stopRecordingKeepAlive } from '../../utils/rec
 import { cleanAiDraftForDisplay } from '../../utils/aiDraftFormat'
 import { formatClinicalDictationToSOAP } from '../../utils/clinicalSoapSynthesizer'
 import * as offlineAudioQueue from '../../utils/offlineAudioQueue'
+import { formatEncounterDate } from '../../utils/visitEncounterUtils'
 import SaintMaryNoteViewerModal from '../../components/SaintMaryNoteViewerModal'
 import './ClinicianPortal.css'
 
 const CLINICAL_TEMPLATES = [
-  { id: 'soap-adult', label: 'SOAP Note — Adult (Standard)', type: 'Follow-up' },
-  { id: 'soap-pediatric', label: 'SOAP Note — Pediatric', type: 'Follow-up' },
-  { id: 'comprehensive', label: 'Comprehensive Physical Exam (H&P)', type: 'New Patient' },
-  { id: 'ortho-msk', label: 'Musculoskeletal / Orthopedic Exam', type: 'Follow-up' },
-  { id: 'cardio', label: 'Cardiology / Chest Pain Consult', type: 'Follow-up' },
-  { id: 'wellness', label: 'Annual Wellness / Preventive Visit', type: 'Follow-up' },
-  { id: 'telehealth', label: 'Telehealth / Virtual Encounter', type: 'Virtual Visit' },
+  // 1. Core Primary Care
+  {
+    id: 'soap-adult',
+    label: 'SOAP Note — Adult (Standard / Episodic)',
+    type: 'Follow-up',
+    category: 'Core Primary Care',
+    description: 'Acute problem or episodic complaint (e.g. URTI, UTI, acute injury, rash).',
+  },
+  {
+    id: 'follow-up',
+    label: 'Follow-Up / Chronic Disease Review',
+    type: 'Follow-up',
+    category: 'Core Primary Care',
+    description: 'Interval assessment, treatment response, lab review, and care plan updates.',
+  },
+  {
+    id: 'comprehensive',
+    label: 'New Patient Comprehensive Intake (H&P)',
+    type: 'New Patient',
+    category: 'Core Primary Care',
+    description: 'Complete baseline health history, past medical/surgical/family/social, ROS, and full physical exam.',
+  },
+
+  // 2. Preventive & Life-Stage
+  {
+    id: 'periodic-health',
+    label: 'Periodic Health Review (CTFPHC Guidelines)',
+    type: 'Follow-up',
+    category: 'Preventive & Life-Stage',
+    description: 'Canadian Task Force preventive screening (FIT, mammography, cervical, bone density, CVD risk).',
+  },
+  {
+    id: 'rourke-pediatric',
+    label: 'Well-Baby / Well-Child (Rourke Baby Record)',
+    type: 'Follow-up',
+    category: 'Preventive & Life-Stage',
+    description: 'Canadian RBR standard: growth percentiles, developmental milestones, nutrition, immunizations.',
+  },
+  {
+    id: 'geriatric-frailty',
+    label: 'Comprehensive Geriatric & Frailty Assessment',
+    type: 'Follow-up',
+    category: 'Preventive & Life-Stage',
+    description: 'Senior assessment: cognitive screening (MoCA/MMSE), ADLs/IADLs, falls risk, polypharmacy review.',
+  },
+
+  // 3. Chronic Disease Management (CDM)
+  {
+    id: 'diabetes-cdm',
+    label: 'Diabetes Mellitus Care (Diabetes Canada)',
+    type: 'Follow-up',
+    category: 'Chronic Disease Management (CDM)',
+    description: 'HbA1c target, home SMBG, hypoglycemia review, 10g monofilament foot exam, ACR/eGFR, statin.',
+  },
+  {
+    id: 'hypertension-cvd',
+    label: 'Hypertension & Cardiovascular (Hypertension Canada)',
+    type: 'Follow-up',
+    category: 'Chronic Disease Management (CDM)',
+    description: 'Home/office BP log, cardiovascular risk, DASH lifestyle, medication reconciliation & target review.',
+  },
+  {
+    id: 'respiratory-cts',
+    label: 'Asthma & COPD Action Visit (CTS Guidelines)',
+    type: 'Follow-up',
+    category: 'Chronic Disease Management (CDM)',
+    description: 'Canadian Thoracic Society: symptom control (ACT/CAT/mMRC), inhaler technique, spirometry/PEF.',
+  },
+  {
+    id: 'chronic-pain-msk',
+    label: 'Chronic Pain & MSK Management Visit',
+    type: 'Follow-up',
+    category: 'Chronic Disease Management (CDM)',
+    description: 'Pain assessment (PEG score), functional impact, non-pharmacologic care, opioid risk, focused exam.',
+  },
+
+  // 4. Mental Health & Addictions
+  {
+    id: 'mental-health-canmat',
+    label: 'Mental Health Assessment (CANMAT Guidelines)',
+    type: 'Follow-up',
+    category: 'Mental Health & Addictions',
+    description: 'Depression/anxiety (PHQ-9/GAD-7), stressors, safety/suicide risk assessment, psychotherapy & meds.',
+  },
+  {
+    id: 'addictions-oat',
+    label: 'Substance Use & Addictions / OAT Encounter',
+    type: 'Follow-up',
+    category: 'Mental Health & Addictions',
+    description: 'Opioid Agonist Therapy (Methadone/Suboxone/Buprenorphine), cravings, harm reduction, toxicology.',
+  },
+
+  // 5. Women\'s Health & Perinatal
+  {
+    id: 'prenatal-sogc',
+    label: 'Prenatal / Antenatal Visit (SOGC Guidelines)',
+    type: 'Follow-up',
+    category: "Women's Health & Perinatal",
+    description: 'SOGC antenatal record: EGA, BP, SFH, FHR, fetal movements, edema, screening labs & ultrasound.',
+  },
+  {
+    id: 'postpartum-6wk',
+    label: 'Postpartum & Newborn 6-Week Examination',
+    type: 'Follow-up',
+    category: "Women's Health & Perinatal",
+    description: 'Maternal physical recovery, EPDS mood screen, infant feeding & growth, contraception counseling.',
+  },
+
+  // 6. Virtual Care & Occupational
+  {
+    id: 'virtual-telehealth',
+    label: 'Virtual Care / Telehealth Encounter (CMPA)',
+    type: 'Virtual Visit',
+    category: 'Virtual Care & Occupational',
+    description: 'CMPA-compliant virtual consent, patient location, technology modality, red flags & in-person trigger.',
+  },
+  {
+    id: 'specialist-referral',
+    label: 'Specialist Referral & Consultation Request',
+    type: 'Other',
+    category: 'Virtual Care & Occupational',
+    description: 'Formal referral letter: clinical question, investigations, medications, failed trials, urgency.',
+  },
+  {
+    id: 'wcb-occupational',
+    label: "Occupational Injury / Worker's Comp (WCB / WSIB)",
+    type: 'Other',
+    category: 'Virtual Care & Occupational',
+    description: 'Workplace incident details, mechanism, objective exam, modified duties, return to work timeline.',
+  },
 ]
+
+function renderTemplateOptions() {
+  const categories = [...new Set(CLINICAL_TEMPLATES.map((t) => t.category))]
+  return categories.map((cat) => (
+    <optgroup key={cat} label={`── ${cat} ──`}>
+      {CLINICAL_TEMPLATES.filter((t) => t.category === cat).map((t) => (
+        <option key={t.id} value={t.label}>
+          {t.label}
+        </option>
+      ))}
+    </optgroup>
+  ))
+}
 
 const DEFAULT_MACROS = [
   {
     id: 'm_vitals',
-    name: 'Normal Vitals',
+    name: 'Normal Vitals (Canadian Metric)',
     shortcut: '.vitals',
-    content: 'VITALS: BP 120/80 mmHg, HR 72 bpm regular, Temp 37.0°C / 98.6°F, RR 16/min, SpO2 99% on room air.',
+    content: 'VITALS: BP 118/76 mmHg, HR 70 bpm regular, Temp 36.8°C (oral), RR 14/min, SpO2 99% on room air, Weight 74.2 kg, Height 175 cm (BMI 24.2 kg/m²).',
   },
   {
     id: 'm_normexam',
     name: 'Normal Physical Exam',
     shortcut: '.normexam',
-    content: 'PHYSICAL EXAM:\nGENERAL: Alert and oriented x3, well-nourished, in no acute distress.\nCARDIOVASCULAR: Regular rate and rhythm, normal S1/S2, no murmurs.\nPULMONARY: Clear to auscultation bilaterally, no wheezes, rales, or rhonchi.\nABDOMEN: Soft, non-tender, non-distended, normoactive bowel sounds.',
+    content: 'PHYSICAL EXAM:\nGENERAL: Alert and oriented x3, well-nourished, in no acute distress.\nHEENT: Normocephalic, atraumatic, conjunctivae clear, pharynx normal.\nCARDIOVASCULAR: Regular rate and rhythm, normal S1/S2, no murmurs.\nPULMONARY: Clear to auscultation bilaterally, no wheezes, rales, or rhonchi.\nABDOMEN: Soft, non-tender, non-distended, active bowel sounds, no organomegaly.\nNEURO: Alert, oriented, cranial nerves grossly intact, normal gait.',
+  },
+  {
+    id: 'm_footexam',
+    name: 'Diabetic Foot Exam (Diabetes Canada)',
+    shortcut: '.footexam',
+    content: 'DIABETIC FOOT EXAM:\nInspection: Skin intact bilaterally, no ulcers, fissures, calluses, or fungal nail changes.\nPulses: Dorsalis pedis (DP) and posterior tibial (PT) 2+ bilaterally, capillary refill < 2s.\nNeurological: 10g Semmes-Weinstein monofilament sensation intact (10/10 sites bilaterally). Vibration sense intact.',
+  },
+  {
+    id: 'm_rourke',
+    name: 'Rourke Well-Child Milestones',
+    shortcut: '.rourke',
+    content: 'ROURKE BABY RECORD ASSESSMENT:\nGrowth: Weight, length, and head circumference tracking steadily along expected percentiles.\nNutrition: Age-appropriate feeding well tolerated; vitamin D supplementation discussed.\nDevelopment: Gross motor, fine motor, communication, and social/emotional milestones intact for age.\nSafety & Guidance: Car seat, safe sleep, sun/water safety, and next scheduled immunizations reviewed.',
+  },
+  {
+    id: 'm_canmat',
+    name: 'Mental Health & Suicide Risk (CANMAT)',
+    shortcut: '.canmat',
+    content: 'MENTAL HEALTH & SAFETY ASSESSMENT:\nMood/Affect: Patient reports mood as low/anxious; affect congruent.\nScores: PHQ-9: 12 (Moderate depression); GAD-7: 10 (Moderate anxiety).\nSafety Assessment: Denies active suicidal ideation, intent, plan, or access to lethal means. No homicidal ideation.\nCrisis Protocol: 24/7 Canada Suicide Crisis Helpline (988) provided. Emergency return precautions reviewed.',
+  },
+  {
+    id: 'm_sogc',
+    name: 'Prenatal Exam (SOGC Antenatal)',
+    shortcut: '.sogc',
+    content: 'PRENATAL VISIT (SOGC):\nGestational Age: EGA consistent with dating ultrasound.\nExam: Maternal BP normotensive. No headache, visual changes, or epigastric pain. SFH concordant with dates.\nFetus: FHR regular at 140-150 bpm. Active fetal movement confirmed by mother. Urine dipstick negative.',
   },
   {
     id: 'm_kneemsk',
@@ -61,13 +222,23 @@ const DEFAULT_MACROS = [
     shortcut: '.followup',
     content: 'FOLLOW-UP:\n1. Return to clinic in 2 weeks or sooner if symptoms, swelling, or pain worsen.\n2. Red flag return precautions discussed including severe pain, calf swelling, or inability to bear weight.',
   },
+  {
+    id: 'm_wcb',
+    name: 'WCB Return-to-Work Plan',
+    shortcut: '.wcb',
+    content: 'WCB WORK CAPABILITY & PLAN:\n1. Modified work duties recommended: No lifting > 5 kg, avoid repetitive twisting or bending for 2 weeks.\n2. WCB Form completed and submitted. Physiotherapy referral initiated.\n3. Clinical review and functional assessment in 2 weeks.',
+  },
 ]
 
 function normalizeVisitTypeForDb(val) {
   const s = String(val || '').toLowerCase()
-  if (s.includes('new')) {return 'New Patient'}
+  const found = CLINICAL_TEMPLATES.find(
+    (t) => t.label.toLowerCase() === s || t.id.toLowerCase() === s
+  )
+  if (found) {return found.type}
+  if (s.includes('new') || s.includes('intake') || s.includes('comprehensive')) {return 'New Patient'}
   if (s.includes('virtual') || s.includes('tele')) {return 'Virtual Visit'}
-  if (s.includes('other')) {return 'Other'}
+  if (s.includes('referral') || s.includes('wcb') || s.includes('occupational') || s.includes('other')) {return 'Other'}
   return 'Follow-up'
 }
 
@@ -238,6 +409,186 @@ function isCompletedVisit(v) {
   )
 }
 
+const DEV_MOCK_VISITS = [
+  {
+    id: 101,
+    patient_name: 'Farhan Kabir',
+    mrn: 'MRN-271370',
+    visit_date: '2026-09-06T00:00:00.000Z',
+    visit_time: '07:47',
+    visit_type: 'Follow-up',
+    status: 'draft',
+    ai_draft: 'CHIEF COMPLAINT: Right knee pain following a mechanical fall HISTORY OF PRESENT ILLNESS (HPI): The patient is a 36-year-old male presenting with acute right knee pain following a fall onto concrete. Reports joint stiffness, effusion, and localized tenderness along medial joint line.',
+  },
+  {
+    id: 102,
+    patient_name: 'Patient Encounter',
+    mrn: 'MRN-489389',
+    visit_date: '2026-09-05T00:00:00.000Z',
+    visit_time: '22:41',
+    visit_type: 'Follow-up',
+    status: 'pending',
+  },
+  {
+    id: 103,
+    patient_name: 'David Headache-Test',
+    mrn: 'MRN-HA-9092',
+    visit_date: '2026-09-05T00:00:00.000Z',
+    visit_time: '15:45',
+    visit_type: 'Follow-up',
+    status: 'completed',
+    locked_at: '2026-09-05T16:00:00.000Z',
+    final_note: 'CHIEF COMPLAINT: Headache evaluation HISTORY OF PRESENT ILLNESS (HPI): The patient is a 45 yrs patient presenting for evaluation of headache. Symptoms have been recurring for 2 weeks with throbbing frontal discomfort, photophobia, and no focal neurological deficit.',
+  },
+  {
+    id: 104,
+    patient_name: 'David Headache-Test',
+    mrn: 'MRN-HA-9092',
+    visit_date: '2026-09-05T00:00:00.000Z',
+    visit_time: '15:45',
+    visit_type: 'Follow-up',
+    status: 'pending',
+  },
+  {
+    id: 105,
+    patient_name: 'Priya Patel',
+    mrn: 'MRN-249018',
+    visit_date: '2026-09-05T00:00:00.000Z',
+    visit_time: '14:30',
+    visit_type: 'Virtual Visit',
+    status: 'completed',
+    locked_at: '2026-09-05T15:00:00.000Z',
+    final_note: 'ANOT HEALTH AMBIENT CLINICAL DOCUMENTATION ATTENDING PHYSICIAN: Dr. A. McKnight, MD | Family Medicine CLINICAL SCRIBE: Shahib Hasib, Certified Medical Scribe. Comprehensive assessment of metabolic panel, hypertension review, and medication titration.',
+  },
+  {
+    id: 106,
+    patient_name: 'Marcus Vance',
+    mrn: 'MRN-882103',
+    visit_date: '2026-09-05T00:00:00.000Z',
+    visit_time: '13:15',
+    visit_type: 'Annual Wellness',
+    status: 'completed',
+    locked_at: '2026-09-05T13:50:00.000Z',
+    final_note: 'Annual wellness exam completed. Blood pressure 122/78 mmHg. Fasting lipid panel reviewed. Recommended continued lifestyle modifications.',
+  },
+  {
+    id: 107,
+    patient_name: 'Elena Rostova',
+    mrn: 'MRN-339102',
+    visit_date: '2026-09-05T00:00:00.000Z',
+    visit_time: '11:30',
+    visit_type: 'Follow-up',
+    status: 'draft',
+    ai_draft: 'Follow-up for type 2 diabetes mellitus management. HbA1c 7.2%. Tolerating Metformin 1000mg BID without GI distress. Foot exam unremarkable.',
+  },
+  {
+    id: 108,
+    patient_name: 'James Wilson',
+    mrn: 'MRN-672194',
+    visit_date: '2026-09-05T00:00:00.000Z',
+    visit_time: '10:00',
+    visit_type: 'Consultation',
+    status: 'completed',
+    locked_at: '2026-09-05T10:45:00.000Z',
+    final_note: 'Cardiology consult follow-up. Normal sinus rhythm on EKG. Echocardiogram shows preserved EF 60%. Continued on current anti-hypertensive regimen.',
+  },
+  {
+    id: 109,
+    patient_name: 'Sophia Chang',
+    mrn: 'MRN-512890',
+    visit_date: '2026-09-05T00:00:00.000Z',
+    visit_time: '09:15',
+    visit_type: 'Follow-up',
+    status: 'draft',
+    ai_draft: 'Asthma maintenance visit. Peak flow at 90% of personal best. Refilled Albuterol MDI and Symbicort inhaler.',
+  },
+  {
+    id: 110,
+    patient_name: 'Robert Miller',
+    mrn: 'MRN-449102',
+    visit_date: '2026-09-05T00:00:00.000Z',
+    visit_time: '08:30',
+    visit_type: 'New Patient',
+    status: 'completed',
+    locked_at: '2026-09-05T09:15:00.000Z',
+    final_note: 'Comprehensive new patient intake. Past surgical history and social history documented. Baseline laboratory panel ordered.',
+  },
+  {
+    id: 111,
+    patient_name: 'Amara Okafor',
+    mrn: 'MRN-781923',
+    visit_date: '2026-09-04T00:00:00.000Z',
+    visit_time: '16:00',
+    visit_type: 'Follow-up',
+    status: 'completed',
+    locked_at: '2026-09-04T16:35:00.000Z',
+    final_note: 'Post-operative incision check at day 14. Surgical site clean, well-approximated, no signs of erythema or drainage. Sutures removed.',
+  },
+  {
+    id: 112,
+    patient_name: 'Lucas Dupont',
+    mrn: 'MRN-993210',
+    visit_date: '2026-09-04T00:00:00.000Z',
+    visit_time: '14:45',
+    visit_type: 'Virtual Visit',
+    status: 'draft',
+    ai_draft: 'Telehealth visit for seasonal allergic rhinitis. Prescribed Flonase nasal spray and Loratadine 10mg daily.',
+  },
+  {
+    id: 113,
+    patient_name: 'Chloe Bennett',
+    mrn: 'MRN-662381',
+    visit_date: '2026-09-04T00:00:00.000Z',
+    visit_time: '13:30',
+    visit_type: 'Follow-up',
+    status: 'completed',
+    locked_at: '2026-09-04T14:10:00.000Z',
+    final_note: 'Dermatology follow-up for mild eczema. Triamcinolone 0.1% cream applied with good response.',
+  },
+  {
+    id: 114,
+    patient_name: 'Benjamin Wright',
+    mrn: 'MRN-119283',
+    visit_date: '2026-09-04T00:00:00.000Z',
+    visit_time: '11:00',
+    visit_type: 'Follow-up',
+    status: 'completed',
+    locked_at: '2026-09-04T11:40:00.000Z',
+    final_note: 'Chronic low back pain management. Referred to physical therapy for core strengthening program.',
+  },
+  {
+    id: 115,
+    patient_name: 'Hannah Abbott',
+    mrn: 'MRN-884129',
+    visit_date: '2026-09-04T00:00:00.000Z',
+    visit_time: '10:15',
+    visit_type: 'Follow-up',
+    status: 'draft',
+    ai_draft: 'Migraine follow-up. Sumatriptan 50mg effective for acute abortive therapy.',
+  },
+  {
+    id: 116,
+    patient_name: 'Tariq Al-Mansoor',
+    mrn: 'MRN-330192',
+    visit_date: '2026-09-04T00:00:00.000Z',
+    visit_time: '09:00',
+    visit_type: 'Follow-up',
+    status: 'completed',
+    locked_at: '2026-09-04T09:35:00.000Z',
+    final_note: 'Routine hypertension follow-up. BP 124/82 mmHg. Lisinopril 20mg daily continued.',
+  },
+  {
+    id: 117,
+    patient_name: 'Olivia Martinez',
+    mrn: 'MRN-552910',
+    visit_date: '2026-09-04T00:00:00.000Z',
+    visit_time: '08:15',
+    visit_type: 'Follow-up',
+    status: 'draft',
+    ai_draft: 'Gastroenterology follow-up for GERD symptoms. Omeprazole 20mg QD continued with dietary adjustments advised.',
+  },
+]
+
 export default function ClinicianPortal({ currentUser, onLogout }) {
   const [tab, setTab] = useState('ambient') // 'ambient' | 'history'
   const [visits, setVisits] = useState([])
@@ -246,7 +597,27 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [scheduleFilter, setScheduleFilter] = useState('all') // 'all' | 'pending' | 'ready' | 'draft'
   const [scheduleDateFilter, setScheduleDateFilter] = useState('today') // 'today' | 'yesterday' | 'all'
+  const hasUserManuallySelectedDateTabRef = useRef(false)
   const [historyStatusFilter, setHistoryStatusFilter] = useState('all') // 'all' | 'signed' | 'draft'
+
+  // Smart-default date tab on initial load if today and yesterday have no visits
+  useEffect(() => {
+    if (hasUserManuallySelectedDateTabRef.current) return
+    if (visits.length === 0) return
+
+    const todayStr = getLocalDateStr()
+    const yesterdayStr = getYesterdayDateStr()
+    const countToday = visits.filter((v) => normalizeVisitDate(v.visit_date) === todayStr).length
+    const countYesterday = visits.filter((v) => normalizeVisitDate(v.visit_date) === yesterdayStr).length
+
+    if (countToday > 0) {
+      setScheduleDateFilter('today')
+    } else if (countYesterday > 0) {
+      setScheduleDateFilter('yesterday')
+    } else {
+      setScheduleDateFilter('all')
+    }
+  }, [visits])
 
   // Edit / Add Patient Details Modal
   const [patientModalOpen, setPatientModalOpen] = useState(false)
@@ -301,7 +672,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
   const [timerSeconds, setTimerSeconds] = useState(0)
   const [uploading, setUploading] = useState(false)
   const [_uploadStatus, setUploadStatus] = useState('')
-  const [selectedTemplate, setSelectedTemplate] = useState('SOAP Note — Adult (Standard)')
+  const [selectedTemplate, setSelectedTemplate] = useState('SOAP Note — Adult (Standard / Episodic)')
   const [audioStream, setAudioStream] = useState(null)
   const [liveTranscript, setLiveTranscript] = useState('')
   const [micLevel, setMicLevel] = useState(0)
@@ -386,6 +757,13 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
           }
         }
 
+        // Fallback to sample visits when previewing in local dev server without live backend
+        if (visitMap.size === 0 && import.meta.env.DEV && typeof window !== 'undefined' && !window.__VITEST__) {
+          for (const v of DEV_MOCK_VISITS) {
+            visitMap.set(v.id, v)
+          }
+        }
+
         return Array.from(visitMap.values()).sort((a, b) => {
           const dateA = `${a.visit_date || ''} ${a.visit_time || ''}`.trim()
           const dateB = `${b.visit_date || ''} ${b.visit_time || ''}`.trim()
@@ -397,7 +775,11 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
         setPatientList(pRes.patients)
       }
 
-      const candidateVisits = [...todayVisits, ...allVisitsList]
+      const candidateVisits = [
+        ...todayVisits,
+        ...allVisitsList,
+        ...(import.meta.env.DEV && !todayVisits.length && !allVisitsList.length && typeof window !== 'undefined' && !window.__VITEST__ ? DEV_MOCK_VISITS : []),
+      ]
       if (candidateVisits.length > 0) {
         setActiveDraftNote((prev) => {
           if (!prev) {return null}
@@ -501,6 +883,11 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
       () => {
         if (mounted) {
           setLiveSyncConnected(false)
+        }
+      },
+      () => {
+        if (mounted) {
+          setLiveSyncConnected(true)
         }
       }
     )
@@ -1349,7 +1736,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
     setPatientNameInput(visit.patient_name || '')
     setPatientMrnInput(visit.mrn || '')
     setPatientAgeInput(pAge || '')
-    setPatientDateInput(visit.visit_date || getLocalDateStr())
+    setPatientDateInput(normalizeVisitDate(visit.visit_date) || getLocalDateStr())
     setPatientTimeInput(visit.visit_time || '10:00')
 
     if (visit.visit_type) {
@@ -1727,11 +2114,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                         value={selectedTemplate}
                         onChange={(e) => setSelectedTemplate(e.target.value)}
                       >
-                        {CLINICAL_TEMPLATES.map((t) => (
-                          <option key={t.id} value={t.label}>
-                            {t.label} ▾
-                          </option>
-                        ))}
+                        {renderTemplateOptions()}
                       </select>
                     </div>
 
@@ -1853,11 +2236,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                         value={selectedTemplate}
                         onChange={(e) => setSelectedTemplate(e.target.value)}
                       >
-                        {CLINICAL_TEMPLATES.map((t) => (
-                          <option key={t.id} value={t.label}>
-                            {t.label} ▾
-                          </option>
-                        ))}
+                        {renderTemplateOptions()}
                       </select>
                     </div>
                   </div>
@@ -2119,7 +2498,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                     const nameMatch = (v.patient_name || '').toLowerCase().includes(term)
                     const mrnMatch = (v.mrn || '').toLowerCase().includes(term)
                     const typeMatch = (v.visit_type || '').toLowerCase().includes(term)
-                    const dateMatch = (v.visit_date || '').toLowerCase().includes(term)
+                    const dateMatch = (v.visit_date || '').toLowerCase().includes(term) || formatEncounterDate(v.visit_date).toLowerCase().includes(term)
                     const noteMatch = (v.final_note || '').toLowerCase().includes(term)
                     const draftMatch = (v.ai_draft || '').toLowerCase().includes(term)
                     const txMatch = (v.transcription || '').toLowerCase().includes(term)
@@ -2181,7 +2560,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                               <span className="sm-history-card__mrn">{v.mrn || 'Auto-MRN'}</span>
                             </div>
                             <span className="sm-history-card__meta">
-                              📅 {v.visit_date || 'Unknown Date'} {v.visit_time ? `· ⏰ ${v.visit_time}` : ''} {v.visit_type ? `· ${v.visit_type}` : ''}
+                              📅 {formatEncounterDate(v.visit_date)} {v.visit_time ? `· ⏰ ${v.visit_time}` : ''} {v.visit_type ? `· ${v.visit_type}` : ''}
                             </span>
                             {snippet && (
                               <p className="sm-history-card__snippet" title={snippet}>
@@ -2239,26 +2618,28 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
           <div className="sm-side-card sm-side-card--scribes">
             <div className="sm-side-card__header">
               <div className="sm-side-card__title-group">
-                <span className="sm-side-card__title">Scribes</span>
-                <span className="sm-side-card__count">{filteredVisits.length}</span>
-                <div
-                  className="sm-live-sync-indicator"
-                  title={liveSyncConnected ? 'Live Sync Active: automatically syncing with mobile app' : 'Syncing with mobile app'}
-                >
-                  <span className={`sm-pulse-dot ${liveSyncConnected ? 'sm-pulse-dot--live' : 'sm-pulse-dot--syncing'}`} />
-                  <span className="sm-live-sync-label">{liveSyncConnected ? 'Live' : 'Syncing'}</span>
+                <div className="sm-side-card__title-left">
+                  <span className="sm-side-card__title">Scribes</span>
+                  <span className="sm-side-card__count">{countAll}</span>
+                  <div
+                    className="sm-live-sync-indicator"
+                    title={liveSyncConnected ? 'Live Sync Active: automatically syncing with mobile app' : 'Syncing with mobile app'}
+                  >
+                    <span className={`sm-pulse-dot ${liveSyncConnected ? 'sm-pulse-dot--live' : 'sm-pulse-dot--syncing'}`} />
+                    <span className="sm-live-sync-label">{liveSyncConnected ? 'Live' : 'Syncing'}</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="sm-btn-sync-now"
+                    onClick={() => {
+                      showToast('↻ Synced with mobile and server', 'info')
+                      loadData()
+                    }}
+                    title="Force refresh from mobile and server"
+                  >
+                    ↻
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className="sm-btn-sync-now"
-                  onClick={() => {
-                    showToast('↻ Synced with mobile and server', 'info')
-                    loadData()
-                  }}
-                  title="Force refresh from mobile and server"
-                >
-                  ↻
-                </button>
                 <button
                   type="button"
                   className="sm-btn-new-scribe"
@@ -2274,77 +2655,68 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                 <button
                   type="button"
                   className={`sm-date-tab ${scheduleDateFilter === 'today' ? 'sm-date-tab--active' : ''}`}
-                  onClick={() => setScheduleDateFilter('today')}
+                  onClick={() => {
+                    hasUserManuallySelectedDateTabRef.current = true
+                    setScheduleDateFilter('today')
+                  }}
                 >
                   Today ({countToday})
                 </button>
                 <button
                   type="button"
                   className={`sm-date-tab ${scheduleDateFilter === 'yesterday' ? 'sm-date-tab--active' : ''}`}
-                  onClick={() => setScheduleDateFilter('yesterday')}
+                  onClick={() => {
+                    hasUserManuallySelectedDateTabRef.current = true
+                    setScheduleDateFilter('yesterday')
+                  }}
                 >
                   Yesterday ({countYesterday})
                 </button>
                 <button
                   type="button"
                   className={`sm-date-tab ${scheduleDateFilter === 'all' ? 'sm-date-tab--active' : ''}`}
-                  onClick={() => setScheduleDateFilter('all')}
+                  onClick={() => {
+                    hasUserManuallySelectedDateTabRef.current = true
+                    setScheduleDateFilter('all')
+                  }}
                 >
                   All ({countAll})
                 </button>
               </div>
 
-              {/* Search scribes input */}
-              <div className="sm-side-search-wrap">
-                <span className="sm-side-search-icon">🔍</span>
-                <input
-                  type="text"
-                  className="sm-side-search-input"
-                  placeholder="Search scribes & notes..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-                {searchTerm && (
-                  <button
-                    type="button"
-                    className="sm-side-search-clear"
-                    onClick={() => setSearchTerm('')}
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
-
-              {/* Schedule Filter Pills */}
-              <div className="sm-filter-pills">
-                <button
-                  type="button"
-                  className={`sm-filter-pill ${scheduleFilter === 'all' ? 'sm-filter-pill--active' : ''}`}
-                  onClick={() => setScheduleFilter('all')}
+              {/* Combined Search Bar + Status Dropdown (Option 1) */}
+              <div className="sm-side-controls-row">
+                <div className="sm-side-search-wrap">
+                  <span className="sm-side-search-icon">🔍</span>
+                  <input
+                    type="text"
+                    className="sm-side-search-input"
+                    placeholder="Search scribes..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                  {searchTerm && (
+                    <button
+                      type="button"
+                      className="sm-side-search-clear"
+                      onClick={() => setSearchTerm('')}
+                      aria-label="Clear search"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+                <select
+                  className="sm-side-status-select"
+                  value={scheduleFilter}
+                  onChange={(e) => setScheduleFilter(e.target.value)}
+                  aria-label="Filter encounters by status"
                 >
-                  All
-                </button>
-                <button
-                  type="button"
-                  className={`sm-filter-pill ${scheduleFilter === 'draft' ? 'sm-filter-pill--active' : ''}`}
-                  onClick={() => setScheduleFilter('draft')}
-                >
-                  Draft
-                </button>
-                <button
-                  type="button"
-                  className={`sm-filter-pill ${scheduleFilter === 'ready' ? 'sm-filter-pill--active' : ''}`}
-                  onClick={() => setScheduleFilter('ready')}
-                >
-                  Signed
-                </button>
-                <button
-                  type="button"
-                  className={`sm-filter-pill ${scheduleFilter === 'pending' ? 'sm-filter-pill--active' : ''}`}
-                  onClick={() => setScheduleFilter('pending')}
-                >
-                  Pending
-                </button>
+                  <option value="all">All Status</option>
+                  <option value="draft">Draft</option>
+                  <option value="ready">Signed</option>
+                  <option value="pending">Pending</option>
+                </select>
               </div>
             </div>
 
@@ -2364,7 +2736,10 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                       type="button"
                       className="sm-btn-mini-chip"
                       style={{ marginTop: 8 }}
-                      onClick={() => setScheduleDateFilter('yesterday')}
+                      onClick={() => {
+                        hasUserManuallySelectedDateTabRef.current = true
+                        setScheduleDateFilter('yesterday')
+                      }}
                     >
                       View Yesterday's Scribes ({countYesterday})
                     </button>
@@ -2374,9 +2749,12 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                       type="button"
                       className="sm-btn-mini-chip"
                       style={{ marginTop: 8 }}
-                      onClick={() => setScheduleDateFilter('all')}
+                      onClick={() => {
+                        hasUserManuallySelectedDateTabRef.current = true
+                        setScheduleDateFilter('all')
+                      }}
                     >
-                      View All Notes ({countAll})
+                      View All Scribes ({countAll})
                     </button>
                   )}
                 </div>
@@ -2413,7 +2791,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                   const prevDate = index > 0 ? normalizeVisitDate(filteredVisits[index - 1].visit_date) : null
                   const showDateHeader = scheduleDateFilter === 'all' && currDate !== prevDate
 
-                  let dateHeaderTitle = currDate
+                  let dateHeaderTitle = formatEncounterDate(v.visit_date)
                   if (currDate === todayStr) {
                     dateHeaderTitle = 'Today'
                   } else if (currDate === yesterdayStr) {
@@ -2448,25 +2826,6 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                           <div className="sm-visit-card__status-group">
                             {isSelected && <span className="sm-tag sm-tag--selected">ACTIVE</span>}
                             <span className={`sm-tag sm-tag--${badgeType}`}>{badgeText}</span>
-                            <button
-                              type="button"
-                              className="sm-btn-card-mini-action"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                openEditPatientModal(v)
-                              }}
-                              title="Edit patient details"
-                            >
-                              ✏️
-                            </button>
-                            <button
-                              type="button"
-                              className="sm-btn-card-mini-action sm-btn-card-mini-action--delete"
-                              onClick={(e) => handleDeleteClick(e, v)}
-                              title="Delete encounter / patient"
-                            >
-                              🗑
-                            </button>
                           </div>
                         </div>
                       </div>
@@ -2561,7 +2920,7 @@ function ScheduleVisitModal({ isOpen, onClose, patientList, onVisitCreated, show
     const now = new Date()
     return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
   })
-  const [visitType, setVisitType] = useState('SOAP Note — Adult (Standard)')
+  const [visitType, setVisitType] = useState('SOAP Note — Adult (Standard / Episodic)')
   const [submitting, setSubmitting] = useState(false)
 
   if (!isOpen) {return null}
@@ -2775,11 +3134,7 @@ function ScheduleVisitModal({ isOpen, onClose, patientList, onVisitCreated, show
                     setModalError(null)
                   }}
                 >
-                  {CLINICAL_TEMPLATES.map((t) => (
-                    <option key={t.id} value={t.label}>
-                      {t.label}
-                    </option>
-                  ))}
+                  {renderTemplateOptions()}
                 </select>
               </div>
             </div>

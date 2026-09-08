@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { parseNote } from '../utils/noteParser'
 import { cleanAiDraftForDisplay } from '../utils/aiDraftFormat'
 import { notesAPI } from '../services/api'
+import { formatEncounterDate } from '../utils/visitEncounterUtils'
 import './SaintMaryNoteViewerModal.css'
 
 export default function SaintMaryNoteViewerModal({ noteData, onClose, onNoteUpdated, showToast }) {
@@ -93,7 +94,7 @@ export default function SaintMaryNoteViewerModal({ noteData, onClose, onNoteUpda
               </div>
               <div className="sm-note-modal__meta-row">
                 {noteData.mrn && <span><strong>MRN:</strong> {noteData.mrn}</span>}
-                <span><strong>Date:</strong> {noteData.visit_date || 'Today'} {noteData.visit_time ? `at ${noteData.visit_time}` : ''}</span>
+                <span><strong>Date:</strong> {formatEncounterDate(noteData.visit_date)} {noteData.visit_time ? `at ${noteData.visit_time}` : ''}</span>
                 <span><strong>Encounter:</strong> {noteData.visit_type || 'Consultation'}</span>
                 {noteData.scribe_name && <span><strong>Scribe:</strong> {noteData.scribe_name}</span>}
               </div>

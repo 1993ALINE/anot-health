@@ -498,13 +498,17 @@ export const visitsAPI = {
   /** Regenerate AI draft from saved transcriptions (HTTP 200). */
   generateDraft: async (visitId) => apiMutate('POST', `/visits/${visitId}/generate-draft`, { body: {} }),
   /** Subscribe to real-time visit events via SSE (Server-Sent Events) */
-  subscribeToEvents: (onEvent, onError) => {
+  subscribeToEvents: (onEvent, onError, onOpen) => {
     if (typeof EventSource === 'undefined') {
       return () => {}
     }
     try {
       const url = `${API_BASE}/visits/events`
       const es = new EventSource(url, { withCredentials: true })
+      if (onOpen) {
+        es.onopen = () => onOpen()
+        es.addEventListener('connected', () => onOpen())
+      }
       es.addEventListener('visit_update', (e) => {
         try {
           const data = JSON.parse(e.data)

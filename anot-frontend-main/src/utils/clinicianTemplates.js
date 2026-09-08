@@ -2,6 +2,22 @@ const DEFAULT_BY_TYPE = {
   'New Patient': 'new-patient',
   'Follow-up': 'follow-up',
   'Virtual Visit': 'virtual-visit',
+  'Other': 'other',
+  'soap-adult': 'soap-adult',
+  'periodic-health': 'periodic-health',
+  'rourke-pediatric': 'rourke-pediatric',
+  'geriatric-frailty': 'geriatric-frailty',
+  'diabetes-cdm': 'diabetes-cdm',
+  'hypertension-cvd': 'hypertension-cvd',
+  'respiratory-cts': 'respiratory-cts',
+  'chronic-pain-msk': 'chronic-pain-msk',
+  'mental-health-canmat': 'mental-health-canmat',
+  'addictions-oat': 'addictions-oat',
+  'prenatal-sogc': 'prenatal-sogc',
+  'postpartum-6wk': 'postpartum-6wk',
+  'virtual-telehealth': 'virtual-telehealth',
+  'specialist-referral': 'specialist-referral',
+  'wcb-occupational': 'wcb-occupational',
 }
 
 const FALLBACK = {
@@ -49,7 +65,9 @@ export function pickTemplateForVisit(templates, visitType) {
   const id = DEFAULT_BY_TYPE[visitType]
   const match =
     (id && list.find((t) => t.id === id)) ||
+    list.find((t) => t.id === visitType) ||
     list.find((t) => t.name === visitType) ||
+    list.find((t) => t.name.toLowerCase().includes(String(visitType || '').toLowerCase())) ||
     list[0]
   return {
     name: match?.name || FALLBACK.name,

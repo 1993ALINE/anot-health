@@ -67,3 +67,30 @@ export function visitEncounterTabLabel(visit, index, fmtTime) {
   if (time) { return `${base} · ${type} · ${time}` }
   return `${base} · ${type}`
 }
+
+/**
+ * Formats a visit date (e.g. '2026-09-06T00:00:00.000Z' or '2026-09-06')
+ * to a clean, human-readable format like 'Sep 6, 2026'.
+ */
+export function formatEncounterDate(val) {
+  if (!val) return 'Unknown Date'
+  const raw = String(val).trim()
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (m) {
+    const y = parseInt(m[1], 10)
+    const month = parseInt(m[2], 10) - 1
+    const d = parseInt(m[3], 10)
+    const dt = new Date(y, month, d)
+    return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  }
+  try {
+    const dt = new Date(raw)
+    if (!Number.isNaN(dt.getTime())) {
+      return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    }
+  } catch {
+    /* fallback */
+  }
+  return raw
+}
+
