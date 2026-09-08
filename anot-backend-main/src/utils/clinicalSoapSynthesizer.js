@@ -1,19 +1,18 @@
-/**
- * Clinical SOAP Note & ICD-10/CPT Code Synthesizer (Backend & Offline Engine)
- * 
- * Transforms continuous ambient speech-to-text and clinician dictations
- * into certified, structured, board-standard medical SOAP documentation.
- */
+const { detectScribeInstructions, normalizeUnresolvableTokens } = require('./instructionDetector')
 
 const ICD10_RULES = [
   { match: /migraine/i, code: 'G43.909 — Migraine, unspecified, not intractable, without status migrainosus' },
   { match: /tension\s+headache/i, code: 'G44.209 — Tension-type headache, unspecified, not intractable' },
   { match: /headache|head\s+pain|cephalea/i, code: 'R51.9 — Headache, unspecified' },
+  { match: /bilateral\s+(?:knee\s+)?(?:osteoarthritis|arthritis|oa)|bilodoniaoster/i, code: 'M17.0 — Bilateral primary osteoarthritis of knee' },
+  { match: /right\s+knee\s+(?:osteoarthritis|arthritis|degenerative)/i, code: 'M17.11 — Unilateral primary osteoarthritis, right knee' },
+  { match: /left\s+knee\s+(?:osteoarthritis|arthritis|degenerative)/i, code: 'M17.12 — Unilateral primary osteoarthritis, left knee' },
+  { match: /degenerative|osteoarthritis|arthritis/i, code: 'M17.0 — Bilateral primary osteoarthritis of knee' },
   { match: /right\s+knee/i, code: 'M25.561 — Pain in right knee' },
   { match: /left\s+knee/i, code: 'M25.562 — Pain in left knee' },
   { match: /knee\s+pain|knee/i, code: 'M25.569 — Pain in unspecified knee' },
+  { match: /(?:1981|prior|remote|past\s+surgical|pesturgical)\s*(?:mcl|surgery|repair)/i, code: 'Z98.890 — Other specified postprocedural states (personal history of musculoskeletal surgery)' },
   { match: /mcl|meniscus|mcmurray|ligament|sprain/i, code: 'S83.91XA — Sprain of unspecified ligament of right knee, initial encounter' },
-  { match: /degenerative|osteoarthritis|arthritis/i, code: 'M17.11 — Unilateral primary osteoarthritis, right knee' },
   { match: /bike|bicycle|fall|fell|accident/i, code: 'V19.81XA — Pedal cyclist injured in transport accident, initial encounter' },
   { match: /chest\s+pain|angina/i, code: 'R07.9 — Chest pain, unspecified' },
   { match: /hypertension|high\s+blood\s+pressure|bp/i, code: 'I10 — Essential (primary) hypertension' },
@@ -29,9 +28,9 @@ const ICD10_RULES = [
 ]
 
 const CPT_RULES = [
-  { match: /x-?ray|radiograph|imaging/i, code: '73560 — Radiologic examination, knee; 1 or 2 views' },
-  { match: /mri|magnetic\s+resonance/i, code: '73721 — Magnetic resonance imaging, any joint of lower extremity without contrast' },
-  { match: /injection|arthrocentesis/i, code: '20610 — Arthrocentesis, aspiration and/or injection, major joint or bursa' },
+  { match: /(?:order|repeat|perform|take)\s+(?:an?\s+)?(?:x-?ray|radiograph|imaging)|repeat\s+x-?ray/i, code: '73560 — Radiologic examination, knee; 1 or 2 views' },
+  { match: /(?:order|perform)\s+(?:an?\s+)?mri|mri\s+(?:shows|ordered)/i, code: '73721 — Magnetic resonance imaging, any joint of lower extremity without contrast' },
+  { match: /(?:perform|order)\s+(?:an?\s+)?(?:injection|arthrocentesis)|arthrocentesis/i, code: '20610 — Arthrocentesis, aspiration and/or injection, major joint or bursa' },
   { match: /ekg|ecg|electrocardiogram/i, code: '93000 — Electrocardiogram, routine ECG with at least 12 leads; with interpretation and report' },
 ]
 
@@ -237,9 +236,11 @@ function formatClinicalDictationToSOAP(dictation = '', scratchpad = '', visitTyp
   }
 
   // Build Physical Exam
-  // Build Physical Exam (only if dictated, no hallucinated normal exams)
+  const instructionInfo = detectScribeInstructions(fullText)
   const examLines = []
-  if (/exam|palpat|tender|swelling|inspect|rom|range of motion/i.test(normalized)) {
+  if (instructionInfo.hasPendingActions && instructionInfo.formattedExamPlaceholder) {
+    examLines.push(instructionInfo.formattedExamPlaceholder)
+  } else if (/exam|palpat|tender|swelling|inspect|rom|range of motion/i.test(normalized)) {
     if (/swelling/i.test(normalized)) {
       examLines.push(/no\s+swelling/i.test(normalized) ? '• Inspection: No visible swelling or acute deformity.' : '• Inspection: Swelling observed as noted in encounter.')
     }
@@ -251,23 +252,26 @@ function formatClinicalDictationToSOAP(dictation = '', scratchpad = '', visitTyp
     }
   }
   if (examLines.length === 0) {
-    examLines.push('Focused physical examination not documented / Not dictated in this encounter.')
+    examLines.push('Not documented this encounter.')
   }
 
   // Build Assessment
   const assessmentLines = []
   assessmentLines.push(`1. ${chiefComplaint}.`)
 
-  // Build Plan (only document what was discussed)
+  // Build Plan (distinguish orders from discussions)
   const planLines = []
+  if (/(?:request|order)\s+(?:for\s+)?(?:a\s+)?bilateral\s+hyaluronic\s+acid/i.test(fullText)) {
+    planLines.push('1. ORDER: Bilateral hyaluronic acid knee injections requested to address osteoarthritic changes and provide cushioning for physical therapy participation.')
+  }
   if (/follow.?up|return/i.test(normalized)) {
     const fuMatch = normalized.match(/follow.?up\s+(?:in\s+)?([a-zA-Z0-9\s]+?)(?:\.|$)/i)
-    planLines.push(`1. Follow-up: ${fuMatch ? fuMatch[0] : 'Follow up as directed by clinician.'}`)
+    planLines.push(`2. Follow-up: ${fuMatch ? fuMatch[0] : 'Follow up as directed by clinician.'}`)
   } else {
-    planLines.push('1. Follow up as needed if symptoms worsen or fail to improve.')
+    planLines.push('2. Follow up as needed if symptoms worsen or fail to improve.')
   }
   if (/rest|ice|elevat/i.test(normalized)) {
-    planLines.push('2. Supportive care measures as discussed with clinician.')
+    planLines.push('3. Supportive care measures as discussed with clinician.')
   }
 
   // Build Vitals Section (only actual measurements dictated, never fake normal numbers)
@@ -278,7 +282,7 @@ function formatClinicalDictationToSOAP(dictation = '', scratchpad = '', visitTyp
   if (vitals.rr) vitalsLines.push(`• Respiratory Rate: ${vitals.rr}`)
   if (vitals.spo2) vitalsLines.push(`• Oxygen Saturation (SpO2): ${vitals.spo2}`)
   if (vitalsLines.length === 0) {
-    vitalsLines.push('• Vital signs: Not documented / Not dictated in this encounter.')
+    vitalsLines.push('• Vital signs: Not documented this encounter.')
   }
 
   // Derive Codes

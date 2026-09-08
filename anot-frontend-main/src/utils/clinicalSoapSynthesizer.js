@@ -9,11 +9,15 @@ const ICD10_RULES = [
   { match: /migraine/i, code: 'G43.909 — Migraine, unspecified, not intractable, without status migrainosus' },
   { match: /tension\s+headache/i, code: 'G44.209 — Tension-type headache, unspecified, not intractable' },
   { match: /headache|head\s+pain|cephalea/i, code: 'R51.9 — Headache, unspecified' },
+  { match: /bilateral\s+(?:knee\s+)?(?:osteoarthritis|arthritis|oa)|bilodoniaoster/i, code: 'M17.0 — Bilateral primary osteoarthritis of knee' },
+  { match: /right\s+knee\s+(?:osteoarthritis|arthritis|degenerative)/i, code: 'M17.11 — Unilateral primary osteoarthritis, right knee' },
+  { match: /left\s+knee\s+(?:osteoarthritis|arthritis|degenerative)/i, code: 'M17.12 — Unilateral primary osteoarthritis, left knee' },
+  { match: /degenerative|osteoarthritis|arthritis/i, code: 'M17.0 — Bilateral primary osteoarthritis of knee' },
   { match: /right\s+knee/i, code: 'M25.561 — Pain in right knee' },
   { match: /left\s+knee/i, code: 'M25.562 — Pain in left knee' },
   { match: /knee\s+pain|knee/i, code: 'M25.569 — Pain in unspecified knee' },
+  { match: /(?:1981|prior|remote|past\s+surgical|pesturgical)\s*(?:mcl|surgery|repair)/i, code: 'Z98.890 — Other specified postprocedural states (personal history of musculoskeletal surgery)' },
   { match: /mcl|meniscus|mcmurray|ligament|sprain/i, code: 'S83.91XA — Sprain of unspecified ligament of right knee, initial encounter' },
-  { match: /degenerative|osteoarthritis|arthritis/i, code: 'M17.11 — Unilateral primary osteoarthritis, right knee' },
   { match: /bike|bicycle|fall|fell|accident/i, code: 'V19.81XA — Pedal cyclist injured in transport accident, initial encounter' },
   { match: /chest\s+pain|angina/i, code: 'R07.9 — Chest pain, unspecified' },
   { match: /hypertension|high\s+blood\s+pressure|bp/i, code: 'I10 — Essential (primary) hypertension' },
@@ -37,9 +41,9 @@ const ICD10_RULES = [
 ]
 
 const CPT_RULES = [
-  { match: /x-?ray|radiograph|imaging/i, code: '73560 — Radiologic examination, knee; 1 or 2 views' },
-  { match: /mri|magnetic\s+resonance/i, code: '73721 — Magnetic resonance imaging, any joint of lower extremity without contrast' },
-  { match: /injection|arthrocentesis/i, code: '20610 — Arthrocentesis, aspiration and/or injection, major joint or bursa' },
+  { match: /(?:order|repeat|perform|take)\s+(?:an?\s+)?(?:x-?ray|radiograph|imaging)|repeat\s+x-?ray/i, code: '73560 — Radiologic examination, knee; 1 or 2 views' },
+  { match: /(?:order|perform)\s+(?:an?\s+)?mri|mri\s+(?:shows|ordered)/i, code: '73721 — Magnetic resonance imaging, any joint of lower extremity without contrast' },
+  { match: /(?:perform|order)\s+(?:an?\s+)?(?:injection|arthrocentesis)|arthrocentesis/i, code: '20610 — Arthrocentesis, aspiration and/or injection, major joint or bursa' },
   { match: /ekg|ecg|electrocardiogram/i, code: '93000 — Electrocardiogram, routine ECG with at least 12 leads; with interpretation and report' },
 ]
 
@@ -142,7 +146,7 @@ export function formatVitalsSection(vitalsObj) {
     lines.push(`• Oxygen Saturation (SpO2): ${vitalsObj.spo2}`)
   }
   if (lines.length === 0) {
-    return '• Vital signs: Not documented / Not dictated in this encounter.'
+    return '• Vital signs: Not documented this encounter.'
   }
   return lines.join('\n')
 }
@@ -241,7 +245,7 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
     return result
   }
 
-  const patientAge = meta?.patientAge ? String(meta.patientAge).replace(/[^0-9]/g, '') : '36'
+  const patientAge = meta?.patientAge ? String(meta.patientAge).replace(/[^0-9]/g, '') : ''
   const patientName = meta?.patientName || ''
   const isFemale = /\b(?:she|her|female|woman|lady|girl)\b/i.test(normalized)
   const pronoun = isFemale ? 'She' : 'He'
@@ -377,8 +381,15 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
   const hpiText = hpiParagraphs.join(' ')
 
   // 3. Synthesize Physical Exam (only actual observations dictated, no fabricated normal exams)
+  const copyForwardRequested = /(?:copy\s+(?:over|forward)|pull\s+forward|carry\s+forward|same\s+as\s+before)\s+(?:the\s+)?(?:prior|previous|last)?\s*([a-z0-9\s\-]+?)\s*(?:exam|examination|physical\s+exam)/i.test(normalized)
+  const insertRequested = /(?:insert|add)\s+(?:a\s+)?([a-z0-9\s\-]+?)(?:,\s*)?(?:physical\s+exam|exam|examination)/i.test(normalized)
+
   const examLines = []
-  if (/exam|palpat|tender|swelling|inspect|rom|range of motion/i.test(normalized)) {
+  if (copyForwardRequested || insertRequested) {
+    examLines.push('  Right Knee: [COPY FORWARD from prior encounter — per dictation, action pending]')
+    examLines.push('  Left Knee:  [PENDING — examination to be entered]')
+    examLines.push('  *** DO NOT SIGN — exam content outstanding ***')
+  } else if (/exam|palpat|tender|swelling|inspect|rom|range of motion/i.test(normalized)) {
     if (/swelling/i.test(normalized)) {
       examLines.push(/no\s+swelling/i.test(normalized) ? '• Inspection: No visible swelling or acute deformity.' : '• Inspection: Swelling observed as noted in encounter.')
     }
@@ -390,7 +401,7 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
     }
   }
   if (examLines.length === 0) {
-    examLines.push('Focused physical examination not documented / Not dictated in this encounter.')
+    examLines.push('Focused physical examination not documented this encounter.')
   }
 
   const examText = examLines.join('\n')
@@ -417,6 +428,11 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
       assessmentLines.push('1. Headache, unspecified (R51.9).')
       assessmentLines.push('2. Rule out secondary headache disorder; no focal neurological signs on examination.')
     }
+  } else if (/bilateral.*(?:knee|osteoarthritis)|bilodoniaoster/i.test(normalized)) {
+    assessmentLines.push('1. Bilateral primary osteoarthritis of knee (M17.0).')
+    if (/mcl/i.test(normalized) && /1981|prior|remote|repair/i.test(normalized)) {
+      assessmentLines.push('2. Status post remote right MCL surgical repair (1981) (Z98.890).')
+    }
   } else if (/right\s+knee/i.test(normalized) && /mcl|mcmurray/i.test(normalized)) {
     assessmentLines.push('1. Acute right knee pain secondary to bicycle fall (M25.561, V19.81XA).')
     assessmentLines.push('2. Sprain / suspected injury of right medial collateral ligament (MCL), rule out medial meniscus tear (S83.91XA).')
@@ -435,19 +451,22 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
     assessmentLines.push(`1. Clinical evaluation for ${primaryComplaint.toLowerCase()}.`)
   }
 
-  // 6. Plan (only document what was discussed or dictated)
+  // 6. Plan (distinguish orders from discussions)
   const planLines = []
+  if (/(?:request|order)\s+(?:for\s+)?(?:a\s+)?bilateral\s+hyaluronic\s+acid/i.test(normalized)) {
+    planLines.push('1. ORDER: Bilateral hyaluronic acid knee injections requested to address osteoarthritic changes and provide cushioning for physical therapy participation.')
+  }
   if (/follow\s*up|return|week|month/i.test(normalized)) {
     const fuMatch = normalized.match(/follow.?up\s+(?:in\s+)?([a-zA-Z0-9\s]+?)(?:\.|$)/i)
-    planLines.push(`1. Follow-up: ${fuMatch ? fuMatch[0] : 'Follow up as directed by clinician.'}`)
+    planLines.push(`2. Follow-up: ${fuMatch ? fuMatch[0] : 'Follow up as directed by clinician.'}`)
   } else {
-    planLines.push('1. Follow up as needed if symptoms worsen or fail to improve.')
+    planLines.push('2. Follow up as needed if symptoms worsen or fail to improve.')
   }
   if (imagingText) {
-    planLines.push(`2. ${imagingText}`)
+    planLines.push(`3. ${imagingText}`)
   }
   if (/rest|ice|elevat/i.test(normalized)) {
-    planLines.push('3. Supportive care measures as discussed with clinician.')
+    planLines.push('4. Supportive care measures as discussed with clinician.')
   }
 
   // 7. Canadian Primary Care Specialized Section

@@ -100,4 +100,20 @@ describe('buildAnthropicNotePrompt', () => {
     expect(prompt).toContain('MRN123')
     expect(prompt).toContain('the transcript body')
   })
+
+  test('prioritizes adult age 63 over single digit ASR truncation 6-year-old', () => {
+    const transcript = 'Patient is a 63-year-old male presenting for follow up. In assessment he is noted as a 6-year-old male with bilateral knee osteoarthritis.'
+    const details = extractDictatedPatientDetails(transcript)
+    expect(details.age).toBe(63)
+    expect(details.gender).toBe('male')
+  })
+
+  test('injects copy-forward instruction directive when clinician commands are present', () => {
+    const transcript = 'Please copy over prior right knee exam. Please insert a left knee, physical exam.'
+    const prompt = buildAnthropicNotePrompt(patientInfo, transcript)
+    expect(prompt).toContain('EMBEDDED SCRIBE COMMANDS DETECTED IN TRANSCRIPT:')
+    expect(prompt).toContain('[COPY FORWARD from prior encounter — per dictation, action pending]')
+    expect(prompt).toContain('[PENDING — examination to be entered]')
+    expect(prompt).toContain('*** DO NOT SIGN — exam content outstanding ***')
+  })
 })

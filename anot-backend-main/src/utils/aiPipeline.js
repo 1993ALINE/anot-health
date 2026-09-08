@@ -21,11 +21,13 @@ const {
 
 const { resolveTemplateSections } = require('./noteTemplateSections')
 const { formatClinicalDictationToSOAP } = require('./clinicalSoapSynthesizer')
+const { applyClinicalGuardrails } = require('./clinicalGuardrails')
 
 const AI_DRAFT_UNAVAILABLE =
   '[AI draft unavailable — add an Anthropic API key in Admin → Settings or ANTHROPIC_API_KEY to the server .env file, then click Transcribe audio or Refresh.]'
 
-
+const CLINICAL_SYSTEM_PROMPT =
+  'You are an expert board-certified medical scribe and clinical documentation specialist. Generate structured, clinically precise clinical notes from visit transcriptions. Use plain text only — do NOT use markdown symbols, do NOT use bold markers or asterisks, do NOT use # headers, and do NOT use separator lines. Be thorough, professional, and clinically accurate. Distinguish clearly between patient symptoms/history (Subjective) and clinician findings/vitals/exam (Objective). Document specific medications with dosages, routes, frequencies, and durations if stated. Never fabricate or assume clinical details, vital signs, physical exam findings, or treatment plans that were not dictated. If the clinician commanded to copy forward or insert prior exams, output the designated placeholder; NEVER fabricate physical exam findings. Under VITAL SIGNS, write "Not documented this encounter." if none were dictated; never supply default/normal vitals. Under PHYSICAL EXAMINATION (PE), write "Not documented this encounter." if none was performed. Under IMAGING, write "None documented or ordered this encounter." if no imaging was ordered or performed; never fabricate imaging results. Distinguish clearly between physician orders and mere discussions: if an order is dictated (e.g. for injections), document it as an order under the Plan with laterality and medical necessity intact. Never invent quotes or emit internal coder deliberations. For ICD-10 and CPT coding, assign standard codes strictly supported by the documented diagnoses and care delivered. For bilateral knee osteoarthritis, assign M17.0. Never assign acute injury codes to remote surgical history.'
 
 /**
 
@@ -43,7 +45,7 @@ async function loadAnthropicClient(settings) {
   const envKey = (process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY || '').trim()
   const keyIsFromEnv = !!envKey && key === envKey
 
-  if (!keyIsFromEnv && !settings.anthropic_enabled) {
+  if (!keyIsFromEnv && !settings?.anthropic_enabled) {
 
     console.warn('[aiPipeline] Anthropic AI note generation disabled in settings')
 
@@ -81,8 +83,7 @@ async function callAnthropicForNote(anthropic, settings, prompt) {
       () => anthropic.messages.create({
         model,
         max_tokens: 3000,
-        system:
-          'You are an expert board-certified medical scribe and clinical documentation specialist. Generate structured, clinically precise clinical notes from visit transcriptions. Use plain text only — do NOT use markdown symbols, do NOT use bold markers or asterisks, do NOT use # headers, and do NOT use separator lines. Be thorough, professional, and clinically accurate. Distinguish clearly between patient symptoms/history (Subjective) and clinician findings/vitals/exam (Objective). Document specific medications with dosages, routes, frequencies, and durations if stated. Never fabricate or assume clinical details, vital signs, physical exam findings, or treatment plans that were not dictated. Under VITAL SIGNS, write "Not documented / Not dictated in this encounter." if none were dictated; never supply default/normal vitals. Under PHYSICAL EXAMINATION (PE), write "Not documented / Not dictated in this encounter." if none was performed; never supply normal exam findings unless explicitly dictated. For ICD-10 and CPT coding, assign standard codes and descriptions strictly supported by the documented diagnoses and care delivered.',
+        system: CLINICAL_SYSTEM_PROMPT,
         messages: [{ role: 'user', content: prompt }],
       }),
       { maxAttempts: 2, label: 'Anthropic Claude Note Generation', baseDelayMs: 1000 }
@@ -94,8 +95,7 @@ async function callAnthropicForNote(anthropic, settings, prompt) {
       return anthropic.messages.create({
         model: fallbackModel,
         max_tokens: 3000,
-        system:
-          'You are an expert board-certified medical scribe and clinical documentation specialist. Generate structured, clinically precise clinical notes from visit transcriptions. Use plain text only — do NOT use markdown symbols, do NOT use bold markers or asterisks, do NOT use # headers, and do NOT use separator lines. Be thorough, professional, and clinically accurate. Distinguish clearly between patient symptoms/history (Subjective) and clinician findings/vitals/exam (Objective). Document specific medications with dosages, routes, frequencies, and durations if stated. Never fabricate or assume clinical details, vital signs, physical exam findings, or treatment plans that were not dictated. Under VITAL SIGNS, write "Not documented / Not dictated in this encounter." if none were dictated; never supply default/normal vitals. Under PHYSICAL EXAMINATION (PE), write "Not documented / Not dictated in this encounter." if none was performed; never supply normal exam findings unless explicitly dictated. For ICD-10 and CPT coding, assign standard codes and descriptions strictly supported by the documented diagnoses and care delivered.',
+        system: CLINICAL_SYSTEM_PROMPT,
         messages: [{ role: 'user', content: prompt }],
       })
     }
@@ -129,7 +129,7 @@ async function generateAINote(transcriptions, patientInfo, templateSections) {
 
 
 
-    const noteText = response.content?.[0]?.text
+    let noteText = response.content?.[0]?.text
 
     if (!noteText) {
 
@@ -139,8 +139,8 @@ async function generateAINote(transcriptions, patientInfo, templateSections) {
 
     }
 
-    console.log(`✅ AI note generated (${noteText.length} chars)`)
-
+    noteText = applyClinicalGuardrails(noteText, combinedTranscription)
+    console.log(`✅ AI note generated (${noteText.length} chars) with clinical guardrails applied`)
     return noteText
 
   } catch (err) {
@@ -219,6 +219,11 @@ async function resolveAiDraft(transcriptions, visit) {
       patientName: visit.patient_name,
       mrn: visit.mrn,
     })
+  }
+
+  if (aiNote && transcriptions.length > 0) {
+    const combinedTx = Array.isArray(transcriptions) ? transcriptions.join('\n\n') : String(transcriptions || '')
+    aiNote = applyClinicalGuardrails(aiNote, combinedTx)
   }
 
   return aiNote

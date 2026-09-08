@@ -38,6 +38,8 @@ function withCodingHeaders(headers) {
   ]
 }
 
+const { detectScribeInstructions } = require('./instructionDetector')
+
 /**
  * Build Anthropic user prompt for clinical note generation.
  * @param {object} patientInfo
@@ -55,8 +57,19 @@ function buildAnthropicNotePrompt(patientInfo, combinedTranscription, templateSe
 
   const sectionList = headers.map((h) => `${h}:`).join('\n')
 
-  return `Generate a structured clinical note from the visit transcription below.
+  const instructionInfo = detectScribeInstructions(combinedTranscription)
+  let instructionDirective = ''
+  if (instructionInfo.hasPendingActions && instructionInfo.formattedExamPlaceholder) {
+    instructionDirective = `\nEMBEDDED SCRIBE COMMANDS DETECTED IN TRANSCRIPT:
+The clinician dictated direct workflow commands to the scribe:
+${instructionInfo.formattedExamPlaceholder}
+Under PHYSICAL EXAMINATION (PE), you MUST output EXACTLY this placeholder block:
+${instructionInfo.formattedExamPlaceholder}
+CRITICAL SAFETY RULE: Under NO circumstances should you fabricate, assume, or infer any physical exam findings (e.g. do NOT invent Lachman tests, tenderness, range of motion, or joint line findings).\n`
+  }
 
+  return `Generate a structured clinical note from the visit transcription below.
+${instructionDirective}
 Context (do NOT repeat in the note — patient details are shown elsewhere in the UI):
 Patient: ${patientInfo.patient_name}
 MRN: ${patientInfo.mrn}
@@ -70,13 +83,19 @@ INSTRUCTIONS:
 1. Start directly with the first section header below — no title, no patient header, no markdown. Use EXACTLY these ${headers.length} plain-text section headers ending with a colon, in this exact order.
 2. Under each header, write the concise, professional clinical content expected for that section.
 3. Under CHIEF COMPLAINT, state the primary presenting complaint (e.g. "Headache evaluation", "Acute migraine", "Knee pain"). NEVER write generic placeholders like "Clinical Consultation and Evaluation" or "Routine Consultation" when specific symptoms are dictated or discussed.
-4. Under VITAL SIGNS, ONLY document vital signs (BP, HR, Temp, RR, SpO2) that were explicitly dictated or spoken in the encounter. If vitals were not dictated, write "Not documented / Not dictated in this encounter." NEVER invent or assume normal baseline numbers (e.g. do NOT invent 120/80, 72 bpm, 98.6°F, 16/min, or 99%).
+4. Under VITAL SIGNS, ONLY document vital signs (BP, HR, Temp, RR, SpO2) that were explicitly dictated or spoken in the encounter. If vitals were not dictated, write "Not documented this encounter." NEVER invent or assume normal baseline numbers (e.g. do NOT invent 120/80, 72 bpm, 98.6°F, 16/min, or 99%).
 5. The transcript may include speaker-labeled dialogue (e.g. Speaker 0, Speaker 1). Determine who is the clinician and who is the patient based on context.
 6. Distinguish carefully between what the patient reports (Subjective / HPI) and what the clinician finds, measures, or observes (Objective / Exam).
-7. Under PHYSICAL EXAMINATION (PE), ONLY document physical exam findings or maneuvers explicitly dictated. If no physical exam was performed or dictated, write "Not documented / Not dictated in this encounter." NEVER fabricate normal head-to-toe organ systems (PERRLA, cranial nerves II-XII, clear lungs, etc.) unless explicitly dictated.
-8. Under ASSESSMENT & PLAN (A&P), document the assessment based on reported symptoms and only include plan elements (medications, diagnostics, follow-up) explicitly dictated or discussed. Do NOT fabricate unmentioned medications or unmentioned treatments.
-9. CRITICAL FACTUALITY RULE: There must be ZERO random or assumed data. Do NOT invent or assume any clinical details, physical exams, vitals, normal organ systems, imaging results, or medications that were not explicitly stated in the transcription.
-10. For ICD-10 and CPT/E&M coding: act as a certified medical coder — review the documented clinical diagnoses, findings, and care plan, and assign standard, accurate ICD-10-CM and CPT codes (e.g., "R51.9 — Headache, unspecified", "M54.5 — Low back pain"). Base any E&M level strictly on documented complexity — do not upcode.
+7. Under PHYSICAL EXAMINATION (PE), ONLY document physical exam findings explicitly dictated. If the clinician commanded to copy forward or insert prior exams, output the designated placeholder. If no physical exam was performed or dictated, write "Not documented this encounter." NEVER fabricate normal organ systems or positive physical exam findings.
+8. Under IMAGING, if no imaging was ordered, performed, or reviewed in the transcript, write "None documented or ordered this encounter." NEVER fabricate normal or abnormal imaging findings (such as X-rays or MRIs).
+9. Under ASSESSMENT & PLAN (A&P), document the assessment based on reported symptoms. Distinguish clearly between physician ORDERS/REQUESTS and mere discussions. If the clinician dictates an order (e.g. "request bilateral hyaluronic acid injections"), document this under PLAN as an ORDER / REQUEST, with laterality (bilateral) and medical necessity rationale intact. Preserve severity modifiers ("bone-on-bone", "severe", "worse with stepping down") verbatim without dilution.
+10. LOW-CONFIDENCE & CORRUPTED AUDIO: If a word is garbled, unintelligible, or a non-word (e.g. "recrelated"), do NOT guess a fact. Output an in-line query placeholder: "[UNCLEAR: recreational vs. work-related — query physician]".
+11. CITATION INTEGRITY & NO CODER DELIBERATIONS: NEVER fabricate quotes or state "transcript indicates '...'". NEVER include coder deliberations, internal reasoning, or parenthetical meta-notes (e.g. "Note: If right knee X-rays were ordered...") inside the note body.
+12. For ICD-10 and CPT/E&M coding: act as a certified medical coder:
+    - Bilateral knee osteoarthritis must be coded as M17.0 (Bilateral primary osteoarthritis of knee), NEVER stacked unilateral codes M17.11 + M17.12.
+    - Remote surgical history (e.g. 1981 MCL repair) must use postprocedural status Z98.890 (Other specified postprocedural states / personal history of musculoskeletal surgery), NEVER an acute injury sprain code with 7th character A.
+    - Service-Gated CPT: Only assign procedural or radiology CPT codes if an explicit order or performed service exists in the transcript. Retired codes like 71020 (deleted in 2019) and ankle codes on knee encounters are strictly forbidden.
+    - Base E&M level strictly on documented MDM complexity (99214 is "moderate complexity MDM") — do not upcode.
 
 ${sectionList}`
 }
@@ -209,10 +228,14 @@ function extractDictatedPatientDetails(transcript) {
   }
 
   // 4. Age & Gender matching
-  const ageGenderMatch = clean.match(/(\d{1,3})(?:\s*|-)(?:year|yo|y\.o\.)(?:\s*|-)(?:old)?\s*(male|female|man|woman|boy|girl)/i)
-  if (ageGenderMatch) {
-    details.age = parseInt(ageGenderMatch[1], 10)
-    details.gender = ageGenderMatch[2].toLowerCase()
+  const ageGenderMatches = [...clean.matchAll(/(\d{1,3})(?:\s*|-)(?:year|yo|y\.o\.)(?:\s*|-)(?:old)?\s*(male|female|man|woman|boy|girl)/gi)]
+  if (ageGenderMatches.length > 0) {
+    // If multiple matches occur (e.g. "63-year-old male" in HPI, but an ASR truncation "6-year-old male" in assessment),
+    // prefer the adult age (>= 18) when present to prevent adopting acoustic truncations.
+    const adultMatch = ageGenderMatches.find((m) => parseInt(m[1], 10) >= 18)
+    const bestMatch = adultMatch || ageGenderMatches[0]
+    details.age = parseInt(bestMatch[1], 10)
+    details.gender = bestMatch[2].toLowerCase()
   }
 
   return Object.keys(details).length > 0 ? details : null
