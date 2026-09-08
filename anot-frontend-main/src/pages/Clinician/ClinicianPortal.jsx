@@ -1995,32 +1995,42 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                         <span className="sm-intake-icon">👤</span>
                         <span className="sm-intake-title">Patient Encounter Details</span>
                       </div>
-                      {patientNameInput ? (
-                        <div className="sm-intake-selected-actions">
-                          {selectedPatientIdForEncounter && (
-                            <span className="sm-intake-linked-tag">
-                              ✓ Linked to Visit
-                            </span>
-                          )}
-                          <button
-                            type="button"
-                            className="sm-btn-clear-patient"
-                            onClick={() => {
-                              setSelectedPatientIdForEncounter('')
-                              setPatientNameInput('')
-                              setPatientAgeInput('')
-                              setPatientMrnInput('')
-                            }}
-                            title="Clear patient / start new encounter"
-                          >
-                            ✕ Clear / New Patient
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="sm-intake-hint">
-                          Select from Today's Visits or type patient details below
-                        </span>
-                      )}
+                      <div className="sm-patient-intake-actions-group">
+                        <button
+                          type="button"
+                          className="sm-btn-add-schedule"
+                          onClick={() => setScheduleModalOpen(true)}
+                          title="Schedule an appointment for today"
+                        >
+                          📅 + Schedule Today's Visit
+                        </button>
+                        {patientNameInput ? (
+                          <div className="sm-intake-selected-actions">
+                            {selectedPatientIdForEncounter && (
+                              <span className="sm-intake-linked-tag">
+                                ✓ Linked to Visit
+                              </span>
+                            )}
+                            <button
+                              type="button"
+                              className="sm-btn-clear-patient"
+                              onClick={() => {
+                                setSelectedPatientIdForEncounter('')
+                                setPatientNameInput('')
+                                setPatientAgeInput('')
+                                setPatientMrnInput('')
+                              }}
+                              title="Clear patient / start new encounter"
+                            >
+                              ✕ Clear / New Patient
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="sm-intake-hint">
+                            Select from Today's Visits or type patient details below
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <div className="sm-patient-intake-inputs-row">
@@ -2640,14 +2650,24 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                     ↻
                   </button>
                 </div>
-                <button
-                  type="button"
-                  className="sm-btn-new-scribe"
-                  onClick={handleStartNewConsultation}
-                  title="Start a new consultation / dictation"
-                >
-                  + New scribe
-                </button>
+                <div className="sm-sidebar-actions-group">
+                  <button
+                    type="button"
+                    className="sm-btn-schedule-patient"
+                    onClick={() => setScheduleModalOpen(true)}
+                    title="Add a patient to today's appointment schedule"
+                  >
+                    📅 + Schedule
+                  </button>
+                  <button
+                    type="button"
+                    className="sm-btn-new-scribe"
+                    onClick={handleStartNewConsultation}
+                    title="Start a new consultation / dictation"
+                  >
+                    + New scribe
+                  </button>
+                </div>
               </div>
 
               {/* Date Filter Tabs: Today / Yesterday / All */}
@@ -2683,6 +2703,21 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                   All ({countAll})
                 </button>
               </div>
+
+              {/* Today Schedule Quick Bar */}
+              {scheduleDateFilter === 'today' && (
+                <div className="sm-today-schedule-bar">
+                  <span className="sm-today-schedule-label">📅 Today's Schedule</span>
+                  <button
+                    type="button"
+                    className="sm-btn-add-today-schedule"
+                    onClick={() => setScheduleModalOpen(true)}
+                    title="Add a patient to today's schedule"
+                  >
+                    + Add Patient Schedule
+                  </button>
+                </div>
+              )}
 
               {/* Combined Search Bar + Status Dropdown (Option 1) */}
               <div className="sm-side-controls-row">
@@ -2726,11 +2761,21 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                   <div className="sm-empty-state__icon">📋</div>
                   <p>
                     {scheduleDateFilter === 'today'
-                      ? 'No scribes recorded for today yet.'
+                      ? 'No scribes or appointments recorded for today yet.'
                       : scheduleDateFilter === 'yesterday'
                         ? 'No scribes recorded for yesterday.'
                         : 'No scribes matching filter.'}
                   </p>
+                  {scheduleDateFilter === 'today' && (
+                    <button
+                      type="button"
+                      className="sm-btn-add-today-schedule"
+                      style={{ marginTop: 10, padding: '7px 14px', fontSize: '12px' }}
+                      onClick={() => setScheduleModalOpen(true)}
+                    >
+                      📅 + Add Patient Schedule for Today
+                    </button>
+                  )}
                   {scheduleDateFilter === 'today' && countYesterday > 0 && (
                     <button
                       type="button"

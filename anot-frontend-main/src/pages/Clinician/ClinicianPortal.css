@@ -2691,8 +2691,37 @@
   gap: 8px;
 }
 
-.sm-btn-new-scribe {
+.sm-sidebar-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-left: auto;
+}
+
+.sm-btn-schedule-patient {
+  background: var(--sm-blue-50, #eff6ff);
+  color: var(--sm-blue-700, #1d4ed8);
+  border: 1px solid var(--sm-blue-200, #bfdbfe);
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sm-btn-schedule-patient:hover {
+  background: var(--sm-blue-100, #dbeafe);
+  border-color: var(--sm-blue-300, #93c5fd);
+  color: var(--sm-blue-800, #1e40af);
+  transform: translateY(-1px);
+}
+
+.sm-btn-new-scribe {
   background: var(--sm-blue-600, #2563eb);
   color: #ffffff;
   border: none;
@@ -2709,6 +2738,54 @@
 .sm-btn-new-scribe:hover {
   background: var(--sm-blue-700, #1d4ed8);
   transform: translateY(-1px);
+}
+
+/* ── Today Schedule Bar & Actions ── */
+.sm-today-schedule-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  padding: 5px 8px;
+  margin-top: 6px;
+  box-sizing: border-box;
+}
+
+.sm-today-schedule-label {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--sm-blue-800, #1e40af);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sm-btn-add-today-schedule {
+  background: var(--sm-blue-600, #2563eb);
+  color: #ffffff;
+  border: none;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.2);
+}
+
+.sm-btn-add-today-schedule:hover {
+  background: var(--sm-blue-700, #1d4ed8);
+  transform: translateY(-1px);
+}
+
+.sm-patient-intake-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .sm-date-tabs {
