@@ -16,7 +16,8 @@ async function ensureClinicianTemplatesSchema() {
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             PRIMARY KEY (user_id, template_id)
-        )
+        );
+        ALTER TABLE clinician_templates ADD COLUMN IF NOT EXISTS category VARCHAR(128);
     `)
     await addIndexIfMissing(
         'idx_clinician_templates_user_id',

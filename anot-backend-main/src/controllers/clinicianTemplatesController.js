@@ -7,6 +7,7 @@ const DEFAULT_TEMPLATES = [
     {
         id: 'new-patient',
         name: 'New Patient Comprehensive Intake (H&P)',
+        category: 'Core Primary Care',
         icon: '🆕',
         color: '#E3F2FD',
         accent: '#1565C0',
@@ -16,6 +17,7 @@ const DEFAULT_TEMPLATES = [
     {
         id: 'soap-adult',
         name: 'SOAP Note — Adult (Standard / Episodic)',
+        category: 'Core Primary Care',
         icon: '🩺',
         color: '#E3F2FD',
         accent: '#0284C7',
@@ -25,6 +27,7 @@ const DEFAULT_TEMPLATES = [
     {
         id: 'follow-up',
         name: 'Follow-Up / Chronic Disease Review',
+        category: 'Core Primary Care',
         icon: '🔄',
         color: '#E8F5E9',
         accent: '#2E7D32',
@@ -34,6 +37,7 @@ const DEFAULT_TEMPLATES = [
     {
         id: 'periodic-health',
         name: 'Periodic Health Review (CTFPHC Guidelines)',
+        category: 'Preventive & Life-Stage',
         icon: '📋',
         color: '#F3E8FF',
         accent: '#7E22CE',
@@ -43,6 +47,7 @@ const DEFAULT_TEMPLATES = [
     {
         id: 'rourke-pediatric',
         name: 'Well-Baby / Well-Child (Rourke Baby Record)',
+        category: 'Preventive & Life-Stage',
         icon: '👶',
         color: '#FEF3C7',
         accent: '#D97706',
@@ -52,6 +57,7 @@ const DEFAULT_TEMPLATES = [
     {
         id: 'geriatric-frailty',
         name: 'Comprehensive Geriatric & Frailty Assessment',
+        category: 'Preventive & Life-Stage',
         icon: '🧓',
         color: '#E0E7FF',
         accent: '#4338CA',
@@ -61,6 +67,7 @@ const DEFAULT_TEMPLATES = [
     {
         id: 'diabetes-cdm',
         name: 'Diabetes Mellitus Care (Diabetes Canada)',
+        category: 'Chronic Disease Management (CDM)',
         icon: '🩸',
         color: '#FEE2E2',
         accent: '#B91C1C',
@@ -70,6 +77,7 @@ const DEFAULT_TEMPLATES = [
     {
         id: 'hypertension-cvd',
         name: 'Hypertension & Cardiovascular (Hypertension Canada)',
+        category: 'Chronic Disease Management (CDM)',
         icon: '❤️',
         color: '#FFE4E6',
         accent: '#BE123C',
@@ -79,6 +87,7 @@ const DEFAULT_TEMPLATES = [
     {
         id: 'respiratory-cts',
         name: 'Asthma & COPD Action Visit (CTS Guidelines)',
+        category: 'Chronic Disease Management (CDM)',
         icon: '🫁',
         color: '#E0F2FE',
         accent: '#0369A1',
@@ -88,6 +97,7 @@ const DEFAULT_TEMPLATES = [
     {
         id: 'chronic-pain-msk',
         name: 'Chronic Pain & MSK Management Visit',
+        category: 'Chronic Disease Management (CDM)',
         icon: '🦴',
         color: '#FEF9C3',
         accent: '#A16207',
@@ -97,6 +107,7 @@ const DEFAULT_TEMPLATES = [
     {
         id: 'mental-health-canmat',
         name: 'Mental Health Assessment (CANMAT Guidelines)',
+        category: 'Mental Health & Addictions',
         icon: '🧠',
         color: '#EDE9FE',
         accent: '#6D28D9',
@@ -106,6 +117,7 @@ const DEFAULT_TEMPLATES = [
     {
         id: 'addictions-oat',
         name: 'Substance Use & Addictions / OAT Encounter',
+        category: 'Mental Health & Addictions',
         icon: '💊',
         color: '#F1F5F9',
         accent: '#475569',
@@ -115,6 +127,7 @@ const DEFAULT_TEMPLATES = [
     {
         id: 'prenatal-sogc',
         name: 'Prenatal / Antenatal Visit (SOGC Guidelines)',
+        category: "Women's Health & Perinatal",
         icon: '🤰',
         color: '#FCE7F3',
         accent: '#BE185D',
@@ -124,6 +137,7 @@ const DEFAULT_TEMPLATES = [
     {
         id: 'postpartum-6wk',
         name: 'Postpartum & Newborn 6-Week Examination',
+        category: "Women's Health & Perinatal",
         icon: '🤱',
         color: '#FFEDD5',
         accent: '#C2410C',
@@ -133,6 +147,7 @@ const DEFAULT_TEMPLATES = [
     {
         id: 'virtual-visit',
         name: 'Virtual Care / Telehealth Encounter (CMPA)',
+        category: 'Virtual Care & Occupational',
         icon: '💻',
         color: '#EDE9FE',
         accent: '#4527A0',
@@ -142,6 +157,7 @@ const DEFAULT_TEMPLATES = [
     {
         id: 'specialist-referral',
         name: 'Specialist Referral & Consultation Request',
+        category: 'Virtual Care & Occupational',
         icon: '✉️',
         color: '#CCFBF1',
         accent: '#0F766E',
@@ -151,6 +167,7 @@ const DEFAULT_TEMPLATES = [
     {
         id: 'wcb-occupational',
         name: "Occupational Injury / Worker's Comp (WCB / WSIB)",
+        category: 'Virtual Care & Occupational',
         icon: '👷',
         color: '#FEF08A',
         accent: '#854D0E',
@@ -160,6 +177,7 @@ const DEFAULT_TEMPLATES = [
     {
         id: 'other',
         name: 'Other / General',
+        category: 'Other / General',
         icon: '📋',
         color: '#FFF8E1',
         accent: '#F57F17',
@@ -171,6 +189,7 @@ function mapRow(row) {
     return {
         id: row.template_id,
         name: row.name,
+        category: row.category || 'Core Primary Care',
         icon: row.icon || '',
         color: row.color || '',
         accent: row.accent || '',
@@ -181,17 +200,18 @@ function mapRow(row) {
 async function seedDefaultsForUser(userId) {
     for (const t of DEFAULT_TEMPLATES) {
         await pool.query(
-            `INSERT INTO clinician_templates (user_id, template_id, name, icon, color, accent, content)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
-             ON CONFLICT (user_id, template_id) DO NOTHING`,
-            [userId, t.id, t.name, t.icon, t.color, t.accent, t.content],
+            `INSERT INTO clinician_templates (user_id, template_id, name, icon, color, accent, content, category)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+             ON CONFLICT (user_id, template_id) DO UPDATE
+             SET category = EXCLUDED.category WHERE clinician_templates.category IS NULL`,
+            [userId, t.id, t.name, t.icon, t.color, t.accent, t.content, t.category || 'Core Primary Care'],
         )
     }
 }
 
 async function listTemplatesForUser(userId) {
     const { rows } = await pool.query(
-        `SELECT template_id, name, icon, color, accent, content
+        `SELECT template_id, name, icon, color, accent, content, category
          FROM clinician_templates
          WHERE user_id = $1
          ORDER BY template_id`,
@@ -252,8 +272,8 @@ const saveClinicianTemplates = async (req, res) => {
                     return res.status(400).json({ error: 'Each template requires id and name.' })
                 }
                 await client.query(
-                    `INSERT INTO clinician_templates (user_id, template_id, name, icon, color, accent, content, updated_at)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
+                    `INSERT INTO clinician_templates (user_id, template_id, name, icon, color, accent, content, category, updated_at)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
                     [
                         req.user.id,
                         id.slice(0, 64),
@@ -262,6 +282,7 @@ const saveClinicianTemplates = async (req, res) => {
                         String(t.color || '').slice(0, 32) || null,
                         String(t.accent || '').slice(0, 32) || null,
                         content,
+                        String(t.category || 'Core Primary Care').slice(0, 128) || null,
                     ],
                 )
             }

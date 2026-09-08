@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, Fragment } from 'react'
-import { visitsAPI, notesAPI, patientsAPI, consentAPI } from '../../services/api'
+import { visitsAPI, notesAPI, patientsAPI, consentAPI, settingsAPI } from '../../services/api'
 import RecordingVisualizer from '../../components/RecordingVisualizer'
 import { startRecordingKeepAlive, stopRecordingKeepAlive } from '../../utils/recordingKeepAlive'
 import { cleanAiDraftForDisplay } from '../../utils/aiDraftFormat'
@@ -7,6 +7,7 @@ import { formatClinicalDictationToSOAP } from '../../utils/clinicalSoapSynthesiz
 import * as offlineAudioQueue from '../../utils/offlineAudioQueue'
 import { formatEncounterDate } from '../../utils/visitEncounterUtils'
 import SaintMaryNoteViewerModal from '../../components/SaintMaryNoteViewerModal'
+import ClinicianTemplateModal from '../../components/ClinicianTemplateModal'
 import './ClinicianPortal.css'
 
 const CLINICAL_TEMPLATES = [
@@ -142,13 +143,14 @@ const CLINICAL_TEMPLATES = [
   },
 ]
 
-function renderTemplateOptions() {
-  const categories = [...new Set(CLINICAL_TEMPLATES.map((t) => t.category))]
+function renderTemplateOptions(list = CLINICAL_TEMPLATES) {
+  const safeList = Array.isArray(list) && list.length > 0 ? list : CLINICAL_TEMPLATES
+  const categories = [...new Set(safeList.map((t) => t.category || 'Core Primary Care'))]
   return categories.map((cat) => (
     <optgroup key={cat} label={`── ${cat} ──`}>
-      {CLINICAL_TEMPLATES.filter((t) => t.category === cat).map((t) => (
-        <option key={t.id} value={t.label}>
-          {t.label}
+      {safeList.filter((t) => (t.category || 'Core Primary Care') === cat).map((t) => (
+        <option key={t.id} value={t.label || t.name}>
+          {t.label || t.name}
         </option>
       ))}
     </optgroup>
@@ -673,6 +675,8 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
   const [uploading, setUploading] = useState(false)
   const [_uploadStatus, setUploadStatus] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState('SOAP Note — Adult (Standard / Episodic)')
+  const [providerTemplates, setProviderTemplates] = useState(CLINICAL_TEMPLATES)
+  const [templateModalOpen, setTemplateModalOpen] = useState(false)
   const [audioStream, setAudioStream] = useState(null)
   const [liveTranscript, setLiveTranscript] = useState('')
   const [micLevel, setMicLevel] = useState(0)
@@ -710,6 +714,48 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 3500)
   }, [])
+
+  useEffect(() => {
+    let isMounted = true
+    settingsAPI.getClinicianTemplates()
+      .then((res) => {
+        if (isMounted && Array.isArray(res?.templates) && res.templates.length > 0) {
+          const mapped = res.templates.map((t) => ({
+            ...t,
+            label: t.name,
+            type: t.type || normalizeVisitTypeForDb(t.name),
+            category: t.category || 'Core Primary Care',
+          }))
+          setProviderTemplates(mapped)
+        }
+      })
+      .catch((err) => {
+        console.warn('Could not load custom provider templates, using defaults:', err)
+      })
+    return () => { isMounted = false }
+  }, [])
+
+  const handleSaveProviderTemplates = async (updatedList) => {
+    const formatted = updatedList.map((t) => ({
+      id: t.id,
+      name: t.name || t.label,
+      category: t.category || 'Core Primary Care',
+      icon: t.icon || '📋',
+      color: t.color || '#E3F2FD',
+      accent: t.accent || '#1565C0',
+      content: t.content || '',
+    }))
+    const res = await settingsAPI.saveClinicianTemplates(formatted)
+    const savedList = Array.isArray(res?.templates) ? res.templates : formatted
+    const mapped = savedList.map((t) => ({
+      ...t,
+      label: t.name,
+      type: t.type || normalizeVisitTypeForDb(t.name),
+      category: t.category || 'Core Primary Care',
+    }))
+    setProviderTemplates(mapped)
+    showToast('✓ Clinical note templates updated for your profile!')
+  }
 
   const fmtTime = (secs) => {
     const m = Math.floor(secs / 60)
@@ -1405,6 +1451,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
             patientName: currentActive.patient_name || patientNameInput,
             patientAge: patientAgeInput || getPatientDisplayAge(currentActive, patientList),
             mrn: currentActive.mrn || patientMrnInput,
+            template: selectedTemplate,
           }
         )
         try {
@@ -1441,7 +1488,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
           showToast(`✓ Clinical SOAP Note & ICD-10 Codes generated!`)
 
           // Background Claude enhancement
-          visitsAPI.generateDraft(currentActive.id).then(async (dRes) => {
+          visitsAPI.generateDraft(currentActive.id, { template: selectedTemplate }).then(async (dRes) => {
             const isUnavailable = !dRes?.ai_draft || dRes.ai_draft.includes('unavailable')
 
             if (dRes?.ai_draft && !isUnavailable) {
@@ -1960,6 +2007,16 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
             </div>
           )}
 
+          <button
+            type="button"
+            className="sm-btn-nav-tmpl"
+            onClick={() => setTemplateModalOpen(true)}
+            title="Manage and customize your personal clinical templates"
+          >
+            <span>📋</span>
+            <span>Templates</span>
+          </button>
+
           <div className="sm-clinician-badge">
             <div className="sm-clinician-avatar">
               {currentUser?.name ? currentUser.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() : 'MD'}
@@ -1996,15 +2053,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                         <span className="sm-intake-title">Patient Encounter Details</span>
                       </div>
                       <div className="sm-patient-intake-actions-group">
-                        <button
-                          type="button"
-                          className="sm-btn-add-schedule"
-                          onClick={() => setScheduleModalOpen(true)}
-                          title="Schedule an appointment for today"
-                        >
-                          📅 + Schedule Today's Visit
-                        </button>
-                        {patientNameInput ? (
+                        {patientNameInput && (
                           <div className="sm-intake-selected-actions">
                             {selectedPatientIdForEncounter && (
                               <span className="sm-intake-linked-tag">
@@ -2025,10 +2074,6 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                               ✕ Clear / New Patient
                             </button>
                           </div>
-                        ) : (
-                          <span className="sm-intake-hint">
-                            Select from Today's Visits or type patient details below
-                          </span>
                         )}
                       </div>
                     </div>
@@ -2122,10 +2167,26 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                       <select
                         className="sm-halo-template-select"
                         value={selectedTemplate}
-                        onChange={(e) => setSelectedTemplate(e.target.value)}
+                        onChange={(e) => {
+                          if (e.target.value === '__manage_templates__') {
+                            setTemplateModalOpen(true)
+                          } else {
+                            setSelectedTemplate(e.target.value)
+                          }
+                        }}
                       >
-                        {renderTemplateOptions()}
+                        {renderTemplateOptions(providerTemplates)}
+                        <option value="__manage_templates__">⚙️ Edit / Customize Templates...</option>
                       </select>
+                      <button
+                        type="button"
+                        className="sm-btn-edit-templates"
+                        onClick={() => setTemplateModalOpen(true)}
+                        title="Edit or customize documentation templates for your individual profile"
+                      >
+                        <span className="sm-edit-tmpl-icon">⚙️</span>
+                        <span>Edit Templates</span>
+                      </button>
                     </div>
 
                     {/* High-Impact Glowing Primary Record Button */}
@@ -2750,50 +2811,14 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
 
             <div className="sm-visits-container">
               {filteredVisits.length === 0 ? (
-                <div className="sm-empty-state">
-                  <div className="sm-empty-state__icon">📋</div>
-                  <p>
+                <div className="sm-empty-state sm-empty-state--minimal">
+                  <p className="sm-empty-state__message">
                     {scheduleDateFilter === 'today'
-                      ? 'No patients or appointments recorded for today yet.'
+                      ? 'No visits recorded for today.'
                       : scheduleDateFilter === 'yesterday'
                         ? 'No scribes recorded for yesterday.'
                         : 'No scribes matching filter.'}
                   </p>
-                  {scheduleDateFilter === 'today' && (
-                    <button
-                      type="button"
-                      className="sm-btn-schedule-patient-clean"
-                      onClick={() => setScheduleModalOpen(true)}
-                    >
-                      📅 + Schedule Patient for Today
-                    </button>
-                  )}
-                  {scheduleDateFilter === 'today' && countYesterday > 0 && (
-                    <button
-                      type="button"
-                      className="sm-btn-mini-chip"
-                      style={{ marginTop: 8 }}
-                      onClick={() => {
-                        hasUserManuallySelectedDateTabRef.current = true
-                        setScheduleDateFilter('yesterday')
-                      }}
-                    >
-                      View Yesterday's Scribes ({countYesterday})
-                    </button>
-                  )}
-                  {scheduleDateFilter !== 'all' && countAll > 0 && (
-                    <button
-                      type="button"
-                      className="sm-btn-mini-chip"
-                      style={{ marginTop: 8 }}
-                      onClick={() => {
-                        hasUserManuallySelectedDateTabRef.current = true
-                        setScheduleDateFilter('all')
-                      }}
-                    >
-                      View All Scribes ({countAll})
-                    </button>
-                  )}
                 </div>
               ) : (
                 filteredVisits.map((v, index) => {
@@ -2937,6 +2962,16 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
         dialog={deleteDialog}
         setDialog={setDeleteDialog}
         onConfirm={handleConfirmDelete}
+      />
+
+      {/* Clinician Template Studio Modal */}
+      <ClinicianTemplateModal
+        isOpen={templateModalOpen}
+        onClose={() => setTemplateModalOpen(false)}
+        templates={providerTemplates}
+        onSaveTemplates={handleSaveProviderTemplates}
+        defaultTemplates={CLINICAL_TEMPLATES}
+        currentDoctorName={currentUser?.name || 'Doctor'}
       />
     </div>
   )

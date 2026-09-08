@@ -211,7 +211,8 @@ async function generateDraft(req, res) {
 
     validateNoteEditableForDraft(note)
 
-    const templateSections = await resolveTemplateSections(row.clinician_id, row.visit_type, 'generate-draft')
+    const requestedTemplate = req.body?.template || req.body?.template_id || req.body?.visit_type || row.visit_type
+    const templateSections = await resolveTemplateSections(row.clinician_id, requestedTemplate, 'generate-draft')
 
     let aiDraft = await generateAINote(segments, {
       patient_name: row.patient_name,
