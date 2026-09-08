@@ -2653,19 +2653,11 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                 <div className="sm-sidebar-actions-group">
                   <button
                     type="button"
-                    className="sm-btn-schedule-patient"
-                    onClick={() => setScheduleModalOpen(true)}
-                    title="Add a patient to today's appointment schedule"
-                  >
-                    📅 + Schedule
-                  </button>
-                  <button
-                    type="button"
-                    className="sm-btn-new-scribe"
+                    className="sm-btn-new-patient"
                     onClick={handleStartNewConsultation}
-                    title="Start a new consultation / dictation"
+                    title="Start a new patient consultation"
                   >
-                    + New scribe
+                    + New patient
                   </button>
                 </div>
               </div>
@@ -2704,29 +2696,30 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                 </button>
               </div>
 
-              {/* Today Schedule Quick Bar */}
+              {/* Option 2: Clean Today Schedule Action Bar */}
               {scheduleDateFilter === 'today' && (
-                <div className="sm-today-schedule-bar">
-                  <span className="sm-today-schedule-label">📅 Today's Schedule</span>
+                <div className="sm-today-action-bar">
+                  <span className="sm-today-action-label">Today's Schedule</span>
                   <button
                     type="button"
-                    className="sm-btn-add-today-schedule"
+                    className="sm-btn-schedule-patient-link"
                     onClick={() => setScheduleModalOpen(true)}
                     title="Add a patient to today's schedule"
                   >
-                    + Add Patient Schedule
+                    <span className="sm-schedule-icon">📅</span>
+                    <span>+ Schedule Patient</span>
                   </button>
                 </div>
               )}
 
-              {/* Combined Search Bar + Status Dropdown (Option 1) */}
+              {/* Combined Search Bar + Status Dropdown */}
               <div className="sm-side-controls-row">
                 <div className="sm-side-search-wrap">
                   <span className="sm-side-search-icon">🔍</span>
                   <input
                     type="text"
                     className="sm-side-search-input"
-                    placeholder="Search scribes..."
+                    placeholder="Search patients..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
@@ -2761,7 +2754,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                   <div className="sm-empty-state__icon">📋</div>
                   <p>
                     {scheduleDateFilter === 'today'
-                      ? 'No scribes or appointments recorded for today yet.'
+                      ? 'No patients or appointments recorded for today yet.'
                       : scheduleDateFilter === 'yesterday'
                         ? 'No scribes recorded for yesterday.'
                         : 'No scribes matching filter.'}
@@ -2769,11 +2762,10 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                   {scheduleDateFilter === 'today' && (
                     <button
                       type="button"
-                      className="sm-btn-add-today-schedule"
-                      style={{ marginTop: 10, padding: '7px 14px', fontSize: '12px' }}
+                      className="sm-btn-schedule-patient-clean"
                       onClick={() => setScheduleModalOpen(true)}
                     >
-                      📅 + Add Patient Schedule for Today
+                      📅 + Schedule Patient for Today
                     </button>
                   )}
                   {scheduleDateFilter === 'today' && countYesterday > 0 && (

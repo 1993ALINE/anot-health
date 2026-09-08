@@ -2721,32 +2721,111 @@
   transform: translateY(-1px);
 }
 
+.sm-btn-new-patient,
 .sm-btn-new-scribe {
   background: var(--sm-blue-600, #2563eb);
   color: #ffffff;
   border: none;
   font-size: 12px;
   font-weight: 700;
-  padding: 5px 12px;
+  padding: 6px 14px;
   border-radius: 6px;
   cursor: pointer;
   transition: background 0.15s ease, transform 0.1s ease;
   box-shadow: 0 1px 2px rgba(37, 99, 235, 0.2);
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
+.sm-btn-new-patient:hover,
 .sm-btn-new-scribe:hover {
   background: var(--sm-blue-700, #1d4ed8);
   transform: translateY(-1px);
 }
 
-/* ── Today Schedule Bar & Actions ── */
+/* ── Option 2: Today Action Bar & Scheduling Links ── */
+.sm-today-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 5px 10px;
+  margin-top: 6px;
+  box-sizing: border-box;
+}
+
+.sm-today-action-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--sm-slate-600, #475569);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sm-btn-schedule-patient-link {
+  background: #ffffff;
+  color: var(--sm-blue-600, #2563eb);
+  border: 1px solid var(--sm-blue-200, #bfdbfe);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3.5px 9px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.sm-btn-schedule-patient-link:hover {
+  background: var(--sm-blue-50, #eff6ff);
+  border-color: var(--sm-blue-400, #60a5fa);
+  color: var(--sm-blue-800, #1e40af);
+  transform: translateY(-1px);
+}
+
+.sm-schedule-icon {
+  font-size: 11px;
+}
+
+.sm-btn-schedule-patient-clean {
+  background: var(--sm-blue-50, #eff6ff);
+  color: var(--sm-blue-700, #1d4ed8);
+  border: 1px solid var(--sm-blue-200, #bfdbfe);
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.sm-btn-schedule-patient-clean:hover {
+  background: var(--sm-blue-100, #dbeafe);
+  border-color: var(--sm-blue-300, #93c5fd);
+  color: var(--sm-blue-800, #1e40af);
+  transform: translateY(-1px);
+}
+
+/* Backwards compatibility */
 .sm-today-schedule-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
-  border: 1px solid #bfdbfe;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
   border-radius: 6px;
   padding: 5px 8px;
   margin-top: 6px;

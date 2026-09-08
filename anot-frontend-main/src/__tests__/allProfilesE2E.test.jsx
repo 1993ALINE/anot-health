@@ -76,7 +76,7 @@ describe('End-to-End Profile Test Suite (All 5 Roles)', () => {
 
       // Verify Scribes Side Panel & Date Tabs
       expect(div.innerHTML).toContain('Scribes')
-      expect(div.innerHTML).toContain('+ New scribe')
+      expect(div.innerHTML).toContain('+ New patient')
       expect(div.innerHTML).toContain('Today')
       expect(div.innerHTML).toContain('Yesterday')
       expect(div.innerHTML).toContain('All')
