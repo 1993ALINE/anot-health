@@ -74,7 +74,7 @@ function req(options, body) {
       'Cookie': cookie,
       'X-CSRF-Token': tokenVal
     }
-  }, JSON.stringify({ email: 'amcknight2025@gmail.com', password: 'Password@2026', force: true }));
+  }, JSON.stringify({ email: process.env.CLINICIAN_EMAIL || 'amcknight2025@gmail.com', password: process.env.CLINICIAN_PASSWORD || process.env.DEFAULT_TEST_PASSWORD || '', force: true }));
 
   console.log(`Login Status: ${loginRes.status}`, loginRes.body?.user?.name);
   if (loginRes.status !== 200 || !loginRes.body?.token) {

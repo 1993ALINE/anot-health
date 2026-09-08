@@ -167,6 +167,19 @@ router.post('/:visitId', protect, restrict('clinician'), upload.single('audio'),
     await appendAudioPathToVisit(visitId, audioPath, 'recording-uploaded')
     console.log('[audio] Upload complete for visit:', visitId, 's3Key:', audioPath, 'size:', req.file.size)
 
+    try {
+      const { emitVisitEvent, getDeviceTypeFromRequest } = require('../utils/visitEvents')
+      emitVisitEvent(req.user.id, {
+        type: 'AUDIO_UPLOADED',
+        visitId: Number(visitId) || visitId,
+        status: 'recording-uploaded',
+        action: 'audio_uploaded',
+        source: getDeviceTypeFromRequest(req),
+      })
+    } catch (e) {
+      console.warn('[audio] emitVisitEvent failed:', e.message)
+    }
+
     res.status(200).json({
       message: 'Audio uploaded successfully.',
       audio_file: audioPath,

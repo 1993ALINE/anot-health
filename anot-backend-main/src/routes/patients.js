@@ -1,6 +1,6 @@
 const express = require('express')
 const router = express.Router()
-const { getAllPatients, createPatient, getPatient, deletePatient, bulkDeleteAllPatients } = require('../controllers/patientController')
+const { getAllPatients, createPatient, getPatient, updatePatient, deletePatient, bulkDeleteAllPatients } = require('../controllers/patientController')
 const { protect, restrict } = require('../middleware/auth')
 
 router.use(protect)
@@ -12,6 +12,7 @@ router.get('/',     restrict('clinician', 'scribe', 'qps', 'admin', 'super_admin
 router.post('/',    restrict('clinician', 'admin', 'super_admin'),                  createPatient)
 router.delete('/bulk/all', restrict('admin', 'super_admin'), bulkDeleteAllPatients)
 router.get('/:id',  restrict('clinician', 'scribe', 'qps', 'admin', 'super_admin'), getPatient)
-router.delete('/:id', restrict('admin', 'super_admin'), deletePatient)
+router.put('/:id',  restrict('clinician', 'admin', 'super_admin'),                  updatePatient)
+router.delete('/:id', restrict('clinician', 'admin', 'super_admin'),                deletePatient)
 
 module.exports = router

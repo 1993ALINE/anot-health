@@ -40,16 +40,16 @@ async function main() {
 
     await pool.query(`
       INSERT INTO system_settings (id, anthropic_enabled, anthropic_api_key_enc, anthropic_model)
-      VALUES (1, true, $1, 'claude-3-5-sonnet-20241022')
+      VALUES (1, true, $1, 'claude-haiku-4-5-20251001')
       ON CONFLICT (id) DO UPDATE SET
         anthropic_enabled = true,
         anthropic_api_key_enc = $1,
-        anthropic_model = COALESCE(EXCLUDED.anthropic_model, 'claude-3-5-sonnet-20241022')
+        anthropic_model = COALESCE(EXCLUDED.anthropic_model, 'claude-haiku-4-5-20251001')
     `, [encrypted])
 
     console.log('✅ Done! Anthropic API key updated in DB from .env')
     console.log('   anthropic_enabled = true')
-    console.log('   model = claude-3-5-sonnet-20241022')
+    console.log('   model = claude-haiku-4-5-20251001')
     console.log('\nRestart the backend server to apply the new settings cache.')
   } catch (err) {
     console.error('❌ Error:', err.message)

@@ -700,6 +700,26 @@ function Scribe() {
   useEffect(() => {
     if (screen !== 'recordings' || !selectedProvider?.id || !selectedDate) {return}
     void loadRecordings(selectedProvider.id, selectedDate)
+
+    const handleFocus = () => {
+      if (document.visibilityState === 'visible') {
+        void loadRecordings(selectedProvider.id, selectedDate)
+      }
+    }
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleFocus)
+
+    const pollTimer = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void loadRecordings(selectedProvider.id, selectedDate)
+      }
+    }, 5000)
+
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleFocus)
+      clearInterval(pollTimer)
+    }
   }, [screen, selectedProvider?.id, selectedDate, loadRecordings])
 
   const saveDraft = async () => {

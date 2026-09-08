@@ -1,5 +1,6 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const pool = require('../config/db');
+const { resolveCanonicalAnthropicModel } = require('./aiSettings');
 
 const anthropic = new Anthropic({
   apiKey: process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY
@@ -22,11 +23,11 @@ Rules: Use only information from the transcript. Be concise and medically precis
 // COST TRACKING & MONITORING
 // ════════════════════════════════════════════════════════════
 
-// Claude 3.5 Haiku pricing (current)
+// Claude Haiku 4.5 pricing (current)
 const CLAUDE_COSTS = {
-  input: 0.80 / 1_000_000,   // $0.80 per 1M input tokens
-  output: 4.00 / 1_000_000,  // $4.00 per 1M output tokens
-  model: 'claude-3-5-haiku-20241022'
+  input: 1.00 / 1_000_000,   // $1.00 per 1M input tokens
+  output: 5.00 / 1_000_000,  // $5.00 per 1M output tokens
+  model: 'claude-haiku-4-5-20251001'
 };
 
 // Cost tracking (in-memory, resets on server restart)
@@ -109,7 +110,7 @@ async function trackCost(visitId, inputTokens, outputTokens, cacheCreationTokens
       `INSERT INTO claude_usage_log (visit_id, input_tokens, output_tokens, 
        cache_creation_tokens, cache_read_tokens, cost, model, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
-      [visitId, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens, callCost, CLAUDE_COSTS.model]
+      [visitId, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens, callCost, resolveCanonicalAnthropicModel(CLAUDE_COSTS.model)]
     ).catch(err => {
       // Table might not exist yet - that's ok, just log to console
       if (!err.message.includes('does not exist')) {
@@ -268,10 +269,10 @@ async function generateMedicalNotes(transcript, visitId) {
     
     const startTime = Date.now();
 
-    // Full transcript sent — Haiku is cheap enough that truncation hurts more than it saves
-    // A typical 30-min visit: ~2,000 input tokens = $0.0016. Full note saves scribe editing time.
+    // Full transcript sent — Haiku 4.5 is cost-efficient and produces accurate SOAP notes
+    const activeModel = resolveCanonicalAnthropicModel(CLAUDE_COSTS.model);
     const response = await anthropic.messages.create({
-      model: CLAUDE_COSTS.model,
+      model: activeModel,
       max_tokens: 1200, // Enough for a complete structured SOAP note with ICD-10 codes
       system: [{
         type: 'text',

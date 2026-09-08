@@ -21,7 +21,7 @@ async function getVisitForUser(visitId, user, client = pool) {
 
   if (user.role === 'clinician') {
     const r = await client.query(
-      'SELECT * FROM visits WHERE id = $1 AND clinician_id = $2',
+      'SELECT * FROM visits WHERE id = $1 AND (clinician_id = $2 OR clinician_id IS NULL)',
       [id, user.id]
     )
     return r.rows[0] || null

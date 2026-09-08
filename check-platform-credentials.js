@@ -25,11 +25,11 @@ function req(options, body) {
   const tokenVal = JSON.parse(csrf.body).csrfToken;
 
   const accounts = [
-    { email: 'atiqurrahmanaline@gmail.com', pass: '#1Augmedix2026', role: 'super_admin' },
-    { email: 'amcknight2025@gmail.com', pass: 'Password@2026', role: 'clinician' },
-    { email: 'sahib@anot.health', pass: 'Password@2026', role: 'scribe' },
-    { email: 'farhan@docva.health', pass: 'Password@2026', role: 'qps' },
-    { email: 'ashikur@anot.health', pass: 'Password@2026', role: 'admin' },
+    { email: process.env.SUPER_ADMIN_EMAIL || 'atiqurrahmanaline@gmail.com', pass: process.env.SUPER_ADMIN_PASSWORD || '', role: 'super_admin' },
+    { email: process.env.CLINICIAN_EMAIL || 'amcknight2025@gmail.com', pass: process.env.CLINICIAN_PASSWORD || process.env.DEFAULT_TEST_PASSWORD || '', role: 'clinician' },
+    { email: process.env.SCRIBE_EMAIL || 'sahib@anot.health', pass: process.env.SCRIBE_PASSWORD || process.env.DEFAULT_TEST_PASSWORD || '', role: 'scribe' },
+    { email: process.env.QPS_EMAIL || 'farhan@docva.health', pass: process.env.QPS_PASSWORD || process.env.DEFAULT_TEST_PASSWORD || '', role: 'qps' },
+    { email: process.env.ADMIN_EMAIL || 'ashikur@anot.health', pass: process.env.ADMIN_PASSWORD || process.env.DEFAULT_TEST_PASSWORD || '', role: 'admin' },
   ];
 
   console.log('--- TESTING ALL ACTIVE ROLES & CREDENTIALS ---');

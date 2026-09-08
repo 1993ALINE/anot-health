@@ -24,6 +24,56 @@ router.delete('/:id', protect, restrict('clinician'), deleteVisit)
 router.post('/:id/lock-note', protect, restrict('clinician'), lockNote)
 router.put('/:id/lock-note',  protect, restrict('clinician'), lockNote)
 
+const { visitEvents } = require('../utils/visitEvents')
+
+// Real-time Server-Sent Events stream for clinicians and scribes
+router.get('/events', protect, restrict('clinician', 'scribe', 'admin', 'super_admin'), (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  })
+
+  if (typeof res.flushHeaders === 'function') {
+    res.flushHeaders()
+  }
+
+  res.write(`event: connected\ndata: ${JSON.stringify({ connected: true, userId: req.user.id, timestamp: Date.now() })}\n\n`)
+
+  const userId = req.user.id
+  const eventChannel = `clinician:${userId}`
+
+  const onVisitEvent = (eventData) => {
+    try {
+      res.write(`event: visit_update\ndata: ${JSON.stringify(eventData)}\n\n`)
+    } catch {
+      // client disconnected
+    }
+  }
+
+  visitEvents.on(eventChannel, onVisitEvent)
+  if (req.user.role === 'admin' || req.user.role === 'super_admin') {
+    visitEvents.on('all', onVisitEvent)
+  }
+
+  const heartbeatId = setInterval(() => {
+    try {
+      res.write(': ping\n\n')
+    } catch {
+      clearInterval(heartbeatId)
+    }
+  }, 20000)
+
+  req.on('close', () => {
+    clearInterval(heartbeatId)
+    visitEvents.off(eventChannel, onVisitEvent)
+    if (req.user.role === 'admin' || req.user.role === 'super_admin') {
+      visitEvents.off('all', onVisitEvent)
+    }
+  })
+})
+
 // Clinician (own visits), Scribe (assigned visits), QPS (review), and Admins (all) — the
 // controller scopes results per role.
 router.get('/', protect, restrict('clinician', 'scribe', 'qps', 'admin', 'super_admin'), getAllVisits)
@@ -180,6 +230,20 @@ async function generateDraft(req, res) {
     }
 
     await saveAiDraftToNote(id, aiDraft, segments, note)
+
+    try {
+      const { emitVisitEvent, getDeviceTypeFromRequest } = require('../utils/visitEvents')
+      emitVisitEvent(row.clinician_id, {
+        type: 'AI_DRAFT_READY',
+        visitId: Number(id) || id,
+        status: 'draft',
+        action: 'draft_ready',
+        source: getDeviceTypeFromRequest(req),
+      })
+    } catch (e) {
+      console.warn('[visits] emitVisitEvent failed:', e.message)
+    }
+
     return res.status(200).json({
       ai_draft: aiDraft,
       ai_used: aiUsed,

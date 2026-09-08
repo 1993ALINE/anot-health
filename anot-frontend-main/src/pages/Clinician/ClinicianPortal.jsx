@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, Fragment } from 'react'
 import { visitsAPI, notesAPI, patientsAPI, consentAPI } from '../../services/api'
 import RecordingVisualizer from '../../components/RecordingVisualizer'
 import { startRecordingKeepAlive, stopRecordingKeepAlive } from '../../utils/recordingKeepAlive'
@@ -122,7 +122,7 @@ function calculateAge(dateOfBirth) {
 }
 
 function getPatientDisplayAge(visitOrPatient, patientList = []) {
-  if (!visitOrPatient) {return '36 yrs'}
+  if (!visitOrPatient) {return ''}
   if (visitOrPatient.age) {
     const num = String(visitOrPatient.age).replace(/[^0-9]/g, '')
     return num ? `${num} yrs` : visitOrPatient.age
@@ -147,7 +147,7 @@ function getPatientDisplayAge(visitOrPatient, patientList = []) {
     }
     if (p?.age) {return `${p.age} yrs`}
   }
-  return '36 yrs'
+  return ''
 }
 
 function getLocalDateStr(d = new Date()) {
@@ -155,6 +155,77 @@ function getLocalDateStr(d = new Date()) {
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${y}-${m}-${day}`
+}
+
+function getYesterdayDateStr() {
+  const d = new Date()
+  d.setDate(d.getDate() - 1)
+  return getLocalDateStr(d)
+}
+
+function normalizeVisitDate(val) {
+  if (!val) {return ''}
+  if (typeof val === 'string') {
+    return val.slice(0, 10)
+  }
+  try {
+    const d = new Date(val)
+    return getLocalDateStr(d)
+  } catch {
+    return ''
+  }
+}
+
+function formatEncounterDateTime(visitDate, visitTime) {
+  const todayStr = getLocalDateStr()
+  const yesterdayStr = getYesterdayDateStr()
+  const vDate = normalizeVisitDate(visitDate)
+
+  let formattedTime = visitTime || '10:00'
+  if (formattedTime.includes(':')) {
+    const parts = formattedTime.split(':')
+    const hour = parseInt(parts[0], 10)
+    const min = parts[1] || '00'
+    const ampm = hour >= 12 ? 'PM' : 'AM'
+    const h12 = hour % 12 || 12
+    formattedTime = `${h12}:${min} ${ampm}`
+  }
+
+  if (vDate === todayStr) {
+    return `Today, ${formattedTime}`
+  }
+  if (vDate === yesterdayStr) {
+    return `Yesterday, ${formattedTime}`
+  }
+  if (vDate) {
+    try {
+      const [y, m, d] = vDate.split('-').map(Number)
+      const dt = new Date(y, m - 1, d)
+      const monthStr = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      return `${monthStr}, ${formattedTime}`
+    } catch {
+      return `${vDate}, ${formattedTime}`
+    }
+  }
+  return formattedTime
+}
+
+function getNoteSnippet(visit) {
+  const raw = visit?.final_note || visit?.ai_draft || visit?.transcription || ''
+  if (!raw) {return 'Ambient consultation — no note recorded yet.'}
+  const clean = cleanAiDraftForDisplay(raw)
+    .replace(/^#+\s+/gm, '')
+    .replace(/^(?:\[?[A-Z0-9\s/&()\-–—]+\]?|[A-Z\s/&()\-–—]+):\s*/gm, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!clean) {return 'Clinical note recorded.'}
+  return clean.length > 110 ? `${clean.slice(0, 110)}…` : clean
+}
+
+function isUnassignedPatient(v) {
+  if (!v) {return false}
+  const name = String(v.patient_name || '').trim()
+  return !name || name === 'Quick Dictation (Unassigned)' || name === 'Patient Encounter' || name === 'Unnamed Patient'
 }
 
 function isCompletedVisit(v) {
@@ -174,12 +245,39 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
   const [toast, setToast] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [scheduleFilter, setScheduleFilter] = useState('all') // 'all' | 'pending' | 'ready' | 'draft'
+  const [scheduleDateFilter, setScheduleDateFilter] = useState('today') // 'today' | 'yesterday' | 'all'
+  const [historyStatusFilter, setHistoryStatusFilter] = useState('all') // 'all' | 'signed' | 'draft'
+
+  // Edit / Add Patient Details Modal
+  const [patientModalOpen, setPatientModalOpen] = useState(false)
+  const [patientModalTab, setPatientModalTab] = useState('edit') // 'edit' | 'link'
+  const [patientFormData, setPatientFormData] = useState({
+    visitId: null,
+    patientId: null,
+    name: '',
+    age: '',
+    dob: '',
+    mrn: '',
+    selectedExistingId: '',
+  })
+
+  // Delete Encounter / Patient Confirmation Dialog
+  const [deleteDialog, setDeleteDialog] = useState({
+    open: false,
+    visit: null,
+    deletePatientAlso: false,
+  })
 
   // Selected Patient for next/active encounter
   const [selectedPatientIdForEncounter, setSelectedPatientIdForEncounter] = useState('')
   const [patientNameInput, setPatientNameInput] = useState('')
   const [patientAgeInput, setPatientAgeInput] = useState('')
   const [patientMrnInput, setPatientMrnInput] = useState('')
+  const [patientDateInput, setPatientDateInput] = useState(() => getLocalDateStr())
+  const [patientTimeInput, setPatientTimeInput] = useState(() => {
+    const d = new Date()
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  })
 
   // Custom Free-Text Macros / SmartPhrases
   const [macros, setMacros] = useState(() => {
@@ -223,6 +321,10 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
   const [copiedFullNote, setCopiedFullNote] = useState(false)
   const [_selectedAssignPatientId, setSelectedAssignPatientId] = useState('')
 
+  // Real-time mobile activity & live sync state
+  const [liveSyncConnected, setLiveSyncConnected] = useState(false)
+  const [mobileActivityBanner, setMobileActivityBanner] = useState(null)
+
   // MediaRecorder & SpeechRecognition refs
   const mediaRecorderRef = useRef(null)
   const speechRecRef = useRef(null)
@@ -244,44 +346,78 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
   }
 
+  const getNoteSnippet = (v) => {
+    const text = v.final_note || v.ai_draft || v.transcription || ''
+    if (!text) {return ''}
+    const clean = text.replace(/(\r\n|\n|\r)/gm, ' ').replace(/\s+/g, ' ').trim()
+    return clean.length > 140 ? `${clean.slice(0, 140)}…` : clean
+  }
+
   const loadData = useCallback(async () => {
     try {
       const today = getLocalDateStr()
-      const [vRes, pRes] = await Promise.all([
+      const [vRes, allRes, pRes] = await Promise.all([
         visitsAPI.getByDate(today).catch(() => null),
+        visitsAPI.getAll().catch(() => null),
         patientsAPI.getAll().catch(() => null),
       ])
 
-      let fetchedVisits = null
-      if (Array.isArray(vRes?.visits) && vRes.visits.length > 0) {
-        fetchedVisits = vRes.visits
-      } else {
-        // Fallback: If no visits strictly match today's date or getByDate returned null/empty,
-        // query all visits for clinician so schedule never empties
-        const allRes = await visitsAPI.getAll().catch(() => null)
-        if (Array.isArray(allRes?.visits) && allRes.visits.length > 0) {
-          fetchedVisits = allRes.visits
-        } else if (Array.isArray(vRes?.visits)) {
-          fetchedVisits = vRes.visits
-        }
-      }
+      const todayVisits = Array.isArray(vRes?.visits) ? vRes.visits : []
+      const allVisitsList = Array.isArray(allRes?.visits) ? allRes.visits : []
 
-      if (fetchedVisits) {
-        setVisits((prev) => (fetchedVisits.length > 0 ? fetchedVisits : (prev.length > 0 ? prev : fetchedVisits)))
-      }
+      setVisits((prev) => {
+        const visitMap = new Map()
+        // 1. Preserve existing visits in state to prevent disappearance on transient failures/slow responses
+        if (Array.isArray(prev)) {
+          for (const v of prev) {
+            if (v && v.id) visitMap.set(v.id, v)
+          }
+        }
+        // 2. Overlay allVisits (historical records)
+        for (const v of allVisitsList) {
+          if (v && v.id) {
+            visitMap.set(v.id, { ...(visitMap.get(v.id) || {}), ...v })
+          }
+        }
+        // 3. Overlay todayVisits (freshest live statuses for today's visits)
+        for (const v of todayVisits) {
+          if (v && v.id) {
+            visitMap.set(v.id, { ...(visitMap.get(v.id) || {}), ...v })
+          }
+        }
+
+        return Array.from(visitMap.values()).sort((a, b) => {
+          const dateA = `${a.visit_date || ''} ${a.visit_time || ''}`.trim()
+          const dateB = `${b.visit_date || ''} ${b.visit_time || ''}`.trim()
+          return dateB.localeCompare(dateA) || (b.id - a.id)
+        })
+      })
 
       if (Array.isArray(pRes?.patients)) {
         setPatientList(pRes.patients)
       }
 
-      if (fetchedVisits) {
+      const candidateVisits = [...todayVisits, ...allVisitsList]
+      if (candidateVisits.length > 0) {
         setActiveDraftNote((prev) => {
           if (!prev) {return null}
-          const found = fetchedVisits.find((v) => v.id === prev.id)
-          if (found && (found.final_note || found.ai_draft)) {
+          const found = candidateVisits.find((v) => v.id === prev.id)
+          if (found) {
             const updatedFinalNote = found.final_note || found.ai_draft || prev.final_note
             if (found.final_note && found.final_note !== prev.final_note) {
-              setEditedNoteText(found.final_note)
+              setEditedNoteText((prevText) => {
+                if (!prevText || prevText === prev.final_note || prevText === prev.ai_draft) {
+                  return found.final_note
+                }
+                return prevText
+              })
+            } else if (!prev.final_note && found.ai_draft && !prev.ai_draft) {
+              setEditedNoteText((prevText) => {
+                if (!prevText) {
+                  return found.ai_draft
+                }
+                return prevText
+              })
             }
             return {
               ...prev,
@@ -294,7 +430,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
           return prev
         })
       }
-      return fetchedVisits || []
+      return candidateVisits.length > 0 ? candidateVisits : todayVisits
     } catch {
       return []
     }
@@ -302,18 +438,91 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
 
   useEffect(() => {
     let mounted = true
+
+    // Initial load
     void Promise.resolve().then(() => {
       if (mounted) {
         loadData()
       }
     })
-    const pollInterval = activeDraftNote && !isCompletedVisit(activeDraftNote) ? 5000 : 15000
-    const id = setInterval(loadData, pollInterval)
+
+    // Immediate sync when window gets focus or tab becomes visible (switching from phone to desktop)
+    const handleFocusOrVisible = () => {
+      if (document.visibilityState === 'visible') {
+        loadData()
+      }
+    }
+    window.addEventListener('focus', handleFocusOrVisible)
+    document.addEventListener('visibilitychange', handleFocusOrVisible)
+    window.addEventListener('online', handleFocusOrVisible)
+
+    // Real-time SSE subscription for instant push updates from mobile & server
+    const unsubscribeSSE = visitsAPI.subscribeToEvents(
+      (eventData) => {
+        if (!mounted) {return}
+        setLiveSyncConnected(true)
+
+        loadData().then((latestVisits) => {
+          if (!mounted || !Array.isArray(latestVisits)) {return}
+          const targetVisit = latestVisits.find((v) => v.id === eventData.visitId) || eventData.visit
+          const pName = targetVisit?.patient_name || 'Patient'
+
+          if (eventData.source === 'mobile' || eventData.action === 'draft_ready' || eventData.type === 'AI_DRAFT_READY') {
+            if (eventData.action === 'created') {
+              showToast(`📱 Mobile dictation started for ${pName}`, 'info')
+              setMobileActivityBanner({
+                visitId: eventData.visitId,
+                patientName: pName,
+                status: 'recording',
+                text: `Mobile dictation in progress for ${pName}`,
+              })
+            } else if (eventData.action === 'audio_uploaded') {
+              showToast(`📱 Mobile audio received for ${pName}. Processing note...`, 'info')
+              setMobileActivityBanner({
+                visitId: eventData.visitId,
+                patientName: pName,
+                status: 'processing',
+                text: `Audio uploaded from mobile for ${pName} — generating AI draft...`,
+              })
+            } else if (eventData.action === 'draft_ready' || eventData.type === 'AI_DRAFT_READY') {
+              showToast(`✨ Mobile clinical note ready for ${pName}!`, 'success')
+              setMobileActivityBanner({
+                visitId: eventData.visitId,
+                patientName: pName,
+                status: 'ready',
+                text: `AI clinical note ready for ${pName} from mobile dictation`,
+                actionable: true,
+                visit: targetVisit,
+              })
+            }
+          }
+        })
+      },
+      () => {
+        if (mounted) {
+          setLiveSyncConnected(false)
+        }
+      }
+    )
+
+    // Adaptive foreground polling: 4s interval (or 2.5s if active processing)
+    const hasActiveProcessing = activeDraftNote && !isCompletedVisit(activeDraftNote)
+    const pollInterval = hasActiveProcessing ? 2500 : 4000
+    const pollId = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadData()
+      }
+    }, pollInterval)
+
     return () => {
       mounted = false
-      clearInterval(id)
+      window.removeEventListener('focus', handleFocusOrVisible)
+      document.removeEventListener('visibilitychange', handleFocusOrVisible)
+      window.removeEventListener('online', handleFocusOrVisible)
+      unsubscribeSSE()
+      clearInterval(pollId)
     }
-  }, [loadData, activeDraftNote])
+  }, [loadData, activeDraftNote, showToast])
 
   useEffect(() => {
     const handleSessionExpired = (e) => {
@@ -530,15 +739,15 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
       }
 
       if (!patientName) {
-        patientName = 'Patient Encounter'
+        patientName = 'Quick Dictation (Unassigned)'
       }
 
       if (!patientMrn) {
-        patientMrn = `MRN-${now.getTime().toString().slice(-6)}`
+        patientMrn = `TEMP-${now.getTime().toString().slice(-6)}`
       }
 
       if (!patientAge) {
-        patientAge = '36 yrs'
+        patientAge = ''
       }
 
       // Create or ensure patient record in DB if new name is provided
@@ -563,8 +772,8 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
       if (!visitId) {
         const vRes = await visitsAPI.create({
           patient_id: patientId || undefined,
-          visit_date: getLocalDateStr(now),
-          visit_time: timeStr,
+          visit_date: patientDateInput || getLocalDateStr(now),
+          visit_time: patientTimeInput || timeStr,
           visit_type: dbVisitType,
         })
         visitId = vRes?.visit?.id
@@ -588,6 +797,151 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
       await loadData()
     } catch (err) {
       showToast(err?.message || 'Failed to initialize consultation.', 'error')
+    }
+  }
+
+  const handleStartNewConsultation = () => {
+    setActiveDraftNote(null)
+    setIsEditingNote(false)
+    setEditedNoteText('')
+    setSelectedPatientIdForEncounter('')
+    setPatientNameInput('')
+    setPatientAgeInput('')
+    setPatientMrnInput('')
+    setPatientDateInput(getLocalDateStr())
+    const d = new Date()
+    setPatientTimeInput(`${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`)
+    setDictationNotes('')
+    setTab('ambient')
+  }
+
+  const openEditPatientModal = (v) => {
+    if (!v) {return}
+    const isUnassigned = isUnassignedPatient(v)
+    setPatientFormData({
+      visitId: v.id,
+      patientId: v.patient_id || null,
+      name: isUnassigned ? '' : (v.patient_name || ''),
+      age: (v.age && v.age !== 'Not specified') ? v.age : '',
+      dob: v.date_of_birth || '',
+      mrn: (v.mrn && !v.mrn.startsWith('TEMP-')) ? v.mrn : '',
+      selectedExistingId: v.patient_id ? String(v.patient_id) : '',
+    })
+    setPatientModalTab('edit')
+    setPatientModalOpen(true)
+  }
+
+  const handleSavePatientModal = async () => {
+    try {
+      const { visitId, patientId, name, dob, mrn, selectedExistingId } = patientFormData
+      if (patientModalTab === 'link') {
+        if (!selectedExistingId) {
+          showToast('Please select a patient from the roster.', 'warn')
+          return
+        }
+        const chosen = patientList.find((p) => String(p.id) === String(selectedExistingId))
+        if (!chosen) {return}
+        await visitsAPI.updateVisit(visitId, { patient_id: chosen.id })
+        showToast(`Linked encounter to ${chosen.name}.`, 'success')
+      } else {
+        const cleanName = name.trim() || 'Patient Encounter'
+        const cleanMrn = mrn.trim() || `MRN-${Date.now().toString().slice(-6)}`
+        let targetPatientId = patientId
+
+        if (targetPatientId) {
+          try {
+            await patientsAPI.update(targetPatientId, {
+              name: cleanName,
+              mrn: cleanMrn,
+              date_of_birth: dob || null,
+            })
+          } catch {
+            const created = await patientsAPI.create({
+              name: cleanName,
+              mrn: cleanMrn,
+              date_of_birth: dob || null,
+            })
+            if (created?.patient?.id) {
+              targetPatientId = created.patient.id
+              await visitsAPI.updateVisit(visitId, { patient_id: targetPatientId })
+            }
+          }
+        } else {
+          const created = await patientsAPI.create({
+            name: cleanName,
+            mrn: cleanMrn,
+            date_of_birth: dob || null,
+          })
+          if (created?.patient?.id) {
+            targetPatientId = created.patient.id
+            await visitsAPI.updateVisit(visitId, { patient_id: targetPatientId })
+          }
+        }
+        showToast('Patient details saved successfully.', 'success')
+      }
+
+      setPatientModalOpen(false)
+      await loadData()
+
+      setActiveDraftNote((prev) => {
+        if (!prev || String(prev.id) !== String(visitId)) {return prev}
+        const chosen = patientModalTab === 'link'
+          ? patientList.find((p) => String(p.id) === String(selectedExistingId))
+          : null
+        return {
+          ...prev,
+          patient_name: chosen?.name || patientFormData.name.trim() || prev.patient_name,
+          mrn: chosen?.mrn || patientFormData.mrn.trim() || prev.mrn,
+          age: chosen?.age || patientFormData.age.trim() || prev.age,
+        }
+      })
+    } catch (err) {
+      showToast(err?.message || 'Failed to save patient details.', 'error')
+    }
+  }
+
+  const handleDeleteClick = (e, visit) => {
+    e.stopPropagation()
+    setDeleteDialog({
+      open: true,
+      visit,
+      deletePatientAlso: false,
+    })
+  }
+
+  const handleConfirmDelete = async () => {
+    const { visit, deletePatientAlso } = deleteDialog
+    if (!visit) {return}
+    try {
+      if (deletePatientAlso && visit.patient_id) {
+        await patientsAPI.delete(visit.patient_id)
+        showToast(`Deleted patient ${visit.patient_name || ''} and associated records.`, 'success')
+      } else {
+        await visitsAPI.deleteVisit(visit.id)
+        showToast('Encounter deleted successfully.', 'success')
+      }
+
+      if (activeDraftNote?.id === visit.id) {
+        setActiveDraftNote(null)
+        setIsEditingNote(false)
+        setEditedNoteText('')
+      }
+      if (selectedPatientIdForEncounter === `visit-${visit.id}`) {
+        setSelectedPatientIdForEncounter('')
+        setPatientNameInput('')
+        setPatientAgeInput('')
+        setPatientMrnInput('')
+      }
+
+      setVisits((prev) => prev.filter((v) => v.id !== visit.id))
+      if (deletePatientAlso && visit.patient_id) {
+        setPatientList((prev) => prev.filter((p) => p.id !== visit.patient_id))
+      }
+
+      setDeleteDialog({ open: false, visit: null, deletePatientAlso: false })
+      await loadData()
+    } catch (err) {
+      showToast(err?.message || 'Failed to delete encounter.', 'error')
     }
   }
 
@@ -995,6 +1349,8 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
     setPatientNameInput(visit.patient_name || '')
     setPatientMrnInput(visit.mrn || '')
     setPatientAgeInput(pAge || '')
+    setPatientDateInput(visit.visit_date || getLocalDateStr())
+    setPatientTimeInput(visit.visit_time || '10:00')
 
     if (visit.visit_type) {
       const matched = CLINICAL_TEMPLATES.find((t) => t.type === visit.visit_type || t.label.toLowerCase().includes(String(visit.visit_type).toLowerCase()))
@@ -1067,8 +1423,38 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
     ? parseNoteSections(activeDraftNote.final_note || activeDraftNote.ai_draft)
     : []
 
-  // Filter today's visits list
-  const filteredVisits = visits.filter((v) => {
+  // Filter today's visits vs past encounters
+  const todayStr = getLocalDateStr()
+  const yesterdayStr = getYesterdayDateStr()
+
+  const countToday = visits.filter((v) => normalizeVisitDate(v.visit_date) === todayStr).length
+  const countYesterday = visits.filter((v) => normalizeVisitDate(v.visit_date) === yesterdayStr).length
+  const countAll = visits.length
+
+  const dateFilteredVisits = visits.filter((v) => {
+    const vDate = normalizeVisitDate(v.visit_date)
+    if (scheduleDateFilter === 'today') {
+      return vDate === todayStr
+    }
+    if (scheduleDateFilter === 'yesterday') {
+      return vDate === yesterdayStr
+    }
+    return true
+  })
+
+  // Sort reverse chronologically (newest first)
+  const sortedVisits = [...dateFilteredVisits].sort((a, b) => {
+    const dateA = normalizeVisitDate(a.visit_date) || ''
+    const dateB = normalizeVisitDate(b.visit_date) || ''
+    if (dateA !== dateB) {
+      return dateB.localeCompare(dateA)
+    }
+    const timeA = a.visit_time || ''
+    const timeB = b.visit_time || ''
+    return timeB.localeCompare(timeA)
+  })
+
+  const filteredVisits = sortedVisits.filter((v) => {
     const hasNote = Boolean(v.final_note || v.ai_draft)
     const isCompleted = isCompletedVisit(v)
     if (scheduleFilter === 'pending' && isCompleted) {return false}
@@ -1080,7 +1466,8 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
       const term = searchTerm.toLowerCase()
       const matchName = (v.patient_name || '').toLowerCase().includes(term)
       const matchMrn = (v.mrn || '').toLowerCase().includes(term)
-      if (!matchName && !matchMrn) {return false}
+      const matchNote = (v.final_note || v.ai_draft || '').toLowerCase().includes(term)
+      if (!matchName && !matchMrn && !matchNote) {return false}
     }
     return true
   })
@@ -1090,10 +1477,45 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
       {/* Toast Notification */}
       {toast && (
         <div className={`sm-toast sm-toast--${toast.type}`}>
-          <span className="sm-toast-icon">
-            {toast.type === 'success' ? '✓' : toast.type === 'error' ? '✕' : 'ℹ'}
+          <span className="sm-toast__icon">
+            {toast.type === 'error' ? '❌' : toast.type === 'amber' ? '⚠️' : '✓'}
           </span>
           <span>{toast.msg}</span>
+        </div>
+      )}
+
+      {/* Real-time Mobile Activity Banner */}
+      {mobileActivityBanner && (
+        <div className="sm-mobile-banner">
+          <div className="sm-mobile-banner__content">
+            <span className="sm-mobile-banner__icon">📱</span>
+            <div className="sm-mobile-banner__text">
+              <strong className="sm-mobile-banner__title">Mobile Activity Detected</strong>
+              <span className="sm-mobile-banner__desc">{mobileActivityBanner.text}</span>
+            </div>
+          </div>
+          <div className="sm-mobile-banner__actions">
+            {mobileActivityBanner.actionable && mobileActivityBanner.visit && (
+              <button
+                type="button"
+                className="sm-btn-mobile-banner sm-btn-mobile-banner--action"
+                onClick={() => {
+                  handleSelectVisitFromSchedule(mobileActivityBanner.visit)
+                  setMobileActivityBanner(null)
+                }}
+              >
+                Review Note →
+              </button>
+            )}
+            <button
+              type="button"
+              className="sm-btn-mobile-banner sm-btn-mobile-banner--close"
+              onClick={() => setMobileActivityBanner(null)}
+              title="Dismiss notification"
+            >
+              ✕
+            </button>
+          </div>
         </div>
       )}
 
@@ -1132,15 +1554,21 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
         </div>
 
         <div className="sm-header__user-group">
-          {/* Active Recording Badge with Audio Sensitivity Meter */}
+          {/* Active Recording Badge with Audio Sensitivity Meter & Sleep Prevention */}
           {isRecordingState && (
-            <div className="sm-live-badge">
-              <span className="sm-live-badge__dot" />
-              <span className="sm-live-badge__text">LIVE REC</span>
-              <div className="sm-mic-meter" title={`Mic sensitivity: ${micLevel}%`}>
-                <span className="sm-mic-meter__bar" style={{ height: `${Math.max(20, micLevel)}%` }} />
-                <span className="sm-mic-meter__bar" style={{ height: `${Math.max(10, micLevel * 0.8)}%` }} />
-                <span className="sm-mic-meter__bar" style={{ height: `${Math.max(30, micLevel * 1.1)}%` }} />
+            <div className="sm-live-badge-group">
+              <div className="sm-live-badge">
+                <span className="sm-live-badge__dot" />
+                <span className="sm-live-badge__text">LIVE REC</span>
+                <div className="sm-mic-meter" title={`Mic sensitivity: ${micLevel}%`}>
+                  <span className="sm-mic-meter__bar" style={{ height: `${Math.max(20, micLevel)}%` }} />
+                  <span className="sm-mic-meter__bar" style={{ height: `${Math.max(10, micLevel * 0.8)}%` }} />
+                  <span className="sm-mic-meter__bar" style={{ height: `${Math.max(30, micLevel * 1.1)}%` }} />
+                </div>
+              </div>
+              <div className="sm-nosleep-badge" title="Screen and system sleep prevention active: PC and mobile will stay awake during consultation">
+                <span className="sm-nosleep-icon">☕</span>
+                <span className="sm-nosleep-text">No Sleep</span>
               </div>
             </div>
           )}
@@ -1223,6 +1651,24 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                         />
                       </div>
 
+                      <div className="sm-intake-field sm-intake-field--datetime">
+                        <label className="sm-intake-label">Date &amp; Time</label>
+                        <div className="sm-intake-datetime-group">
+                          <input
+                            type="date"
+                            className="sm-intake-input sm-intake-input--date"
+                            value={patientDateInput}
+                            onChange={(e) => setPatientDateInput(e.target.value)}
+                          />
+                          <input
+                            type="time"
+                            className="sm-intake-input sm-intake-input--time"
+                            value={patientTimeInput}
+                            onChange={(e) => setPatientTimeInput(e.target.value)}
+                          />
+                        </div>
+                      </div>
+
                       <div className="sm-intake-field sm-intake-field--age">
                         <label className="sm-intake-label">Age / DOB</label>
                         <input
@@ -1247,35 +1693,52 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                     </div>
                   </div>
 
-                  {/* 2. CENTER: Ambient Microphone Console */}
-                  <div className="sm-idle-hub">
-                    <div className="sm-idle-mic-wrap">
+                  {/* 2. CENTER: Ultra-Attractive Concentric Halo with In-Orb Timer Console */}
+                  <div className="sm-halo-console">
+                    {/* Concentric Halo Acoustic Stage */}
+                    <div className="sm-halo-stage">
+                      <div className="sm-halo-ring sm-halo-ring--3" />
+                      <div className="sm-halo-ring sm-halo-ring--2" />
+                      <div className="sm-halo-ring sm-halo-ring--1" />
+
+                      {/* Central Frosted Glassmorphic Orb with In-Orb Timer */}
                       <button
                         type="button"
-                        className="sm-idle-mic-btn"
+                        className="sm-halo-orb"
                         onClick={() => handleStartInstantDictation()}
                         title={`Click to start ambient consultation${patientNameInput ? ` for ${patientNameInput}` : ''}`}
                       >
-                        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                          <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                          <line x1="12" y1="19" x2="12" y2="22" />
-                        </svg>
+                        <div className="sm-halo-orb__mic-icon">
+                          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                            <line x1="12" y1="19" x2="12" y2="22" />
+                          </svg>
+                        </div>
+                        <div className="sm-halo-orb__timer">00:00</div>
                       </button>
                     </div>
 
-                    <div className="sm-clock-display">00:00</div>
-                    
-                    <div className="sm-status-line">
-                      <span className="sm-status-dot sm-status-dot--ready" />
-                      <span>
-                        {patientNameInput ? `Ready for consultation with ${patientNameInput}` : 'Ready for consultation'}
-                      </span>
+                    {/* Prominent Clinical Template Option */}
+                    <div className="sm-halo-template-wrapper">
+                      <span className="sm-halo-template-label">📋 Template:</span>
+                      <select
+                        className="sm-halo-template-select"
+                        value={selectedTemplate}
+                        onChange={(e) => setSelectedTemplate(e.target.value)}
+                      >
+                        {CLINICAL_TEMPLATES.map((t) => (
+                          <option key={t.id} value={t.label}>
+                            {t.label} ▾
+                          </option>
+                        ))}
+                      </select>
                     </div>
 
+                    {/* High-Impact Glowing Primary Record Button */}
                     <button
                       type="button"
-                      className="sm-btn-hero-record"
+                      className="sm-btn-hero-record sm-btn-hero-record--halo"
                       onClick={() => handleStartInstantDictation()}
                     >
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1287,22 +1750,6 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                         {patientNameInput ? `Start Recording for ${patientNameInput}` : 'Start Ambient Recording'}
                       </span>
                     </button>
-
-                    {/* Template Selection Pill */}
-                    <div className="sm-template-pill">
-                      <span className="sm-template-pill__tag">Template</span>
-                      <select
-                        className="sm-template-pill__select"
-                        value={selectedTemplate}
-                        onChange={(e) => setSelectedTemplate(e.target.value)}
-                      >
-                        {CLINICAL_TEMPLATES.map((t) => (
-                          <option key={t.id} value={t.label}>
-                            {t.label} ▾
-                          </option>
-                        ))}
-                      </select>
-                    </div>
                   </div>
                 </div>
               )}
@@ -1314,11 +1761,23 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                     {/* Active Patient Demographic Strip */}
                     <div className="sm-recording-patient-badge">
                       <span className="sm-patient-avatar-mini">👤</span>
-                      <span className="sm-rec-patient-name">{activeVisit?.patient_name || 'Patient'}</span>
+                      <span className="sm-rec-patient-name">{activeVisit?.patient_name || 'Quick Dictation'}</span>
                       <span className="sm-meta-divider">•</span>
-                      <span className="sm-rec-patient-age">Age: <strong>{getPatientDisplayAge(activeVisit, patientList)}</strong></span>
+                      <span className="sm-rec-patient-age">
+                        Age: <strong>{getPatientDisplayAge(activeVisit, patientList) || 'Not specified'}</strong>
+                      </span>
                       <span className="sm-meta-divider">•</span>
-                      <span className="sm-rec-patient-mrn">MRN/PHN: <strong>{activeVisit?.mrn || 'Auto-MRN'}</strong></span>
+                      <span className="sm-rec-patient-mrn">
+                        MRN: <strong>{(activeVisit?.mrn && !activeVisit.mrn.startsWith('TEMP-')) ? activeVisit.mrn : 'Pending'}</strong>
+                      </span>
+                      <button
+                        type="button"
+                        className="sm-btn-rec-edit-patient"
+                        onClick={() => openEditPatientModal(activeVisit)}
+                        title="Add or edit patient details"
+                      >
+                        ✏️ Edit Patient
+                      </button>
                     </div>
 
                     {/* Live Glowing Mic */}
@@ -1336,6 +1795,9 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                     <div className="sm-status-line">
                       <span className={`sm-status-dot ${isPaused ? 'sm-status-dot--paused' : 'sm-status-dot--live'}`} />
                       <span>{isPaused ? 'Consultation paused' : 'Listening — ambient scribe active'}</span>
+                      <span className="sm-nosleep-pill" title="Screen and device sleep prevention active: PC and mobile stay awake">
+                        ☕ No Sleep Active
+                      </span>
                     </div>
 
                     {/* Audio Waveform Reaction */}
@@ -1410,26 +1872,8 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                     <button
                       type="button"
                       className="sm-btn-back-recording"
-                      onClick={() => {
-                        setActiveDraftNote(null)
-                        setIsEditingNote(false)
-                        setEditedNoteText('')
-                        const currentId = selectedPatientIdForEncounter.replace('visit-', '')
-                        const currVisit = visits.find((v) => String(v.id) === String(currentId))
-                        if (currVisit && isCompletedVisit(currVisit)) {
-                          const nextPending = visits.find((v) => String(v.id) !== String(currVisit.id) && !isCompletedVisit(v))
-                          if (nextPending) {
-                            handleSelectVisitFromSchedule(nextPending)
-                          } else {
-                            setSelectedPatientIdForEncounter('')
-                            setPatientNameInput('')
-                            setPatientMrnInput('')
-                            setPatientAgeInput('')
-                            setDictationNotes('')
-                          }
-                        }
-                      }}
-                      title="Return to Ready to Record"
+                      onClick={handleStartNewConsultation}
+                      title="Return to Ready to Record (New Consultation)"
                     >
                       <span className="sm-back-arrow">←</span>
                       <span>Back to Recording</span>
@@ -1444,13 +1888,39 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
 
                   {/* Clinical Patient Demographic Header */}
                   <div className="sm-patient-clinical-header">
+                    {isUnassignedPatient(activeDraftNote) && (
+                      <div className="sm-unassigned-banner">
+                        <div className="sm-unassigned-banner__text">
+                          <span className="sm-unassigned-icon">⚠️</span>
+                          <span><strong>Dictation recorded without patient info.</strong> Add name, age, and MRN to complete this encounter.</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="sm-btn-assign-patient"
+                          onClick={() => openEditPatientModal(activeDraftNote)}
+                        >
+                          + Add Patient Details
+                        </button>
+                      </div>
+                    )}
+
                     <div className="sm-patient-card-main">
                       <div className="sm-patient-avatar-badge">
                         <span className="sm-patient-avatar-icon">👤</span>
                       </div>
                       <div className="sm-patient-identifiers">
                         <div className="sm-patient-name-row">
-                          <h2 className="sm-patient-name-title">{activeDraftNote?.patient_name || 'Patient'}</h2>
+                          <h2 className="sm-patient-name-title">
+                            {activeDraftNote?.patient_name || 'Quick Dictation (Unassigned)'}
+                          </h2>
+                          <button
+                            type="button"
+                            className="sm-btn-inline-edit"
+                            onClick={() => openEditPatientModal(activeDraftNote)}
+                            title="Edit patient details"
+                          >
+                            ✏️ Edit Patient Info
+                          </button>
                           {(() => {
                             const isNoteSigned = isCompletedVisit(activeDraftNote)
                             return (
@@ -1461,13 +1931,17 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                           })()}
                         </div>
                         <div className="sm-patient-meta-row">
-                          <span className="sm-meta-item"><strong>Age:</strong> {getPatientDisplayAge(activeDraftNote, patientList)}</span>
+                          <span className="sm-meta-item">
+                            <strong>Age:</strong> {getPatientDisplayAge(activeDraftNote, patientList) || 'Not specified'}
+                          </span>
                           <span className="sm-meta-divider">•</span>
-                          <span className="sm-meta-item"><strong>MRN:</strong> {activeDraftNote?.mrn || 'N/A'}</span>
+                          <span className="sm-meta-item">
+                            <strong>MRN:</strong> {(activeDraftNote?.mrn && !activeDraftNote.mrn.startsWith('TEMP-')) ? activeDraftNote.mrn : 'Not assigned'}
+                          </span>
                           <span className="sm-meta-divider">•</span>
                           <span className="sm-meta-item"><strong>Encounter:</strong> {activeDraftNote?.visit_type || selectedTemplate}</span>
                           <span className="sm-meta-divider">•</span>
-                          <span className="sm-meta-item"><strong>Date:</strong> {activeDraftNote?.visit_date || getLocalDateStr()}</span>
+                          <span className="sm-meta-item"><strong>Date:</strong> {formatEncounterDateTime(activeDraftNote?.visit_date, activeDraftNote?.visit_time)}</span>
                         </div>
                       </div>
                     </div>
@@ -1524,24 +1998,20 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
 
                       <button
                         type="button"
+                        className="sm-btn-doc sm-btn-doc--delete"
+                        onClick={(e) => handleDeleteClick(e, activeDraftNote)}
+                        title="Delete this encounter"
+                      >
+                        🗑 Delete
+                      </button>
+
+                      <button
+                        type="button"
                         className="sm-btn-doc sm-btn-doc--new"
-                        onClick={() => {
-                          setActiveDraftNote(null)
-                          setIsEditingNote(false)
-                          setEditedNoteText('')
-                          setDictationNotes('')
-                          setSelectedPatientIdForEncounter('')
-                          setPatientNameInput('')
-                          setPatientMrnInput('')
-                          setPatientAgeInput('')
-                          const nextPending = visits.find((v) => !isCompletedVisit(v))
-                          if (nextPending) {
-                            handleSelectVisitFromSchedule(nextPending)
-                          }
-                        }}
+                        onClick={handleStartNewConsultation}
                         title="Start another patient consultation"
                       >
-                        + New Encounter
+                        + New Consultation
                       </button>
                     </div>
                   </div>
@@ -1589,65 +2059,260 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                   <h2>📁 Consultation & Note History</h2>
                   <p>Review signed and draft clinical documentation for {currentUser?.name ? `${currentUser.name}'s` : 'your'} patients.</p>
                 </div>
-                <input
-                  type="text"
-                  className="sm-search-control"
-                  placeholder="🔍 Search by name or MRN..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
+                <div className="sm-history-header-actions">
+                  <div className="sm-history-filter-chips">
+                    <button
+                      type="button"
+                      className={`sm-filter-chip ${historyStatusFilter === 'all' ? 'sm-filter-chip--active' : ''}`}
+                      onClick={() => setHistoryStatusFilter('all')}
+                    >
+                      All ({visits.length})
+                    </button>
+                    <button
+                      type="button"
+                      className={`sm-filter-chip ${historyStatusFilter === 'signed' ? 'sm-filter-chip--active' : ''}`}
+                      onClick={() => setHistoryStatusFilter('signed')}
+                    >
+                      Signed ({visits.filter((v) => v.status === 'completed' || v.status === 'uploaded' || v.note_status === 'uploaded' || Boolean(v.locked_at)).length})
+                    </button>
+                    <button
+                      type="button"
+                      className={`sm-filter-chip ${historyStatusFilter === 'draft' ? 'sm-filter-chip--active' : ''}`}
+                      onClick={() => setHistoryStatusFilter('draft')}
+                    >
+                      Drafts ({visits.filter((v) => !(v.status === 'completed' || v.status === 'uploaded' || v.note_status === 'uploaded' || Boolean(v.locked_at))).length})
+                    </button>
+                  </div>
+                  <div className="sm-history-search-wrapper">
+                    <input
+                      type="text"
+                      className="sm-search-control"
+                      placeholder="🔍 Search name, MRN, date, notes..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                    {searchTerm && (
+                      <button
+                        type="button"
+                        className="sm-search-clear-btn"
+                        onClick={() => setSearchTerm('')}
+                        title="Clear search"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              <div className="sm-history-grid">
-                {visits
-                  .filter((v) => !searchTerm || (v.patient_name || '').toLowerCase().includes(searchTerm.toLowerCase()) || (v.mrn || '').toLowerCase().includes(searchTerm.toLowerCase()))
-                  .map((v) => (
-                    <div key={v.id} className="sm-history-card" onClick={() => handleSelectVisitFromSchedule(v)}>
-                      <div className="sm-history-card__left">
-                        <div className="sm-history-card__name-row">
-                          <strong>{v.patient_name || 'Patient'}</strong>
-                          <span className="sm-history-card__mrn">{v.mrn || 'Auto-MRN'}</span>
-                        </div>
-                        <span className="sm-history-card__meta">
-                          {v.visit_date} · {v.visit_time || '10:00'} · {v.visit_type}
-                        </span>
-                      </div>
-                      <div className="sm-history-card__right">
-                        {(() => {
-                          const isSigned = v.status === 'completed' || v.status === 'uploaded' || v.note_status === 'uploaded' || Boolean(v.locked_at)
-                          return (
+              {(() => {
+                const term = searchTerm.trim().toLowerCase()
+                const filtered = visits
+                  .filter((v) => {
+                    // Status filter
+                    const isSigned = v.status === 'completed' || v.status === 'uploaded' || v.note_status === 'uploaded' || Boolean(v.locked_at)
+                    if (historyStatusFilter === 'signed' && !isSigned) {return false}
+                    if (historyStatusFilter === 'draft' && isSigned) {return false}
+
+                    // Search filter
+                    if (!term) {return true}
+                    const nameMatch = (v.patient_name || '').toLowerCase().includes(term)
+                    const mrnMatch = (v.mrn || '').toLowerCase().includes(term)
+                    const typeMatch = (v.visit_type || '').toLowerCase().includes(term)
+                    const dateMatch = (v.visit_date || '').toLowerCase().includes(term)
+                    const noteMatch = (v.final_note || '').toLowerCase().includes(term)
+                    const draftMatch = (v.ai_draft || '').toLowerCase().includes(term)
+                    const txMatch = (v.transcription || '').toLowerCase().includes(term)
+                    return nameMatch || mrnMatch || typeMatch || dateMatch || noteMatch || draftMatch || txMatch
+                  })
+                  .sort((a, b) => {
+                    const dateA = `${a.visit_date || ''} ${a.visit_time || ''}`.trim()
+                    const dateB = `${b.visit_date || ''} ${b.visit_time || ''}`.trim()
+                    return dateB.localeCompare(dateA) || (b.id - a.id)
+                  })
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="sm-history-empty-card">
+                      {visits.length === 0 ? (
+                        <>
+                          <div className="sm-history-empty-icon">📁</div>
+                          <h3>No Consultation Notes Found</h3>
+                          <p>All recorded encounters and generated clinical notes will appear here once saved.</p>
+                          <button
+                            type="button"
+                            className="sm-btn-primary sm-history-empty-btn"
+                            onClick={() => setTab('ambient')}
+                          >
+                            + Start Ambient Consultation
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <div className="sm-history-empty-icon">🔍</div>
+                          <h3>No matching consultation notes</h3>
+                          <p>No notes matched {searchTerm ? `"${searchTerm}"` : 'the active filter'}.</p>
+                          <button
+                            type="button"
+                            className="sm-btn-secondary sm-history-empty-btn"
+                            onClick={() => {
+                              setSearchTerm('')
+                              setHistoryStatusFilter('all')
+                            }}
+                          >
+                            Reset Filters
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )
+                }
+
+                return (
+                  <div className="sm-history-grid">
+                    {filtered.map((v) => {
+                      const isSigned = v.status === 'completed' || v.status === 'uploaded' || v.note_status === 'uploaded' || Boolean(v.locked_at)
+                      const snippet = getNoteSnippet(v)
+                      return (
+                        <div key={v.id} className="sm-history-card" onClick={() => handleSelectVisitFromSchedule(v)}>
+                          <div className="sm-history-card__left">
+                            <div className="sm-history-card__name-row">
+                              <strong>{v.patient_name || 'Patient'}</strong>
+                              <span className="sm-history-card__mrn">{v.mrn || 'Auto-MRN'}</span>
+                            </div>
+                            <span className="sm-history-card__meta">
+                              📅 {v.visit_date || 'Unknown Date'} {v.visit_time ? `· ⏰ ${v.visit_time}` : ''} {v.visit_type ? `· ${v.visit_type}` : ''}
+                            </span>
+                            {snippet && (
+                              <p className="sm-history-card__snippet" title={snippet}>
+                                {snippet}
+                              </p>
+                            )}
+                          </div>
+                          <div className="sm-history-card__right">
                             <span className={`sm-badge ${isSigned ? 'sm-badge--ready' : 'sm-badge--draft'}`}>
                               {isSigned ? 'SIGNED' : (v.final_note || v.ai_draft ? 'DRAFT' : 'PENDING')}
                             </span>
-                          )
-                        })()}
-                        <button type="button" className="sm-btn-sm-view" onClick={(e) => { e.stopPropagation(); setSelectedNoteModal(v) }}>
-                          View Note
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-              </div>
+                            <button
+                              type="button"
+                              className="sm-btn-sm-view"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setSelectedNoteModal(v)
+                              }}
+                            >
+                              View Note
+                            </button>
+                            <button
+                              type="button"
+                              className="sm-btn-sm-edit"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                openEditPatientModal(v)
+                              }}
+                              title="Edit patient details"
+                            >
+                              ✏️ Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="sm-btn-sm-delete"
+                              onClick={(e) => handleDeleteClick(e, v)}
+                              title="Delete encounter"
+                            >
+                              🗑 Delete
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })()}
             </div>
           )}
         </section>
 
         {/* ─── RIGHT COLUMN: CLINICAL SCHEDULE & SCRATCHPAD ─── */}
         <aside className="sm-sidebar">
-          {/* Today's Schedule Card */}
-          <div className="sm-side-card">
+          {/* Modernized Scribes / Encounters Side Card */}
+          <div className="sm-side-card sm-side-card--scribes">
             <div className="sm-side-card__header">
               <div className="sm-side-card__title-group">
-                <span className="sm-side-card__title">Today's visits</span>
-                <span className="sm-side-card__count">{visits.length}</span>
+                <span className="sm-side-card__title">Scribes</span>
+                <span className="sm-side-card__count">{filteredVisits.length}</span>
+                <div
+                  className="sm-live-sync-indicator"
+                  title={liveSyncConnected ? 'Live Sync Active: automatically syncing with mobile app' : 'Syncing with mobile app'}
+                >
+                  <span className={`sm-pulse-dot ${liveSyncConnected ? 'sm-pulse-dot--live' : 'sm-pulse-dot--syncing'}`} />
+                  <span className="sm-live-sync-label">{liveSyncConnected ? 'Live' : 'Syncing'}</span>
+                </div>
                 <button
                   type="button"
-                  className="sm-btn-add-schedule"
-                  onClick={() => setScheduleModalOpen(true)}
-                  title="Schedule a visit for today"
+                  className="sm-btn-sync-now"
+                  onClick={() => {
+                    showToast('↻ Synced with mobile and server', 'info')
+                    loadData()
+                  }}
+                  title="Force refresh from mobile and server"
                 >
-                  + Add
+                  ↻
                 </button>
+                <button
+                  type="button"
+                  className="sm-btn-new-scribe"
+                  onClick={handleStartNewConsultation}
+                  title="Start a new consultation / dictation"
+                >
+                  + New scribe
+                </button>
+              </div>
+
+              {/* Date Filter Tabs: Today / Yesterday / All */}
+              <div className="sm-date-tabs">
+                <button
+                  type="button"
+                  className={`sm-date-tab ${scheduleDateFilter === 'today' ? 'sm-date-tab--active' : ''}`}
+                  onClick={() => setScheduleDateFilter('today')}
+                >
+                  Today ({countToday})
+                </button>
+                <button
+                  type="button"
+                  className={`sm-date-tab ${scheduleDateFilter === 'yesterday' ? 'sm-date-tab--active' : ''}`}
+                  onClick={() => setScheduleDateFilter('yesterday')}
+                >
+                  Yesterday ({countYesterday})
+                </button>
+                <button
+                  type="button"
+                  className={`sm-date-tab ${scheduleDateFilter === 'all' ? 'sm-date-tab--active' : ''}`}
+                  onClick={() => setScheduleDateFilter('all')}
+                >
+                  All ({countAll})
+                </button>
+              </div>
+
+              {/* Search scribes input */}
+              <div className="sm-side-search-wrap">
+                <span className="sm-side-search-icon">🔍</span>
+                <input
+                  type="text"
+                  className="sm-side-search-input"
+                  placeholder="Search scribes & notes..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    className="sm-side-search-clear"
+                    onClick={() => setSearchTerm('')}
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
 
               {/* Schedule Filter Pills */}
@@ -1661,10 +2326,10 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                 </button>
                 <button
                   type="button"
-                  className={`sm-filter-pill ${scheduleFilter === 'pending' ? 'sm-filter-pill--active' : ''}`}
-                  onClick={() => setScheduleFilter('pending')}
+                  className={`sm-filter-pill ${scheduleFilter === 'draft' ? 'sm-filter-pill--active' : ''}`}
+                  onClick={() => setScheduleFilter('draft')}
                 >
-                  Pending
+                  Draft
                 </button>
                 <button
                   type="button"
@@ -1675,10 +2340,10 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                 </button>
                 <button
                   type="button"
-                  className={`sm-filter-pill ${scheduleFilter === 'draft' ? 'sm-filter-pill--active' : ''}`}
-                  onClick={() => setScheduleFilter('draft')}
+                  className={`sm-filter-pill ${scheduleFilter === 'pending' ? 'sm-filter-pill--active' : ''}`}
+                  onClick={() => setScheduleFilter('pending')}
                 >
-                  Draft
+                  Pending
                 </button>
               </div>
             </div>
@@ -1686,106 +2351,129 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
             <div className="sm-visits-container">
               {filteredVisits.length === 0 ? (
                 <div className="sm-empty-state">
-                  <p>No scheduled encounters matching filter</p>
-                  {scheduleFilter !== 'all' && (
+                  <div className="sm-empty-state__icon">📋</div>
+                  <p>
+                    {scheduleDateFilter === 'today'
+                      ? 'No scribes recorded for today yet.'
+                      : scheduleDateFilter === 'yesterday'
+                        ? 'No scribes recorded for yesterday.'
+                        : 'No scribes matching filter.'}
+                  </p>
+                  {scheduleDateFilter === 'today' && countYesterday > 0 && (
                     <button
                       type="button"
                       className="sm-btn-mini-chip"
                       style={{ marginTop: 8 }}
-                      onClick={() => setScheduleFilter('all')}
+                      onClick={() => setScheduleDateFilter('yesterday')}
                     >
-                      Show All Visits ({visits.length})
+                      View Yesterday's Scribes ({countYesterday})
+                    </button>
+                  )}
+                  {scheduleDateFilter !== 'all' && countAll > 0 && (
+                    <button
+                      type="button"
+                      className="sm-btn-mini-chip"
+                      style={{ marginTop: 8 }}
+                      onClick={() => setScheduleDateFilter('all')}
+                    >
+                      View All Notes ({countAll})
                     </button>
                   )}
                 </div>
               ) : (
-                filteredVisits.map((v) => {
+                filteredVisits.map((v, index) => {
                   const hasNote = Boolean(v.final_note || v.ai_draft)
                   const isCompleted = isCompletedVisit(v)
                   const isSelected = selectedPatientIdForEncounter === `visit-${v.id}` || activeDraftNote?.id === v.id || activeVisit?.id === v.id
-                  let dotColor = '#CBD5E1'
-                  let badgeText = v.visit_time || '10:00'
-                  let badgeType = 'time'
+                  const isUnassigned = isUnassignedPatient(v)
 
-                  if (isCompleted) {
-                    dotColor = '#10B981'
+                  let badgeText = 'PENDING'
+                  let badgeType = 'pending'
+                  if (v.status === 'in-progress') {
+                    badgeText = '🎙 RECORDING'
+                    badgeType = 'recording'
+                  } else if (v.status === 'recording-uploaded' || v.transcription_status === 'processing') {
+                    badgeText = '⚡ TRANSCRIBING'
+                    badgeType = 'transcribing'
+                  } else if (isCompleted) {
                     badgeText = 'SIGNED'
                     badgeType = 'signed'
                   } else if (hasNote && v.status === 'ready') {
-                    dotColor = '#10B981'
                     badgeText = 'READY'
                     badgeType = 'ready'
                   } else if (hasNote) {
-                    dotColor = '#3B82F6'
                     badgeText = 'DRAFT'
                     badgeType = 'draft'
+                  } else if (isUnassigned) {
+                    badgeText = 'UNASSIGNED'
+                    badgeType = 'unassigned'
+                  }
+
+                  const currDate = normalizeVisitDate(v.visit_date)
+                  const prevDate = index > 0 ? normalizeVisitDate(filteredVisits[index - 1].visit_date) : null
+                  const showDateHeader = scheduleDateFilter === 'all' && currDate !== prevDate
+
+                  let dateHeaderTitle = currDate
+                  if (currDate === todayStr) {
+                    dateHeaderTitle = 'Today'
+                  } else if (currDate === yesterdayStr) {
+                    dateHeaderTitle = 'Yesterday'
                   }
 
                   return (
-                    <div
-                      key={v.id}
-                      className={`sm-visit-item ${isSelected ? 'sm-visit-item--active sm-visit-item--selected' : ''}`}
-                      onClick={() => handleSelectVisitFromSchedule(v)}
-                    >
-                      <div className="sm-visit-item__left">
-                        <span className="sm-visit-item__dot" style={{ background: isSelected ? '#2563EB' : dotColor }} />
-                        <div className="sm-visit-item__details">
-                          <span className="sm-visit-item__patient">{v.patient_name || `Patient ${v.mrn || ''}`}</span>
-                          <span className="sm-visit-item__sub">
-                            Age: <strong>{getPatientDisplayAge(v, patientList)}</strong> · {v.mrn || 'No MRN'}
+                    <Fragment key={v.id}>
+                      {showDateHeader && (
+                        <div className="sm-date-group-header">
+                          <span>{dateHeaderTitle}</span>
+                        </div>
+                      )}
+                      <div
+                        className={`sm-visit-card sm-visit-card--compact ${isSelected ? 'sm-visit-card--selected' : ''} ${isUnassigned ? 'sm-visit-card--unassigned' : ''}`}
+                        onClick={() => handleSelectVisitFromSchedule(v)}
+                      >
+                        <div className="sm-visit-card__row-main">
+                          <strong className="sm-visit-card__name">
+                            {v.patient_name || 'Quick Dictation'}
+                          </strong>
+                          <span className="sm-visit-card__time-badge">
+                            {v.visit_time || '10:00'}
                           </span>
                         </div>
-                      </div>
 
-                      <div className="sm-visit-item__right">
-                        {isSelected && <span className="sm-tag sm-tag--selected">ACTIVE</span>}
-                        {badgeType === 'signed' && <span className="sm-tag sm-tag--ready">SIGNED</span>}
-                        {badgeType === 'ready' && <span className="sm-tag sm-tag--ready">READY</span>}
-                        {badgeType === 'draft' && <span className="sm-tag sm-tag--draft">DRAFT</span>}
-                        {badgeType === 'time' && <span className="sm-tag sm-tag--time">{badgeText}</span>}
+                        <div className="sm-visit-card__row-sub">
+                          <span className="sm-visit-card__meta-text">
+                            {getPatientDisplayAge(v, patientList) ? `Age: ${getPatientDisplayAge(v, patientList)} · ` : ''}
+                            {(v.mrn && !v.mrn.startsWith('TEMP-')) ? v.mrn : (isUnassigned ? 'No MRN' : 'Auto-MRN')}
+                          </span>
+                          <div className="sm-visit-card__status-group">
+                            {isSelected && <span className="sm-tag sm-tag--selected">ACTIVE</span>}
+                            <span className={`sm-tag sm-tag--${badgeType}`}>{badgeText}</span>
+                            <button
+                              type="button"
+                              className="sm-btn-card-mini-action"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                openEditPatientModal(v)
+                              }}
+                              title="Edit patient details"
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              type="button"
+                              className="sm-btn-card-mini-action sm-btn-card-mini-action--delete"
+                              onClick={(e) => handleDeleteClick(e, v)}
+                              title="Delete encounter / patient"
+                            >
+                              🗑
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                    </div>
+                    </Fragment>
                   )
                 })
               )}
-            </div>
-          </div>
-
-          {/* Smart Scratchpad Card */}
-          <div className="sm-side-card sm-side-card--scratchpad">
-            <div className="sm-side-card__header">
-              <span className="sm-side-card__title">Scratchpad</span>
-              <span className="sm-side-card__sub">Auto-synthesizes with dictation</span>
-            </div>
-
-            <textarea
-              className="sm-scratchpad-area"
-              placeholder="Type vitals, meds, findings... (e.g. BP 130/85, knee swollen, limited ROM)"
-              value={dictationNotes}
-              onChange={(e) => setDictationNotes(e.target.value)}
-              rows={6}
-            />
-
-            <div className="sm-scratchpad-quick-bar">
-              {macros.slice(0, 4).map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  className="sm-btn-mini-chip"
-                  onClick={() => handleInsertMacro(m)}
-                  title={`Insert: ${m.content}`}
-                >
-                  + {m.shortcut || m.name}
-                </button>
-              ))}
-              <button
-                type="button"
-                className="sm-btn-mini-chip sm-btn-mini-chip--manage"
-                onClick={() => setMacroModalOpen(true)}
-                title="Manage Macros"
-              >
-                ⚙️ Macros
-              </button>
             </div>
           </div>
         </aside>
@@ -1835,6 +2523,25 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
           onInsert={handleInsertMacro}
         />
       )}
+
+      {/* Patient Details Modal */}
+      <PatientDetailsModal
+        isOpen={patientModalOpen}
+        tab={patientModalTab}
+        setTab={setPatientModalTab}
+        formData={patientFormData}
+        setFormData={setPatientFormData}
+        patientList={patientList}
+        onClose={() => setPatientModalOpen(false)}
+        onSave={handleSavePatientModal}
+      />
+
+      {/* Delete Encounter Modal */}
+      <DeleteEncounterModal
+        dialog={deleteDialog}
+        setDialog={setDeleteDialog}
+        onConfirm={handleConfirmDelete}
+      />
     </div>
   )
 }
@@ -2267,6 +2974,190 @@ function ManageMacrosModal({
               </div>
             </form>
           )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * PatientDetailsModal
+ * Allows clinicians to add or edit patient name, age/dob, and MRN, or link to existing patient roster.
+ */
+function PatientDetailsModal({
+  isOpen,
+  tab,
+  setTab,
+  formData,
+  setFormData,
+  patientList,
+  onClose,
+  onSave,
+}) {
+  if (!isOpen) {
+    return null
+  }
+
+  return (
+    <div className="sm-modal-backdrop" onClick={onClose}>
+      <div className="sm-modal-box sm-modal-box--patient" onClick={(e) => e.stopPropagation()}>
+        <div className="sm-modal-header">
+          <div className="sm-modal-title-group">
+            <h3>👤 Patient Encounter Details</h3>
+            <span className="sm-modal-subtitle">Add or edit patient information for this consultation</span>
+          </div>
+          <button type="button" className="sm-modal-close" onClick={onClose} title="Close">✕</button>
+        </div>
+
+        <div className="sm-modal-tabs">
+          <button
+            type="button"
+            className={`sm-modal-tab ${tab === 'edit' ? 'sm-modal-tab--active' : ''}`}
+            onClick={() => setTab('edit')}
+          >
+            Enter Details (New / Edit)
+          </button>
+          <button
+            type="button"
+            className={`sm-modal-tab ${tab === 'link' ? 'sm-modal-tab--active' : ''}`}
+            onClick={() => setTab('link')}
+          >
+            Link to Existing Patient ({patientList.length})
+          </button>
+        </div>
+
+        <div className="sm-modal-body">
+          {tab === 'edit' ? (
+            <div className="sm-modal-form">
+              <div className="sm-form-group">
+                <label>Patient Full Name *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Sarah Connor, Jack Smith"
+                  value={formData.name}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
+                  autoFocus
+                />
+              </div>
+
+              <div className="sm-form-row">
+                <div className="sm-form-group">
+                  <label>Age</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 42 yrs"
+                    value={formData.age}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, age: e.target.value }))}
+                  />
+                </div>
+
+                <div className="sm-form-group">
+                  <label>Date of Birth</label>
+                  <input
+                    type="date"
+                    value={formData.dob}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, dob: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div className="sm-form-group">
+                <label>MRN / PHN / Health Card #</label>
+                <input
+                  type="text"
+                  placeholder="e.g. MRN-849201"
+                  value={formData.mrn}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, mrn: e.target.value }))}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="sm-modal-form">
+              <div className="sm-form-group">
+                <label>Select Patient from Roster</label>
+                <select
+                  value={formData.selectedExistingId}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, selectedExistingId: e.target.value }))}
+                >
+                  <option value="">-- Choose an existing patient --</option>
+                  {patientList.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} {p.mrn ? `(${p.mrn})` : ''} {p.age ? `· ${p.age} yrs` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="sm-modal-footer">
+          <button type="button" className="sm-btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="button" className="sm-btn-primary" onClick={onSave}>
+            Save Patient Details
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * DeleteEncounterModal
+ * Confirms deletion of an encounter, with optional deletion of the entire patient.
+ */
+function DeleteEncounterModal({
+  dialog,
+  setDialog,
+  onConfirm,
+}) {
+  if (!dialog.open) {
+    return null
+  }
+
+  return (
+    <div className="sm-modal-backdrop" onClick={() => setDialog({ open: false, visit: null, deletePatientAlso: false })}>
+      <div className="sm-modal-box sm-modal-box--delete" onClick={(e) => e.stopPropagation()}>
+        <div className="sm-modal-header sm-modal-header--danger">
+          <h3>🗑 Confirm Deletion</h3>
+          <button type="button" className="sm-modal-close" onClick={() => setDialog({ open: false, visit: null, deletePatientAlso: false })} title="Close">✕</button>
+        </div>
+        <div className="sm-modal-body">
+          <p>
+            Are you sure you want to delete this encounter for <strong>{dialog.visit?.patient_name || 'this patient'}</strong>?
+          </p>
+          <p className="sm-modal-subtext">
+            This action will delete the consultation note, draft, and associated audio permanently.
+          </p>
+
+          {dialog.visit?.patient_id && (
+            <label className="sm-delete-checkbox-label">
+              <input
+                type="checkbox"
+                checked={dialog.deletePatientAlso}
+                onChange={(e) => setDialog((prev) => ({ ...prev, deletePatientAlso: e.target.checked }))}
+              />
+              <span>Also delete patient <strong>{dialog.visit?.patient_name}</strong> from patient roster</span>
+            </label>
+          )}
+        </div>
+        <div className="sm-modal-footer">
+          <button
+            type="button"
+            className="sm-btn-secondary"
+            onClick={() => setDialog({ open: false, visit: null, deletePatientAlso: false })}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="sm-btn-danger"
+            onClick={onConfirm}
+          >
+            Delete Encounter
+          </button>
         </div>
       </div>
     </div>

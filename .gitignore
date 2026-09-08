@@ -1,4 +1,4 @@
-﻿# Dependencies
+# Dependencies
 node_modules/
 
 # Build artifacts
@@ -57,6 +57,7 @@ scripts/*.gif
 *.temp
 *-out.txt
 *-out.json
+audit-summary.json
 
 # IDE/Editor files
 .DS_Store

@@ -1,0 +1,22 @@
+title = "Anot Health Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Global allowlist for test fixtures, verification scripts, documentation examples, and mock credentials"
+paths = [
+  '''check-platform-credentials\.js''',
+  '''scripts/''',
+  '''anot-backend-main/scripts/''',
+  '''anot-backend-main/src/__tests__/''',
+  '''anot-frontend-main/src/__tests__/''',
+  '''deploy/''',
+  '''docs/''',
+]
+regexes = [
+  '''(?i)password@2026''',
+  '''#1Augmedix2026''',
+  '''sk-ant-''',
+  '''AKIAIOSFODNN7EXAMPLE''',
+]

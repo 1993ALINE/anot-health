@@ -71,13 +71,21 @@ const BASE_URL = API_BASE
  * @deprecated Token is HttpOnly cookie — use hasValidSession() instead.
  */
 const _getAuthToken = () => getToken()
+export const isMobileDevice =
+  typeof navigator !== 'undefined' &&
+  /Mobile|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '')
+
 /**
  * Build request headers for API calls.
  * Session JWT is sent via HttpOnly cookie (credentials: include).
  * Bearer Authorization is only added when explicitly passed in extraHeaders (login gates).
  */
 function buildRequestHeaders(_includeAuth = true, extraHeaders = {}) {
-  const h = { 'Content-Type': 'application/json', ...extraHeaders }
+  const h = {
+    'Content-Type': 'application/json',
+    'X-Device-Type': isMobileDevice ? 'mobile' : 'desktop',
+    ...extraHeaders,
+  }
   return h
 }
 
@@ -442,6 +450,8 @@ export const usersAPI = {
 export const patientsAPI = {
   getAll: async () => apiFetch('/patients'),
   create: async (patientData) => apiMutate('POST', '/patients', { body: patientData }),
+  update: async (id, patientData) => apiMutate('PUT', `/patients/${id}`, { body: patientData }),
+  delete: async (id) => apiMutate('DELETE', `/patients/${id}`),
   bulkDeleteAll: async () => apiMutate('DELETE', '/patients/bulk/all'),
 }
 
@@ -487,6 +497,32 @@ export const visitsAPI = {
   runTranscription: async (visitId) => apiMutate('POST', `/visits/${visitId}/transcribe`, { body: {} }),
   /** Regenerate AI draft from saved transcriptions (HTTP 200). */
   generateDraft: async (visitId) => apiMutate('POST', `/visits/${visitId}/generate-draft`, { body: {} }),
+  /** Subscribe to real-time visit events via SSE (Server-Sent Events) */
+  subscribeToEvents: (onEvent, onError) => {
+    if (typeof EventSource === 'undefined') {
+      return () => {}
+    }
+    try {
+      const url = `${API_BASE}/visits/events`
+      const es = new EventSource(url, { withCredentials: true })
+      es.addEventListener('visit_update', (e) => {
+        try {
+          const data = JSON.parse(e.data)
+          if (onEvent) { onEvent(data) }
+        } catch (err) {
+          console.warn('[SSE] Failed to parse visit event:', err)
+        }
+      })
+      if (onError) {
+        es.onerror = onError
+      }
+      return () => {
+        es.close()
+      }
+    } catch {
+      return () => {}
+    }
+  },
 }
 
 // ─── NOTES ────────────────────────────────────────────────────────────────────

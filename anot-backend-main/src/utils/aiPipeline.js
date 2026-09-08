@@ -326,6 +326,19 @@ async function persistTranscriptionAndDraft(id, transcriptions, visit, options =
 
   await setVisitTranscriptionStatus(id, 'completed')
 
+  try {
+    const { emitVisitEvent } = require('./visitEvents')
+    emitVisitEvent(visit?.clinician_id, {
+      type: 'AI_DRAFT_READY',
+      visitId: Number(id) || id,
+      status: 'completed',
+      action: 'draft_ready',
+      source: options.source || 'pipeline',
+    })
+  } catch (e) {
+    console.warn('[aiPipeline] emitVisitEvent failed:', e?.message)
+  }
+
   await auditLog(ctxUser, 'TRANSCRIPTION_COMPLETED', 'visit', String(id), options.completionMessage || 'Transcription and AI draft stored', {
 
     ...auditOpts,

@@ -48,16 +48,23 @@ function resolveCanonicalAnthropicModel(model) {
 }
 
 const ANTHROPIC_MODELS = new Set([
-  'claude-sonnet-4-6',
   'claude-haiku-4-5-20251001',
-  'claude-sonnet-4-5-20250929',
-  'claude-opus-4-6',
-  'claude-sonnet-5',
   'claude-haiku-4-5',
+  'claude-sonnet-4-6',
+  'claude-sonnet-4-5-20250929',
   'claude-sonnet-4-5',
+  'claude-opus-4-6',
   'claude-opus-4-5',
-  'claude-3-5-sonnet',
+  'claude-sonnet-5',
+  'claude-3-5-haiku-20241022',
   'claude-3-5-haiku',
+  'claude-3-haiku-20240307',
+  'claude-3-5-sonnet-20241022',
+  'claude-3-5-sonnet',
+  'claude-3-7-sonnet-20250219',
+  'claude-3-7-sonnet',
+  'claude-3-opus-20240229',
+  'claude-3-opus',
 ])
 const DEEPGRAM_MODELS = new Set(['nova-3-medical', 'nova-3', 'nova-2'])
 

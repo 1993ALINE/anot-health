@@ -4,7 +4,7 @@ const { getPublicErrorMessage, sendHttpError } = require('../utils/errorMessages
 const pool = require('../config/db')
 const cloudWatchAudit = require('../utils/logger')
 const { encryptString } = require('../utils/settingsEncryption')
-const { invalidateAiSettingsCache, normalizeDeepgramModel, loadAiSettings, getAnthropicKey } = require('../services/aiSettings')
+const { invalidateAiSettingsCache, normalizeDeepgramModel, loadAiSettings, getAnthropicKey, ANTHROPIC_MODELS } = require('../services/aiSettings')
 const {
   normalizeTranscribeLanguage,
   parseCustomVocabulary,
@@ -41,8 +41,6 @@ const DEFAULT_SETTINGS = {
   secondary_color: '#0F172A',
   system_description: 'Clinical documentation platform',
 }
-
-const ANTHROPIC_MODELS = new Set(['claude-haiku-4-5', 'claude-sonnet-4-5', 'claude-opus-4-5'])
 
 const AI_DEFAULTS = {
   transcribe_enabled: false,

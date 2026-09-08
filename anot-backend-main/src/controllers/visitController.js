@@ -14,6 +14,7 @@ const { getVisitForUser } = require('../utils/visitAccess')
 const { addColumnIfMissing } = require('../utils/schemaDdl')
 const { deleteAudio, dbPathToKey } = require('../services/s3Storage')
 const { ALLOWED_VISIT_TYPES } = require('../utils/visitTypes')
+const { emitVisitEvent, getDeviceTypeFromRequest } = require('../utils/visitEvents')
 
 async function ensureNoteLockColumns() {
   await addColumnIfMissing('notes', 'locked_at', 'ALTER TABLE notes ADD COLUMN IF NOT EXISTS locked_at TIMESTAMPTZ')
@@ -54,7 +55,7 @@ const getVisitsByDate = async (req, res) => {
          p.id as patient_id, p.name as patient_name, p.mrn, p.date_of_birth,
          u.name as scribe_name, u.id as scribe_id,
          n.id as note_id, n.status as note_status,
-         n.final_note, n.ai_draft, n.transcription, n.updated_at as note_updated_at
+         n.final_note, n.ai_draft, n.transcription, n.updated_at as note_updated_at, n.locked_at
        FROM visits v
        LEFT JOIN patients p ON p.id = v.patient_id
        LEFT JOIN users u ON u.id = v.scribe_id
@@ -67,33 +68,7 @@ const getVisitsByDate = async (req, res) => {
       [clinician_id, localDate]
     )
 
-    let rows = result.rows
-    if (rows.length === 0) {
-      // Fallback: If no visits match the exact date query, check for visits within +/- 1 day or recent visits for this clinician
-      const fallbackResult = await pool.query(
-        `SELECT
-           v.id, v.visit_date, v.visit_time, v.visit_type, v.status,
-           ${durationCol}, ${consentCol}, v.audio_file,
-           p.id as patient_id, p.name as patient_name, p.mrn, p.date_of_birth,
-           u.name as scribe_name, u.id as scribe_id,
-           n.id as note_id, n.status as note_status,
-           n.final_note, n.ai_draft, n.transcription, n.updated_at as note_updated_at
-         FROM visits v
-         LEFT JOIN patients p ON p.id = v.patient_id
-         LEFT JOIN users u ON u.id = v.scribe_id
-         LEFT JOIN LATERAL (
-           SELECT * FROM notes WHERE visit_id = v.id ORDER BY updated_at DESC, id DESC LIMIT 1
-         ) n ON true
-         WHERE (v.clinician_id = $1 OR v.clinician_id IS NULL)
-         ORDER BY v.visit_date DESC, v.visit_time ASC
-         LIMIT 50`,
-        [clinician_id]
-      )
-      if (fallbackResult.rows.length > 0) {
-        rows = fallbackResult.rows
-      }
-    }
-
+    const rows = result.rows
     res.status(200).json({ visits: rows })
 
     void auditLog(
@@ -137,14 +112,14 @@ const getAllVisits = async (req, res) => {
       SELECT
         v.id, v.visit_date, v.visit_time, v.visit_type, v.status,
         ${durationCol}, ${consentCol}, v.audio_file, ${txStatusCol},
-        p.id as patient_id, p.name as patient_name, p.mrn,
+        p.id as patient_id, p.name as patient_name, p.mrn, p.date_of_birth,
         c.name as clinician_name, c.id as clinician_id,
         s.name as scribe_name, s.id as scribe_id,
         n.id as note_id, n.status as note_status,
-        n.final_note, n.ai_draft, n.transcription, n.updated_at as note_updated_at
+        n.final_note, n.ai_draft, n.transcription, n.updated_at as note_updated_at, n.locked_at
       FROM visits v
-      JOIN patients p ON p.id = v.patient_id
-      JOIN users c    ON c.id = v.clinician_id
+      LEFT JOIN patients p ON p.id = v.patient_id
+      LEFT JOIN users c    ON c.id = v.clinician_id
       LEFT JOIN users s ON s.id = v.scribe_id
       LEFT JOIN LATERAL (
         SELECT * FROM notes WHERE visit_id = v.id ORDER BY updated_at DESC, id DESC LIMIT 1
@@ -176,9 +151,9 @@ const getAllVisits = async (req, res) => {
         OR v.id IN (SELECT visit_id FROM notes WHERE submitted_by = $${params.length})
       )`
     } else if (userRole === 'clinician') {
-      // Clinicians may only see their own visits via this endpoint.
+      // Clinicians may only see their own visits (or unassigned encounters) via this endpoint.
       params.push(user_id)
-      query += ` AND v.clinician_id = $${params.length}`
+      query += ` AND (v.clinician_id = $${params.length} OR v.clinician_id IS NULL)`
     }
     // qps + admin: no additional scoping — they see everything.
 
@@ -258,12 +233,26 @@ const createVisit = async (req, res) => {
 
     const full = await pool.query(
       `SELECT v.*, p.name as patient_name, p.mrn
-       FROM visits v JOIN patients p ON p.id = v.patient_id
+       FROM visits v LEFT JOIN patients p ON p.id = v.patient_id
        WHERE v.id = $1`,
       [result.rows[0].id]
     )
 
     res.status(201).json({ message: 'Visit scheduled successfully.', visit: full.rows[0] })
+
+    // Broadcast real-time visit creation event (e.g. from mobile or web)
+    try {
+      emitVisitEvent(clinician_id, {
+        type: 'VISIT_CREATED',
+        visitId: result.rows[0].id,
+        status: result.rows[0].status,
+        action: 'created',
+        source: getDeviceTypeFromRequest(req),
+        visit: full.rows[0],
+      })
+    } catch (e) {
+      console.warn('[visitController] emitVisitEvent failed:', e.message)
+    }
 
     // Fire-and-forget: the row is already committed, so an audit failure must
     // not turn a successful create into a 500. reportAuditFailure surfaces it.
@@ -345,6 +334,18 @@ const updateVisitStatus = async (req, res) => {
     if (!result.rows[0]) return res.status(404).json({ error: 'Visit not found.' })
 
     res.status(200).json({ message: 'Visit status updated.', visit: result.rows[0] })
+
+    try {
+      emitVisitEvent(accessible.clinician_id, {
+        type: 'VISIT_UPDATED',
+        visitId: Number(id) || id,
+        status,
+        action: 'status_changed',
+        source: getDeviceTypeFromRequest(req),
+      })
+    } catch (e) {
+      console.warn('[visitController] emitVisitEvent failed:', e.message)
+    }
 
     void auditLog(
       req.user,
@@ -438,6 +439,18 @@ const endVisit = async (req, res) => {
       transcription_status: visit.hasAudio ? 'processing' : 'none',
     })
 
+    try {
+      emitVisitEvent(req.user.id, {
+        type: 'VISIT_UPDATED',
+        visitId: Number(id) || id,
+        status: 'recording-uploaded',
+        action: 'ended',
+        source: getDeviceTypeFromRequest(req),
+      })
+    } catch (e) {
+      console.warn('[visitController] emitVisitEvent failed:', e.message)
+    }
+
     // Run AI pipeline in background (non-blocking) only if audio is attached
     if (visit.hasAudio) {
       setImmediate(() => {
@@ -457,27 +470,64 @@ const endVisit = async (req, res) => {
 const updateVisit = async (req, res) => {
   try {
     const { id } = req.params
-    const { visit_time, visit_type } = req.body
+    const { visit_time, visit_type, patient_id } = req.body
 
-    if (!isHmTime(String(visit_time || '').trim())) {
-      return res.status(400).json({ error: 'visit_time must be HH:MM (24h).' })
+    const updates = []
+    const params = []
+    let pIdx = 1
+
+    if (visit_time !== undefined) {
+      if (!isHmTime(String(visit_time || '').trim())) {
+        return res.status(400).json({ error: 'visit_time must be HH:MM (24h).' })
+      }
+      updates.push(`visit_time = $${pIdx++}`)
+      params.push(String(visit_time).trim())
     }
-    const vtype = String(visit_type || '').trim()
-    if (!ALLOWED_VISIT_TYPES.includes(vtype)) {
-      return res.status(400).json({
-        error: `visit_type must be one of: ${ALLOWED_VISIT_TYPES.join(', ')}.`,
-      })
+
+    if (visit_type !== undefined) {
+      const vtype = String(visit_type || '').trim()
+      if (!ALLOWED_VISIT_TYPES.includes(vtype)) {
+        return res.status(400).json({
+          error: `visit_type must be one of: ${ALLOWED_VISIT_TYPES.join(', ')}.`,
+        })
+      }
+      updates.push(`visit_type = $${pIdx++}`)
+      params.push(vtype)
     }
+
+    if (patient_id !== undefined) {
+      updates.push(`patient_id = $${pIdx++}`)
+      params.push(patient_id ? Number(patient_id) : null)
+    }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields provided to update.' })
+    }
+
+    const visitId = id
+    params.push(visitId)
+    params.push(req.user.id)
 
     const result = await pool.query(
-      `UPDATE visits SET visit_time = $1, visit_type = $2
-       WHERE id = $3 AND clinician_id = $4 RETURNING *`,
-      [String(visit_time).trim(), vtype, id, req.user.id]
+      `UPDATE visits SET ${updates.join(', ')}
+       WHERE id = $${pIdx++} AND (clinician_id = $${pIdx++} OR clinician_id IS NULL) RETURNING *`,
+      params
     )
 
     if (!result.rows[0]) return res.status(404).json({ error: 'Visit not found.' })
 
     res.status(200).json({ message: 'Visit updated.', visit: result.rows[0] })
+
+    try {
+      emitVisitEvent(req.user.id, {
+        type: 'VISIT_UPDATED',
+        visitId: Number(id) || id,
+        action: 'updated',
+        source: getDeviceTypeFromRequest(req),
+      })
+    } catch (e) {
+      console.warn('[visitController] emitVisitEvent failed:', e.message)
+    }
 
     void auditLog(
       req.user,
@@ -492,7 +542,11 @@ const updateVisit = async (req, res) => {
         status: 'success',
         metadata: {
           visit_id: Number(id) || id,
-          changes: { visit_time: String(visit_time).trim(), visit_type: vtype },
+          changes: {
+            ...(visit_time !== undefined && { visit_time: String(visit_time).trim() }),
+            ...(visit_type !== undefined && { visit_type: String(visit_type).trim() }),
+            ...(patient_id !== undefined && { patient_id: patient_id ? Number(patient_id) : null }),
+          },
         },
       }
     ).catch(reportAuditFailure)
@@ -534,6 +588,17 @@ const deleteVisit = async (req, res) => {
         client,
         { req, module_key: 'clinical', action_category: 'delete', status: 'critical' }
       )
+
+      try {
+        emitVisitEvent(req.user.id, {
+          type: 'VISIT_DELETED',
+          visitId: Number(id) || id,
+          action: 'deleted',
+          source: getDeviceTypeFromRequest(req),
+        })
+      } catch (e) {
+        console.warn('[visitController] emitVisitEvent failed:', e.message)
+      }
 
       return { files: (check.rows[0].audio_file || '').split(',').map(s => s.trim()).filter(Boolean) }
     })

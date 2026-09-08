@@ -2588,12 +2588,17 @@ function Admin() {
                                             <div className="adm-form-group">
                                                 <label className="adm-form-label">Model</label>
                                                 <select className="adm-input" value={settingsForm.anthropic_model} onChange={(e) => handleSettingInput('anthropic_model', e.target.value)}>
-                                                    <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet (Highest accuracy, recommended)</option>
-                                                    <option value="claude-3-7-sonnet-20250219">Claude 3.7 Sonnet (Advanced clinical reasoning)</option>
-                                                    <option value="claude-3-5-haiku-20241022">Claude 3.5 Haiku (Fastest)</option>
-                                                    <option value="claude-haiku-4-5">claude-haiku-4-5 (Legacy alias → Claude 3.5 Haiku)</option>
-                                                    <option value="claude-sonnet-4-5">claude-sonnet-4-5 (Legacy alias → Claude 3.5 Sonnet)</option>
-                                                    <option value="claude-opus-4-5">claude-opus-4-5 (Legacy alias → Claude 3.7 Sonnet)</option>
+                                                    <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 (Fastest, recommended for clinical notes)</option>
+                                                    <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (Highest accuracy & reasoning)</option>
+                                                    <option value="claude-opus-4-6">Claude Opus 4.6 (Deep clinical synthesis)</option>
+                                                    <option value="claude-haiku-4-5">claude-haiku-4-5 (Alias → Claude Haiku 4.5)</option>
+                                                    <option value="claude-sonnet-4-5">claude-sonnet-4-5 (Alias → Claude Sonnet 4.5)</option>
+                                                    <option value="claude-opus-4-5">claude-opus-4-5 (Alias → Claude Opus 4.5)</option>
+                                                    {['claude-3-5-haiku-20241022', 'claude-3-5-haiku', 'claude-3-5-sonnet-20241022', 'claude-3-5-sonnet', 'claude-3-7-sonnet-20250219', 'claude-3-7-sonnet', 'claude-3-haiku-20240307'].includes(settingsForm.anthropic_model) && (
+                                                        <option value={settingsForm.anthropic_model}>
+                                                            {settingsForm.anthropic_model} (Retired — upgrade recommended)
+                                                        </option>
+                                                    )}
                                                 </select>
                                             </div>
                                         </div>

@@ -11,6 +11,7 @@ jobs:
   npm-audit:
     runs-on: ubuntu-22.04
     strategy:
+      fail-fast: false
       matrix:
         project: [backend, frontend]
     steps:
@@ -49,3 +50,4 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml

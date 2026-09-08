@@ -190,7 +190,94 @@ const getPatient = async (req, res) => {
     }
 }
 
-// ─── DELETE PATIENT (HIPAA right to erasure — admin only) ─────────────────────
+// ─── UPDATE PATIENT ───────────────────────────────────────────────────────────
+
+const updatePatient = async (req, res) => {
+    try {
+        const { id } = req.params
+        const patientId = parseInt(id, 10)
+        if (!Number.isFinite(patientId)) {
+            return res.status(400).json({ error: 'Invalid patient id.' })
+        }
+
+        const { name, mrn, date_of_birth } = req.body
+
+        const existing = await pool.query('SELECT * FROM patients WHERE id = $1', [patientId])
+        if (!existing.rows[0]) {
+            return res.status(404).json({ error: 'Patient not found.' })
+        }
+
+        if (req.user.role === 'clinician') {
+            const forbiddenOther = await pool.query(
+                'SELECT 1 FROM visits WHERE patient_id = $1 AND clinician_id IS NOT NULL AND clinician_id != $2 LIMIT 1',
+                [patientId, req.user.id]
+            )
+            if (forbiddenOther.rows.length > 0) {
+                return res.status(403).json({ error: 'Cannot modify patient associated with another clinician.' })
+            }
+        }
+
+        const updates = []
+        const params = []
+        let pIdx = 1
+
+        if (name !== undefined) {
+            const cleanName = String(name || '').trim()
+            if (!cleanName) {
+                return res.status(400).json({ error: 'Patient name cannot be empty.' })
+            }
+            updates.push(`name = $${pIdx++}`)
+            params.push(cleanName)
+        }
+
+        if (mrn !== undefined) {
+            const normalizedMrn = String(mrn || '').trim().toUpperCase()
+            if (normalizedMrn) {
+                const mrnConflict = await pool.query(
+                    'SELECT id FROM patients WHERE mrn = $1 AND id != $2',
+                    [normalizedMrn, patientId]
+                )
+                if (mrnConflict.rows.length > 0) {
+                    return res.status(409).json({ error: 'A patient with this MRN already exists.' })
+                }
+                updates.push(`mrn = $${pIdx++}`)
+                params.push(normalizedMrn)
+            }
+        }
+
+        if (date_of_birth !== undefined) {
+            if (date_of_birth && (!/^\d{4}-\d{2}-\d{2}$/.test(date_of_birth) || Number.isNaN(Date.parse(date_of_birth)))) {
+                return res.status(400).json({ error: 'date_of_birth must be in YYYY-MM-DD format.' })
+            }
+            updates.push(`date_of_birth = $${pIdx++}`)
+            params.push(date_of_birth || null)
+        }
+
+        if (updates.length === 0) {
+            return res.status(400).json({ error: 'No update fields provided.' })
+        }
+
+        params.push(patientId)
+        const result = await pool.query(
+            `UPDATE patients SET ${updates.join(', ')} WHERE id = $${pIdx} RETURNING *`,
+            params
+        )
+
+        const updatedPatient = result.rows[0]
+        await auditLog(req.user, 'PATIENT_UPDATED', 'patient', updatedPatient.id,
+            `Updated patient record (id ${updatedPatient.id})`,
+            { req, module_key: 'clinical', action_category: 'update', metadata: { patient_id: updatedPatient.id } }).catch(reportAuditFailure)
+
+        res.status(200).json({
+            message: 'Patient updated successfully.',
+            patient: updatedPatient,
+        })
+    } catch (err) {
+        sendHttpError(res, 500, err, { context: 'patient.update', req })
+    }
+}
+
+// ─── DELETE PATIENT (HIPAA right to erasure — clinician / admin) ─────────────
 
 const deletePatient = async (req, res) => {
     try {
@@ -203,6 +290,16 @@ const deletePatient = async (req, res) => {
         const existing = await pool.query('SELECT id, name, mrn FROM patients WHERE id = $1', [patientId])
         if (!existing.rows[0]) {
             return res.status(404).json({ error: 'Patient not found.' })
+        }
+
+        if (req.user.role === 'clinician') {
+            const forbiddenOther = await pool.query(
+                'SELECT 1 FROM visits WHERE patient_id = $1 AND clinician_id IS NOT NULL AND clinician_id != $2 LIMIT 1',
+                [patientId, req.user.id]
+            )
+            if (forbiddenOther.rows.length > 0) {
+                return res.status(403).json({ error: 'Cannot delete patient associated with another clinician.' })
+            }
         }
 
         const visitAudio = await pool.query(
@@ -338,4 +435,4 @@ const bulkDeleteAllPatients = async (req, res) => {
     }
 }
 
-module.exports = { getAllPatients, createPatient, getPatient, deletePatient, bulkDeleteAllPatients, collectAudioPathsFromVisits }
+module.exports = { getAllPatients, createPatient, getPatient, updatePatient, deletePatient, bulkDeleteAllPatients, collectAudioPathsFromVisits }
