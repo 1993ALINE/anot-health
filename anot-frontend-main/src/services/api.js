@@ -332,26 +332,24 @@ export const authAPI = {
     return data
   },
   logout: async ({ reload = true } = {}) => {
-    // 1. Immediately wipe local auth state so UI reflects logout in 0ms
-    clearSession()
-    clearCsrfToken()
+    try {
+      // 1. Fire server logout first while session cookies/credentials & CSRF token are still valid
+      await Promise.race([
+        apiMutate('POST', '/auth/logout'),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Logout timed out')), 2500)),
+      ]).catch((err) => {
+        console.warn('[auth.logout] Server logout request failed:', err?.message || err)
+      })
+    } finally {
+      // 2. Wipe local session, CSRF cache, and sensitive local PHI storage
+      clearSession()
+      clearCsrfToken()
+      await purgeClientPhiStorage().catch(() => {})
 
-    // 2. Fire server logout
-    const serverLogoutPromise = apiMutate('POST', '/auth/logout').catch(() => {})
-
-    // 3. Purge storage
-    const storagePurgePromise = purgeClientPhiStorage().catch(() => {})
-
-    // Allow the server logout request to reach backend and clear session cookie before reload
-    await Promise.race([
-      Promise.allSettled([serverLogoutPromise, storagePurgePromise]),
-      new Promise((r) => setTimeout(r, 400)),
-    ])
-
-    // 4. Navigation
-    if (reload && typeof globalThis.location !== 'undefined') {
-      globalThis.location.replace('/login')
-      return
+      // 3. Navigate to login
+      if (reload && typeof globalThis.location !== 'undefined') {
+        globalThis.location.replace('/login')
+      }
     }
   },
   getCurrentUser: () => {

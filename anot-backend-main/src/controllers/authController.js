@@ -15,6 +15,7 @@ const { loginRequiresMfa, issueAndSendCode, verifyMfaCode, maskDestination, isMf
 const { setSessionCookie, clearSessionCookie } = require('../utils/sessionCookie')
 const { isLocked, lockoutMessage, recordFailedLogin, resetFailedLogins } = require('../services/accountLockout')
 const { invalidateUserAuthCache, extractBearerToken } = require('../middleware/auth')
+const { getDeviceTypeFromRequest } = require('../utils/visitEvents')
 
 const SESSION_INACTIVITY_MS = 15 * 60 * 1000 // 15 minutes of inactivity timeout
 
@@ -36,13 +37,16 @@ const PHI_TRAINING_VERSION = 1
 // ─── GENERATE JWT TOKEN ───────────────────────────────────────────────────────
 
 const generateToken = (user, extraClaims = {}) => {
+    const deviceType = extraClaims.device_type || user.device_type || 'desktop'
+    const sessionId = extraClaims.session_id || (deviceType === 'mobile' ? user.active_mobile_session_id : user.active_session_id) || null
     return jwt.sign(
         {
             id: user.id,
             userId: user.id,
             role: user.role,
             token_version: Number(user.token_version) || 0,
-            session_id: user.active_session_id || extraClaims.session_id || null,
+            session_id: sessionId,
+            device_type: deviceType,
             ...extraClaims,
         },
         process.env.JWT_SECRET,
@@ -162,26 +166,37 @@ async function buildPostPasswordLoginResponse(user, req, res) {
         }
     }
 
-    // ─── SINGLE CONCURRENT SESSION PER USER ──────────────────────────────
-    const hasActiveSession = !!(
-        user.active_session_id &&
-        user.last_active_at &&
-        (Date.now() - new Date(user.last_active_at).getTime() < SESSION_INACTIVITY_MS)
-    )
+    const deviceType = getDeviceTypeFromRequest(req)
+    const isMobile = deviceType === 'mobile'
+
+    // ─── DUAL CONCURRENT SESSIONS: 1 DESKTOP + 1 MOBILE ───────────────────
+    // A user may have one active computer session AND one active mobile session simultaneously.
+    const hasActiveSession = isMobile
+        ? !!(
+            user.active_mobile_session_id &&
+            user.last_mobile_active_at &&
+            (Date.now() - new Date(user.last_mobile_active_at).getTime() < SESSION_INACTIVITY_MS)
+        )
+        : !!(
+            user.active_session_id &&
+            user.last_active_at &&
+            (Date.now() - new Date(user.last_active_at).getTime() < SESSION_INACTIVITY_MS)
+        )
 
     if (hasActiveSession && !req.body?.force) {
+        const deviceLabel = isMobile ? 'mobile device' : 'computer'
         void auditLog(
             { id: user.id, name: user.name, role: user.role },
             'LOGIN_CONCURRENT_BLOCKED',
             'auth',
             String(user.id),
-            'Concurrent login attempt blocked — active session already exists for this user',
+            `Concurrent login attempt blocked — active session already exists on another ${deviceLabel}`,
             { req, module_key: 'authentication', status: 'warning', action_category: 'authentication' }
         ).catch(reportAuditFailure)
         return {
             status: 409,
             body: {
-                error: 'This account already has an active session on another device. Only one session is permitted per user.',
+                error: `This account already has an active session on another ${deviceLabel}. Only one session per device type is permitted.`,
                 code: 'CONCURRENT_SESSION_ACTIVE',
                 canForce: true,
             },
@@ -189,27 +204,33 @@ async function buildPostPasswordLoginResponse(user, req, res) {
     }
 
     if (req.body?.force && hasActiveSession) {
-        await incrementTokenVersion(user.id)
-        user.token_version = (Number(user.token_version) || 0) + 1
         void auditLog(
             { id: user.id, name: user.name, role: user.role },
             'CONCURRENT_SESSION_TERMINATED',
             'auth',
             String(user.id),
-            'Prior active session terminated by user force sign-in',
+            `Prior active ${deviceType} session terminated by user force sign-in`,
             { req, module_key: 'authentication', status: 'warning', action_category: 'authentication' }
         ).catch(reportAuditFailure)
     }
 
     const sessionId = crypto.randomUUID()
-    await pool.query(
-        'UPDATE users SET active_session_id = $1, last_active_at = NOW() WHERE id = $2',
-        [sessionId, user.id]
-    )
-    user.active_session_id = sessionId
+    if (isMobile) {
+        await pool.query(
+            'UPDATE users SET active_mobile_session_id = $1, last_mobile_active_at = NOW() WHERE id = $2',
+            [sessionId, user.id]
+        )
+        user.active_mobile_session_id = sessionId
+    } else {
+        await pool.query(
+            'UPDATE users SET active_session_id = $1, last_active_at = NOW() WHERE id = $2',
+            [sessionId, user.id]
+        )
+        user.active_session_id = sessionId
+    }
     invalidateUserAuthCache(user.id)
 
-    const token = generateToken(user, { session_id: sessionId })
+    const token = generateToken(user, { session_id: sessionId, device_type: deviceType })
     setSessionCookie(res, token)
     void auditLog({ id: user.id, name: user.name, role: user.role }, 'LOGIN_SUCCESS', 'auth', String(user.id), 'Signed in successfully', { req, module_key: 'authentication', status: 'success', action_category: 'authentication' }).catch(reportAuditFailure)
     cloudWatchAudit.logLogin(user.id, user.email, user.role, req.clientIp, 'success')
@@ -224,15 +245,25 @@ async function buildPostPasswordLoginResponse(user, req, res) {
 }
 
 /** Issue full session: HttpOnly cookie + user payload (with unique session_id). */
-async function respondFullSession(res, user, extra = {}) {
+async function respondFullSession(res, user, extra = {}, req = null) {
+    const deviceType = req ? getDeviceTypeFromRequest(req) : (user.device_type || 'desktop')
+    const isMobile = deviceType === 'mobile'
     const sessionId = crypto.randomUUID()
-    await pool.query(
-        'UPDATE users SET active_session_id = $1, last_active_at = NOW() WHERE id = $2',
-        [sessionId, user.id]
-    )
-    user.active_session_id = sessionId
+    if (isMobile) {
+        await pool.query(
+            'UPDATE users SET active_mobile_session_id = $1, last_mobile_active_at = NOW() WHERE id = $2',
+            [sessionId, user.id]
+        )
+        user.active_mobile_session_id = sessionId
+    } else {
+        await pool.query(
+            'UPDATE users SET active_session_id = $1, last_active_at = NOW() WHERE id = $2',
+            [sessionId, user.id]
+        )
+        user.active_session_id = sessionId
+    }
     invalidateUserAuthCache(user.id)
-    const token = generateToken(user, { session_id: sessionId })
+    const token = generateToken(user, { session_id: sessionId, device_type: deviceType })
     setSessionCookie(res, token)
     return res.status(200).json({
         message: extra.message || 'Login successful',
@@ -448,12 +479,25 @@ const acknowledgePhiTraining = async (req, res) => {
             })
         }
 
-        const token = generateToken(fresh)
+        const deviceType = getDeviceTypeFromRequest(req)
+        const isMobile = deviceType === 'mobile'
+        const sessionId = crypto.randomUUID()
+        if (isMobile) {
+            await pool.query('UPDATE users SET active_mobile_session_id = $1, last_mobile_active_at = NOW() WHERE id = $2', [sessionId, fresh.id])
+            fresh.active_mobile_session_id = sessionId
+        } else {
+            await pool.query('UPDATE users SET active_session_id = $1, last_active_at = NOW() WHERE id = $2', [sessionId, fresh.id])
+            fresh.active_session_id = sessionId
+        }
+        invalidateUserAuthCache(fresh.id)
+
+        const token = generateToken(fresh, { session_id: sessionId, device_type: deviceType })
         setSessionCookie(res, token)
 
         res.status(200).json({
             message: 'PHI training acknowledged.',
             user: toAuthUser(fresh),
+            token,
         })
     } catch (err) {
         sendHttpError(res, 500, err, { context: 'auth.phiTraining', req })
@@ -721,10 +765,15 @@ const { clearCsrfCookie } = require('../middleware/csrf')
 
 const logout = async (req, res) => {
     try {
-        await pool.query('UPDATE users SET active_session_id = NULL, last_active_at = NULL WHERE id = $1', [req.user.id]).catch(() => {})
-        await incrementTokenVersion(req.user.id)
+        const deviceType = req.user?.device_type || getDeviceTypeFromRequest(req)
+        const isMobile = deviceType === 'mobile'
+        if (isMobile) {
+            await pool.query('UPDATE users SET active_mobile_session_id = NULL, last_mobile_active_at = NULL WHERE id = $1', [req.user.id]).catch(() => {})
+        } else {
+            await pool.query('UPDATE users SET active_session_id = NULL, last_active_at = NULL WHERE id = $1', [req.user.id]).catch(() => {})
+        }
         invalidateUserAuthCache(req.user.id)
-        void auditLog(req.user, 'LOGOUT', 'auth', String(req.user.id), 'User signed out', { req, module_key: 'authentication', status: 'success', action_category: 'authentication' }).catch(reportAuditFailure)
+        void auditLog(req.user, 'LOGOUT', 'auth', String(req.user.id), `User signed out from ${deviceType}`, { req, module_key: 'authentication', status: 'success', action_category: 'authentication' }).catch(reportAuditFailure)
         const emailRow = await pool.query('SELECT email FROM users WHERE id = $1', [req.user.id])
         cloudWatchAudit.logLogout(req.user.id, emailRow.rows[0]?.email || null, req.clientIp)
         clearCsrfCookie(res)
@@ -795,13 +844,26 @@ const verifyMfaLogin = async (req, res) => {
             { req, module_key: 'authentication', status: 'success', action_category: 'authentication' }
         ).catch(reportAuditFailure)
 
-        const sessionToken = generateToken(user)
+        const deviceType = getDeviceTypeFromRequest(req)
+        const isMobile = deviceType === 'mobile'
+        const sessionId = crypto.randomUUID()
+        if (isMobile) {
+            await pool.query('UPDATE users SET active_mobile_session_id = $1, last_mobile_active_at = NOW() WHERE id = $2', [sessionId, user.id])
+            user.active_mobile_session_id = sessionId
+        } else {
+            await pool.query('UPDATE users SET active_session_id = $1, last_active_at = NOW() WHERE id = $2', [sessionId, user.id])
+            user.active_session_id = sessionId
+        }
+        invalidateUserAuthCache(user.id)
+
+        const sessionToken = generateToken(user, { session_id: sessionId, device_type: deviceType })
         setSessionCookie(res, sessionToken)
         cloudWatchAudit.logLogin(user.id, user.email, user.role, req.clientIp, 'success')
 
         res.status(200).json({
             message: 'MFA verified. Login successful.',
             user: toAuthUser(user),
+            token: sessionToken,
         })
     } catch (err) {
         sendHttpError(res, 500, err, { context: 'auth.verifyMfa', req })

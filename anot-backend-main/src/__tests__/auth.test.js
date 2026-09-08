@@ -106,19 +106,105 @@ describe('validateUserAuthState (session)', () => {
   test('rejects session_id mismatch when account was logged in elsewhere', () => {
     const result = validateUserAuthState(
       { found: true, status: 'active', role: 'clinician', token_version: 1, active_session_id: 'sess-device-b' },
-      { role: 'clinician', token_version: 1, session_id: 'sess-device-a' },
+      { role: 'clinician', token_version: 1, session_id: 'sess-device-a', device_type: 'desktop' },
     )
     expect(result.ok).toBe(false)
     expect(result.code).toBe('SESSION_TERMINATED')
     expect(result.error).toMatch(/logged into on another device/i)
   })
 
-  test('accepts matching active_session_id', () => {
+  test('accepts matching active_session_id for desktop session', () => {
     const result = validateUserAuthState(
-      { found: true, status: 'active', role: 'clinician', token_version: 1, active_session_id: 'sess-device-a' },
-      { role: 'clinician', token_version: 1, session_id: 'sess-device-a' },
+      { found: true, status: 'active', role: 'clinician', token_version: 1, active_session_id: 'sess-desktop-a' },
+      { role: 'clinician', token_version: 1, session_id: 'sess-desktop-a', device_type: 'desktop' },
     )
     expect(result.ok).toBe(true)
+  })
+
+  test('accepts matching active_mobile_session_id for mobile session', () => {
+    const result = validateUserAuthState(
+      { found: true, status: 'active', role: 'clinician', token_version: 1, active_mobile_session_id: 'sess-mobile-a' },
+      { role: 'clinician', token_version: 1, session_id: 'sess-mobile-a', device_type: 'mobile' },
+    )
+    expect(result.ok).toBe(true)
+  })
+
+  test('allows concurrent desktop and mobile sessions simultaneously', () => {
+    const sharedDbState = {
+      found: true,
+      status: 'active',
+      role: 'clinician',
+      token_version: 1,
+      active_session_id: 'sess-desk-1',
+      active_mobile_session_id: 'sess-mob-1',
+    }
+
+    const desktopCheck = validateUserAuthState(sharedDbState, {
+      role: 'clinician',
+      token_version: 1,
+      session_id: 'sess-desk-1',
+      device_type: 'desktop',
+    })
+    expect(desktopCheck.ok).toBe(true)
+
+    const mobileCheck = validateUserAuthState(sharedDbState, {
+      role: 'clinician',
+      token_version: 1,
+      session_id: 'sess-mob-1',
+      device_type: 'mobile',
+    })
+    expect(mobileCheck.ok).toBe(true)
+  })
+
+  test('rejects mobile session mismatch when another mobile phone signs in without affecting desktop', () => {
+    const dbState = {
+      found: true,
+      status: 'active',
+      role: 'clinician',
+      token_version: 1,
+      active_session_id: 'sess-desk-1',
+      active_mobile_session_id: 'sess-mob-2', // overwritten by 2nd mobile login
+    }
+
+    // Desktop is still valid
+    const desktopResult = validateUserAuthState(dbState, {
+      role: 'clinician',
+      token_version: 1,
+      session_id: 'sess-desk-1',
+      device_type: 'desktop',
+    })
+    expect(desktopResult.ok).toBe(true)
+
+    // First mobile phone is terminated
+    const oldMobileResult = validateUserAuthState(dbState, {
+      role: 'clinician',
+      token_version: 1,
+      session_id: 'sess-mob-1',
+      device_type: 'mobile',
+    })
+    expect(oldMobileResult.ok).toBe(false)
+    expect(oldMobileResult.code).toBe('SESSION_TERMINATED')
+    expect(oldMobileResult.error).toMatch(/mobile device/i)
+  })
+
+  test('desktop logout clears desktop session without terminating active mobile session', () => {
+    const dbStateAfterDesktopLogout = {
+      found: true,
+      status: 'active',
+      role: 'clinician',
+      token_version: 1,
+      active_session_id: null,
+      active_mobile_session_id: 'sess-mob-1',
+    }
+
+    // Mobile remains authenticated
+    const mobileResult = validateUserAuthState(dbStateAfterDesktopLogout, {
+      role: 'clinician',
+      token_version: 1,
+      session_id: 'sess-mob-1',
+      device_type: 'mobile',
+    })
+    expect(mobileResult.ok).toBe(true)
   })
 })
 
