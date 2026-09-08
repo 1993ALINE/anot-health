@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, Fragment } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react'
 import { visitsAPI, notesAPI, patientsAPI, consentAPI, settingsAPI } from '../../services/api'
 import RecordingVisualizer from '../../components/RecordingVisualizer'
 import { startRecordingKeepAlive, stopRecordingKeepAlive } from '../../utils/recordingKeepAlive'
@@ -2955,6 +2955,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
         patientList={patientList}
         onClose={() => setPatientModalOpen(false)}
         onSave={handleSavePatientModal}
+        contextNote={activeDraftNote}
       />
 
       {/* Delete Encounter Modal */}
@@ -3420,9 +3421,47 @@ function PatientDetailsModal({
   patientList,
   onClose,
   onSave,
+  contextNote,
 }) {
+  useEffect(() => {
+    if (!isOpen) return
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, onClose])
+
+  const detected = useMemo(() => {
+    if (!contextNote) return null
+    const sourceText = [
+      contextNote.transcription,
+      contextNote.final_note,
+      contextNote.ai_draft,
+    ].filter(Boolean).join(' ')
+    if (!sourceText) return null
+
+    // Check for "patient [is] Name" or "Mr./Ms./Mrs. Name"
+    const nameMatch = sourceText.match(/(?:patient(?:\s+is)?|named?|mr\.|mrs\.|ms\.)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})/i)
+    // Check for age pattern
+    const ageMatch = sourceText.match(/(\b\d{1,3}\b)\s*(?:-|–|\s)?(?:year-old|years-old|year\s+old|years\s+old|yr|yo|y\.?o\.?)/i)
+    const name = nameMatch ? nameMatch[1].trim() : ''
+    const age = ageMatch ? ageMatch[1].trim() : ''
+    if (name || age) {
+      return { name, age }
+    }
+    return null
+  }, [contextNote])
+
   if (!isOpen) {
     return null
+  }
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    onSave()
   }
 
   return (
@@ -3433,7 +3472,7 @@ function PatientDetailsModal({
             <h3>👤 Patient Encounter Details</h3>
             <span className="sm-modal-subtitle">Add or edit patient information for this consultation</span>
           </div>
-          <button type="button" className="sm-modal-close" onClick={onClose} title="Close">✕</button>
+          <button type="button" className="sm-modal-close" onClick={onClose} title="Close (Esc)">✕</button>
         </div>
 
         <div className="sm-modal-tabs">
@@ -3453,79 +3492,105 @@ function PatientDetailsModal({
           </button>
         </div>
 
-        <div className="sm-modal-body">
-          {tab === 'edit' ? (
-            <div className="sm-modal-form">
-              <div className="sm-form-group">
-                <label>Patient Full Name *</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Sarah Connor, Jack Smith"
-                  value={formData.name}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
-                  autoFocus
-                />
-              </div>
+        {detected && tab === 'edit' && (!formData.name || !formData.age) && (
+          <div className="sm-ai-detect-banner">
+            <span className="sm-ai-detect-icon">💡</span>
+            <span className="sm-ai-detect-text">
+              <strong>AI Detected:</strong> {detected.name || 'Patient'}{detected.age ? `, ${detected.age} yrs` : ''}
+            </span>
+            <button
+              type="button"
+              className="sm-ai-detect-btn"
+              onClick={() => {
+                setFormData((prev) => ({
+                  ...prev,
+                  name: prev.name || detected.name || '',
+                  age: prev.age || detected.age || '',
+                }))
+              }}
+            >
+              Click to Apply
+            </button>
+          </div>
+        )}
 
-              <div className="sm-form-row">
+        <form onSubmit={handleSubmit}>
+          <div className="sm-modal-body">
+            {tab === 'edit' ? (
+              <div className="sm-modal-form">
                 <div className="sm-form-group">
-                  <label>Age</label>
+                  <label>Patient Full Name *</label>
                   <input
                     type="text"
-                    placeholder="e.g. 42 yrs"
-                    value={formData.age}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, age: e.target.value }))}
+                    placeholder="e.g. Sarah Connor, Jack Smith"
+                    value={formData.name}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
+                    autoFocus
+                    required
                   />
+                </div>
+
+                <div className="sm-form-row">
+                  <div className="sm-form-group">
+                    <label>Age</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 42 yrs"
+                      value={formData.age}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, age: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="sm-form-group">
+                    <label>Date of Birth</label>
+                    <input
+                      type="date"
+                      value={formData.dob}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, dob: e.target.value }))}
+                    />
+                  </div>
                 </div>
 
                 <div className="sm-form-group">
-                  <label>Date of Birth</label>
+                  <label>MRN / PHN / Health Card #</label>
                   <input
-                    type="date"
-                    value={formData.dob}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, dob: e.target.value }))}
+                    type="text"
+                    placeholder="e.g. MRN-849201"
+                    value={formData.mrn}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, mrn: e.target.value }))}
                   />
                 </div>
               </div>
-
-              <div className="sm-form-group">
-                <label>MRN / PHN / Health Card #</label>
-                <input
-                  type="text"
-                  placeholder="e.g. MRN-849201"
-                  value={formData.mrn}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, mrn: e.target.value }))}
-                />
+            ) : (
+              <div className="sm-modal-form">
+                <div className="sm-form-group">
+                  <label>Select Patient from Roster</label>
+                  <select
+                    value={formData.selectedExistingId}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, selectedExistingId: e.target.value }))}
+                    autoFocus
+                  >
+                    <option value="">-- Choose an existing patient --</option>
+                    {patientList.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} {p.mrn ? `(${p.mrn})` : ''} {p.age ? `· ${p.age} yrs` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="sm-modal-form">
-              <div className="sm-form-group">
-                <label>Select Patient from Roster</label>
-                <select
-                  value={formData.selectedExistingId}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, selectedExistingId: e.target.value }))}
-                >
-                  <option value="">-- Choose an existing patient --</option>
-                  {patientList.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} {p.mrn ? `(${p.mrn})` : ''} {p.age ? `· ${p.age} yrs` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
 
-        <div className="sm-modal-footer">
-          <button type="button" className="sm-btn-secondary" onClick={onClose}>
-            Cancel
-          </button>
-          <button type="button" className="sm-btn-primary" onClick={onSave}>
-            Save Patient Details
-          </button>
-        </div>
+          <div className="sm-modal-footer">
+            <button type="button" className="sm-btn-secondary" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="sm-btn-primary">
+              Save Patient Details
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   )
@@ -3540,16 +3605,32 @@ function DeleteEncounterModal({
   setDialog,
   onConfirm,
 }) {
+  const closeDialog = () => setDialog({ open: false, visit: null, deletePatientAlso: false })
+
+  useEffect(() => {
+    if (!dialog.open) return
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        closeDialog()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [dialog.open])
+
   if (!dialog.open) {
     return null
   }
 
   return (
-    <div className="sm-modal-backdrop" onClick={() => setDialog({ open: false, visit: null, deletePatientAlso: false })}>
+    <div className="sm-modal-backdrop" onClick={closeDialog}>
       <div className="sm-modal-box sm-modal-box--delete" onClick={(e) => e.stopPropagation()}>
         <div className="sm-modal-header sm-modal-header--danger">
-          <h3>🗑 Confirm Deletion</h3>
-          <button type="button" className="sm-modal-close" onClick={() => setDialog({ open: false, visit: null, deletePatientAlso: false })} title="Close">✕</button>
+          <div className="sm-modal-title-group">
+            <h3>🗑 Confirm Deletion</h3>
+            <span className="sm-modal-subtitle">Permanent action cannot be undone</span>
+          </div>
+          <button type="button" className="sm-modal-close" onClick={closeDialog} title="Close (Esc)">✕</button>
         </div>
         <div className="sm-modal-body">
           <p>
@@ -3574,7 +3655,7 @@ function DeleteEncounterModal({
           <button
             type="button"
             className="sm-btn-secondary"
-            onClick={() => setDialog({ open: false, visit: null, deletePatientAlso: false })}
+            onClick={closeDialog}
           >
             Cancel
           </button>
