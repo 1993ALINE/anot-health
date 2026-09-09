@@ -926,3 +926,93 @@
     opacity: 0 !important;
   }
 }
+
+/* ─── Device Session Selector & Concurrent Callout ────────────────────────── */
+.login-page__device-selector {
+  margin: 0.35rem 0 1.15rem;
+}
+
+.login-page__device-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.45rem;
+}
+
+.login-page__device-badge {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: #64748b;
+  letter-spacing: -0.01em;
+}
+
+.login-page__device-pills {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  background: rgba(241, 245, 249, 0.75);
+  padding: 0.25rem;
+  border-radius: 12px;
+  border: 1px solid rgba(203, 213, 225, 0.7);
+}
+
+.login-page__device-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.84rem;
+  font-weight: 500;
+  color: #475569;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+.login-page__device-pill:hover:not(.login-page__device-pill--active) {
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.login-page__device-pill--active {
+  color: #186df6;
+  background: #ffffff;
+  border-color: rgba(24, 109, 246, 0.22);
+  box-shadow: 0 2px 6px rgba(24, 109, 246, 0.1), 0 1px 2px rgba(15, 23, 42, 0.04);
+  font-weight: 600;
+}
+
+.login-page__device-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.login-page__concurrent-box {
+  margin: 0.85rem 0 1.25rem;
+  padding: 0.95rem 1.15rem;
+  background: rgba(239, 68, 68, 0.07);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 12px;
+  backdrop-filter: blur(8px);
+}
+
+.login-page__concurrent-title {
+  margin: 0 0 0.4rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #ef4444;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.login-page__concurrent-text {
+  margin: 0 0 0.85rem;
+  font-size: 0.81rem;
+  color: #475569;
+  line-height: 1.45;
+}

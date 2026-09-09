@@ -208,7 +208,14 @@ async function bootstrap() {
       }
     },
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'x-csrf-token'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-CSRF-Token',
+      'x-csrf-token',
+      'X-Device-Type',
+      'x-device-type',
+    ],
     exposedHeaders: ['x-csrf-token'],
   }
 

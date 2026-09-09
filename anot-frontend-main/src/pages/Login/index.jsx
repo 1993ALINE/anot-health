@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import './login.css'
-import { API_BASE, authAPI, isLikelyNetworkFailure } from '../../services/api'
+import { API_BASE, authAPI, getClientDeviceType, isLikelyNetworkFailure } from '../../services/api'
 import { fetchCsrfToken } from '../../utils/csrf'
 import { dashboardPathForRole } from '../../auth/dashboardPaths'
 import { DEFAULT_BRAND_LOGO_SRC, useBranding } from '../../services/branding'
@@ -219,7 +219,9 @@ export default function Login() {
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [deviceType, setDeviceType] = useState(() => getClientDeviceType())
   const [concurrentSessionActive, setConcurrentSessionActive] = useState(false)
+  const [conflictedDeviceLabel, setConflictedDeviceLabel] = useState('')
   const [phiTrainingToken, setPhiTrainingToken] = useState(null)
   const [passwordChangeToken, setPasswordChangeToken] = useState(null)
   const [csrfTokenFetched, setCsrfTokenFetched] = useState(false)
@@ -319,13 +321,19 @@ export default function Login() {
     setLoading(true)
     try {
       await fetchCsrfToken(API_BASE, { forceRefresh: true })
-      const data = await authAPI.login(email.trim(), password, { force })
+      const data = await authAPI.login(email.trim(), password, { force, deviceType })
       setConcurrentSessionActive(false)
       routeAfterAuth(data)
     } catch (err) {
       if (err?.status === 409 || err?.code === 'CONCURRENT_SESSION_ACTIVE') {
         setConcurrentSessionActive(true)
-        setError(err?.message || 'This account is currently active on another device. Only one session is permitted per user.')
+        const label = err?.deviceLabel || (deviceType === 'mobile' ? 'mobile device' : 'computer')
+        setConflictedDeviceLabel(label)
+        setError(
+          err?.message ||
+          err?.error ||
+          `This account already has an active session on another ${label}. Only one session per device type (1 computer + 1 mobile) is permitted.`
+        )
       } else {
         setConcurrentSessionActive(false)
         setError(humanizeAuthError(err))
@@ -345,7 +353,7 @@ export default function Login() {
     setLoading(true)
     try {
       await fetchCsrfToken(API_BASE, { forceRefresh: true })
-      const data = await authAPI.login(email.trim(), newPassword)
+      const data = await authAPI.login(email.trim(), newPassword, { deviceType })
       routeAfterAuth(data)
     } catch (err) {
       setError(humanizeAuthError(err))
@@ -583,6 +591,50 @@ export default function Login() {
                     </div>
                   </div>
 
+                  {/* Device Type Selector (Computer vs Mobile) */}
+                  <div className="login-page__device-selector">
+                    <div className="login-page__device-header">
+                      <label className="login-page__label" style={{ margin: 0, fontSize: '0.78rem' }}>
+                        Session Slot
+                      </label>
+                      <span className="login-page__device-badge">
+                        1 computer + 1 mobile allowed simultaneously
+                      </span>
+                    </div>
+                    <div className="login-page__device-pills" role="radiogroup" aria-label="Device session type">
+                      <button
+                        type="button"
+                        className={`login-page__device-pill ${deviceType === 'desktop' ? 'login-page__device-pill--active' : ''}`}
+                        onClick={() => {
+                          setDeviceType('desktop')
+                          if (concurrentSessionActive) {
+                            setConcurrentSessionActive(false)
+                            setError('')
+                          }
+                        }}
+                        aria-pressed={deviceType === 'desktop'}
+                      >
+                        <span className="login-page__device-icon">💻</span>
+                        <span>Computer</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`login-page__device-pill ${deviceType === 'mobile' ? 'login-page__device-pill--active' : ''}`}
+                        onClick={() => {
+                          setDeviceType('mobile')
+                          if (concurrentSessionActive) {
+                            setConcurrentSessionActive(false)
+                            setError('')
+                          }
+                        }}
+                        aria-pressed={deviceType === 'mobile'}
+                      >
+                        <span className="login-page__device-icon">📱</span>
+                        <span>Mobile</span>
+                      </button>
+                    </div>
+                  </div>
+
                   {error ? (
                     <div className="login-page__error" role="alert">
                       <IconAlert />
@@ -591,9 +643,12 @@ export default function Login() {
                   ) : null}
 
                   {concurrentSessionActive ? (
-                    <div className="login-page__concurrent-box" style={{ margin: '0.75rem 0 1rem', padding: '0.75rem 1rem', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', borderRadius: '8px' }}>
-                      <p style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', color: '#f87171', lineHeight: 1.4 }}>
-                        Only one session is permitted per user. Would you like to terminate the other device&apos;s session and sign in here?
+                    <div className="login-page__concurrent-box">
+                      <p className="login-page__concurrent-title">
+                        Active {conflictedDeviceLabel === 'mobile device' ? 'Mobile' : 'Computer'} Session Detected
+                      </p>
+                      <p className="login-page__concurrent-text">
+                        Anot permits 1 computer session and 1 mobile session at the same time. Would you like to terminate the other {conflictedDeviceLabel === 'mobile device' ? 'mobile' : 'computer'} session and sign in here?
                       </p>
                       <button
                         type="button"
@@ -602,7 +657,7 @@ export default function Login() {
                         disabled={loading || !csrfReady}
                         style={{ background: '#dc2626', borderColor: '#b91c1c' }}
                       >
-                        {loading ? 'Terminating & Signing In…' : 'Log Out Other Device & Sign In Here'}
+                        {loading ? 'Terminating & Signing In…' : `Log Out Other ${conflictedDeviceLabel === 'mobile device' ? 'Mobile' : 'Computer'} & Sign In Here`}
                       </button>
                     </div>
                   ) : (

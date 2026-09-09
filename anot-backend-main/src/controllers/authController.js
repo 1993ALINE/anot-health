@@ -198,6 +198,8 @@ async function buildPostPasswordLoginResponse(user, req, res) {
             body: {
                 error: `This account already has an active session on another ${deviceLabel}. Only one session per device type is permitted.`,
                 code: 'CONCURRENT_SESSION_ACTIVE',
+                deviceType,
+                deviceLabel,
                 canForce: true,
             },
         }
@@ -238,8 +240,9 @@ async function buildPostPasswordLoginResponse(user, req, res) {
         status: 200,
         body: {
             message: 'Login successful',
-            user: toAuthUser(user),
+            user: { ...toAuthUser(user), device_type: deviceType },
             token,
+            device_type: deviceType,
         },
     }
 }
@@ -613,7 +616,7 @@ const getMe = async (req, res) => {
             return res.status(404).json({ error: 'User not found.' })
         }
 
-        res.status(200).json({ user: result.rows[0] })
+        res.status(200).json({ user: { ...result.rows[0], device_type: req.user.device_type || 'desktop' } })
     } catch (err) {
         sendHttpError(res, 500, err, { context: 'auth.getMe', req })
     }

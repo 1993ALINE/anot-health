@@ -97,15 +97,33 @@ describe('Backend End-to-End Profile Authorization & Event Lifecycle Test', () =
     test('detects explicit X-Device-Type headers', () => {
       expect(getDeviceTypeFromRequest({ headers: { 'x-device-type': 'mobile' } })).toBe('mobile')
       expect(getDeviceTypeFromRequest({ headers: { 'x-device-type': 'desktop' } })).toBe('desktop')
+      expect(getDeviceTypeFromRequest({ headers: { 'X-Device-Type': 'mobile' } })).toBe('mobile')
     })
 
-    test('detects mobile user agents (iOS Safari, Android Chrome)', () => {
+    test('detects explicit deviceType in request body and query', () => {
+      expect(getDeviceTypeFromRequest({ body: { deviceType: 'mobile' } })).toBe('mobile')
+      expect(getDeviceTypeFromRequest({ body: { device_type: 'mobile' } })).toBe('mobile')
+      expect(getDeviceTypeFromRequest({ body: { deviceType: 'desktop' } })).toBe('desktop')
+      expect(getDeviceTypeFromRequest({ query: { deviceType: 'mobile' } })).toBe('mobile')
+      expect(getDeviceTypeFromRequest({ query: { device: 'mobile' } })).toBe('mobile')
+    })
+
+    test('detects Sec-CH-UA-Mobile client hint', () => {
+      expect(getDeviceTypeFromRequest({ headers: { 'sec-ch-ua-mobile': '?1' } })).toBe('mobile')
+      expect(getDeviceTypeFromRequest({ headers: { 'sec-ch-ua-mobile': '?0' } })).toBe('desktop')
+    })
+
+    test('detects mobile user agents (iOS Safari, Android Chrome, iPad, tablets)', () => {
       const iPhoneUA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1'
       const androidUA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36'
+      const iPadUA = 'Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+      const tabletUA = 'Mozilla/5.0 (Linux; Android 12; SM-T870) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.127 Safari/537.36 Tablet'
       const desktopChromeUA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
 
       expect(getDeviceTypeFromRequest({ headers: { 'user-agent': iPhoneUA } })).toBe('mobile')
       expect(getDeviceTypeFromRequest({ headers: { 'user-agent': androidUA } })).toBe('mobile')
+      expect(getDeviceTypeFromRequest({ headers: { 'user-agent': iPadUA } })).toBe('mobile')
+      expect(getDeviceTypeFromRequest({ headers: { 'user-agent': tabletUA } })).toBe('mobile')
       expect(getDeviceTypeFromRequest({ headers: { 'user-agent': desktopChromeUA } })).toBe('desktop')
     })
   })

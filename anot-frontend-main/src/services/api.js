@@ -70,10 +70,61 @@ const BASE_URL = API_BASE
 /**
  * @deprecated Token is HttpOnly cookie — use hasValidSession() instead.
  */
-const _getAuthToken = () => getToken()
-export const isMobileDevice =
-  typeof navigator !== 'undefined' &&
-  /Mobile|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent || '')
+/**
+ * Detect client device type ('mobile' vs 'desktop') with multi-tiered heuristics:
+ * 1. URL parameter override (?device=mobile or ?deviceType=mobile or ?mobile=1)
+ * 2. Modern Client Hints (navigator.userAgentData.mobile)
+ * 3. User-Agent regex (iPhone, Android, mobile browsers, tablets)
+ * 4. iPadOS 13+ detection (Macintosh UA with multi-touch)
+ * 5. Touch device media query (coarse pointer + tablet/phone viewport)
+ * 6. Responsive mobile screen / viewport dimensions
+ */
+export function getClientDeviceType() {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') return 'desktop'
+
+  // 1. URL parameter override (useful for testing, responsive deep links)
+  try {
+    const params = new URLSearchParams(window.location.search)
+    const urlDevice = params.get('device') || params.get('deviceType')
+    if (urlDevice === 'mobile' || urlDevice === 'desktop') return urlDevice
+    if (params.get('mobile') === '1' || params.get('mobile') === 'true') return 'mobile'
+  } catch (_) {}
+
+  // 2. Modern Client Hints API
+  if (navigator.userAgentData?.mobile === true) {
+    return 'mobile'
+  }
+
+  // 3. User Agent heuristics
+  const ua = navigator.userAgent || navigator.vendor || window.opera || ''
+  if (/Mobile|Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Silk|CriOS|FxiOS|webOS|Tablet/i.test(ua)) {
+    return 'mobile'
+  }
+
+  // 4. iPad on iPadOS 13+ (Apple reports desktop Macintosh UA for iPads with multi-touch)
+  if (/Macintosh/i.test(ua) && typeof navigator.maxTouchPoints === 'number' && navigator.maxTouchPoints > 1) {
+    return 'mobile'
+  }
+
+  // 5. Coarse pointer (touch screen) with tablet/phone viewport
+  if (typeof window.matchMedia === 'function') {
+    if (window.matchMedia('(max-width: 1024px) and (pointer: coarse)').matches) {
+      return 'mobile'
+    }
+  }
+
+  // 6. Viewport / screen width heuristic (mobile phone / responsive mode)
+  if (typeof window.innerWidth === 'number' && window.innerWidth <= 768) {
+    return 'mobile'
+  }
+  if (typeof screen !== 'undefined' && screen.width && screen.width <= 768) {
+    return 'mobile'
+  }
+
+  return 'desktop'
+}
+
+export const isMobileDevice = typeof window !== 'undefined' && getClientDeviceType() === 'mobile'
 
 /**
  * Build request headers for API calls.
@@ -81,9 +132,10 @@ export const isMobileDevice =
  * Bearer Authorization is only added when explicitly passed in extraHeaders (login gates).
  */
 function buildRequestHeaders(_includeAuth = true, extraHeaders = {}) {
+  const deviceType = getClientDeviceType()
   const h = {
     'Content-Type': 'application/json',
-    'X-Device-Type': isMobileDevice ? 'mobile' : 'desktop',
+    'X-Device-Type': deviceType,
     ...extraHeaders,
   }
   return h
@@ -295,10 +347,12 @@ const handleResponse = async (res) => {
 
 export const authAPI = {
   login: async (email, password, options = {}) => {
-    const { force = false } = typeof options === 'boolean' ? { force: options } : options
+    const opts = typeof options === 'boolean' ? { force: options } : options
+    const force = opts.force || false
+    const deviceType = opts.deviceType || getClientDeviceType()
     const data = await apiMutate('POST', '/auth/login', {
       includeAuth: false,
-      body: { email, password, force },
+      body: { email, password, force, deviceType },
     })
     // Persist session when login completes (HttpOnly cookie set by server).
     if (data.user && !data.temporaryToken && !data.requireMfa && !data.requirePhiTraining && !data.requirePasswordChange) {
@@ -310,10 +364,11 @@ export const authAPI = {
    * Completes the PHI-training gate. Exchanges the short-lived temporaryToken
    * from login for a real session token, then persists the session.
    */
-  acknowledgePhiTraining: async (temporaryToken) => {
+  acknowledgePhiTraining: async (temporaryToken, options = {}) => {
+    const deviceType = options.deviceType || getClientDeviceType()
     const data = await apiMutate('POST', '/auth/acknowledge-phi-training', {
       includeAuth: false,
-      body: { temporaryToken },
+      body: { temporaryToken, deviceType },
     })
     // Only persist a full session when no further login gates remain.
     if (data.user && !data.enrollmentRequired && !data.requireMfa && !data.temporaryToken) {
@@ -321,10 +376,11 @@ export const authAPI = {
     }
     return data
   },
-  verifyMfaLogin: async (temporaryToken, code) => {
+  verifyMfaLogin: async (temporaryToken, code, options = {}) => {
+    const deviceType = options.deviceType || getClientDeviceType()
     const data = await apiMutate('POST', '/auth/verify-mfa', {
       includeAuth: false,
-      body: { temporaryToken, code },
+      body: { temporaryToken, code, deviceType },
     })
     if (data.user) {
       setSession(data.user)
