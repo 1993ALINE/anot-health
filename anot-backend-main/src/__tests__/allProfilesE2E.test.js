@@ -126,6 +126,29 @@ describe('Backend End-to-End Profile Authorization & Event Lifecycle Test', () =
       expect(getDeviceTypeFromRequest({ headers: { 'user-agent': tabletUA } })).toBe('mobile')
       expect(getDeviceTypeFromRequest({ headers: { 'user-agent': desktopChromeUA } })).toBe('desktop')
     })
+
+    test('detects CloudFront edge viewer headers', () => {
+      expect(getDeviceTypeFromRequest({ headers: { 'cloudfront-is-mobile-viewer': 'true' } })).toBe('mobile')
+      expect(getDeviceTypeFromRequest({ headers: { 'cloudfront-is-tablet-viewer': 'true' } })).toBe('mobile')
+      expect(getDeviceTypeFromRequest({ headers: { 'cloudfront-is-android-viewer': 'true' } })).toBe('mobile')
+      expect(getDeviceTypeFromRequest({ headers: { 'cloudfront-is-ios-viewer': 'true' } })).toBe('mobile')
+      expect(getDeviceTypeFromRequest({ headers: { 'cloudfront-is-desktop-viewer': 'true' } })).toBe('desktop')
+    })
+
+    test('detects native mobile app runtimes and platforms', () => {
+      expect(getDeviceTypeFromRequest({ headers: { 'user-agent': 'Dart/3.4.0 (dart:io)' } })).toBe('mobile')
+      expect(getDeviceTypeFromRequest({ headers: { 'user-agent': 'okhttp/4.12.0' } })).toBe('mobile')
+      expect(getDeviceTypeFromRequest({ headers: { 'user-agent': 'CFNetwork/1494.0.7 Darwin/23.4.0' } })).toBe('mobile')
+      expect(getDeviceTypeFromRequest({ headers: { 'user-agent': 'Anot/1.0.0 (iOS 17.5)' } })).toBe('mobile')
+      expect(getDeviceTypeFromRequest({ headers: { 'user-agent': 'Expo/50.0.0' } })).toBe('mobile')
+      expect(getDeviceTypeFromRequest({ headers: { 'x-platform': 'ios' } })).toBe('mobile')
+      expect(getDeviceTypeFromRequest({ headers: { 'x-platform': 'android' } })).toBe('mobile')
+    })
+
+    test('detects native non-browser client without desktop browser signatures', () => {
+      // Mobile app making API calls without browser origin/referer/fetch headers
+      expect(getDeviceTypeFromRequest({ headers: { 'user-agent': 'CustomHttpClient/2.0' } })).toBe('mobile')
+    })
   })
 
   // ──────────────────────────────────────────────────────────────────────────
