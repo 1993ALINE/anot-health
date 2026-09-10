@@ -2017,13 +2017,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
 
   const dateFilteredVisits = visits.filter((v) => {
     const vDate = normalizeVisitDate(v.visit_date)
-    if (scheduleDateFilter === 'today') {
-      return vDate === todayStr
-    }
-    if (scheduleDateFilter === 'yesterday') {
-      return vDate === yesterdayStr
-    }
-    return true
+    return vDate === todayStr
   })
 
   // Sort reverse chronologically (newest first)
@@ -2808,14 +2802,6 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                             >
                               ✏️ Edit
                             </button>
-                            <button
-                              type="button"
-                              className="sm-btn-sm-delete"
-                              onClick={(e) => handleDeleteClick(e, v)}
-                              title="Delete encounter"
-                            >
-                              🗑 Delete
-                            </button>
                           </div>
                         </div>
                       )
@@ -2834,8 +2820,8 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
             <div className="sm-side-card__header">
               <div className="sm-side-card__title-group">
                 <div className="sm-side-card__title-left">
-                  <span className="sm-side-card__title" title="Patient Encounters">Encounters</span>
-                  <span className="sm-side-card__count">{countAll}</span>
+                  <span className="sm-side-card__title" title="Today's Patient Encounters">Today's Encounters</span>
+                  <span className="sm-side-card__count">{countToday}</span>
                   <div
                     className="sm-live-sync-indicator"
                     title={liveSyncConnected ? 'Live Sync Active: automatically syncing with mobile app' : 'Syncing with mobile app'}
@@ -2867,55 +2853,19 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                 </div>
               </div>
 
-              {/* Date Filter Tabs: Today / Yesterday / All */}
-              <div className="sm-date-tabs">
+              {/* Clean Today Schedule Action Bar */}
+              <div className="sm-today-action-bar">
+                <span className="sm-today-action-label">Today's Schedule</span>
                 <button
                   type="button"
-                  className={`sm-date-tab ${scheduleDateFilter === 'today' ? 'sm-date-tab--active' : ''}`}
-                  onClick={() => {
-                    hasUserManuallySelectedDateTabRef.current = true
-                    setScheduleDateFilter('today')
-                  }}
+                  className="sm-btn-schedule-patient-link"
+                  onClick={() => setScheduleModalOpen(true)}
+                  title="Add a patient to today's schedule"
                 >
-                  Today ({countToday})
-                </button>
-                <button
-                  type="button"
-                  className={`sm-date-tab ${scheduleDateFilter === 'yesterday' ? 'sm-date-tab--active' : ''}`}
-                  onClick={() => {
-                    hasUserManuallySelectedDateTabRef.current = true
-                    setScheduleDateFilter('yesterday')
-                  }}
-                >
-                  Yesterday ({countYesterday})
-                </button>
-                <button
-                  type="button"
-                  className={`sm-date-tab ${scheduleDateFilter === 'all' ? 'sm-date-tab--active' : ''}`}
-                  onClick={() => {
-                    hasUserManuallySelectedDateTabRef.current = true
-                    setScheduleDateFilter('all')
-                  }}
-                >
-                  All ({countAll})
+                  <span className="sm-schedule-icon">📅</span>
+                  <span>+ Schedule Patient</span>
                 </button>
               </div>
-
-              {/* Option 2: Clean Today Schedule Action Bar */}
-              {scheduleDateFilter === 'today' && (
-                <div className="sm-today-action-bar">
-                  <span className="sm-today-action-label">Today's Schedule</span>
-                  <button
-                    type="button"
-                    className="sm-btn-schedule-patient-link"
-                    onClick={() => setScheduleModalOpen(true)}
-                    title="Add a patient to today's schedule"
-                  >
-                    <span className="sm-schedule-icon">📅</span>
-                    <span>+ Schedule Patient</span>
-                  </button>
-                </div>
-              )}
 
               {/* Combined Search Bar + Status Dropdown */}
               <div className="sm-side-controls-row">
@@ -2924,7 +2874,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                   <input
                     type="text"
                     className="sm-side-search-input"
-                    placeholder="Search patients..."
+                    placeholder="Search today's patients..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
@@ -2957,11 +2907,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
               {filteredVisits.length === 0 ? (
                 <div className="sm-empty-state sm-empty-state--minimal">
                   <p className="sm-empty-state__message">
-                    {scheduleDateFilter === 'today'
-                      ? 'No encounters recorded for today.'
-                      : scheduleDateFilter === 'yesterday'
-                        ? 'No encounters recorded for yesterday.'
-                        : 'No encounters matching filter.'}
+                    No encounters recorded for today.
                   </p>
                 </div>
               ) : (
