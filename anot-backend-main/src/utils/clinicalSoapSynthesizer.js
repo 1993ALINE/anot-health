@@ -147,23 +147,107 @@ function deriveCptCodes(text, visitType = 'Follow-up') {
   return matched.slice(0, 3)
 }
 
+const SECTION_HEADERS_LIST = [
+  'CHIEF COMPLAINT',
+  'REASON FOR VISIT',
+  'HISTORY OF PRESENT ILLNESS',
+  'HPI',
+  'SUBJECTIVE',
+  'CURRENT MEDICATIONS',
+  'ACTIVE MEDICATIONS',
+  'MEDICATIONS',
+  'MEDS',
+  'ALLERGIES',
+  'PAST MEDICAL HISTORY',
+  'PAST SURGICAL HISTORY',
+  'REVIEW OF SYSTEMS',
+  'ROS',
+  'VITAL SIGNS',
+  'VITALS',
+  'OBJECTIVE',
+  'PHYSICAL EXAMINATION',
+  'PHYSICAL EXAM',
+  'PE',
+  'ASSESSMENT & PLAN',
+  'ASSESSMENT AND PLAN',
+  'A&P',
+  'ASSESSMENT',
+  'IMPRESSION',
+  'PLAN',
+  'ORDERS',
+  'RECOMMENDATIONS',
+  'ICD-10 CODES',
+  'ICD-10',
+  'ICD 10',
+  'CPT CODES',
+  'CPT'
+]
+
+function normalizeSectionBreaks(text) {
+  if (!text) return ''
+  let str = String(text)
+  const headerAlt = SECTION_HEADERS_LIST.map(h => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')
+  const boundaryRegex = new RegExp(`(?:^|[\\n\\r]|\\.\\s+|;\\s+|\\s{2,})(${headerAlt})(?:\\s*\\([A-Za-z0-9\\s/&\\-–—]+\\))?\\s*:`, 'gi')
+  str = str.replace(boundaryRegex, (match, p1) => `\n\n${p1.toUpperCase()}:\n`)
+  return str.trim()
+}
+
+function extractSectionContent(text, headerRegex, stopHeaderNames = []) {
+  if (!text) return null
+  const headerMatch = text.match(headerRegex)
+  if (!headerMatch) return null
+  const startIndex = headerMatch.index + headerMatch[0].length
+  const remainder = text.slice(startIndex)
+
+  const stopHeaders = stopHeaderNames.length > 0 ? stopHeaderNames : SECTION_HEADERS_LIST
+  const stopAlt = stopHeaders.map(h => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')
+  const stopRegex = new RegExp(`(?:^|[\\n\\r]|\\.\\s+|;\\s+|\\s{2,})(?:${stopAlt})(?:\\s*\\([A-Za-z0-9\\s/&\\-–—]+\\))?\\s*:`, 'i')
+  const stopMatch = remainder.match(stopRegex)
+  const endIndex = stopMatch ? stopMatch.index : remainder.length
+
+  return remainder.slice(0, endIndex).trim()
+}
+
+function formatNumberedList(text) {
+  if (!text) return ''
+  const items = text.split(/(?=(?:\d+\.|\([0-9a-z]\))\s+)/i).map(s => s.trim()).filter(Boolean)
+  if (items.length > 1) {
+    return items.join('\n')
+  }
+  return text
+}
+
+function formatExamFindings(rawPe) {
+  if (!rawPe) return 'Not documented this encounter.'
+  if (rawPe.includes('\n') || rawPe.includes('•')) {
+    return rawPe.split('\n').map(l => l.trim()).filter(Boolean).join('\n')
+  }
+  const parts = rawPe.split(/[,;]|\.\s+(?=[A-Z])/).map(p => p.trim().replace(/\.+$/, '')).filter(p => p.length > 3)
+  if (parts.length > 1) {
+    return parts.map(p => `• ${p.charAt(0).toUpperCase() + p.slice(1)}`).join('\n')
+  }
+  return rawPe
+}
+
 /**
  * Extracts medications with dosages, routes, and frequencies from dictation or transcript
  */
 function extractMedications(text) {
   if (!text) return { list: [], formattedText: '• No current prescription medications documented this encounter.' }
+  const normalizedStr = normalizeSectionBreaks(text)
   const str = String(text)
   const meds = new Map()
 
-  // 1. Explicit Medication block (e.g. "Medications: Lisinopril 20mg once daily, Atorvastatin 20mg at bedtime, Tylenol 500mg PRN.")
-  const blockRegex = /(?:current\s+)?(?:medications?|meds?|medication\s+list|active\s+medications?|prescriptions?|rx)(?:\s*list|\s*review)?:\s*([^\n\r]+(?:\n(?!(?:Physical|Assessment|Plan|Vitals|Allergies|Past|Chief|Review|[A-Z\s]{4,}:))[^\n\r]+)*)/gi
-  let match
-  while ((match = blockRegex.exec(str)) !== null) {
-    const rawBlock = match[1].trim()
+  // 1. Explicit Medication block
+  const rawBlock = extractSectionContent(normalizedStr, /(?:current\s+)?(?:medications?|meds?|medication\s+list|active\s+medications?|prescriptions?|rx)(?:\s*list|\s*review)?:\s*/i)
+  if (rawBlock) {
     const items = rawBlock.split(/[,;\n•\*\-]|\band\b/i).map(s => s.trim()).filter(s => s.length > 2)
     for (const item of items) {
-      const clean = item.replace(/\.+$/, '').trim()
-      if (clean && !/^(none|denies|nil|no known|n\/a)$/i.test(clean)) {
+      let clean = item.replace(/\.+$/, '').trim()
+      if (/(?:physical\s+exam|cranial|cervical|assessment|plan:|follow.?up|screen\s+rule)/i.test(clean)) {
+        clean = clean.replace(/\.\s*(?:Physical|Assessment|Plan|cervical|no\s+temporal).*/i, '').trim()
+      }
+      if (clean && clean.length > 2 && !/^(none|denies|nil|no known|n\/a|cervical|no temporal|assessment|plan|screen rule)$/i.test(clean) && !/(?:cranial\s+nerve|range\s+of\s+motion|artery\s+tenderness)/i.test(clean)) {
         const key = clean.toLowerCase()
         if (!meds.has(key)) {
           meds.set(key, clean)
@@ -210,6 +294,7 @@ function formatClinicalDictationToSOAP(dictation = '', scratchpad = '', visitTyp
   const cleanDictation = String(dictation || '').trim()
   const cleanScratch = String(scratchpad || '').trim()
   const fullText = [cleanDictation, cleanScratch].filter(Boolean).join('\n\n')
+  const normalizedText = normalizeSectionBreaks(fullText)
 
   const normalized = fullText.toLowerCase()
   const patientName = meta.patientName || 'Patient'
@@ -237,9 +322,9 @@ function formatClinicalDictationToSOAP(dictation = '', scratchpad = '', visitTyp
 
   // Determine Chief Complaint
   let chiefComplaint = 'Clinical Consultation'
-  const explicitCc = cleanDictation.match(/chief\s+complaint:\s*([^\n\r]+)/i)
-  if (explicitCc && explicitCc[1].trim().length > 2) {
-    chiefComplaint = explicitCc[1].trim()
+  const explicitCc = extractSectionContent(normalizedText, /(?:chief\s+complaint|reason\s+for\s+visit):\s*/i)
+  if (explicitCc && explicitCc.length > 2) {
+    chiefComplaint = explicitCc.replace(/\.+$/, '').trim()
   } else if (meta.chiefComplaint && !meta.chiefComplaint.toLowerCase().includes('consultation')) {
     chiefComplaint = meta.chiefComplaint
   } else if (isHeadache) {
@@ -270,10 +355,10 @@ function formatClinicalDictationToSOAP(dictation = '', scratchpad = '', visitTyp
 
   // Build HPI
   const hpiLines = []
-  const explicitHpi = cleanDictation.match(/(?:history\s+of\s+present\s+illness|hpi):\s*([^\n\r]+(?:\n(?!(?:vitals|physical|past|medications|assessment|plan|[A-Z\s]{4,}:))[^\n\r]+)*)/i)
+  const explicitHpi = extractSectionContent(normalizedText, /(?:history\s+of\s+present\s+illness|hpi):\s*/i)
 
-  if (explicitHpi && explicitHpi[1].trim().length > 10) {
-    hpiLines.push(explicitHpi[1].trim())
+  if (explicitHpi && explicitHpi.length > 10) {
+    hpiLines.push(explicitHpi)
   } else if (isHeadache) {
     hpiLines.push(`The patient is a ${patientAge} ${genderTerm} presenting for evaluation of ${chiefComplaint.toLowerCase()}.`)
     if (/throbbing|pulsating/i.test(normalized)) {
@@ -304,13 +389,12 @@ function formatClinicalDictationToSOAP(dictation = '', scratchpad = '', visitTyp
   // Build Physical Exam
   const instructionInfo = detectScribeInstructions(fullText)
   const examLines = []
-  const explicitPe = cleanDictation.match(/(?:physical\s+examination|pe):\s*([^\n\r]+(?:\n(?!(?:assessment|plan|[A-Z\s]{4,}:))[^\n\r]+)*)/i)
+  const explicitPe = extractSectionContent(normalizedText, /(?:physical\s+examination|physical\s+exam|pe):\s*/i)
 
   if (instructionInfo.hasPendingActions && instructionInfo.formattedExamPlaceholder) {
     examLines.push(instructionInfo.formattedExamPlaceholder)
-  } else if (explicitPe && explicitPe[1].trim().length > 10) {
-    const peItems = explicitPe[1].trim().split('\n').map(l => l.trim()).filter(Boolean)
-    examLines.push(...peItems)
+  } else if (explicitPe && explicitPe.length > 5) {
+    examLines.push(formatExamFindings(explicitPe))
   } else if (/exam|palpat|tender|swelling|inspect|rom|range of motion/i.test(normalized)) {
     if (/swelling/i.test(normalized)) {
       examLines.push(/no\s+swelling/i.test(normalized) ? '• Inspection: No visible swelling or acute deformity.' : '• Inspection: Swelling observed as noted in encounter.')
@@ -328,10 +412,9 @@ function formatClinicalDictationToSOAP(dictation = '', scratchpad = '', visitTyp
 
   // Build Assessment
   const assessmentLines = []
-  const explicitAss = cleanDictation.match(/assessment:\s*([^\n\r]+(?:\n(?!(?:plan|[A-Z\s]{4,}:))[^\n\r]+)*)/i)
-  if (explicitAss && explicitAss[1].trim().length > 5) {
-    const assItems = explicitAss[1].trim().split('\n').map(l => l.trim()).filter(Boolean)
-    assessmentLines.push(...assItems)
+  const explicitAss = extractSectionContent(normalizedText, /(?:assessment|impression):\s*/i)
+  if (explicitAss && explicitAss.length > 3) {
+    assessmentLines.push(formatNumberedList(explicitAss))
   } else {
     assessmentLines.push(`1. ${chiefComplaint}.`)
     if (isHypertension && !assessmentLines.some(a => /hypertension/i.test(a))) {
@@ -341,10 +424,9 @@ function formatClinicalDictationToSOAP(dictation = '', scratchpad = '', visitTyp
 
   // Build Plan (distinguish orders from discussions)
   const planLines = []
-  const explicitPlan = cleanDictation.match(/plan:\s*([^\n\r]+(?:\n(?!(?:icd|cpt|[A-Z\s]{4,}:))[^\n\r]+)*)/i)
-  if (explicitPlan && explicitPlan[1].trim().length > 5) {
-    const pItems = explicitPlan[1].trim().split('\n').map(l => l.trim()).filter(Boolean)
-    planLines.push(...pItems)
+  const explicitPlan = extractSectionContent(normalizedText, /plan:\s*/i)
+  if (explicitPlan && explicitPlan.length > 3) {
+    planLines.push(formatNumberedList(explicitPlan))
   } else {
     if (/(?:request|order)\s+(?:for\s+)?(?:a\s+)?bilateral\s+hyaluronic\s+acid/i.test(fullText)) {
       planLines.push('1. ORDER: Bilateral hyaluronic acid knee injections requested to address osteoarthritic changes and provide cushioning for physical therapy participation.')
@@ -401,7 +483,6 @@ function formatClinicalDictationToSOAP(dictation = '', scratchpad = '', visitTyp
     'PHYSICAL EXAMINATION (PE):',
     examLines.join('\n'),
     '',
-    'ASSESSMENT & PLAN (A&P):',
     'ASSESSMENT:',
     assessmentLines.join('\n'),
     '',

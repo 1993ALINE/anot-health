@@ -151,23 +151,107 @@ export function formatVitalsSection(vitalsObj) {
   return lines.join('\n')
 }
 
+export const SECTION_HEADERS_LIST = [
+  'CHIEF COMPLAINT',
+  'REASON FOR VISIT',
+  'HISTORY OF PRESENT ILLNESS',
+  'HPI',
+  'SUBJECTIVE',
+  'CURRENT MEDICATIONS',
+  'ACTIVE MEDICATIONS',
+  'MEDICATIONS',
+  'MEDS',
+  'ALLERGIES',
+  'PAST MEDICAL HISTORY',
+  'PAST SURGICAL HISTORY',
+  'REVIEW OF SYSTEMS',
+  'ROS',
+  'VITAL SIGNS',
+  'VITALS',
+  'OBJECTIVE',
+  'PHYSICAL EXAMINATION',
+  'PHYSICAL EXAM',
+  'PE',
+  'ASSESSMENT & PLAN',
+  'ASSESSMENT AND PLAN',
+  'A&P',
+  'ASSESSMENT',
+  'IMPRESSION',
+  'PLAN',
+  'ORDERS',
+  'RECOMMENDATIONS',
+  'ICD-10 CODES',
+  'ICD-10',
+  'ICD 10',
+  'CPT CODES',
+  'CPT'
+]
+
+export function normalizeSectionBreaks(text) {
+  if (!text) { return '' }
+  let str = String(text)
+  const headerAlt = SECTION_HEADERS_LIST.map(h => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')
+  const boundaryRegex = new RegExp(`(?:^|[\\n\\r]|\\.\\s+|;\\s+|\\s{2,})(${headerAlt})(?:\\s*\\([A-Za-z0-9\\s/&\\-–—]+\\))?\\s*:`, 'gi')
+  str = str.replace(boundaryRegex, (match, p1) => `\n\n${p1.toUpperCase()}:\n`)
+  return str.trim()
+}
+
+export function extractSectionContent(text, headerRegex, stopHeaderNames = []) {
+  if (!text) { return null }
+  const headerMatch = text.match(headerRegex)
+  if (!headerMatch) { return null }
+  const startIndex = headerMatch.index + headerMatch[0].length
+  const remainder = text.slice(startIndex)
+
+  const stopHeaders = stopHeaderNames.length > 0 ? stopHeaderNames : SECTION_HEADERS_LIST
+  const stopAlt = stopHeaders.map(h => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')
+  const stopRegex = new RegExp(`(?:^|[\\n\\r]|\\.\\s+|;\\s+|\\s{2,})(?:${stopAlt})(?:\\s*\\([A-Za-z0-9\\s/&\\-–—]+\\))?\\s*:`, 'i')
+  const stopMatch = remainder.match(stopRegex)
+  const endIndex = stopMatch ? stopMatch.index : remainder.length
+
+  return remainder.slice(0, endIndex).trim()
+}
+
+export function formatNumberedList(text) {
+  if (!text) { return '' }
+  const items = text.split(/(?=(?:\d+\.|\([0-9a-z]\))\s+)/i).map(s => s.trim()).filter(Boolean)
+  if (items.length > 1) {
+    return items.join('\n')
+  }
+  return text
+}
+
+export function formatExamFindings(rawPe) {
+  if (!rawPe) { return 'Not documented this encounter.' }
+  if (rawPe.includes('\n') || rawPe.includes('•')) {
+    return rawPe.split('\n').map(l => l.trim()).filter(Boolean).join('\n')
+  }
+  const parts = rawPe.split(/[,;]|\.\s+(?=[A-Z])/).map(p => p.trim().replace(/\.+$/, '')).filter(p => p.length > 3)
+  if (parts.length > 1) {
+    return parts.map(p => `• ${p.charAt(0).toUpperCase() + p.slice(1)}`).join('\n')
+  }
+  return rawPe
+}
+
 /**
  * Extracts medications with dosages, routes, and frequencies from dictation or transcript
  */
 export function extractMedications(text) {
   if (!text) return { list: [], formattedText: '• No current prescription medications documented this encounter.' }
+  const normalizedStr = normalizeSectionBreaks(text)
   const str = String(text)
   const meds = new Map()
 
   // 1. Explicit Medication block
-  const blockRegex = /(?:current\s+)?(?:medications?|meds?|medication\s+list|active\s+medications?|prescriptions?|rx)(?:\s*list|\s*review)?:\s*([^\n\r]+(?:\n(?!(?:Physical|Assessment|Plan|Vitals|Allergies|Past|Chief|Review|[A-Z\s]{4,}:))[^\n\r]+)*)/gi
-  let match
-  while ((match = blockRegex.exec(str)) !== null) {
-    const rawBlock = match[1].trim()
+  const rawBlock = extractSectionContent(normalizedStr, /(?:current\s+)?(?:medications?|meds?|medication\s+list|active\s+medications?|prescriptions?|rx)(?:\s*list|\s*review)?:\s*/i)
+  if (rawBlock) {
     const items = rawBlock.split(/[,;\n•\*\-]|\band\b/i).map(s => s.trim()).filter(s => s.length > 2)
     for (const item of items) {
-      const clean = item.replace(/\.+$/, '').trim()
-      if (clean && !/^(none|denies|nil|no known|n\/a)$/i.test(clean)) {
+      let clean = item.replace(/\.+$/, '').trim()
+      if (/(?:physical\s+exam|cranial|cervical|assessment|plan:|follow.?up|screen\s+rule)/i.test(clean)) {
+        clean = clean.replace(/\.\s*(?:Physical|Assessment|Plan|cervical|no\s+temporal).*/i, '').trim()
+      }
+      if (clean && clean.length > 2 && !/^(none|denies|nil|no known|n\/a|cervical|no temporal|assessment|plan|screen rule)$/i.test(clean) && !/(?:cranial\s+nerve|range\s+of\s+motion|artery\s+tenderness)/i.test(clean)) {
         const key = clean.toLowerCase()
         if (!meds.has(key)) {
           meds.set(key, clean)
@@ -246,6 +330,7 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
   const combined = [dictation, scratch].filter(Boolean).join(' ').trim()
   const fullText = combined
   const normalized = normalizeAsrErrors(combined)
+  const normalizedBreaks = normalizeSectionBreaks(combined)
 
   const vitalsObj = extractVitals(combined)
   const vitalsText = formatVitalsSection(vitalsObj)
@@ -266,7 +351,6 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
       'GENERAL: Alert, oriented, in no acute distress.',
       'FOCUSED EXAM: Exam findings deferred / not dictated.',
       '',
-      'ASSESSMENT & PLAN (A&P):',
       'ASSESSMENT:',
       '1. Routine outpatient clinical consultation (Z00.00).',
       '',
@@ -282,11 +366,16 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
     ].join('\n')
   }
 
-  // If text already has pre-formatted markdown/structured headers from manual macro, preserve it cleanly
-  const upper = normalized.toUpperCase()
-  if (upper.includes('CHIEF COMPLAINT') && upper.includes('HISTORY OF PRESENT ILLNESS') && upper.includes('PLAN')) {
-    let result = normalized.trim()
-    if (!upper.includes('VITAL SIGNS') && !upper.includes('VITALS:')) {
+  // If text already has pre-formatted markdown/structured standalone headers from manual macro (each on its own line), preserve cleanly
+  const hasStandaloneHeaders = /^CHIEF COMPLAINT:\s*$/m.test(normalizedBreaks) &&
+                               /^HISTORY OF PRESENT ILLNESS(?:\s*\(HPI\))?:\s*$/m.test(normalizedBreaks) &&
+                               /^PLAN:\s*$/m.test(normalizedBreaks) &&
+                               !/Symptoms associated with prolonged microscope usage.*Medications:/s.test(combined)
+
+  if (hasStandaloneHeaders) {
+    let result = normalizedBreaks.trim()
+    const upper = result.toUpperCase()
+    if (!upper.includes('VITAL SIGNS:') && !upper.includes('VITALS:')) {
       const nextHeaderIdx = result.search(/(?:PHYSICAL EXAMINATION|PHYSICAL EXAM|PE:|ASSESSMENT)/i)
       if (nextHeaderIdx !== -1) {
         result = `${result.slice(0, nextHeaderIdx).trimEnd()}\n\nVITAL SIGNS:\n${vitalsText}\n\n${result.slice(nextHeaderIdx).trimStart()}`
@@ -312,6 +401,11 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
   let primaryComplaint
   let anatomicalRegion = ''
   let mechanism = ''
+
+  const explicitCc = extractSectionContent(normalizedBreaks, /(?:chief\s+complaint|reason\s+for\s+visit):\s*/i)
+  if (explicitCc && explicitCc.length > 2) {
+    primaryComplaint = explicitCc.replace(/\.+$/, '').trim()
+  }
 
   const isHeadache = /headache|migraine|head\s*pain|cephalea|cephalalgia|head\s*ache/i.test(normalized) ||
                      /headache|migraine|head\s*pain|cephalea|cephalalgia|head\s*ache/i.test(String(meta?.chiefComplaint || '')) ||
@@ -355,113 +449,126 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
     mechanism = 'after heavy lifting'
   }
 
-  if (isHeadache) {
-    if (/migraine/i.test(normalized) || /migraine/i.test(String(visitType || ''))) {
-      primaryComplaint = 'Acute migraine evaluation'
-    } else if (/tension/i.test(normalized)) {
-      primaryComplaint = 'Tension-type headache evaluation'
+  if (!primaryComplaint) {
+    if (isHeadache) {
+      if (/migraine/i.test(normalized) || /migraine/i.test(String(visitType || ''))) {
+        primaryComplaint = 'Acute migraine evaluation'
+      } else if (/tension/i.test(normalized)) {
+        primaryComplaint = 'Tension-type headache evaluation'
+      } else {
+        primaryComplaint = 'Headache evaluation'
+      }
+    } else if (anatomicalRegion) {
+      primaryComplaint = `${anatomicalRegion.charAt(0).toUpperCase() + anatomicalRegion.slice(1)} pain${mechanism ? ` ${mechanism}` : ''}`
     } else {
-      primaryComplaint = 'Headache evaluation'
-    }
-  } else if (anatomicalRegion) {
-    primaryComplaint = `${anatomicalRegion.charAt(0).toUpperCase() + anatomicalRegion.slice(1)} pain${mechanism ? ` ${mechanism}` : ''}`
-  } else {
-    const m = normalized.match(/(?:presenting\s+(?:with|for)|here\s+(?:with|for)|complaining\s+of|concern\s+for)\s+([a-zA-Z\s]{4,35}?)(?=\s+(?:he|she|patient|since|last|yesterday|fell|pain|and|\.|$))/i)
-    if (m && m[1]) {
-      primaryComplaint = m[1].trim().charAt(0).toUpperCase() + m[1].trim().slice(1)
-    } else {
-      primaryComplaint = visitType ? `${visitType} Clinical Evaluation` : 'Outpatient Clinical Consultation'
+      const m = normalized.match(/(?:presenting\s+(?:with|for)|here\s+(?:with|for)|complaining\s+of|concern\s+for)\s+([a-zA-Z\s]{4,35}?)(?=\s+(?:he|she|patient|since|last|yesterday|fell|pain|and|\.|$))/i)
+      if (m && m[1]) {
+        primaryComplaint = m[1].trim().charAt(0).toUpperCase() + m[1].trim().slice(1)
+      } else {
+        primaryComplaint = visitType ? `${visitType} Clinical Evaluation` : 'Outpatient Clinical Consultation'
+      }
     }
   }
 
   // 2. Synthesize HPI
-  const hpiParagraphs = []
-  const patientDesc = patientAge
-    ? `The patient is a ${patientAge}-year-old ${isFemale ? 'female' : 'male'}`
-    : patientName
-    ? `${patientName}`
-    : 'The patient'
+  const explicitHpi = extractSectionContent(normalizedBreaks, /(?:history\s+of\s+present\s+illness|hpi):\s*/i)
+  let hpiText = ''
+  if (explicitHpi && explicitHpi.length > 10) {
+    hpiText = explicitHpi
+  } else {
+    const hpiParagraphs = []
+    const patientDesc = patientAge
+      ? `The patient is a ${patientAge}-year-old ${isFemale ? 'female' : 'male'}`
+      : patientName
+      ? `${patientName}`
+      : 'The patient'
 
-  let openingHpi = `${patientDesc} presenting for evaluation of ${primaryComplaint.toLowerCase()}.`
-  if (/fell\s+from\s+(?:his|her)?\s*bike|bicycle/i.test(normalized)) {
-    openingHpi += ` Symptoms started acute onset after ${pronoun.toLowerCase()} fell from ${possessive} bicycle last night.`
-  } else if (mechanism) {
-    openingHpi += ` Symptoms began acutely ${mechanism}.`
-  }
-  hpiParagraphs.push(openingHpi)
-
-  // Severity & Medication History
-  let painDesc = ''
-  if (/severe\s+pain/i.test(normalized)) {
-    painDesc = `${pronoun} reports severe and persistent pain since the incident.`
-  } else if (/moderate\s+pain/i.test(normalized)) {
-    painDesc = `${pronoun} reports moderate pain localized to the area.`
-  } else if (/pain/i.test(normalized)) {
-    painDesc = `${pronoun} reports persistent pain localized to the affected site.`
-  }
-
-  if (/tylenol/i.test(normalized)) {
-    painDesc += ` The patient took Tylenol (acetaminophen) prior to presentation with minimal to partial relief.`
-  } else if (/ibuprofen|advil|motrin/i.test(normalized)) {
-    painDesc += ` The patient tried OTC NSAIDs with limited symptom relief.`
-  }
-
-  if (painDesc) {
-    hpiParagraphs.push(painDesc)
-  }
-
-  // Functional impact & Associated symptoms
-  let functionalImpact = ''
-  if (/headache|migraine|head\s*pain/i.test(normalized)) {
-    functionalImpact = `${pronoun} denies sudden-onset thunderclap headache, focal neurological deficits, visual changes, or neck stiffness.`
-    if (/throbbing|pulsating/i.test(normalized)) {
-      functionalImpact += ` Pain is described as throbbing in character.`
+    let openingHpi = `${patientDesc} presenting for evaluation of ${primaryComplaint.toLowerCase()}.`
+    if (/fell\s+from\s+(?:his|her)?\s*bike|bicycle/i.test(normalized)) {
+      openingHpi += ` Symptoms started acute onset after ${pronoun.toLowerCase()} fell from ${possessive} bicycle last night.`
+    } else if (mechanism) {
+      openingHpi += ` Symptoms began acutely ${mechanism}.`
     }
-    if (/photophobia|light\s+sensitiv/i.test(normalized) || /nausea/i.test(normalized)) {
-      functionalImpact += ` Associated with mild photophobia and nausea; denies intractable vomiting.`
-    }
-  } else if (/mcl|mcmurray|knee/i.test(normalized)) {
-    functionalImpact = `${pronoun} notes discomfort with knee flexion and ambulation. Denies numbness or tingling in the lower extremity.`
-  } else if (/back|lumbar/i.test(normalized)) {
-    functionalImpact = `Denies bowel or bladder incontinence, saddle anesthesia, or progressive lower extremity weakness.`
-  } else if (/shoulder/i.test(normalized)) {
-    functionalImpact = `Notes restricted overhead reaching and abduction due to acute pain. Denies distal neurological symptoms.`
-  } else if (/chest/i.test(normalized)) {
-    functionalImpact = `Denies diaphoresis, shortness of breath, or radiation to jaw or left arm.`
-  } else if (/respiratory|cough/i.test(normalized)) {
-    functionalImpact = `Denies high fever, hemoptysis, or wheezing.`
-  }
-  if (functionalImpact) {
-    hpiParagraphs.push(functionalImpact)
-  }
+    hpiParagraphs.push(openingHpi)
 
-  const hpiText = hpiParagraphs.join(' ')
+    // Severity & Medication History
+    let painDesc = ''
+    if (/severe\s+pain/i.test(normalized)) {
+      painDesc = `${pronoun} reports severe and persistent pain since the incident.`
+    } else if (/moderate\s+pain/i.test(normalized)) {
+      painDesc = `${pronoun} reports moderate pain localized to the area.`
+    } else if (/pain/i.test(normalized)) {
+      painDesc = `${pronoun} reports persistent pain localized to the affected site.`
+    }
+
+    if (/tylenol/i.test(normalized)) {
+      painDesc += ` The patient took Tylenol (acetaminophen) prior to presentation with minimal to partial relief.`
+    } else if (/ibuprofen|advil|motrin/i.test(normalized)) {
+      painDesc += ` The patient tried OTC NSAIDs with limited symptom relief.`
+    }
+
+    if (painDesc) {
+      hpiParagraphs.push(painDesc)
+    }
+
+    // Functional impact & Associated symptoms
+    let functionalImpact = ''
+    if (/headache|migraine|head\s*pain/i.test(normalized)) {
+      functionalImpact = `${pronoun} denies sudden-onset thunderclap headache, focal neurological deficits, visual changes, or neck stiffness.`
+      if (/throbbing|pulsating/i.test(normalized)) {
+        functionalImpact += ` Pain is described as throbbing in character.`
+      }
+      if (/photophobia|light\s+sensitiv/i.test(normalized) || /nausea/i.test(normalized)) {
+        functionalImpact += ` Associated with mild photophobia and nausea; denies intractable vomiting.`
+      }
+    } else if (/mcl|mcmurray|knee/i.test(normalized)) {
+      functionalImpact = `${pronoun} notes discomfort with knee flexion and ambulation. Denies numbness or tingling in the lower extremity.`
+    } else if (/back|lumbar/i.test(normalized)) {
+      functionalImpact = `Denies bowel or bladder incontinence, saddle anesthesia, or progressive lower extremity weakness.`
+    } else if (/shoulder/i.test(normalized)) {
+      functionalImpact = `Notes restricted overhead reaching and abduction due to acute pain. Denies distal neurological symptoms.`
+    } else if (/chest/i.test(normalized)) {
+      functionalImpact = `Denies diaphoresis, shortness of breath, or radiation to jaw or left arm.`
+    } else if (/respiratory|cough/i.test(normalized)) {
+      functionalImpact = `Denies high fever, hemoptysis, or wheezing.`
+    }
+    if (functionalImpact) {
+      hpiParagraphs.push(functionalImpact)
+    }
+
+    hpiText = hpiParagraphs.join(' ')
+  }
 
   // 3. Synthesize Physical Exam (only actual observations dictated, no fabricated normal exams)
-  const copyForwardRequested = /(?:copy\s+(?:over|forward)|pull\s+forward|carry\s+forward|same\s+as\s+before)\s+(?:the\s+)?(?:prior|previous|last)?\s*([a-z0-9\s\-]+?)\s*(?:exam|examination|physical\s+exam)/i.test(normalized)
-  const insertRequested = /(?:insert|add)\s+(?:a\s+)?([a-z0-9\s\-]+?)(?:,\s*)?(?:physical\s+exam|exam|examination)/i.test(normalized)
+  let examText = ''
+  const explicitPe = extractSectionContent(normalizedBreaks, /(?:physical\s+examination|physical\s+exam|pe):\s*/i)
+  if (explicitPe && explicitPe.length > 5) {
+    examText = formatExamFindings(explicitPe)
+  } else {
+    const copyForwardRequested = /(?:copy\s+(?:over|forward)|pull\s+forward|carry\s+forward|same\s+as\s+before)\s+(?:the\s+)?(?:prior|previous|last)?\s*([a-z0-9\s\-]+?)\s*(?:exam|examination|physical\s+exam)/i.test(normalized)
+    const insertRequested = /(?:insert|add)\s+(?:a\s+)?([a-z0-9\s\-]+?)(?:,\s*)?(?:physical\s+exam|exam|examination)/i.test(normalized)
 
-  const examLines = []
-  if (copyForwardRequested || insertRequested) {
-    examLines.push('  Right Knee: [COPY FORWARD from prior encounter — per dictation, action pending]')
-    examLines.push('  Left Knee:  [PENDING — examination to be entered]')
-    examLines.push('  *** DO NOT SIGN — exam content outstanding ***')
-  } else if (/exam|palpat|tender|swelling|inspect|rom|range of motion/i.test(normalized)) {
-    if (/swelling/i.test(normalized)) {
-      examLines.push(/no\s+swelling/i.test(normalized) ? '• Inspection: No visible swelling or acute deformity.' : '• Inspection: Swelling observed as noted in encounter.')
+    const examLines = []
+    if (copyForwardRequested || insertRequested) {
+      examLines.push('  Right Knee: [COPY FORWARD from prior encounter — per dictation, action pending]')
+      examLines.push('  Left Knee:  [PENDING — examination to be entered]')
+      examLines.push('  *** DO NOT SIGN — exam content outstanding ***')
+    } else if (/exam|palpat|tender|swelling|inspect|rom|range of motion/i.test(normalized)) {
+      if (/swelling/i.test(normalized)) {
+        examLines.push(/no\s+swelling/i.test(normalized) ? '• Inspection: No visible swelling or acute deformity.' : '• Inspection: Swelling observed as noted in encounter.')
+      }
+      if (/tender|pain on palpation/i.test(normalized)) {
+        examLines.push('• Palpation: Tenderness to palpation noted as dictated.')
+      }
+      if (/range of motion|rom|flexion|extension/i.test(normalized)) {
+        examLines.push('• Range of Motion: Assessed as dictated.')
+      }
     }
-    if (/tender|pain on palpation/i.test(normalized)) {
-      examLines.push('• Palpation: Tenderness to palpation noted as dictated.')
+    if (examLines.length === 0) {
+      examLines.push('Focused physical examination not documented this encounter.')
     }
-    if (/range of motion|rom|flexion|extension/i.test(normalized)) {
-      examLines.push('• Range of Motion: Assessed as dictated.')
-    }
+    examText = examLines.join('\n')
   }
-  if (examLines.length === 0) {
-    examLines.push('Focused physical examination not documented this encounter.')
-  }
-
-  const examText = examLines.join('\n')
 
   // 4. Imaging & Diagnostics
   let imagingText = null
@@ -475,7 +582,10 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
 
   // 5. Assessment
   const assessmentLines = []
-  if (isHeadache) {
+  const explicitAss = extractSectionContent(normalizedBreaks, /(?:assessment|impression):\s*/i)
+  if (explicitAss && explicitAss.length > 3) {
+    assessmentLines.push(formatNumberedList(explicitAss))
+  } else if (isHeadache) {
     if (/migraine/i.test(normalized) || /migraine/i.test(String(visitType || ''))) {
       assessmentLines.push('1. Acute migraine, unspecified, not intractable, without status migrainosus (G43.909).')
       assessmentLines.push('2. Secondary intracranial pathology / red-flag etiologies ruled out by clinical exam.')
@@ -510,30 +620,35 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
 
   // 6. Plan (distinguish orders from discussions)
   const planLines = []
-  if (/(?:request|order)\s+(?:for\s+)?(?:a\s+)?bilateral\s+hyaluronic\s+acid/i.test(normalized)) {
-    planLines.push('1. ORDER: Bilateral hyaluronic acid knee injections requested to address osteoarthritic changes and provide cushioning for physical therapy participation.')
-  }
-  // Medication refills & prescriptions in Plan
-  const refillMatches = fullText.match(/(?:refill|prescribe|order|start|continue|increase|decrease)\s+(?:prescription\s+for\s+)?([A-Z][a-zA-Z0-9\s,\.\-mg/]+?)(?=(?:\.|\n|$))/gi)
-  if (refillMatches) {
-    for (const rm of refillMatches) {
-      const cleanRm = rm.trim().replace(/\.+$/, '')
-      if (cleanRm.length > 8 && !planLines.some(p => p.toLowerCase().includes(cleanRm.toLowerCase().slice(0, 15)))) {
-        planLines.push(`${planLines.length + 1}. ${cleanRm.charAt(0).toUpperCase() + cleanRm.slice(1)}.`)
+  const explicitPlan = extractSectionContent(normalizedBreaks, /plan:\s*/i)
+  if (explicitPlan && explicitPlan.length > 3) {
+    planLines.push(formatNumberedList(explicitPlan))
+  } else {
+    if (/(?:request|order)\s+(?:for\s+)?(?:a\s+)?bilateral\s+hyaluronic\s+acid/i.test(normalized)) {
+      planLines.push('1. ORDER: Bilateral hyaluronic acid knee injections requested to address osteoarthritic changes and provide cushioning for physical therapy participation.')
+    }
+    // Medication refills & prescriptions in Plan
+    const refillMatches = fullText.match(/(?:refill|prescribe|order|start|continue|increase|decrease)\s+(?:prescription\s+for\s+)?([A-Z][a-zA-Z0-9\s,\.\-mg/]+?)(?=(?:\.|\n|$))/gi)
+    if (refillMatches) {
+      for (const rm of refillMatches) {
+        const cleanRm = rm.trim().replace(/\.+$/, '')
+        if (cleanRm.length > 8 && !planLines.some(p => p.toLowerCase().includes(cleanRm.toLowerCase().slice(0, 15)))) {
+          planLines.push(`${planLines.length + 1}. ${cleanRm.charAt(0).toUpperCase() + cleanRm.slice(1)}.`)
+        }
       }
     }
-  }
-  if (/follow\s*up|return|week|month/i.test(normalized)) {
-    const fuMatch = normalized.match(/follow.?up\s+(?:in\s+)?([a-zA-Z0-9\s]+?)(?:\.|$)/i)
-    planLines.push(`${planLines.length + 1}. Follow-up: ${fuMatch ? fuMatch[0] : 'Follow up as directed by clinician.'}`)
-  } else {
-    planLines.push(`${planLines.length + 1}. Follow up as needed if symptoms worsen or fail to improve.`)
-  }
-  if (imagingText) {
-    planLines.push(`${planLines.length + 1}. ${imagingText}`)
-  }
-  if (/rest|ice|elevat/i.test(normalized)) {
-    planLines.push(`${planLines.length + 1}. Supportive care measures as discussed with clinician.`)
+    if (/follow\s*up|return|week|month/i.test(normalized)) {
+      const fuMatch = normalized.match(/follow.?up\s+(?:in\s+)?([a-zA-Z0-9\s]+?)(?:\.|$)/i)
+      planLines.push(`${planLines.length + 1}. Follow-up: ${fuMatch ? fuMatch[0] : 'Follow up as directed by clinician.'}`)
+    } else {
+      planLines.push(`${planLines.length + 1}. Follow up as needed if symptoms worsen or fail to improve.`)
+    }
+    if (imagingText) {
+      planLines.push(`${planLines.length + 1}. ${imagingText}`)
+    }
+    if (/rest|ice|elevat/i.test(normalized)) {
+      planLines.push(`${planLines.length + 1}. Supportive care measures as discussed with clinician.`)
+    }
   }
 
   // 7. Canadian Primary Care Specialized Section
@@ -593,7 +708,6 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
     ...(specializedSection ? ['', specializedSection.header, specializedSection.content] : []),
     ...(imagingText ? ['', 'IMAGING & DIAGNOSTICS:', imagingText] : []),
     '',
-    'ASSESSMENT & PLAN (A&P):',
     'ASSESSMENT:',
     assessmentLines.join('\n'),
     '',

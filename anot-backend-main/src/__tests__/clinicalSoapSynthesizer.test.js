@@ -62,4 +62,30 @@ Plan:
     expect(soap).toContain('• Tylenol 500mg PRN')
     expect(soap).toContain('Refill Lisinopril 20mg oral daily for blood pressure control')
   })
+
+  test('strictly prevents cross-section bleeding and cleans inline dictation', () => {
+    const rawTranscript = `Patient Barbara McClintock, 45-year-old female presenting with headache. Chief Complaint: Dull bilateral headache towards end of day. History of Present Illness: Symptoms associated with prolonged microscope usage. Denies visual aura, nausea, or fever. Vitals: BP 120/76 mmHg, HR 72 bpm, Temp 98.4 F, SpO2 99%. Medications: Ibuprofen 400mg PRN, Acetaminophen 500mg PRN, Artificial tears 1 drop QID PRN. Physical Examination: Normal cranial nerve exam, cervical range of motion full, no temporal artery tenderness. Assessment: 1. Headache, unspecified. 2. Digital / optical eye strain. Plan: 1. Refill Ibuprofen 400mg PRN for headache relief. 2. Follow 20-20-20 screen rule. 3. Follow-up as needed.`
+
+    const soap = formatClinicalDictationToSOAP(rawTranscript, '', 'Follow-up', {
+      patientName: 'Barbara McClintock',
+      patientAge: '45 yrs',
+    })
+
+    // Chief Complaint must NOT contain subsequent sections
+    expect(soap).toMatch(/CHIEF COMPLAINT:\s*\nDull bilateral headache towards end of day\b/)
+
+    // HPI must NOT contain vitals or medications
+    expect(soap).toMatch(/HISTORY OF PRESENT ILLNESS \(HPI\):\s*\nSymptoms associated with prolonged microscope usage\. Denies visual aura, nausea, or fever/)
+
+    // Current medications must only contain the 3 drugs, not physical exam
+    expect(soap).toContain('• Ibuprofen 400mg PRN')
+    expect(soap).toContain('• Acetaminophen 500mg PRN')
+    expect(soap).toContain('• Artificial tears 1 drop QID PRN')
+
+    // Physical exam must not contain assessment
+    expect(soap).toContain('• Normal cranial nerve exam')
+
+    // Assessment must be properly grouped
+    expect(soap).toMatch(/1\. Headache, unspecified\.\s*\n2\. Digital \/ optical eye strain/)
+  })
 })

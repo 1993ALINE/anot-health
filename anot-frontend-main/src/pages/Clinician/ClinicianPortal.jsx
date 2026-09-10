@@ -244,18 +244,124 @@ function normalizeVisitTypeForDb(val) {
   return 'Follow-up'
 }
 
-function parseNoteSections(noteText) {
-  if (!noteText) {return []}
-  const text = cleanAiDraftForDisplay(noteText)
+const CLINICAL_SECTION_HEADERS = [
+  'CHIEF COMPLAINT',
+  'REASON FOR VISIT',
+  'HISTORY OF PRESENT ILLNESS (HPI)',
+  'HISTORY OF PRESENT ILLNESS',
+  'HPI',
+  'SUBJECTIVE',
+  'CURRENT MEDICATIONS',
+  'ACTIVE MEDICATIONS',
+  'MEDICATIONS',
+  'MEDS',
+  'ALLERGIES',
+  'PAST MEDICAL HISTORY',
+  'PAST SURGICAL HISTORY',
+  'REVIEW OF SYSTEMS (ROS)',
+  'REVIEW OF SYSTEMS',
+  'ROS',
+  'VITAL SIGNS',
+  'VITALS',
+  'OBJECTIVE',
+  'PHYSICAL EXAMINATION (PE)',
+  'PHYSICAL EXAMINATION',
+  'PHYSICAL EXAM',
+  'PE',
+  'ASSESSMENT & PLAN (A&P)',
+  'ASSESSMENT & PLAN',
+  'ASSESSMENT AND PLAN',
+  'A&P',
+  'ASSESSMENT',
+  'IMPRESSION',
+  'PLAN',
+  'ORDERS',
+  'RECOMMENDATIONS',
+  'ICD-10 CODES',
+  'ICD-10',
+  'ICD 10',
+  'CPT CODES',
+  'CPT'
+]
 
+function sanitizeSectionText(header, content) {
+  let str = (content || '').trim()
+
+  // Strip bleeding of subsequent sections:
+  const bleedPattern = /(?:^|\n|\.\s+|;\s+)(?:CHIEF\s+COMPLAINT|HISTORY\s+OF\s+PRESENT\s+ILLNESS|HPI|CURRENT\s+MEDICATIONS?|MEDICATIONS?|MEDS|VITAL\s+SIGNS|VITALS|PHYSICAL\s+EXAM(?:INATION)?|PE|ASSESSMENT(?:\s*&\s*PLAN)?|PLAN|ICD-?10|CPT)(?:\s*\(.*?\))?\s*:/i
+  const bleedMatch = str.match(bleedPattern)
+  if (bleedMatch) {
+    str = str.slice(0, bleedMatch.index).trim()
+  }
+
+  const hUpper = header.toUpperCase()
+
+  if (hUpper.includes('MEDICATION')) {
+    // Keep only clean medication lines
+    const lines = str.split('\n')
+      .map((l) => {
+        let clean = l.trim().replace(/^[•\*\-\s]+/, '')
+        clean = clean.replace(/\.\s*(?:Physical|Assessment|Plan|cervical|no\s+temporal).*/i, '')
+        return clean.trim()
+      })
+      .filter((l) => {
+        if (!l || l.length < 3) {return false}
+        if (/^(?:physical\s+exam|assessment|plan|cervical|no\s+temporal|screen\s+rule|follow\s+up|up\s+as\s+needed)/i.test(l)) {return false}
+        return true
+      })
+    return lines.map((l) => `• ${l}`).join('\n')
+  }
+
+  if (hUpper.includes('PHYSICAL') || hUpper === 'PE') {
+    if (!str.includes('\n') && !str.includes('•')) {
+      const parts = str.split(/[,;]|\.\s+(?=[A-Z])/).map((p) => p.trim().replace(/\.+$/, '')).filter((p) => p.length > 3)
+      if (parts.length > 1) {
+        return parts.map((p) => `• ${p.charAt(0).toUpperCase() + p.slice(1)}`).join('\n')
+      }
+    }
+  }
+
+  if (hUpper.includes('ASSESSMENT') || hUpper.includes('PLAN')) {
+    const items = str.split(/(?=(?:\d+\.|\([0-9a-z]\))\s+)/i).map((s) => s.trim()).filter(Boolean)
+    if (items.length > 1) {
+      return items.join('\n')
+    }
+  }
+
+  return str.trim()
+}
+
+export { sanitizeSectionText }
+
+export function parseNoteSections(noteText) {
+  if (!noteText) {return []}
+  let text = cleanAiDraftForDisplay(noteText)
+
+  // 1. First check if text already has line headers matching sectionRegex
   const sectionRegex = /^(?:\[?[A-Z0-9\s/&()\-–—]+\]?|[A-Z\s/&()\-–—]+):\s*$/gm
-  const matches = []
+  let matches = []
   let match
   while ((match = sectionRegex.exec(text)) !== null) {
     const rawHeader = match[0].replace(/:$/, '').trim()
     const cleanHeader = rawHeader.replace(/^\[|\]$/g, '').trim()
-    if (cleanHeader.length >= 2 && !/^(NOTE|DATE|TIME|MRN|PATIENT|STATUS)/i.test(cleanHeader)) {
+    if (cleanHeader.length >= 2 && !/^(NOTE|DATE|TIME|MRN|PATIENT|STATUS|ASSESSMENT & PLAN \(A&P\))/i.test(cleanHeader)) {
       matches.push({ header: cleanHeader, index: match.index, length: match[0].length })
+    }
+  }
+
+  // 2. If no standalone line headers were found (e.g. inline headers like "Chief Complaint: ... HPI: ..."), normalize linebreaks
+  if (matches.length === 0) {
+    const headerAlt = CLINICAL_SECTION_HEADERS.map((h) => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')
+    const boundaryRegex = new RegExp(`(?:^|[\\n\\r]|\\.\\s+|;\\s+|\\s{2,})(${headerAlt})(?:\\s*\\([A-Za-z0-9\\s/&\\-–—]+\\))?\\s*:`, 'gi')
+    text = text.replace(boundaryRegex, (m, p1) => `\n\n${p1.toUpperCase()}:\n`).trim()
+
+    sectionRegex.lastIndex = 0
+    while ((match = sectionRegex.exec(text)) !== null) {
+      const rawHeader = match[0].replace(/:$/, '').trim()
+      const cleanHeader = rawHeader.replace(/^\[|\]$/g, '').trim()
+      if (cleanHeader.length >= 2 && !/^(NOTE|DATE|TIME|MRN|PATIENT|STATUS|ASSESSMENT & PLAN \(A&P\))/i.test(cleanHeader)) {
+        matches.push({ header: cleanHeader, index: match.index, length: match[0].length })
+      }
     }
   }
 
@@ -264,16 +370,26 @@ function parseNoteSections(noteText) {
   }
 
   const sections = []
+  const seenHeaders = new Set()
+
   for (let i = 0; i < matches.length; i++) {
     const current = matches[i]
     const next = matches[i + 1]
     const contentStart = current.index + current.length
     const contentEnd = next ? next.index : text.length
-    const content = text.slice(contentStart, contentEnd).trim()
-    if (content) {
+    let content = text.slice(contentStart, contentEnd).trim()
+
+    if (!content && next) {continue}
+
+    const normalizedHeader = current.header.toUpperCase()
+    if (seenHeaders.has(normalizedHeader)) {continue}
+    seenHeaders.add(normalizedHeader)
+
+    const cleanContent = sanitizeSectionText(current.header, content)
+    if (cleanContent) {
       sections.push({
         header: current.header,
-        content: content,
+        content: cleanContent,
       })
     }
   }
