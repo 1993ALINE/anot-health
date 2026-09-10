@@ -8,6 +8,7 @@ const { visitDurationSelect, visitTranscriptionStatusSelect } = require('../util
 const { addColumnIfMissing } = require('../utils/schemaDdl')
 const ehrConnectionsService = require('../services/ehrConnectionsService')
 const { getDriver } = require('../services/ehrDrivers')
+const { emitVisitEvent, getDeviceTypeFromRequest } = require('../utils/visitEvents')
 
 const NOTE_STATUSES = new Set(['draft', 'pending', 'submitted', 'uploaded'])
 
@@ -346,6 +347,22 @@ const saveDraft = async (req, res) => {
       )
     }
 
+    try {
+      const visitRow = await pool.query('SELECT clinician_id FROM visits WHERE id = $1', [visit_id])
+      const clinicianId = visitRow.rows[0]?.clinician_id
+      if (clinicianId) {
+        emitVisitEvent(clinicianId, {
+          type: 'NOTE_UPDATED',
+          visitId: Number(visit_id) || visit_id,
+          status: 'draft',
+          action: 'note_updated',
+          source: getDeviceTypeFromRequest(req),
+        })
+      }
+    } catch (e) {
+      console.warn('[noteController] emitVisitEvent failed in saveDraft:', e.message)
+    }
+
     res.status(200).json({ message: 'Draft saved successfully.', note: result.rows[0] })
 
     const draftAction = existing.rows.length > 0 ? 'UPDATE' : 'CREATE'
@@ -425,6 +442,22 @@ const submitNote = async (req, res) => {
       req.user.id, req.user.role, 'note', id, 'UPDATE', req.clientIp,
       { visit_id: out.note.visit_id, stage: 'submitted' }
     )
+
+    try {
+      const visitRow = await pool.query('SELECT clinician_id FROM visits WHERE id = $1', [out.note.visit_id])
+      const clinicianId = visitRow.rows[0]?.clinician_id
+      if (clinicianId) {
+        emitVisitEvent(clinicianId, {
+          type: 'NOTE_SUBMITTED',
+          visitId: Number(out.note.visit_id) || out.note.visit_id,
+          status: 'submitted',
+          action: 'draft_ready',
+          source: getDeviceTypeFromRequest(req),
+        })
+      }
+    } catch (e) {
+      console.warn('[noteController] emitVisitEvent failed in submitNote:', e.message)
+    }
 
     res.status(200).json({ message: 'Note submitted successfully.', note: out.note })
   } catch (err) {

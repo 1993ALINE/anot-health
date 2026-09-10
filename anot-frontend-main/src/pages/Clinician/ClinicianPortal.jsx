@@ -286,30 +286,25 @@ const CLINICAL_SECTION_HEADERS = [
 
 function sanitizeSectionText(header, content) {
   let str = (content || '').trim()
+  if (!str) return ''
 
-  // Strip bleeding of subsequent sections:
+  // Strip trailing bleed of any unparsed subsequent headers:
   const bleedPattern = /(?:^|\n|\.\s+|;\s+)(?:CHIEF\s+COMPLAINT|HISTORY\s+OF\s+PRESENT\s+ILLNESS|HPI|CURRENT\s+MEDICATIONS?|MEDICATIONS?|MEDS|VITAL\s+SIGNS|VITALS|PHYSICAL\s+EXAM(?:INATION)?|PE|ASSESSMENT(?:\s*&\s*PLAN)?|PLAN|ICD-?10|CPT)(?:\s*\(.*?\))?\s*:/i
   const bleedMatch = str.match(bleedPattern)
-  if (bleedMatch) {
+  if (bleedMatch && bleedMatch.index > 0) {
     str = str.slice(0, bleedMatch.index).trim()
   }
 
   const hUpper = header.toUpperCase()
 
-  if (hUpper.includes('MEDICATION')) {
-    // Keep only clean medication lines
+  if (hUpper.includes('MEDICATION') || hUpper === 'MEDS') {
     const lines = str.split('\n')
-      .map((l) => {
-        let clean = l.trim().replace(/^[•\*\-\s]+/, '')
-        clean = clean.replace(/\.\s*(?:Physical|Assessment|Plan|cervical|no\s+temporal).*/i, '')
-        return clean.trim()
-      })
-      .filter((l) => {
-        if (!l || l.length < 3) {return false}
-        if (/^(?:physical\s+exam|assessment|plan|cervical|no\s+temporal|screen\s+rule|follow\s+up|up\s+as\s+needed)/i.test(l)) {return false}
-        return true
-      })
-    return lines.map((l) => `• ${l}`).join('\n')
+      .map((l) => l.trim().replace(/^[•\*\-\s]+/, ''))
+      .filter((l) => l && l.length >= 2)
+    if (lines.length > 0) {
+      return lines.map((l) => (l.startsWith('•') ? l : `• ${l}`)).join('\n')
+    }
+    return str
   }
 
   if (hUpper.includes('PHYSICAL') || hUpper === 'PE') {
@@ -319,6 +314,7 @@ function sanitizeSectionText(header, content) {
         return parts.map((p) => `• ${p.charAt(0).toUpperCase() + p.slice(1)}`).join('\n')
       }
     }
+    return str
   }
 
   if (hUpper.includes('ASSESSMENT') || hUpper.includes('PLAN')) {
@@ -326,9 +322,10 @@ function sanitizeSectionText(header, content) {
     if (items.length > 1) {
       return items.join('\n')
     }
+    return str
   }
 
-  return str.trim()
+  return str
 }
 
 export { sanitizeSectionText }
@@ -337,29 +334,34 @@ export function parseNoteSections(noteText) {
   if (!noteText) {return []}
   let text = cleanAiDraftForDisplay(noteText)
 
-  // 1. First check if text already has line headers matching sectionRegex
+  const headerAlt = CLINICAL_SECTION_HEADERS.map((h) => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')
+  const boundaryRegex = new RegExp(`(?:^|[\\n\\r]|\\.\\s+|;\\s+|\\s{2,})(${headerAlt})(?:\\s*\\([A-Za-z0-9\\s/&\\-–—]+\\))?\\s*:`, 'gi')
+
+  // 1. First check if text already has clean standalone line headers matching sectionRegex
   const sectionRegex = /^(?:\[?[A-Z0-9\s/&()\-–—]+\]?|[A-Z\s/&()\-–—]+):\s*$/gm
   let matches = []
   let match
   while ((match = sectionRegex.exec(text)) !== null) {
     const rawHeader = match[0].replace(/:$/, '').trim()
     const cleanHeader = rawHeader.replace(/^\[|\]$/g, '').trim()
-    if (cleanHeader.length >= 2 && !/^(NOTE|DATE|TIME|MRN|PATIENT|STATUS|ASSESSMENT & PLAN \(A&P\))/i.test(cleanHeader)) {
+    if (cleanHeader.length >= 2 && !/^(NOTE|DATE|TIME|MRN|PATIENT|STATUS)/i.test(cleanHeader)) {
       matches.push({ header: cleanHeader, index: match.index, length: match[0].length })
     }
   }
 
   // 2. If no standalone line headers were found (e.g. inline headers like "Chief Complaint: ... HPI: ..."), normalize linebreaks
-  if (matches.length === 0) {
-    const headerAlt = CLINICAL_SECTION_HEADERS.map((h) => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')
-    const boundaryRegex = new RegExp(`(?:^|[\\n\\r]|\\.\\s+|;\\s+|\\s{2,})(${headerAlt})(?:\\s*\\([A-Za-z0-9\\s/&\\-–—]+\\))?\\s*:`, 'gi')
-    text = text.replace(boundaryRegex, (m, p1) => `\n\n${p1.toUpperCase()}:\n`).trim()
+  if (matches.length <= 1) {
+    text = text.replace(boundaryRegex, (m) => {
+      const headerPart = m.replace(/^[\s.;\n\r]+/, '').replace(/:$/, '').trim()
+      return `\n\n${headerPart.toUpperCase()}:\n`
+    }).trim()
 
     sectionRegex.lastIndex = 0
+    matches = []
     while ((match = sectionRegex.exec(text)) !== null) {
       const rawHeader = match[0].replace(/:$/, '').trim()
       const cleanHeader = rawHeader.replace(/^\[|\]$/g, '').trim()
-      if (cleanHeader.length >= 2 && !/^(NOTE|DATE|TIME|MRN|PATIENT|STATUS|ASSESSMENT & PLAN \(A&P\))/i.test(cleanHeader)) {
+      if (cleanHeader.length >= 2 && !/^(NOTE|DATE|TIME|MRN|PATIENT|STATUS)/i.test(cleanHeader)) {
         matches.push({ header: cleanHeader, index: match.index, length: match[0].length })
       }
     }
@@ -1758,48 +1760,6 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
     }
   }
 
-  const handleRegenerateNote = async () => {
-    if (!activeDraftNote?.id) {return}
-    setUploading(true)
-    setUploadStatus('Generating clinical note...')
-    try {
-      const res = await visitsAPI.generateDraft(activeDraftNote.id).catch(() => null)
-      let refreshedText = res?.ai_draft
-      const aiUsed = res?.ai_used !== false
-
-      if (!refreshedText || refreshedText.includes('unavailable')) {
-        const trans = activeDraftNote.transcription || activeDraftNote.final_note || ''
-        refreshedText = formatClinicalDictationToSOAP(
-          trans,
-          '',
-          activeDraftNote.visit_type,
-          {
-            patientName: activeDraftNote.patient_name,
-            patientAge: getPatientDisplayAge(activeDraftNote, patientList),
-            mrn: activeDraftNote.mrn,
-          }
-        )
-      }
-      if (refreshedText) {
-        if (activeDraftNote.note_id) {
-          await notesAPI.updateNote(activeDraftNote.note_id, refreshedText).catch(() => {})
-        }
-        setActiveDraftNote((p) => ({ ...p, final_note: refreshedText, ai_draft: refreshedText }))
-        setEditedNoteText(refreshedText)
-        if (!aiUsed) {
-          showToast('⚠ Note generation failed — note generated from template. Please check your Anthropic API key in Admin → Settings.', 'error')
-        } else {
-          showToast('✓ Clinical note generated!')
-        }
-        await loadData()
-      }
-    } catch {
-      showToast('Failed to regenerate note.', 'error')
-    } finally {
-      setUploading(false)
-    }
-  }
-
   const saveMacrosToStorage = (newList) => {
     setMacros(newList)
     try {
@@ -2584,41 +2544,16 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                       {(() => {
                         const isNoteSigned = isCompletedVisit(activeDraftNote)
                         return (
-                          <>
-                            <button
-                              type="button"
-                              className={`sm-btn-doc ${isEditingNote ? 'sm-btn-doc--save' : 'sm-btn-doc--edit'} ${isNoteSigned ? 'sm-btn-doc--disabled' : ''}`}
-                              onClick={isNoteSigned ? () => showToast('This note is locked & signed. Edits are disabled.', 'warn') : (isEditingNote ? handleSaveEditedNote : () => {
-                                setEditedNoteText(activeDraftNote?.final_note || activeDraftNote?.ai_draft || '')
-                                setIsEditingNote(true)
-                              })}
-                              title={isNoteSigned ? 'Note is locked and cannot be edited' : undefined}
-                            >
-                              {isEditingNote ? '💾 Save Changes' : (isNoteSigned ? '🔒 Locked' : '✏️ Edit Note')}
-                            </button>
-
-                            {!isNoteSigned && (
-                              <button
-                                type="button"
-                                className="sm-btn-doc sm-btn-doc--edit"
-                                onClick={handleRegenerateNote}
-                                disabled={uploading}
-                                title="Regenerate this note"
-                              >
-                                ↻ Regenerate Note
-                              </button>
-                            )}
-
-                            <button
-                              type="button"
-                              className={`sm-btn-doc sm-btn-doc--sign ${isNoteSigned ? 'sm-btn-doc--disabled' : ''}`}
-                              onClick={() => !isNoteSigned && handleReviewAndSign(activeDraftNote)}
-                              disabled={isNoteSigned}
-                              title={isNoteSigned ? 'Note is locked & signed by clinician' : 'Review & Sign note'}
-                            >
-                              {isNoteSigned ? '✓ Signed & Locked' : '✍️ Review & Sign'}
-                            </button>
-                          </>
+                          <button
+                            type="button"
+                            className={`sm-btn-doc sm-btn-doc--sign ${isNoteSigned ? 'sm-btn-doc--disabled' : ''}`}
+                            onClick={() => {
+                              setSelectedNoteModal(activeDraftNote)
+                            }}
+                            title={isNoteSigned ? 'View locked & signed note' : 'Review, edit & sign note'}
+                          >
+                            {isNoteSigned ? '✓ Signed & Locked' : '✍️ Review & Sign'}
+                          </button>
                         )
                       })()}
 
@@ -3019,7 +2954,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
         </aside>
       </main>
 
-      {/* Note Viewer Modal */}
+      {/* Note Viewer / Review & Sign Modal */}
       {selectedNoteModal && (
         <SaintMaryNoteViewerModal
           note={selectedNoteModal}
@@ -3027,7 +2962,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
           currentUser={currentUser}
           onClose={() => setSelectedNoteModal(null)}
           onNoteUpdated={loadData}
-          onRegenerateNote={handleRegenerateNote}
+          onSignNote={handleReviewAndSign}
           showToast={showToast}
         />
       )}

@@ -1,21 +1,23 @@
 import { useState } from 'react'
 import { parseNote } from '../utils/noteParser'
 import { cleanAiDraftForDisplay } from '../utils/aiDraftFormat'
-import { notesAPI } from '../services/api'
+import { notesAPI, visitsAPI } from '../services/api'
 import { formatEncounterDate } from '../utils/visitEncounterUtils'
 import './SaintMaryNoteViewerModal.css'
 
-export default function SaintMaryNoteViewerModal({ noteData, onClose, onNoteUpdated, showToast }) {
+export default function SaintMaryNoteViewerModal({ noteData, onClose, onNoteUpdated, onSignNote, showToast }) {
   const [activeTab, setActiveTab] = useState('formatted') // 'formatted' | 'raw' | 'transcript'
   const [isEditing, setIsEditing] = useState(false)
   const [editText, setEditText] = useState(() => noteData?.final_note || noteData?.ai_draft || '')
   const [saving, setSaving] = useState(false)
+  const [signing, setSigning] = useState(false)
   const [copied, setCopied] = useState(false)
 
   if (!noteData) {return null}
 
+  const isSigned = noteData.status === 'completed' || noteData.status === 'uploaded' || noteData.note_status === 'uploaded' || Boolean(noteData.locked_at)
   const rawNoteText = noteData.final_note || noteData.ai_draft || ''
-  const displayText = cleanAiDraftForDisplay(rawNoteText)
+  const displayText = cleanAiDraftForDisplay(isEditing ? editText : rawNoteText)
   const sections = parseNote(displayText)
   const transcriptText = noteData.transcription || noteData.transcript || ''
 
@@ -62,6 +64,47 @@ export default function SaintMaryNoteViewerModal({ noteData, onClose, onNoteUpda
     }
   }
 
+  const handleSignAndLock = async () => {
+    setSigning(true)
+    try {
+      // 1. If currently editing, save the edit first
+      if (isEditing && editText !== rawNoteText) {
+        if (noteData.note_id) {
+          await notesAPI.updateNote(noteData.note_id, editText)
+        } else if (noteData.id && noteData.visit_id && noteData.id !== noteData.visit_id) {
+          await notesAPI.updateNote(noteData.id, editText)
+        } else {
+          const vId = noteData.visit_id || noteData.id
+          try {
+            const res = await notesAPI.getByVisit(vId)
+            if (res?.note?.id) {
+              await notesAPI.updateNote(res.note.id, editText)
+            } else {
+              await notesAPI.saveDraft(vId, editText, transcriptText, noteData.ai_draft)
+            }
+          } catch {
+            await notesAPI.saveDraft(vId, editText, transcriptText, noteData.ai_draft)
+          }
+        }
+      }
+
+      // 2. Lock and sign the note
+      const visitId = noteData.visit_id || noteData.id
+      if (onSignNote) {
+        await onSignNote({ ...noteData, final_note: editText || rawNoteText })
+      } else if (visitId) {
+        await visitsAPI.lockNote(visitId)
+        showToast?.('✓ Clinical note locked & signed by clinician!')
+        onNoteUpdated?.({ ...noteData, final_note: editText || rawNoteText, status: 'uploaded', locked_at: new Date().toISOString() })
+      }
+      onClose?.()
+    } catch (err) {
+      showToast?.(err?.message || 'Failed to sign and lock note.', 'error')
+    } finally {
+      setSigning(false)
+    }
+  }
+
   const handlePrint = () => {
     window.print()
   }
@@ -102,6 +145,17 @@ export default function SaintMaryNoteViewerModal({ noteData, onClose, onNoteUpda
           </div>
 
           <div className="sm-note-modal__header-actions">
+            {!isSigned && (
+              <button
+                type="button"
+                className="sm-note-btn sm-note-btn--primary"
+                onClick={handleSignAndLock}
+                disabled={signing || saving}
+                title="Sign & lock this clinical note"
+              >
+                {signing ? 'Signing…' : '✍️ Sign & Lock Note'}
+              </button>
+            )}
             <button
               type="button"
               className={`sm-note-btn sm-note-btn--copy ${copied ? 'sm-note-btn--copied' : ''}`}
@@ -264,13 +318,25 @@ export default function SaintMaryNoteViewerModal({ noteData, onClose, onNoteUpda
           <span className="sm-note-modal__footer-tag">
             🏥 {noteData.clinic_name || 'Anot Health'} · HIPAA &amp; PIPEDA Compliant
           </span>
-          <button
-            type="button"
-            className="sm-note-btn sm-note-btn--secondary"
-            onClick={onClose}
-          >
-            Close Note
-          </button>
+          <div className="sm-note-modal__footer-actions">
+            {!isSigned && (
+              <button
+                type="button"
+                className="sm-note-btn sm-note-btn--primary"
+                onClick={handleSignAndLock}
+                disabled={signing || saving}
+              >
+                {signing ? 'Signing…' : '✍️ Sign & Lock Note'}
+              </button>
+            )}
+            <button
+              type="button"
+              className="sm-note-btn sm-note-btn--secondary"
+              onClick={onClose}
+            >
+              Close Note
+            </button>
+          </div>
         </div>
       </div>
     </div>
