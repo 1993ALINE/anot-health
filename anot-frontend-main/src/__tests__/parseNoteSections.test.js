@@ -192,4 +192,63 @@ ASSESSMENT & PLAN (A&P):
     expect(apSection.content).toContain('Routine health maintenance');
     expect(apSection.content).toContain('Follow-up in 6 months');
   });
+
+  it('correctly preserves all sections and information for notes with same-line headers and follow-up (David Smith case)', () => {
+    const davidNote = `CHIEF COMPLAINT:
+Headache evaluation
+
+HISTORY OF PRESENT ILLNESS (HPI):
+David Smith is a 45 yo male presenting with 2 weeks of headaches. Symptoms have been recurring with throbbing frontal discomfort.
+
+VITAL SIGNS:
+• Blood Pressure: 122/78 mmHg
+• Pulse / Heart Rate: 72 bpm regular
+• Oxygen Saturation (SpO2): 99% on room air
+
+PHYSICAL EXAMINATION (PE):
+Neurological exam normal. Full cervical ROM without meningismus.
+
+ASSESSMENT & PLAN: 1. Tension headache. Prescribe ibuprofen.
+Follow-up: 2 weeks.`;
+
+    const sections = parseNoteSections(davidNote);
+    expect(sections).toHaveLength(6);
+    expect(sections[0].header).toBe('CHIEF COMPLAINT');
+    expect(sections[0].content).toContain('Headache evaluation');
+    expect(sections[1].header).toContain('HISTORY OF PRESENT ILLNESS');
+    expect(sections[1].content).toContain('David Smith is a 45 yo male');
+    expect(sections[2].header).toContain('VITAL SIGNS');
+    expect(sections[2].content).toContain('122/78 mmHg');
+    expect(sections[3].header).toContain('PHYSICAL EXAMINATION');
+    expect(sections[3].content).toContain('Neurological exam normal');
+    expect(sections[4].header).toContain('ASSESSMENT & PLAN');
+    expect(sections[4].content).toContain('1. Tension headache. Prescribe ibuprofen.');
+    expect(sections[5].header).toContain('FOLLOW-UP');
+    expect(sections[5].content).toContain('2 weeks');
+  });
+
+  it('preserves overview/preamble text and does not truncate list items mentioning medications or plan', () => {
+    const preambleNote = `CLINICAL OVERVIEW: Patient seen in clinic for annual health review and chronic migraine management.
+
+CHIEF COMPLAINT:
+Follow-up hypertension and headache
+
+PLAN:
+1. Current medications: continue Lisinopril 10mg daily.
+2. Treatment plan: start Sumatriptan 50mg PRN for acute migraine episodes.
+3. Follow-up: return in 4 weeks.`;
+
+    const sections = parseNoteSections(preambleNote);
+    expect(sections.length).toBeGreaterThanOrEqual(3);
+
+    const overview = sections.find((s) => s.header === 'OVERVIEW' || s.header === 'CLINICAL OVERVIEW');
+    expect(overview).toBeDefined();
+    expect(overview.content).toContain('annual health review');
+
+    const plan = sections.find((s) => s.header === 'PLAN');
+    expect(plan).toBeDefined();
+    expect(plan.content).toContain('1. Current medications: continue Lisinopril 10mg daily.');
+    expect(plan.content).toContain('2. Treatment plan: start Sumatriptan 50mg PRN');
+    expect(plan.content).toContain('3. Follow-up: return in 4 weeks.');
+  });
 });

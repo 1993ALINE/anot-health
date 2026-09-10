@@ -245,8 +245,11 @@ function normalizeVisitTypeForDb(val) {
 }
 
 const CLINICAL_SECTION_HEADERS = [
+  'CHIEF COMPLAINT (CC)',
   'CHIEF COMPLAINT',
+  'CC',
   'REASON FOR VISIT',
+  'CHIEF CONCERN',
   'HISTORY OF PRESENT ILLNESS (HPI)',
   'HISTORY OF PRESENT ILLNESS',
   'HPI',
@@ -254,10 +257,24 @@ const CLINICAL_SECTION_HEADERS = [
   'CURRENT MEDICATIONS',
   'ACTIVE MEDICATIONS',
   'MEDICATIONS',
+  'MEDICATION LIST',
   'MEDS',
+  'ALLERGIES & INTOLERANCES',
+  'ALLERGIES AND INTOLERANCES',
   'ALLERGIES',
+  'PAST MEDICAL HISTORY (PMH)',
   'PAST MEDICAL HISTORY',
+  'PMH',
+  'PAST SURGICAL HISTORY (PSH)',
   'PAST SURGICAL HISTORY',
+  'PSH',
+  'FAMILY HISTORY (FH)',
+  'FAMILY MEDICAL HISTORY',
+  'FAMILY HISTORY',
+  'FH',
+  'SOCIAL HISTORY (SH)',
+  'SOCIAL HISTORY',
+  'SH',
   'REVIEW OF SYSTEMS (ROS)',
   'REVIEW OF SYSTEMS',
   'ROS',
@@ -268,31 +285,84 @@ const CLINICAL_SECTION_HEADERS = [
   'PHYSICAL EXAMINATION',
   'PHYSICAL EXAM',
   'PE',
+  'IMAGING & DIAGNOSTICS',
+  'IMAGING AND DIAGNOSTICS',
+  'IMAGING',
+  'DIAGNOSTIC STUDIES',
+  'DIAGNOSTICS',
+  'LABS',
+  'LABORATORY DATA',
+  'LABORATORY RESULTS',
   'ASSESSMENT & PLAN (A&P)',
   'ASSESSMENT & PLAN',
+  'ASSESSMENT AND PLAN (A&P)',
   'ASSESSMENT AND PLAN',
   'A&P',
   'ASSESSMENT',
   'IMPRESSION',
+  'DIAGNOSIS',
+  'DIAGNOSES',
+  'ICD-10 DIAGNOSES',
   'PLAN',
   'ORDERS',
   'RECOMMENDATIONS',
+  'TREATMENT PLAN',
+  'FOLLOW-UP',
+  'FOLLOW UP',
+  'FOLLOW-UP / DISPOSITION',
+  'DISPOSITION',
+  'INSTRUCTIONS',
+  'PATIENT INSTRUCTIONS',
+  'PATIENT EDUCATION',
+  'PATIENT COUNSELING',
+  'PROCEDURES',
+  'PROCEDURE',
+  'PRECAUTIONS',
+  'WARNING SIGNS',
+  'RED FLAGS',
+  'CLINICAL SUMMARY',
+  'SUMMARY',
+  'OVERVIEW',
+  'CLINICAL OVERVIEW',
   'ICD-10 CODES',
   'ICD-10',
   'ICD 10',
+  'ICD CODES',
   'CPT CODES',
-  'CPT'
+  'CPT',
+  'BILLING CODES',
+  'CPT / BILLING CODES',
+  'PROCEDURE CODES',
 ]
 
-function sanitizeSectionText(header, content) {
+const SORTED_CLINICAL_HEADERS = [...CLINICAL_SECTION_HEADERS].sort((a, b) => b.length - a.length)
+const CLINICAL_HEADER_ALT = SORTED_CLINICAL_HEADERS.map((h) => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')
+
+// Matches boundaries where a clinical header starts:
+// 1) Start of text or newlines
+// 2) After a real sentence ending (non-numeric word followed by . ! ? or ;)
+// 3) After multiple spaces
+const BOUNDARY_REGEX = new RegExp(
+  `(?:^|[\\r\\n]+|(?<!\\b\\d+)[.!?][ \\t]+|;[ \\t]+|[ \\t]{2,})(?:\\[?\\b(${CLINICAL_HEADER_ALT})\\b\\]?(?:[ \\t]*\\([^)]*\\))?)[ \\t]*:`,
+  'gi'
+)
+
+// Bleed pattern: inside a section's text, detects if another subsequent header was accidentally concatenated
+// Note: Requires lookbehind for sentence ending or newline, NEVER matching list markers like 1. or (a)
+const BLEED_PATTERN = /(?:^|[\r\n]+|(?<=[a-zA-Z]{2,}[.!?])[ \t]+|(?<=;)[ \t]+)(?:CHIEF\s+COMPLAINT|HISTORY\s+OF\s+PRESENT\s+ILLNESS|HPI|CURRENT\s+MEDICATIONS?|MEDICATIONS?|MEDS|VITAL\s+SIGNS|VITALS|PHYSICAL\s+EXAM(?:INATION)?|PE|ASSESSMENT(?:\s*&\s*PLAN)?|PLAN|ICD-?10|CPT)(?:\s*\(.*?\))?\s*:/i
+
+function sanitizeSectionText(header, content, existingSubsequentHeaders = []) {
   let str = (content || '').trim()
   if (!str) return ''
 
-  // Strip trailing bleed of any unparsed subsequent headers:
-  const bleedPattern = /(?:^|\n|\.\s+|;\s+)(?:CHIEF\s+COMPLAINT|HISTORY\s+OF\s+PRESENT\s+ILLNESS|HPI|CURRENT\s+MEDICATIONS?|MEDICATIONS?|MEDS|VITAL\s+SIGNS|VITALS|PHYSICAL\s+EXAM(?:INATION)?|PE|ASSESSMENT(?:\s*&\s*PLAN)?|PLAN|ICD-?10|CPT)(?:\s*\(.*?\))?\s*:/i
-  const bleedMatch = str.match(bleedPattern)
+  // Strip trailing bleed only if it matches a genuine bleed boundary and that header actually exists later
+  const bleedMatch = str.match(BLEED_PATTERN)
   if (bleedMatch && bleedMatch.index > 0) {
-    str = str.slice(0, bleedMatch.index).trim()
+    const matchText = bleedMatch[0].toUpperCase()
+    const isPresentLater = Array.isArray(existingSubsequentHeaders) && existingSubsequentHeaders.some((h) => matchText.includes(h.toUpperCase()))
+    if (isPresentLater) {
+      str = str.slice(0, bleedMatch.index).trim()
+    }
   }
 
   const hUpper = header.toUpperCase()
@@ -334,36 +404,20 @@ export function parseNoteSections(noteText) {
   if (!noteText) {return []}
   let text = cleanAiDraftForDisplay(noteText)
 
-  const headerAlt = CLINICAL_SECTION_HEADERS.map((h) => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')
-  const boundaryRegex = new RegExp(`(?:^|[\\n\\r]|\\.\\s+|;\\s+|\\s{2,})(${headerAlt})(?:\\s*\\([A-Za-z0-9\\s/&\\-–—]+\\))?\\s*:`, 'gi')
+  // Normalize header boundaries into standalone uppercase line headers
+  text = text.replace(BOUNDARY_REGEX, (m, p1) => {
+    return `\n\n${p1.toUpperCase()}:\n`
+  }).trim()
 
-  // 1. First check if text already has clean standalone line headers matching sectionRegex
-  const sectionRegex = /^(?:\[?[A-Z0-9\s/&()\-–—]+\]?|[A-Z\s/&()\-–—]+):\s*$/gm
-  let matches = []
+  // Match line headers: ONLY horizontal whitespace in header, NO \r or \n
+  const sectionRegex = /^(?:\[?([A-Za-z0-9 /&()\-–—]+)\]?):[ \t]*$/gm
+  const matches = []
   let match
   while ((match = sectionRegex.exec(text)) !== null) {
-    const rawHeader = match[0].replace(/:$/, '').trim()
-    const cleanHeader = rawHeader.replace(/^\[|\]$/g, '').trim()
-    if (cleanHeader.length >= 2 && !/^(NOTE|DATE|TIME|MRN|PATIENT|STATUS)/i.test(cleanHeader)) {
-      matches.push({ header: cleanHeader, index: match.index, length: match[0].length })
-    }
-  }
-
-  // 2. If no standalone line headers were found (e.g. inline headers like "Chief Complaint: ... HPI: ..."), normalize linebreaks
-  if (matches.length <= 1) {
-    text = text.replace(boundaryRegex, (m) => {
-      const headerPart = m.replace(/^[\s.;\n\r]+/, '').replace(/:$/, '').trim()
-      return `\n\n${headerPart.toUpperCase()}:\n`
-    }).trim()
-
-    sectionRegex.lastIndex = 0
-    matches = []
-    while ((match = sectionRegex.exec(text)) !== null) {
-      const rawHeader = match[0].replace(/:$/, '').trim()
-      const cleanHeader = rawHeader.replace(/^\[|\]$/g, '').trim()
-      if (cleanHeader.length >= 2 && !/^(NOTE|DATE|TIME|MRN|PATIENT|STATUS)/i.test(cleanHeader)) {
-        matches.push({ header: cleanHeader, index: match.index, length: match[0].length })
-      }
+    const rawHeader = match[1].trim()
+    // Ignore pure metadata single tokens like "MRN", "DATE", "TIME", "STATUS", but keep "PATIENT INSTRUCTIONS" etc.
+    if (rawHeader.length >= 2 && !/^(NOTE|DATE|TIME|MRN|PATIENT|STATUS)$/i.test(rawHeader)) {
+      matches.push({ header: rawHeader, index: match.index, length: match[0].length })
     }
   }
 
@@ -372,7 +426,19 @@ export function parseNoteSections(noteText) {
   }
 
   const sections = []
-  const seenHeaders = new Set()
+
+  // Preserve any preamble text before the first section header
+  if (matches[0].index > 0) {
+    const preamble = text.slice(0, matches[0].index).trim()
+    if (preamble) {
+      sections.push({
+        header: 'OVERVIEW',
+        content: preamble,
+      })
+    }
+  }
+
+  const allHeadersList = matches.map((m) => m.header)
 
   for (let i = 0; i < matches.length; i++) {
     const current = matches[i]
@@ -383,11 +449,8 @@ export function parseNoteSections(noteText) {
 
     if (!content && next) {continue}
 
-    const normalizedHeader = current.header.toUpperCase()
-    if (seenHeaders.has(normalizedHeader)) {continue}
-    seenHeaders.add(normalizedHeader)
-
-    const cleanContent = sanitizeSectionText(current.header, content)
+    const subsequentHeaders = allHeadersList.slice(i + 1)
+    const cleanContent = sanitizeSectionText(current.header, content, subsequentHeaders)
     if (cleanContent) {
       sections.push({
         header: current.header,
@@ -551,18 +614,41 @@ const DEV_MOCK_VISITS = [
   },
   {
     id: 103,
-    patient_name: 'David Headache-Test',
+    patient_name: 'David Smith',
     mrn: 'MRN-HA-9092',
     visit_date: '2026-09-05T00:00:00.000Z',
     visit_time: '15:45',
     visit_type: 'Follow-up',
     status: 'completed',
     locked_at: '2026-09-05T16:00:00.000Z',
-    final_note: 'CHIEF COMPLAINT: Headache evaluation HISTORY OF PRESENT ILLNESS (HPI): The patient is a 45 yrs patient presenting for evaluation of headache. Symptoms have been recurring for 2 weeks with throbbing frontal discomfort, photophobia, and no focal neurological deficit.',
+    final_note: `CHIEF COMPLAINT:
+Headache evaluation
+
+HISTORY OF PRESENT ILLNESS (HPI):
+The patient is a 45-year-old male presenting for evaluation of headache. Symptoms have been recurring for 2 weeks with throbbing frontal discomfort, photophobia, and no focal neurological deficit.
+
+VITAL SIGNS:
+• Blood Pressure: 122/78 mmHg
+• Pulse / Heart Rate: 72 bpm regular
+• Oxygen Saturation (SpO2): 99% on room air
+
+PHYSICAL EXAMINATION (PE):
+• Neurological: Cranial nerves II-XII intact. No focal weakness or sensory loss. Reflexes 2+ symmetrical.
+• Head & Neck: Supple neck, full cervical ROM without meningismus. No temporal artery tenderness.
+
+ASSESSMENT & PLAN:
+1. Tension-type headache with intermittent migraine features.
+2. Controlled blood pressure.
+3. Recommend lifestyle modifications, proper hydration, and 20-20-20 screen rule.
+4. Prescribe Ibuprofen 400mg PO TID PRN for acute pain relief.
+5. Patient instructed on red-flag warning signs (thunderclap onset, sudden weakness).
+
+FOLLOW-UP:
+Follow-up in clinic in 2 weeks or sooner if symptoms worsen.`,
   },
   {
     id: 104,
-    patient_name: 'David Headache-Test',
+    patient_name: 'David Smith',
     mrn: 'MRN-HA-9092',
     visit_date: '2026-09-05T00:00:00.000Z',
     visit_time: '15:45',
