@@ -74,8 +74,8 @@ describe('End-to-End Profile Test Suite (All 5 Roles)', () => {
       expect(div.innerHTML).toContain('Note History')
       expect(div.innerHTML).toContain('Dr. Sarah Smith')
 
-      // Verify Scribes Side Panel & Date Tabs
-      expect(div.innerHTML).toContain('Scribes')
+      // Verify Encounters Side Panel & Date Tabs
+      expect(div.innerHTML).toContain('Encounters')
       expect(div.innerHTML).toContain('+ New patient')
       expect(div.innerHTML).toContain('Today')
       expect(div.innerHTML).toContain('Yesterday')

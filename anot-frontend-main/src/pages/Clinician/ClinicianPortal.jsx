@@ -2157,16 +2157,6 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
             </div>
           )}
 
-          <button
-            type="button"
-            className="sm-btn-nav-tmpl"
-            onClick={() => setTemplateModalOpen(true)}
-            title="Manage and customize your personal clinical templates"
-          >
-            <span>📋</span>
-            <span>Templates</span>
-          </button>
-
           <div className="sm-clinician-badge">
             <div className="sm-clinician-avatar">
               {currentUser?.name ? currentUser.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() : 'MD'}
@@ -2839,12 +2829,12 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
 
         {/* ─── RIGHT COLUMN: CLINICAL SCHEDULE & SCRATCHPAD ─── */}
         <aside className="sm-sidebar">
-          {/* Modernized Scribes / Encounters Side Card */}
-          <div className="sm-side-card sm-side-card--scribes">
+          {/* Modernized Encounters Side Card */}
+          <div className="sm-side-card sm-side-card--encounters sm-side-card--scribes">
             <div className="sm-side-card__header">
               <div className="sm-side-card__title-group">
                 <div className="sm-side-card__title-left">
-                  <span className="sm-side-card__title">Scribes</span>
+                  <span className="sm-side-card__title" title="Patient Encounters">Encounters</span>
                   <span className="sm-side-card__count">{countAll}</span>
                   <div
                     className="sm-live-sync-indicator"
@@ -2968,10 +2958,10 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                 <div className="sm-empty-state sm-empty-state--minimal">
                   <p className="sm-empty-state__message">
                     {scheduleDateFilter === 'today'
-                      ? 'No visits recorded for today.'
+                      ? 'No encounters recorded for today.'
                       : scheduleDateFilter === 'yesterday'
-                        ? 'No scribes recorded for yesterday.'
-                        : 'No scribes matching filter.'}
+                        ? 'No encounters recorded for yesterday.'
+                        : 'No encounters matching filter.'}
                   </p>
                 </div>
               ) : (
