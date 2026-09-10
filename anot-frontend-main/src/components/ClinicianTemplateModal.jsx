@@ -179,7 +179,7 @@ export default function ClinicianTemplateModal({
 
   return (
     <div className="sm-modal-overlay" onClick={onClose}>
-      <div className="sm-modal sm-template-manager-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="sm-template-manager-modal" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="sm-modal__header sm-tmpl-header">
           <div className="sm-modal__title-group">

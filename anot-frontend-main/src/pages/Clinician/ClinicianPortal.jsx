@@ -2495,15 +2495,6 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
 
                       <button
                         type="button"
-                        className="sm-btn-doc sm-btn-doc--delete"
-                        onClick={(e) => handleDeleteClick(e, activeDraftNote)}
-                        title="Delete this encounter"
-                      >
-                        🗑 Delete
-                      </button>
-
-                      <button
-                        type="button"
                         className="sm-btn-doc sm-btn-doc--new"
                         onClick={handleStartNewConsultation}
                         title="Start another patient consultation"
