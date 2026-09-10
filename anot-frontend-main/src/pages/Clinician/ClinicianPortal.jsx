@@ -799,6 +799,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
 
   // Ambient Dictation scratchpad
   const [dictationNotes, setDictationNotes] = useState('')
+  const [showLiveTranscript, setShowLiveTranscript] = useState(false)
 
   // After-recording Review state (1c)
   const [recordedDuration, setRecordedDuration] = useState('00:00')
@@ -2356,6 +2357,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
               )}
 
               {/* STATE 1b: RECORDING — Mic is Live */}
+              {/* STATE 1b: RECORDING — Clean, User-Friendly Clinical Console */}
               {isRecordingState && (
                 <div className="sm-state-recording">
                   <div className="sm-recording-card">
@@ -2381,43 +2383,48 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                       </button>
                     </div>
 
-                    {/* Live Glowing Mic */}
-                    <div className={`sm-rec-mic-halo ${isPaused ? 'sm-rec-mic-halo--paused' : ''}`}>
-                      <div className="sm-rec-mic-btn">
-                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    {/* Calm Clinical Audio Monitor & Digital Stopwatch */}
+                    <div className="sm-rec-console-center">
+                      <div className={`sm-rec-mic-emblem ${isPaused ? 'sm-rec-mic-emblem--paused' : ''}`}>
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                           <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
                           <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
                           <line x1="12" y1="19" x2="12" y2="22" />
                         </svg>
                       </div>
-                    </div>
 
-                    <div className="sm-clock-display sm-clock-display--live">{fmtTime(timerSeconds)}</div>
-                    <div className="sm-status-line">
-                      <span className={`sm-status-dot ${isPaused ? 'sm-status-dot--paused' : 'sm-status-dot--live'}`} />
-                      <span>{isPaused ? 'Consultation paused' : 'Listening — recording in progress'}</span>
-                      <span className="sm-nosleep-pill" title="Screen and device sleep prevention active: PC and mobile stay awake">
-                        ☕ No Sleep Active
-                      </span>
-                    </div>
+                      <div className="sm-clock-display sm-clock-display--live">{fmtTime(timerSeconds)}</div>
 
-                    {/* Audio Waveform Reaction */}
-                    <div className="sm-waveform-wrap">
-                      <RecordingVisualizer stream={audioStream} isPaused={isPaused} barCount={24} theme="danger" />
-                    </div>
-
-                    {/* Live Speech Recognition Auto-Scroll Bubble */}
-                    <div className="sm-live-transcript-card" ref={transcriptScrollRef}>
-                      <div className="sm-live-transcript-header">
-                        <span className="sm-live-transcript-badge">LIVE TRANSCRIPT</span>
-                        <span className="sm-live-transcript-meta">Capturing dictation...</span>
+                      <div className="sm-status-line">
+                        <span className={`sm-status-dot ${isPaused ? 'sm-status-dot--paused' : 'sm-status-dot--live'}`} />
+                        <span className="sm-status-text">{isPaused ? 'Consultation paused' : 'Listening · Ambient recording active'}</span>
+                        <span className="sm-nosleep-pill" title="Screen stays awake during consultation">
+                          ☕ Stay Awake Active
+                        </span>
                       </div>
-                      <div className="sm-live-transcript-text">
-                        {liveTranscript ? `“${liveTranscript}”` : 'Capturing clinical consultation in real-time...'}
+
+                      {/* Gentle Audio Level Waveform */}
+                      <div className="sm-waveform-wrap">
+                        <RecordingVisualizer stream={audioStream} isPaused={isPaused} barCount={20} theme="primary" />
                       </div>
                     </div>
 
-                    {/* Action Button Controls */}
+                    {/* Doctor's In-Consultation Scratchpad (Ultra User-Friendly) */}
+                    <div className="sm-rec-scratchpad-card">
+                      <div className="sm-rec-scratchpad-header">
+                        <span className="sm-rec-scratchpad-title">📝 In-Consultation Quick Notes (Optional)</span>
+                        <span className="sm-rec-scratchpad-hint">Auto-included in final clinical note</span>
+                      </div>
+                      <textarea
+                        className="sm-rec-scratchpad-textarea"
+                        placeholder="Type any key clinical findings, vitals, or meds (e.g. BP 120/80, tenderness in right knee, Rx amoxicillin)..."
+                        value={dictationNotes}
+                        onChange={(e) => setDictationNotes(e.target.value)}
+                        rows={2}
+                      />
+                    </div>
+
+                    {/* Primary Operating Action Controls: Large, Clear & Tactile */}
                     <div className="sm-rec-actions-row">
                       <button
                         type="button"
@@ -2432,8 +2439,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                         className="sm-btn-action sm-btn-action--stop"
                         onClick={handleEndVisit}
                       >
-                        <span className="sm-square-icon" />
-                        <span>Stop & Generate Note</span>
+                        <span>✓ Finish & Generate Note</span>
                       </button>
 
                       <button
@@ -2442,21 +2448,44 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                         onClick={handleCancelRecording}
                         title="Cancel recording"
                       >
-                        ✕
+                        ✕ Cancel
                       </button>
                     </div>
 
-                    {/* Template Selection Pill */}
-                    <div className="sm-template-pill">
-                      <span className="sm-template-pill__tag">Template</span>
-                      <select
-                        className="sm-template-pill__select"
-                        value={selectedTemplate}
-                        onChange={(e) => setSelectedTemplate(e.target.value)}
+                    {/* Clean Template Pill & Optional Transcript Toggle */}
+                    <div className="sm-rec-footer-row">
+                      <div className="sm-template-pill">
+                        <span className="sm-template-pill__tag">Template:</span>
+                        <select
+                          className="sm-template-pill__select"
+                          value={selectedTemplate}
+                          onChange={(e) => setSelectedTemplate(e.target.value)}
+                        >
+                          {renderTemplateOptions()}
+                        </select>
+                      </div>
+
+                      <button
+                        type="button"
+                        className="sm-btn-toggle-transcript"
+                        onClick={() => setShowLiveTranscript(!showLiveTranscript)}
                       >
-                        {renderTemplateOptions()}
-                      </select>
+                        {showLiveTranscript ? 'Hide live transcript' : 'Show live transcript'}
+                      </button>
                     </div>
+
+                    {/* Optional Live Transcript Drawer (Hidden by default to prevent distraction) */}
+                    {showLiveTranscript && (
+                      <div className="sm-live-transcript-card" ref={transcriptScrollRef}>
+                        <div className="sm-live-transcript-header">
+                          <span className="sm-live-transcript-badge">LIVE AUDIO FEED</span>
+                          <span className="sm-live-transcript-meta">Microphone audio stream</span>
+                        </div>
+                        <div className="sm-live-transcript-text">
+                          {liveTranscript ? `“${liveTranscript}”` : 'Listening to room audio...'}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

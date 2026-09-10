@@ -727,60 +727,259 @@
   flex-direction: column;
   align-items: center;
   text-align: center;
-  max-width: 540px;
+  max-width: 620px;
   width: 100%;
+  margin: 0 auto;
 }
 
-.sm-rec-mic-halo {
-  width: 84px;
-  height: 84px;
+/* Calm, non-pulsating medical microphone emblem */
+.sm-rec-console-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 4px 0 10px;
+}
+
+.sm-rec-mic-emblem {
+  width: 58px;
+  height: 58px;
   border-radius: 50%;
-  background: #FEE2E2;
+  background: #EFF6FF;
+  border: 2px solid #BFDBFE;
+  color: #2563EB;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 16px;
-  animation: sm-halo-pulse 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+  margin-bottom: 8px;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.12);
+  transition: all 0.2s ease;
 }
 
-.sm-rec-mic-halo--paused {
+.sm-rec-mic-emblem--paused {
   background: #FEF3C7;
-  animation: none;
+  border-color: #FDE68A;
+  color: #D97706;
+  box-shadow: 0 2px 8px rgba(217, 119, 6, 0.12);
 }
 
-@keyframes sm-halo-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-  50% { box-shadow: 0 0 0 16px rgba(239, 68, 68, 0); }
+.sm-clock-display--live {
+  font-size: 32px;
+  font-weight: 800;
+  color: #0F172A;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  letter-spacing: 1.5px;
+  line-height: 1;
+  margin-bottom: 6px;
 }
 
-.sm-rec-mic-btn {
-  color: #EF4444;
+.sm-status-line {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sm-slate-600);
+  margin-bottom: 4px;
 }
 
-.sm-rec-mic-halo--paused .sm-rec-mic-btn {
-  color: #D97706;
+.sm-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sm-status-dot--live {
+  background: #10B981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+}
+
+.sm-status-dot--paused {
+  background: #F59E0B;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+}
+
+.sm-nosleep-pill {
+  background: #F1F5F9;
+  border: 1px solid #E2E8F0;
+  color: #475569;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
 }
 
 .sm-waveform-wrap {
-  margin: 14px 0 6px;
-  height: 32px;
+  margin: 4px 0 8px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-/* Live Streaming Transcript Feed */
-.sm-live-transcript-card {
+/* Doctor's In-Consultation Quick Scratchpad */
+.sm-rec-scratchpad-card {
   width: 100%;
   background: #F8FAFC;
   border: 1px solid var(--sm-slate-200);
   border-radius: 10px;
-  padding: 12px 16px;
-  margin: 14px 0 20px;
-  max-height: 90px;
+  padding: 10px 14px;
+  margin: 6px 0 12px;
+  text-align: left;
+  box-sizing: border-box;
+  transition: all 0.15s ease;
+}
+
+.sm-rec-scratchpad-card:focus-within {
+  background: #FFFFFF;
+  border-color: #3B82F6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.sm-rec-scratchpad-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.sm-rec-scratchpad-title {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--sm-slate-700);
+}
+
+.sm-rec-scratchpad-hint {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--sm-slate-400);
+}
+
+.sm-rec-scratchpad-textarea {
+  width: 100%;
+  border: 1px solid var(--sm-slate-200);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--sm-slate-800);
+  background: #FFFFFF;
+  resize: none;
+  outline: none;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.sm-rec-scratchpad-textarea:focus {
+  border-color: #3B82F6;
+}
+
+/* Primary Operating Controls: Accessible, Big & Foolproof */
+.sm-rec-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.sm-btn-action {
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.15s ease;
+  border: none;
+  white-space: nowrap;
+}
+
+.sm-btn-action--pause {
+  background: #FFFFFF;
+  border: 1.5px solid var(--sm-slate-300);
+  color: var(--sm-slate-700);
+  padding: 10px 20px;
+}
+
+.sm-btn-action--pause:hover {
+  background: var(--sm-slate-50);
+  color: var(--sm-slate-900);
+  border-color: var(--sm-slate-400);
+}
+
+.sm-btn-action--stop {
+  background: #2563EB !important;
+  color: #FFFFFF !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  padding: 10px 26px !important;
+  box-shadow: 0 3px 12px rgba(37, 99, 235, 0.25);
+}
+
+.sm-btn-action--stop:hover {
+  background: #1D4ED8 !important;
+  transform: translateY(-1px);
+  box-shadow: 0 5px 16px rgba(37, 99, 235, 0.35);
+}
+
+.sm-btn-action--cancel {
+  background: #FFFFFF;
+  border: 1px solid var(--sm-slate-200);
+  color: var(--sm-slate-500);
+  padding: 10px 16px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.sm-btn-action--cancel:hover {
+  background: #FEE2E2;
+  border-color: #FECACA;
+  color: #EF4444;
+}
+
+/* Footer Row: Template + Optional Transcript Toggle */
+.sm-rec-footer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 12px;
+  padding: 0 4px;
+  box-sizing: border-box;
+}
+
+.sm-btn-toggle-transcript {
+  background: transparent;
+  border: none;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--sm-slate-500);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: color 0.15s ease;
+}
+
+.sm-btn-toggle-transcript:hover {
+  color: var(--sm-blue-600);
+}
+
+/* Optional Transcript Drawer */
+.sm-live-transcript-card {
+  width: 100%;
+  background: #F8FAFC;
+  border: 1px solid var(--sm-slate-200);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-top: 10px;
+  max-height: 80px;
   overflow-y: auto;
   text-align: left;
   box-sizing: border-box;
@@ -790,95 +989,29 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .sm-live-transcript-badge {
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 800;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   color: var(--sm-blue-600);
   background: var(--sm-blue-50);
-  padding: 2px 6px;
-  border-radius: 4px;
+  padding: 1px 5px;
+  border-radius: 3px;
 }
 
 .sm-live-transcript-meta {
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--sm-slate-400);
 }
 
 .sm-live-transcript-text {
-  font-size: 13px;
-  line-height: 1.45;
-  color: var(--sm-slate-700);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--sm-slate-600);
   font-style: italic;
-}
-
-.sm-rec-actions-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.sm-btn-action {
-  border-radius: 9px;
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  transition: all 0.15s ease;
-  border: none;
-}
-
-.sm-btn-action--pause {
-  background: #FFFFFF;
-  border: 1px solid var(--sm-slate-300);
-  color: var(--sm-slate-800);
-  padding: 11px 22px;
-}
-
-.sm-btn-action--pause:hover {
-  background: var(--sm-slate-50);
-}
-
-.sm-btn-action--stop {
-  background: var(--sm-slate-900);
-  color: #FFFFFF;
-  padding: 11px 26px;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
-}
-
-.sm-btn-action--stop:hover {
-  background: #000000;
-  transform: translateY(-1px);
-}
-
-.sm-btn-action--cancel {
-  background: #FFFFFF;
-  border: 1px solid var(--sm-slate-200);
-  color: var(--sm-slate-400);
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  border-radius: 9px;
-  font-size: 16px;
-}
-
-.sm-btn-action--cancel:hover {
-  background: #FEE2E2;
-  border-color: #FECACA;
-  color: #EF4444;
-}
-
-.sm-square-icon {
-  width: 10px;
-  height: 10px;
-  background: #FFFFFF;
-  border-radius: 2px;
 }
 
 /* ─── STATE 1a PATIENT INTAKE CARD ────────────────────────────────────── */
