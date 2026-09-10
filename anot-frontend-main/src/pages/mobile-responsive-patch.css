@@ -16,6 +16,7 @@ body,
   .sm-intake-input,
   .sm-patient-quick-dropdown,
   .sm-template-pill__select,
+  .sm-halo-template-select,
   .sf-input,
   .sf-select,
   .sf-textarea,
@@ -45,7 +46,9 @@ body,
   .qps-btn,
   select,
   .sm-patient-quick-dropdown,
-  .sm-template-pill__select {
+  .sm-template-pill__select,
+  .sm-halo-template-select,
+  .sm-btn-hero-record--halo {
     min-height: 44px !important;
     touch-action: manipulation;
   }

@@ -528,10 +528,13 @@
   padding: 4px;
   gap: 4px;
   border: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .login-page__country-tab {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
