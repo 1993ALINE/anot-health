@@ -9,6 +9,7 @@ const { audioFileFilter, MAX_FILE_SIZE } = require('../middleware/fileValidation
 const { createS3StreamStorage } = require('../middleware/s3StreamUpload')
 const { getPublicErrorMessage, logServerError } = require('../utils/errorMessages')
 const { runAIPipeline } = require('../utils/aiPipeline')
+const { enqueueTranscription } = require('../services/transcriptionQueue')
 const { getVisitForUser } = require('../utils/visitAccess')
 const { visitHasPatientConsentRecorded } = require('../utils/visitSchemaCompat')
 const { loadAiSettings, defaultRuntimeSettings, useDeepgram } = require('../services/aiSettings')
@@ -18,7 +19,29 @@ const cloudWatchAudit = require('../utils/logger')
 // Stream multipart uploads directly to S3 (no in-memory buffering).
 
 function extFromMimetype(mimetype) {
-  return mimetype.includes('mp4') ? 'mp4' : mimetype.includes('ogg') ? 'ogg' : 'webm'
+  if (!mimetype) return 'webm'
+  const lower = mimetype.toLowerCase()
+  if (lower.includes('wav') || lower.includes('wave')) return 'wav'
+  if (lower.includes('mp3') || lower.includes('mpeg')) return 'mp3'
+  if (lower.includes('mp4') || lower.includes('m4a')) return 'mp4'
+  if (lower.includes('ogg') || lower.includes('opus')) return 'ogg'
+  if (lower.includes('flac')) return 'flac'
+  return 'webm'
+}
+
+function mimeFromFilename(filename) {
+  if (!filename) return 'audio/webm'
+  const ext = path.extname(filename).toLowerCase().replace('.', '')
+  switch (ext) {
+    case 'wav': return 'audio/wav'
+    case 'mp3': return 'audio/mpeg'
+    case 'mp4':
+    case 'm4a': return 'audio/mp4'
+    case 'ogg': return 'audio/ogg'
+    case 'flac': return 'audio/flac'
+    case 'webm':
+    default: return 'audio/webm'
+  }
 }
 
 function buildAudioFilename(visitId, mimetype) {
@@ -78,12 +101,10 @@ function handleMulterError(err, req, res, next) {
 }
 
 async function queueVisitTranscription(visitId, user, req, source = 'upload') {
-  console.log(`[transcription] Starting pipeline for visit ${visitId} (${source})`)
-  setImmediate(() => {
-    runAIPipeline(visitId, { user, req })
-      .then(() => console.log(`[transcription] Pipeline finished for visit ${visitId}`))
-      .catch((err) => console.error(`[transcription] Failed for visit ${visitId}:`, err.message))
-  })
+  console.log(`[transcription] Queueing pipeline for visit ${visitId} (${source})`)
+  enqueueTranscription(visitId, { user, req })
+    .then(() => console.log(`[transcription] Pipeline finished for visit ${visitId}`))
+    .catch((err) => console.error(`[transcription] Failed for visit ${visitId}:`, err.message))
 }
 
 async function maybeAutoTranscribe(visitId, user, req) {
@@ -221,7 +242,7 @@ router.post('/:visitId/append', protect, restrict('clinician'), upload.single('a
 
     setImmediate(() => {
       console.log(`[transcription] Re-running AI pipeline for visit ${visitId} after additional recording`)
-      runAIPipeline(visitId, { user: req.user, req })
+      enqueueTranscription(visitId, { user: req.user, req })
         .catch((err) => console.error(`[transcription] AI re-run error for visit ${visitId}:`, err.message))
     })
   } catch (err) {
@@ -278,8 +299,13 @@ router.get('/:visitId', protect, restrict('clinician', 'scribe', 'qps'), async (
     try {
       const streamResult = await getAudioStream(dbPathToKey(filePath), rangeHeader)
 
+      const detectedMime = mimeFromFilename(cleanName)
+      const finalContentType = (streamResult.contentType && streamResult.contentType !== 'application/octet-stream')
+        ? streamResult.contentType
+        : detectedMime
+
       res.status(streamResult.statusCode)
-      if (streamResult.contentType) res.setHeader('Content-Type', streamResult.contentType)
+      res.setHeader('Content-Type', finalContentType)
       if (streamResult.contentLength != null) res.setHeader('Content-Length', String(streamResult.contentLength))
       if (streamResult.contentRange) res.setHeader('Content-Range', streamResult.contentRange)
       res.setHeader('Accept-Ranges', streamResult.acceptRanges || 'bytes')
@@ -295,9 +321,9 @@ router.get('/:visitId', protect, restrict('clinician', 'scribe', 'qps'), async (
       const localDiskPath = path.join(__dirname, '../uploads', cleanName)
       if (fs.existsSync(localDiskPath)) {
         const stat = fs.statSync(localDiskPath)
-        const mime = extFromMimetype(cleanName)
+        const mime = mimeFromFilename(cleanName)
         res.status(200)
-        res.setHeader('Content-Type', `audio/${mime}`)
+        res.setHeader('Content-Type', mime)
         res.setHeader('Content-Length', String(stat.size))
         res.setHeader('Accept-Ranges', 'bytes')
         return fs.createReadStream(localDiskPath).pipe(res)

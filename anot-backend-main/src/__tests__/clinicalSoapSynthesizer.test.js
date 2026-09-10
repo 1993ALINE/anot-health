@@ -32,4 +32,34 @@ describe('clinicalSoapSynthesizer', () => {
     expect(soap).not.toContain('Cranial nerves II-XII')
     expect(soap).not.toContain('Kernig')
   })
+
+  test('extracts all medications and displays them under CURRENT MEDICATIONS', () => {
+    const dictation = `
+Patient Arthur Pendelton presenting for bilateral knee pain and hypertension management.
+Vitals: BP 134/82 mmHg, HR 72 bpm.
+Medications: Lisinopril 20mg once daily, Atorvastatin 20mg at bedtime, Tylenol 500mg PRN.
+Plan:
+1. ORDER: Request bilateral hyaluronic acid injections.
+2. Refill Lisinopril 20mg oral daily for blood pressure control.
+3. Follow-up in 6 weeks.
+    `.trim()
+
+    const { extractMedications } = require('../utils/clinicalSoapSynthesizer')
+    const meds = extractMedications(dictation)
+    expect(meds.list).toHaveLength(3)
+    expect(meds.formattedText).toContain('Lisinopril 20mg once daily')
+    expect(meds.formattedText).toContain('Atorvastatin 20mg at bedtime')
+    expect(meds.formattedText).toContain('Tylenol 500mg PRN')
+
+    const soap = formatClinicalDictationToSOAP(dictation, '', 'Comprehensive Consultation', {
+      patientName: 'Arthur Pendelton',
+      mrn: 'MRN-30M-1234',
+    })
+
+    expect(soap).toContain('CURRENT MEDICATIONS:')
+    expect(soap).toContain('• Lisinopril 20mg once daily')
+    expect(soap).toContain('• Atorvastatin 20mg at bedtime')
+    expect(soap).toContain('• Tylenol 500mg PRN')
+    expect(soap).toContain('Refill Lisinopril 20mg oral daily for blood pressure control')
+  })
 })

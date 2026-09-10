@@ -4761,3 +4761,56 @@
   font-weight: 600;
 }
 
+/* ─── CLINICAL NOTE LOADING STATE ─────────────────────────────────────── */
+.sm-state-loading-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 480px;
+  width: 100%;
+  padding: 40px 20px;
+  box-sizing: border-box;
+}
+
+.sm-note-loading-card {
+  background: #FFFFFF;
+  border: 1px solid var(--sm-slate-200);
+  border-radius: 16px;
+  padding: 44px 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  max-width: 440px;
+  width: 100%;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+}
+
+.sm-note-loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3.5px solid var(--sm-slate-200);
+  border-top-color: var(--sm-blue-600);
+  border-radius: 50%;
+  animation: sm-spin 0.75s linear infinite;
+  margin-bottom: 20px;
+}
+
+@keyframes sm-spin {
+  to { transform: rotate(360deg); }
+}
+
+.sm-note-loading-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--sm-slate-800);
+  margin: 0 0 8px 0;
+}
+
+.sm-note-loading-sub {
+  font-size: 13.5px;
+  color: var(--sm-slate-500);
+  margin: 0;
+  line-height: 1.5;
+}
+

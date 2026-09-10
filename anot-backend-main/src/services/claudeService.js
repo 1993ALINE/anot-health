@@ -12,12 +12,13 @@ const MEDICAL_SYSTEM_PROMPT = `You are a clinical documentation specialist. Gene
 Format strictly as:
 CHIEF COMPLAINT: [1 sentence]
 HISTORY OF PRESENT ILLNESS: [2-4 sentences covering onset, duration, severity, associated symptoms]
+CURRENT MEDICATIONS: [Bullet list of all active/current medications with doses, routes, and frequencies, or "None documented this encounter."]
 PHYSICAL EXAMINATION: [Key findings only, or "Not documented" if not in transcript]
 ASSESSMENT: [Primary diagnosis/impression, numbered if multiple]
-PLAN: [Numbered action items — medications with doses, follow-up, referrals, patient instructions]
+PLAN: [Numbered action items — all medication orders/refills with doses and frequencies, follow-up, referrals, patient instructions]
 ICD-10 CODES: [1-3 most relevant codes with descriptions]
 
-Rules: Use only information from the transcript. Be concise and medically precise. Do not invent findings.`;
+Rules: Use only information from the transcript. Document all mentioned medications with exact dosages, routes, and frequencies. Be concise and medically precise. Do not invent findings.`;
 
 // ════════════════════════════════════════════════════════════
 // COST TRACKING & MONITORING
@@ -38,13 +39,13 @@ let totalCallCount = 0;
 let lastResetDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 
 // Cost limits and alerts
-const DAILY_COST_LIMIT = parseFloat(process.env.CLAUDE_DAILY_LIMIT || '5.00');
+const DAILY_COST_LIMIT = parseFloat(process.env.CLAUDE_DAILY_LIMIT || '50.00');
 const DAILY_WARNING_THRESHOLD = DAILY_COST_LIMIT * 0.8; // 80% warning
 const ENABLE_COST_CAP = process.env.CLAUDE_ENFORCE_CAP === 'true';
 
 // Rate limiting (prevent accidental mass calls)
 const RATE_LIMIT_WINDOW_MS = 60000; // 1 minute
-const RATE_LIMIT_MAX_CALLS = parseInt(process.env.CLAUDE_RATE_LIMIT || '30'); // 30 calls/min max
+const RATE_LIMIT_MAX_CALLS = parseInt(process.env.CLAUDE_RATE_LIMIT || '150'); // 150 calls/min max
 let recentCalls = [];
 
 /**
@@ -269,8 +270,14 @@ async function generateMedicalNotes(transcript, visitId) {
     
     const startTime = Date.now();
 
-    // Full transcript sent — Haiku 4.5 is cost-efficient and produces accurate SOAP notes
-    const activeModel = resolveCanonicalAnthropicModel(CLAUDE_COSTS.model);
+    // Dynamic Model Tiering:
+    // Default to cost-efficient Haiku 4.5 ($1.00/M input).
+    // Automatically escalate to Claude 3.5 Sonnet for long, highly complex multi-morbidity encounters (>5,000 chars).
+    let activeModel = resolveCanonicalAnthropicModel(CLAUDE_COSTS.model);
+    if (keyInfo && keyInfo.length > 5000) {
+      activeModel = 'claude-sonnet-4-6';
+      console.log(`[Claude] High-complexity encounter detected (${keyInfo.length} chars) -> escalating to ${activeModel}`);
+    }
     const response = await anthropic.messages.create({
       model: activeModel,
       max_tokens: 1200, // Enough for a complete structured SOAP note with ICD-10 codes

@@ -152,6 +152,61 @@ export function formatVitalsSection(vitalsObj) {
 }
 
 /**
+ * Extracts medications with dosages, routes, and frequencies from dictation or transcript
+ */
+export function extractMedications(text) {
+  if (!text) return { list: [], formattedText: '• No current prescription medications documented this encounter.' }
+  const str = String(text)
+  const meds = new Map()
+
+  // 1. Explicit Medication block
+  const blockRegex = /(?:current\s+)?(?:medications?|meds?|medication\s+list|active\s+medications?|prescriptions?|rx)(?:\s*list|\s*review)?:\s*([^\n\r]+(?:\n(?!(?:Physical|Assessment|Plan|Vitals|Allergies|Past|Chief|Review|[A-Z\s]{4,}:))[^\n\r]+)*)/gi
+  let match
+  while ((match = blockRegex.exec(str)) !== null) {
+    const rawBlock = match[1].trim()
+    const items = rawBlock.split(/[,;\n•\*\-]|\band\b/i).map(s => s.trim()).filter(s => s.length > 2)
+    for (const item of items) {
+      const clean = item.replace(/\.+$/, '').trim()
+      if (clean && !/^(none|denies|nil|no known|n\/a)$/i.test(clean)) {
+        const key = clean.toLowerCase()
+        if (!meds.has(key)) {
+          meds.set(key, clean)
+        }
+      }
+    }
+  }
+
+  // 2. Scan entire text for discrete drug name + dosage patterns
+  const drugDoseRegex = /\b(?:(?:refill|prescribe|order|start|continue|discontinue|hold|stop|take|taking|trial|give|inject)\s+)?([A-Z][a-zA-Z]{2,}(?:\s+[A-Z][a-zA-Z]+)?)\s+(\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml|units?|mEq|puff(?:s)?))\b(?:\s+(?:oral|orally|po|topical|sublingual|subcutaneously|inhaled|by\s+mouth))?(?:\s+(once\s+daily|twice\s+daily|three\s+times\s+daily|daily|at\s+bedtime|in\s+the\s+morning|every\s+\d+\s+hours|bid|tid|qid|qhs|prn|as\s+needed(?:\s+for\s+[a-z]+)?))?/gi
+  let dMatch
+  while ((dMatch = drugDoseRegex.exec(str)) !== null) {
+    const rawDrugName = dMatch[1].trim()
+    const drugName = rawDrugName.replace(/^(?:refill|prescribe|order|start|continue|discontinue|hold|stop|take|taking|trial|give|inject)\s+/i, '').trim()
+    if (!/^(?:Range|Pain|Temp|HR|RR|BP|Vitals|SpO2|Oxygen|Normal|Patient|Right|Left|Bilateral|Physical|Chief|History|Follow|Year|Years|Level|Score)/i.test(drugName)) {
+      const key = drugName.toLowerCase()
+      let already = false
+      for (const existingKey of meds.keys()) {
+        if (existingKey.includes(key) || key.includes(existingKey)) {
+          already = true
+          break
+        }
+      }
+      if (!already) {
+        const cleanPhrase = `${drugName} ${dMatch[2]}${dMatch[3] ? ' ' + dMatch[3] : ''}`.trim()
+        meds.set(key, cleanPhrase)
+      }
+    }
+  }
+
+  const list = Array.from(meds.values())
+  const formattedText = list.length > 0
+    ? list.map(m => `• ${m}`).join('\n')
+    : '• No current prescription medications documented this encounter.'
+
+  return { list, formattedText }
+}
+
+/**
  * Normalizes speech recognition acoustic artifacts and common medical misrecognitions
  */
 export function normalizeAsrErrors(text) {
@@ -189,10 +244,12 @@ export function normalizeAsrErrors(text) {
  */
 export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType = 'Follow-up', meta = {}) {
   const combined = [dictation, scratch].filter(Boolean).join(' ').trim()
+  const fullText = combined
   const normalized = normalizeAsrErrors(combined)
 
   const vitalsObj = extractVitals(combined)
   const vitalsText = formatVitalsSection(vitalsObj)
+  const medications = extractMedications(fullText)
 
   if (!normalized) {
     return [
@@ -456,17 +513,27 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
   if (/(?:request|order)\s+(?:for\s+)?(?:a\s+)?bilateral\s+hyaluronic\s+acid/i.test(normalized)) {
     planLines.push('1. ORDER: Bilateral hyaluronic acid knee injections requested to address osteoarthritic changes and provide cushioning for physical therapy participation.')
   }
+  // Medication refills & prescriptions in Plan
+  const refillMatches = fullText.match(/(?:refill|prescribe|order|start|continue|increase|decrease)\s+(?:prescription\s+for\s+)?([A-Z][a-zA-Z0-9\s,\.\-mg/]+?)(?=(?:\.|\n|$))/gi)
+  if (refillMatches) {
+    for (const rm of refillMatches) {
+      const cleanRm = rm.trim().replace(/\.+$/, '')
+      if (cleanRm.length > 8 && !planLines.some(p => p.toLowerCase().includes(cleanRm.toLowerCase().slice(0, 15)))) {
+        planLines.push(`${planLines.length + 1}. ${cleanRm.charAt(0).toUpperCase() + cleanRm.slice(1)}.`)
+      }
+    }
+  }
   if (/follow\s*up|return|week|month/i.test(normalized)) {
     const fuMatch = normalized.match(/follow.?up\s+(?:in\s+)?([a-zA-Z0-9\s]+?)(?:\.|$)/i)
-    planLines.push(`2. Follow-up: ${fuMatch ? fuMatch[0] : 'Follow up as directed by clinician.'}`)
+    planLines.push(`${planLines.length + 1}. Follow-up: ${fuMatch ? fuMatch[0] : 'Follow up as directed by clinician.'}`)
   } else {
-    planLines.push('2. Follow up as needed if symptoms worsen or fail to improve.')
+    planLines.push(`${planLines.length + 1}. Follow up as needed if symptoms worsen or fail to improve.`)
   }
   if (imagingText) {
-    planLines.push(`3. ${imagingText}`)
+    planLines.push(`${planLines.length + 1}. ${imagingText}`)
   }
   if (/rest|ice|elevat/i.test(normalized)) {
-    planLines.push('4. Supportive care measures as discussed with clinician.')
+    planLines.push(`${planLines.length + 1}. Supportive care measures as discussed with clinician.`)
   }
 
   // 7. Canadian Primary Care Specialized Section
@@ -514,6 +581,9 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
     '',
     'HISTORY OF PRESENT ILLNESS (HPI):',
     hpiText,
+    '',
+    'CURRENT MEDICATIONS:',
+    medications.formattedText,
     '',
     'VITAL SIGNS:',
     vitalsText,

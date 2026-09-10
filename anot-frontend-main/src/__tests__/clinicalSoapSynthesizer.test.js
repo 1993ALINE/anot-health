@@ -64,4 +64,30 @@ describe('clinicalSoapSynthesizer - Vitals & Headache Tests', () => {
       expect(note).toMatch(/thunderclap|neck stiffness|warning signs/i);
     });
   });
+
+  describe('Medications Extraction & Reconciliation', () => {
+    it('extracts all medications and includes CURRENT MEDICATIONS section in SOAP note', () => {
+      const transcript = `
+Patient Arthur Pendelton presents for bilateral knee pain and hypertension management.
+Vitals: BP 134/82 mmHg, HR 72 bpm.
+Medications: Lisinopril 20mg once daily, Atorvastatin 20mg at bedtime, Tylenol 500mg PRN.
+Physical Exam: Bilateral knee tenderness.
+Plan:
+1. ORDER: Request bilateral hyaluronic acid injections.
+2. Refill Lisinopril 20mg oral daily for blood pressure control.
+3. Follow up in 6 weeks.
+      `.trim();
+
+      const note = formatClinicalDictationToSOAP(transcript, '', 'Follow-up', {
+        patientName: 'Arthur Pendelton',
+        mrn: 'MRN-30M-1234',
+      });
+
+      expect(note).toContain('CURRENT MEDICATIONS:');
+      expect(note).toContain('• Lisinopril 20mg once daily');
+      expect(note).toContain('• Atorvastatin 20mg at bedtime');
+      expect(note).toContain('• Tylenol 500mg PRN');
+      expect(note).toContain('Refill Lisinopril 20mg oral daily for blood pressure control');
+    });
+  });
 });

@@ -148,6 +148,62 @@ function deriveCptCodes(text, visitType = 'Follow-up') {
 }
 
 /**
+ * Extracts medications with dosages, routes, and frequencies from dictation or transcript
+ */
+function extractMedications(text) {
+  if (!text) return { list: [], formattedText: '• No current prescription medications documented this encounter.' }
+  const str = String(text)
+  const meds = new Map()
+
+  // 1. Explicit Medication block (e.g. "Medications: Lisinopril 20mg once daily, Atorvastatin 20mg at bedtime, Tylenol 500mg PRN.")
+  const blockRegex = /(?:current\s+)?(?:medications?|meds?|medication\s+list|active\s+medications?|prescriptions?|rx)(?:\s*list|\s*review)?:\s*([^\n\r]+(?:\n(?!(?:Physical|Assessment|Plan|Vitals|Allergies|Past|Chief|Review|[A-Z\s]{4,}:))[^\n\r]+)*)/gi
+  let match
+  while ((match = blockRegex.exec(str)) !== null) {
+    const rawBlock = match[1].trim()
+    const items = rawBlock.split(/[,;\n•\*\-]|\band\b/i).map(s => s.trim()).filter(s => s.length > 2)
+    for (const item of items) {
+      const clean = item.replace(/\.+$/, '').trim()
+      if (clean && !/^(none|denies|nil|no known|n\/a)$/i.test(clean)) {
+        const key = clean.toLowerCase()
+        if (!meds.has(key)) {
+          meds.set(key, clean)
+        }
+      }
+    }
+  }
+
+  // 2. Scan entire text for discrete drug name + dosage patterns (e.g. "Lisinopril 20mg", "Tylenol 500mg PRN", "Atorvastatin 20mg")
+  const drugDoseRegex = /\b(?:(?:refill|prescribe|order|start|continue|discontinue|hold|stop|take|taking|trial|give|inject)\s+)?([A-Z][a-zA-Z]{2,}(?:\s+[A-Z][a-zA-Z]+)?)\s+(\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml|units?|mEq|puff(?:s)?))\b(?:\s+(?:oral|orally|po|topical|sublingual|subcutaneously|inhaled|by\s+mouth))?(?:\s+(once\s+daily|twice\s+daily|three\s+times\s+daily|daily|at\s+bedtime|in\s+the\s+morning|every\s+\d+\s+hours|bid|tid|qid|qhs|prn|as\s+needed(?:\s+for\s+[a-z]+)?))?/gi
+  let dMatch
+  while ((dMatch = drugDoseRegex.exec(str)) !== null) {
+    const rawDrugName = dMatch[1].trim()
+    const drugName = rawDrugName.replace(/^(?:refill|prescribe|order|start|continue|discontinue|hold|stop|take|taking|trial|give|inject)\s+/i, '').trim()
+    if (!/^(?:Range|Pain|Temp|HR|RR|BP|Vitals|SpO2|Oxygen|Normal|Patient|Right|Left|Bilateral|Physical|Chief|History|Follow|Year|Years|Level|Score)/i.test(drugName)) {
+      const key = drugName.toLowerCase()
+      let already = false
+      for (const existingKey of meds.keys()) {
+        if (existingKey.includes(key) || key.includes(existingKey)) {
+          already = true
+          break
+        }
+      }
+      if (!already) {
+        // Construct clean phrase without the action verb
+        const cleanPhrase = `${drugName} ${dMatch[2]}${dMatch[3] ? ' ' + dMatch[3] : ''}`.trim()
+        meds.set(key, cleanPhrase)
+      }
+    }
+  }
+
+  const list = Array.from(meds.values())
+  const formattedText = list.length > 0
+    ? list.map(m => `• ${m}`).join('\n')
+    : '• No current prescription medications documented this encounter.'
+
+  return { list, formattedText }
+}
+
+/**
  * Synthesizes a structured clinical SOAP note from dictation text, scratchpad, and metadata.
  */
 function formatClinicalDictationToSOAP(dictation = '', scratchpad = '', visitType = 'Follow-up', meta = {}) {
@@ -181,7 +237,10 @@ function formatClinicalDictationToSOAP(dictation = '', scratchpad = '', visitTyp
 
   // Determine Chief Complaint
   let chiefComplaint = 'Clinical Consultation'
-  if (meta.chiefComplaint && !meta.chiefComplaint.toLowerCase().includes('consultation')) {
+  const explicitCc = cleanDictation.match(/chief\s+complaint:\s*([^\n\r]+)/i)
+  if (explicitCc && explicitCc[1].trim().length > 2) {
+    chiefComplaint = explicitCc[1].trim()
+  } else if (meta.chiefComplaint && !meta.chiefComplaint.toLowerCase().includes('consultation')) {
     chiefComplaint = meta.chiefComplaint
   } else if (isHeadache) {
     if (/migraine/i.test(normalized)) {
@@ -206,9 +265,16 @@ function formatClinicalDictationToSOAP(dictation = '', scratchpad = '', visitTyp
   // Extract Vitals
   const vitals = extractVitals(fullText)
 
+  // Extract Medications
+  const medications = extractMedications(fullText)
+
   // Build HPI
   const hpiLines = []
-  if (isHeadache) {
+  const explicitHpi = cleanDictation.match(/(?:history\s+of\s+present\s+illness|hpi):\s*([^\n\r]+(?:\n(?!(?:vitals|physical|past|medications|assessment|plan|[A-Z\s]{4,}:))[^\n\r]+)*)/i)
+
+  if (explicitHpi && explicitHpi[1].trim().length > 10) {
+    hpiLines.push(explicitHpi[1].trim())
+  } else if (isHeadache) {
     hpiLines.push(`The patient is a ${patientAge} ${genderTerm} presenting for evaluation of ${chiefComplaint.toLowerCase()}.`)
     if (/throbbing|pulsating/i.test(normalized)) {
       hpiLines.push(`Pain is described as throbbing in character.`)
@@ -221,7 +287,7 @@ function formatClinicalDictationToSOAP(dictation = '', scratchpad = '', visitTyp
     const isRight = /right/i.test(normalized)
     const side = isRight ? 'right' : 'knee'
     hpiLines.push(`The patient is a ${patientAge} ${genderTerm} presenting with acute ${side} knee pain.`)
-    if (/fall|fell|bike|bicycle|accident/i.test(normalized)) {
+    if (/fell\s+from|fall\s+from\s+a\s+bike|bicycle\s+accident/i.test(normalized) && !/denies.*fall/i.test(normalized)) {
       hpiLines.push(`Symptoms began following a fall from a bicycle last night, with acute onset of severe localized discomfort.`)
     }
     if (/tylenol|acetaminophen|advil|ibuprofen/i.test(normalized)) {
@@ -238,8 +304,13 @@ function formatClinicalDictationToSOAP(dictation = '', scratchpad = '', visitTyp
   // Build Physical Exam
   const instructionInfo = detectScribeInstructions(fullText)
   const examLines = []
+  const explicitPe = cleanDictation.match(/(?:physical\s+examination|pe):\s*([^\n\r]+(?:\n(?!(?:assessment|plan|[A-Z\s]{4,}:))[^\n\r]+)*)/i)
+
   if (instructionInfo.hasPendingActions && instructionInfo.formattedExamPlaceholder) {
     examLines.push(instructionInfo.formattedExamPlaceholder)
+  } else if (explicitPe && explicitPe[1].trim().length > 10) {
+    const peItems = explicitPe[1].trim().split('\n').map(l => l.trim()).filter(Boolean)
+    examLines.push(...peItems)
   } else if (/exam|palpat|tender|swelling|inspect|rom|range of motion/i.test(normalized)) {
     if (/swelling/i.test(normalized)) {
       examLines.push(/no\s+swelling/i.test(normalized) ? '• Inspection: No visible swelling or acute deformity.' : '• Inspection: Swelling observed as noted in encounter.')
@@ -257,21 +328,46 @@ function formatClinicalDictationToSOAP(dictation = '', scratchpad = '', visitTyp
 
   // Build Assessment
   const assessmentLines = []
-  assessmentLines.push(`1. ${chiefComplaint}.`)
+  const explicitAss = cleanDictation.match(/assessment:\s*([^\n\r]+(?:\n(?!(?:plan|[A-Z\s]{4,}:))[^\n\r]+)*)/i)
+  if (explicitAss && explicitAss[1].trim().length > 5) {
+    const assItems = explicitAss[1].trim().split('\n').map(l => l.trim()).filter(Boolean)
+    assessmentLines.push(...assItems)
+  } else {
+    assessmentLines.push(`1. ${chiefComplaint}.`)
+    if (isHypertension && !assessmentLines.some(a => /hypertension/i.test(a))) {
+      assessmentLines.push('2. Essential hypertension, well-controlled on current therapy.')
+    }
+  }
 
   // Build Plan (distinguish orders from discussions)
   const planLines = []
-  if (/(?:request|order)\s+(?:for\s+)?(?:a\s+)?bilateral\s+hyaluronic\s+acid/i.test(fullText)) {
-    planLines.push('1. ORDER: Bilateral hyaluronic acid knee injections requested to address osteoarthritic changes and provide cushioning for physical therapy participation.')
-  }
-  if (/follow.?up|return/i.test(normalized)) {
-    const fuMatch = normalized.match(/follow.?up\s+(?:in\s+)?([a-zA-Z0-9\s]+?)(?:\.|$)/i)
-    planLines.push(`2. Follow-up: ${fuMatch ? fuMatch[0] : 'Follow up as directed by clinician.'}`)
+  const explicitPlan = cleanDictation.match(/plan:\s*([^\n\r]+(?:\n(?!(?:icd|cpt|[A-Z\s]{4,}:))[^\n\r]+)*)/i)
+  if (explicitPlan && explicitPlan[1].trim().length > 5) {
+    const pItems = explicitPlan[1].trim().split('\n').map(l => l.trim()).filter(Boolean)
+    planLines.push(...pItems)
   } else {
-    planLines.push('2. Follow up as needed if symptoms worsen or fail to improve.')
-  }
-  if (/rest|ice|elevat/i.test(normalized)) {
-    planLines.push('3. Supportive care measures as discussed with clinician.')
+    if (/(?:request|order)\s+(?:for\s+)?(?:a\s+)?bilateral\s+hyaluronic\s+acid/i.test(fullText)) {
+      planLines.push('1. ORDER: Bilateral hyaluronic acid knee injections requested to address osteoarthritic changes and provide cushioning for physical therapy participation.')
+    }
+    // Medication refills/orders
+    const refillMatches = fullText.match(/(?:refill|prescribe|order|start|continue|increase|decrease)\s+(?:prescription\s+for\s+)?([A-Z][a-zA-Z0-9\s,\.\-mg/]+?)(?=(?:\.|\n|$))/gi)
+    if (refillMatches) {
+      for (const rm of refillMatches) {
+        const cleanRm = rm.trim().replace(/\.+$/, '')
+        if (cleanRm.length > 8 && !planLines.some(p => p.toLowerCase().includes(cleanRm.toLowerCase().slice(0, 15)))) {
+          planLines.push(`${planLines.length + 1}. ${cleanRm.charAt(0).toUpperCase() + cleanRm.slice(1)}.`)
+        }
+      }
+    }
+    if (/follow.?up|return/i.test(normalized)) {
+      const fuMatch = normalized.match(/follow.?up\s+(?:in\s+)?([a-zA-Z0-9\s]+?)(?:\.|$)/i)
+      planLines.push(`${planLines.length + 1}. Follow-up: ${fuMatch ? fuMatch[0] : 'Follow up as directed by clinician.'}`)
+    } else {
+      planLines.push(`${planLines.length + 1}. Follow up as needed if symptoms worsen or fail to improve.`)
+    }
+    if (/rest|ice|elevat/i.test(normalized)) {
+      planLines.push(`${planLines.length + 1}. Supportive care measures as discussed with clinician.`)
+    }
   }
 
   // Build Vitals Section (only actual measurements dictated, never fake normal numbers)
@@ -295,6 +391,9 @@ function formatClinicalDictationToSOAP(dictation = '', scratchpad = '', visitTyp
     '',
     'HISTORY OF PRESENT ILLNESS (HPI):',
     hpiLines.join(' '),
+    '',
+    'CURRENT MEDICATIONS:',
+    medications.formattedText,
     '',
     'VITAL SIGNS:',
     vitalsLines.join('\n'),
@@ -322,6 +421,7 @@ function formatClinicalDictationToSOAP(dictation = '', scratchpad = '', visitTyp
 module.exports = {
   formatClinicalDictationToSOAP,
   extractVitals,
+  extractMedications,
   deriveIcd10Codes,
   deriveCptCodes
 }

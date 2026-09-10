@@ -80,6 +80,7 @@ router.get('/', protect, restrict('clinician', 'scribe', 'qps', 'admin', 'super_
 
 const pool = require('../config/db')
 const { runAIPipeline, generateAINote } = require('../utils/aiPipeline')
+const { enqueueTranscription } = require('../services/transcriptionQueue')
 const { getVisitForUser } = require('../utils/visitAccess')
 const { setVisitTranscriptionStatus } = require('../utils/visitSchemaCompat')
 const { resolveTemplateSections } = require('../utils/noteTemplateSections')
@@ -315,7 +316,7 @@ async function queueTranscription(req, res) {
 
   res.status(202).json({ message: 'Transcription queued.', transcription_status: 'processing' })
   setImmediate(() => {
-    runAIPipeline(id, { user: req.user, req }).catch((err) => console.error('Transcription error:', err.message))
+    enqueueTranscription(id, { user: req.user, req }).catch((err) => console.error('Transcription error:', err.message))
   })
 }
 

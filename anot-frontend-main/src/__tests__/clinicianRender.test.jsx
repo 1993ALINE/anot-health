@@ -103,3 +103,4 @@ describe('Clinician and Scribe Render Test', () => {
     expect(div.innerHTML).not.toContain('Something went wrong')
   })
 })
+

@@ -207,13 +207,29 @@ function mapPublicRow(row) {
   return { ...mapBaseSettings(row) }
 }
 
+let publicSettingsCache = null
+let publicSettingsCacheExpiresAt = 0
+const PUBLIC_SETTINGS_CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+
+function invalidatePublicSettingsCache() {
+  publicSettingsCache = null
+  publicSettingsCacheExpiresAt = 0
+}
+
 const getPublicSettings = async (req, res) => {
   try {
+    const now = Date.now()
+    if (publicSettingsCache && now < publicSettingsCacheExpiresAt) {
+      return res.status(200).json(publicSettingsCache)
+    }
     await ensureSettingsTable()
     const result = await pool.query('SELECT * FROM system_settings WHERE id = 1')
     const row = result.rows[0] || DEFAULT_SETTINGS
     const cols = await getSystemSettingsColumns()
-    res.status(200).json({ settings: mapPublicRow(mergeRowWithExtensions(row, cols)) })
+    const payload = { settings: mapPublicRow(mergeRowWithExtensions(row, cols)) }
+    publicSettingsCache = payload
+    publicSettingsCacheExpiresAt = now + PUBLIC_SETTINGS_CACHE_TTL_MS
+    res.status(200).json(payload)
   } catch (err) {
     sendHttpError(res, 500, err, { context: 'settings.getPublic', req })
   }
@@ -468,6 +484,7 @@ const updateSettings = async (req, res) => {
         cur.deepgram_api_key_enc ? 'set' : 'unset', deepgram_api_key_enc ? 'set' : 'cleared', req.clientIp)
     }
 
+    invalidatePublicSettingsCache()
     res.status(200).json({ message: 'Settings saved successfully.', settings: mapInternalRow(result.rows[0], columnSet) })
   } catch (err) {
     if (/does not exist/i.test(String(err.message))) {

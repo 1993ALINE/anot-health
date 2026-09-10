@@ -687,6 +687,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
   // After-recording Review state (1c)
   const [recordedDuration, setRecordedDuration] = useState('00:00')
   const [activeDraftNote, setActiveDraftNote] = useState(null)
+  const [loadingNoteVisitId, setLoadingNoteVisitId] = useState(null)
   const [isEditingNote, setIsEditingNote] = useState(false)
   const [editedNoteText, setEditedNoteText] = useState('')
 
@@ -1772,12 +1773,6 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
       return
     }
 
-    // Immediately purge previous encounter note, editing state, and scratchpad
-    setActiveDraftNote(null)
-    setIsEditingNote(false)
-    setEditedNoteText('')
-    setDictationNotes('')
-
     const pAge = getPatientDisplayAge(visit, patientList)
     setSelectedPatientIdForEncounter(`visit-${visit.id}`)
     setPatientNameInput(visit.patient_name || '')
@@ -1791,6 +1786,37 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
       if (matched) {
         setSelectedTemplate(matched.label)
       }
+    }
+
+    const hasNoteInMemory = Boolean(visit.final_note || visit.ai_draft)
+
+    if (hasNoteInMemory) {
+      // Note is already present in memory: immediately switch to review state with ZERO flash of recording screen
+      const initialCombined = {
+        ...visit,
+        note_id: visit.note_id,
+        final_note: visit.final_note,
+        ai_draft: visit.ai_draft,
+        transcription: visit.transcription,
+        status: visit.status,
+      }
+      setLoadingNoteVisitId(null)
+      setActiveDraftNote(initialCombined)
+      setIsEditingNote(false)
+      setEditedNoteText(initialCombined.final_note || initialCombined.ai_draft || '')
+      setDictationNotes('')
+      setSelectedAssignPatientId(visit.patient_id ? String(visit.patient_id) : '')
+      setRecordedDuration(visit.duration_seconds ? fmtTime(visit.duration_seconds) : '04:12')
+      setTab('ambient')
+    } else {
+      // For any encounter where the note is not yet in memory, show a clean medical loader
+      // while querying the backend, guaranteeing ZERO flash of the recording/idle screen
+      setLoadingNoteVisitId(visit.id)
+      setActiveDraftNote(null)
+      setIsEditingNote(false)
+      setEditedNoteText('')
+      setDictationNotes('')
+      setTab('ambient')
     }
 
     try {
@@ -1807,24 +1833,31 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
           transcription: noteData?.transcription || visit.transcription,
           status: noteData?.status || visit.status,
         }
-        setActiveDraftNote(combined)
-        setEditedNoteText(combined.final_note || combined.ai_draft || '')
+        setActiveDraftNote((prev) => {
+          if (prev && prev.id && String(prev.id) !== String(visit.id)) return prev
+          return combined
+        })
+        setEditedNoteText((prevText) => {
+          return combined.final_note || combined.ai_draft || prevText
+        })
         setSelectedAssignPatientId(visit.patient_id ? String(visit.patient_id) : '')
         setRecordedDuration(visit.duration_seconds ? fmtTime(visit.duration_seconds) : '04:12')
-      } else {
-        // Pending / Scheduled visit: stay on clean Idle recording view, ready to record!
+      } else if (!hasNoteInMemory) {
+        // No note found on server: encounter is an upcoming/scheduled visit ready to record
         setActiveDraftNote(null)
         setEditedNoteText('')
         setDictationNotes('')
         showToast(`✓ Selected ${visit.patient_name || 'Patient'} · Ready to record!`)
       }
-      setTab('ambient')
     } catch {
-      setActiveDraftNote(null)
-      setEditedNoteText('')
-      setDictationNotes('')
-      setTab('ambient')
-      showToast(`✓ Selected ${visit.patient_name || 'Patient'} · Ready to record!`)
+      if (!hasNoteInMemory) {
+        setActiveDraftNote(null)
+        setEditedNoteText('')
+        setDictationNotes('')
+        showToast(`✓ Selected ${visit.patient_name || 'Patient'} · Ready to record!`)
+      }
+    } finally {
+      setLoadingNoteVisitId((cur) => (cur === visit.id ? null : cur))
     }
   }
 
@@ -1849,9 +1882,10 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
   }
 
   // Determine current active display state
+  const isLoadingNote = Boolean(loadingNoteVisitId)
   const isRecordingState = Boolean(activeVisit)
   const isReviewState = Boolean(!activeVisit && activeDraftNote && (activeDraftNote.final_note || activeDraftNote.ai_draft))
-  const isIdleState = !isRecordingState && !isReviewState
+  const isIdleState = !isRecordingState && !isReviewState && !isLoadingNote
 
   const activeNoteSections = isReviewState
     ? parseNoteSections(activeDraftNote.final_note || activeDraftNote.ai_draft)
@@ -2042,6 +2076,19 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
           {/* TAB 1: AMBIENT SCRIBE */}
           {tab === 'ambient' && (
             <>
+              {/* STATE: LOADING NOTE — smooth medical-grade loading while fetching documentation */}
+              {isLoadingNote && (
+                <div className="sm-state-loading-note">
+                  <div className="sm-note-loading-card">
+                    <div className="sm-note-loading-spinner" />
+                    <h3 className="sm-note-loading-title">Loading Clinical Documentation</h3>
+                    <p className="sm-note-loading-sub">
+                      Retrieving clinical note for <strong>{patientNameInput || 'Patient'}</strong>...
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* STATE 1a: IDLE — Ready to Record */}
               {isIdleState && (
                 <div className="sm-state-idle">

@@ -1,0 +1,180 @@
+{
+  "summary": {
+    "totalRequests": 6126,
+    "durationSeconds": "119.8",
+    "requestsPerSecond": "51.15",
+    "overallPercentiles": {
+      "min": 54,
+      "p50": 233,
+      "p90": 957,
+      "p95": 1456,
+      "p99": 3880,
+      "max": 13975,
+      "mean": 442
+    },
+    "statusDistribution": {
+      "200": 4926,
+      "201": 1200
+    },
+    "errorCount": 0,
+    "sampleErrors": [],
+    "endpointBreakdown": {
+      "POST /api/auth/login": {
+        "count": 30,
+        "min": 494,
+        "p50": 507,
+        "p90": 523,
+        "p95": 529,
+        "p99": 567,
+        "max": 567,
+        "mean": 509
+      },
+      "GET /api/health": {
+        "count": 6,
+        "min": 54,
+        "p50": 73,
+        "p90": 79,
+        "p95": 79,
+        "p99": 79,
+        "max": 79,
+        "mean": 66
+      },
+      "POST /api/patients": {
+        "count": 600,
+        "min": 70,
+        "p50": 139,
+        "p90": 407,
+        "p95": 468,
+        "p99": 1176,
+        "max": 1181,
+        "mean": 205
+      },
+      "POST /api/visits": {
+        "count": 600,
+        "min": 59,
+        "p50": 102,
+        "p90": 306,
+        "p95": 348,
+        "p99": 824,
+        "max": 1085,
+        "mean": 146
+      },
+      "POST /api/consent/recording": {
+        "count": 600,
+        "min": 65,
+        "p50": 121,
+        "p90": 227,
+        "p95": 308,
+        "p99": 415,
+        "max": 652,
+        "mean": 142
+      },
+      "PUT /api/visits/:id/status": {
+        "count": 600,
+        "min": 60,
+        "p50": 126,
+        "p90": 271,
+        "p95": 301,
+        "p99": 472,
+        "max": 1789,
+        "mean": 156
+      },
+      "POST /api/audio/:id": {
+        "count": 600,
+        "min": 133,
+        "p50": 708,
+        "p90": 1784,
+        "p95": 2535,
+        "p99": 3899,
+        "max": 5331,
+        "mean": 911
+      },
+      "PUT /api/visits/:id/end": {
+        "count": 600,
+        "min": 75,
+        "p50": 587,
+        "p90": 1083,
+        "p95": 1624,
+        "p99": 2359,
+        "max": 2441,
+        "mean": 670
+      },
+      "POST /api/notes/draft": {
+        "count": 600,
+        "min": 63,
+        "p50": 335,
+        "p90": 648,
+        "p95": 925,
+        "p99": 2063,
+        "max": 2707,
+        "mean": 400
+      },
+      "PUT /api/notes/:id": {
+        "count": 600,
+        "min": 65,
+        "p50": 194,
+        "p90": 527,
+        "p95": 845,
+        "p99": 1158,
+        "max": 1622,
+        "mean": 277
+      },
+      "PUT /api/visits/:id/lock-note": {
+        "count": 600,
+        "min": 74,
+        "p50": 265,
+        "p90": 888,
+        "p95": 1258,
+        "p99": 2128,
+        "max": 2594,
+        "mean": 406
+      },
+      "GET /api/visits/my": {
+        "count": 630,
+        "min": 82,
+        "p50": 444,
+        "p90": 2093,
+        "p95": 3583,
+        "p99": 4394,
+        "max": 5710,
+        "mean": 853
+      },
+      "GET /api/auth/me": {
+        "count": 30,
+        "min": 107,
+        "p50": 692,
+        "p90": 1146,
+        "p95": 1154,
+        "p99": 1177,
+        "max": 1177,
+        "mean": 727
+      },
+      "GET /api/settings/public": {
+        "count": 30,
+        "min": 1149,
+        "p50": 4685,
+        "p90": 5060,
+        "p95": 10951,
+        "p99": 13975,
+        "max": 13975,
+        "mean": 4766
+      }
+    }
+  },
+  "initialHealth": {
+    "status": "healthy",
+    "db": "ok",
+    "s3": "ok",
+    "deepgram": "ok",
+    "connections": 3,
+    "uptime": 58295
+  },
+  "finalHealth": {
+    "status": "healthy",
+    "db": "ok",
+    "s3": "ok",
+    "deepgram": "ok",
+    "connections": 11,
+    "uptime": 58415
+  }
+}

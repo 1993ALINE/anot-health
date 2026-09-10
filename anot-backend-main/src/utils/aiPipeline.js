@@ -76,18 +76,50 @@ async function loadAnthropicClient(settings) {
  */
 
 async function callAnthropicForNote(anthropic, settings, prompt) {
-  const model = resolveCanonicalAnthropicModel(settings?.anthropic_model)
-  console.log(`[aiPipeline] Calling Anthropic with model: ${model}`)
+  const configuredModel = resolveCanonicalAnthropicModel(settings?.anthropic_model)
+  
+  // Dynamic Model Tiering:
+  // For highly complex multi-morbidity encounters (>5,000 characters), route to Sonnet if model is default Haiku;
+  // otherwise use the cost-efficient Haiku 4.5.
+  const isHighComplexity = (prompt && prompt.length > 5000)
+  let model = configuredModel
+  if (!settings?.anthropic_model && isHighComplexity) {
+    model = 'claude-sonnet-4-6'
+    console.log(`[aiPipeline] High-complexity encounter detected (${prompt.length} chars) -> dynamically escalating to ${model}`)
+  } else {
+    console.log(`[aiPipeline] Calling Anthropic with model: ${model}`)
+  }
+
+  // Claude Prompt Caching:
+  // Ephemeral cache control on static clinical system prompt reduces input token cost by 90% ($0.10/M tokens)
+  const systemPromptBlock = [
+    {
+      type: 'text',
+      text: CLINICAL_SYSTEM_PROMPT,
+      cache_control: { type: 'ephemeral' },
+    },
+  ]
+
   try {
-    return await withRetry(
+    const response = await withRetry(
       () => anthropic.messages.create({
         model,
         max_tokens: 3000,
-        system: CLINICAL_SYSTEM_PROMPT,
+        system: systemPromptBlock,
         messages: [{ role: 'user', content: prompt }],
       }),
       { maxAttempts: 2, label: 'Anthropic Claude Note Generation', baseDelayMs: 1000 }
     )
+
+    if (response?.usage) {
+      const u = response.usage
+      const cacheInfo = u.cache_read_input_tokens > 0 
+        ? ` | Cache hit: ${u.cache_read_input_tokens} tokens (90% savings)` 
+        : (u.cache_creation_input_tokens > 0 ? ` | Cache initialized: ${u.cache_creation_input_tokens} tokens` : '')
+      console.log(`[aiPipeline] Tokens: ${u.input_tokens} in, ${u.output_tokens} out${cacheInfo}`)
+    }
+
+    return response
   } catch (err) {
     if (err?.status === 404 || String(err?.message || '').toLowerCase().includes('model')) {
       const fallbackModel = model.includes('haiku') ? 'claude-sonnet-4-6' : 'claude-haiku-4-5-20251001'
@@ -95,7 +127,7 @@ async function callAnthropicForNote(anthropic, settings, prompt) {
       return anthropic.messages.create({
         model: fallbackModel,
         max_tokens: 3000,
-        system: CLINICAL_SYSTEM_PROMPT,
+        system: systemPromptBlock,
         messages: [{ role: 'user', content: prompt }],
       })
     }

@@ -189,3 +189,80 @@ describe('Note History Search and Filtering', () => {
     expect(snippet).toBe('Chief Complaint: Patient reports fever and chills. Assessment: Viral URI.')
   })
 })
+
+describe('Encounter / Note selection state transition logic', () => {
+  function computeActiveState({ activeVisit, activeDraftNote, loadingNoteVisitId }) {
+    const isLoadingNote = Boolean(loadingNoteVisitId)
+    const isRecordingState = Boolean(activeVisit)
+    const isReviewState = Boolean(!activeVisit && activeDraftNote && (activeDraftNote.final_note || activeDraftNote.ai_draft))
+    const isIdleState = !isRecordingState && !isReviewState && !isLoadingNote
+    return { isLoadingNote, isRecordingState, isReviewState, isIdleState }
+  }
+
+  function simulateSelectVisit(visit) {
+    const hasNoteInMemory = Boolean(visit.final_note || visit.ai_draft)
+    const likelyHasNote = hasNoteInMemory || Boolean(
+      visit.note_id ||
+      visit.status === 'completed' ||
+      visit.status === 'uploaded' ||
+      ['ready', 'draft', 'uploaded', 'completed'].includes(visit.status)
+    )
+
+    let activeDraftNote = null
+    let loadingNoteVisitId = null
+
+    if (hasNoteInMemory) {
+      activeDraftNote = {
+        ...visit,
+        final_note: visit.final_note,
+        ai_draft: visit.ai_draft,
+      }
+    } else if (likelyHasNote) {
+      loadingNoteVisitId = visit.id
+    }
+
+    return computeActiveState({
+      activeVisit: null,
+      activeDraftNote,
+      loadingNoteVisitId,
+    })
+  }
+
+  test('selecting a patient with an existing note immediately transitions to review state without flashing idle recording state', () => {
+    const visitWithNote = {
+      id: 101,
+      patient_name: 'Farhan Kabir',
+      status: 'draft',
+      ai_draft: 'CHIEF COMPLAINT: Right knee pain',
+    }
+    const state = simulateSelectVisit(visitWithNote)
+    expect(state.isReviewState).toBe(true)
+    expect(state.isIdleState).toBe(false)
+    expect(state.isLoadingNote).toBe(false)
+  })
+
+  test('selecting a pending patient without note transitions to idle recording state', () => {
+    const pendingVisit = {
+      id: 102,
+      patient_name: 'Patient Encounter',
+      status: 'pending',
+    }
+    const state = simulateSelectVisit(pendingVisit)
+    expect(state.isReviewState).toBe(false)
+    expect(state.isIdleState).toBe(true)
+    expect(state.isLoadingNote).toBe(false)
+  })
+
+  test('selecting a patient whose note needs fetching transitions to loading state, preventing idle recording flash', () => {
+    const remoteNoteVisit = {
+      id: 103,
+      patient_name: 'Remote Note Patient',
+      status: 'ready',
+      note_id: 505,
+    }
+    const state = simulateSelectVisit(remoteNoteVisit)
+    expect(state.isLoadingNote).toBe(true)
+    expect(state.isIdleState).toBe(false)
+    expect(state.isReviewState).toBe(false)
+  })
+})

@@ -4,6 +4,7 @@ const { withTransaction } = require('../config/db')
 const { auditLog, reportAuditFailure } = require('../utils/auditLogger')
 const cloudWatchAudit = require('../utils/logger')
 const { runAIPipeline } = require('../utils/aiPipeline')
+const { enqueueTranscription } = require('../services/transcriptionQueue')
 const {
   visitDurationSelect,
   visitTranscriptionStatusSelect,
@@ -454,8 +455,8 @@ const endVisit = async (req, res) => {
     // Run AI pipeline in background (non-blocking) only if audio is attached
     if (visit.hasAudio) {
       setImmediate(() => {
-        console.log(`[transcription] endVisit triggered pipeline for visit ${id}`)
-        runAIPipeline(id, { user: req.user, req })
+        console.log(`[transcription] endVisit queued pipeline for visit ${id}`)
+        enqueueTranscription(id, { user: req.user, req })
           .catch((err) => console.error(`[transcription] Background AI error for visit ${id}:`, err.message))
       })
     }

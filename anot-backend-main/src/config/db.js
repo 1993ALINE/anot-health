@@ -102,7 +102,7 @@ const sslEnabled =
   !!process.env.DB_SSL_CA ||
   process.env.DB_SSL_NO_VERIFY === 'true'
 
-const DB_POOL_MAX = parseInt(process.env.DB_POOL_MAX || '10', 10)
+const DB_POOL_MAX = parseInt(process.env.DB_POOL_MAX || '25', 10)
 
 const pool = new Pool(
   useUrl
