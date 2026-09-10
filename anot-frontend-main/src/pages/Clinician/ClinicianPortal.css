@@ -365,7 +365,7 @@
   margin: auto 0;
 }
 
-/* ─── ULTRA-ATTRACTIVE CONCENTRIC HALO WITH IN-ORB TIMER CONSOLE ─── */
+/* ─── MINIMALIST CLINICAL DICTATION CONSOLE ─────────────────────────── */
 .sm-halo-console {
   display: flex;
   flex-direction: column;
@@ -386,102 +386,95 @@
   margin-bottom: 12px;
 }
 
-/* Concentric acoustic wave rings */
+/* Subtle, dignified acoustic guidance rings (no distracting pulsating sci-fi animations) */
 .sm-halo-ring {
   position: absolute;
   border-radius: 50%;
   pointer-events: none;
-  transition: all 0.3s ease;
+  transition: all 0.25s ease;
 }
 
 .sm-halo-ring--1 {
-  width: 126px;
-  height: 126px;
-  border: 1.5px solid rgba(14, 165, 233, 0.45);
-  box-shadow: 0 0 12px rgba(14, 165, 233, 0.18), inset 0 0 12px rgba(14, 165, 233, 0.12);
-  animation: sm-halo-breathe 4s infinite ease-in-out;
+  width: 128px;
+  height: 128px;
+  border: 1px solid #E2E8F0;
+  background: rgba(248, 250, 252, 0.6);
 }
 
 .sm-halo-ring--2 {
-  width: 152px;
-  height: 152px;
-  border: 1.5px solid rgba(37, 99, 235, 0.28);
-  box-shadow: 0 0 16px rgba(37, 99, 235, 0.12);
-  animation: sm-halo-breathe 4s infinite ease-in-out 0.8s;
+  width: 154px;
+  height: 154px;
+  border: 1px solid #EEF2F6;
 }
 
 .sm-halo-ring--3 {
   width: 176px;
   height: 176px;
-  border: 1px dashed rgba(59, 130, 246, 0.22);
-  animation: sm-halo-breathe 4s infinite ease-in-out 1.6s;
+  border: 1px dashed #E2E8F0;
 }
 
-@keyframes sm-halo-breathe {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 0.6;
-  }
-  50% {
-    transform: scale(1.04);
-    opacity: 0.95;
-  }
-}
-
-/* Central Frosted Glassmorphic Orb with in-orb timer */
+/* Central Prestigious Clinical Microphone Disc */
 .sm-halo-orb {
   position: relative;
   z-index: 2;
   width: 104px;
   height: 104px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #1e293b, #0f172a 75%, #020617);
-  border: 2px solid rgba(56, 189, 248, 0.55);
-  box-shadow: 0 6px 24px rgba(15, 23, 42, 0.28), 0 0 20px rgba(14, 165, 233, 0.38), inset 0 2px 6px rgba(255, 255, 255, 0.2);
+  background: #FFFFFF;
+  border: 2px solid #CBD5E1;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   outline: none;
-  color: #ffffff;
+  color: #1E293B;
   padding: 0;
 }
 
 .sm-halo-orb:hover {
-  transform: scale(1.05);
-  border-color: rgba(56, 189, 248, 0.9);
-  box-shadow: 0 10px 32px rgba(15, 23, 42, 0.35), 0 0 32px rgba(14, 165, 233, 0.6), inset 0 2px 8px rgba(255, 255, 255, 0.35);
+  transform: translateY(-2px) scale(1.02);
+  border-color: #2563EB;
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.16), 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.sm-halo-orb:active {
+  transform: translateY(1px) scale(0.99);
 }
 
 .sm-halo-orb__mic-icon {
-  color: #38bdf8;
-  filter: drop-shadow(0 0 5px rgba(56, 189, 248, 0.7));
-  margin-bottom: 2px;
-  transition: transform 0.2s ease;
+  color: #2563EB;
+  margin-bottom: 4px;
+  transition: transform 0.2s ease, color 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .sm-halo-orb__mic-icon svg {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
 }
 
 .sm-halo-orb:hover .sm-halo-orb__mic-icon {
-  transform: translateY(-2px);
+  color: #1D4ED8;
+  transform: translateY(-1px);
 }
 
 .sm-halo-orb__timer {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 20px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 11.5px;
   font-weight: 800;
-  color: #f8fafc;
-  letter-spacing: 1px;
+  color: #64748B;
+  letter-spacing: 0.08em;
   line-height: 1;
-  text-shadow: 0 0 10px rgba(56, 189, 248, 0.6);
+  text-transform: uppercase;
+}
+
+.sm-halo-orb:hover .sm-halo-orb__timer {
+  color: #2563EB;
 }
 
 /* Prominent Template Selection Pill */
@@ -494,13 +487,13 @@
   border-radius: 20px;
   padding: 4px 14px;
   margin-bottom: 12px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   transition: all 0.15s ease;
 }
 
 .sm-halo-template-wrapper:hover {
-  border-color: #38bdf8;
-  box-shadow: 0 3px 10px rgba(56, 189, 248, 0.14);
+  border-color: #94A3B8;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
 }
 
 .sm-halo-template-label {
@@ -514,34 +507,35 @@
   background: transparent;
   font-size: 12.5px;
   font-weight: 700;
-  color: #0284c7;
+  color: #2563eb;
   outline: none;
   cursor: pointer;
   padding: 2px 4px;
 }
 
-/* High-Impact Glowing Primary Record Button */
+/* Primary Record Button: Clean, Solid, Confident Medical Blue */
 .sm-btn-hero-record--halo {
-  background: linear-gradient(135deg, #0284c7 0%, #2563eb 55%, #1d4ed8 100%) !important;
+  background: #2563EB !important;
   color: #ffffff !important;
   border: none !important;
   border-radius: 24px !important;
   padding: 10px 32px !important;
   font-size: 14.5px !important;
-  font-weight: 800 !important;
-  letter-spacing: 0.02em !important;
-  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.35), 0 0 14px rgba(2, 132, 199, 0.25) !important;
-  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.01em !important;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.28) !important;
+  transition: all 0.2s ease !important;
   margin-top: 0 !important;
 }
 
 .sm-btn-hero-record--halo:hover {
-  transform: translateY(-2px) scale(1.02) !important;
-  box-shadow: 0 10px 28px rgba(37, 99, 235, 0.45), 0 0 20px rgba(2, 132, 199, 0.4) !important;
+  background: #1D4ED8 !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.35) !important;
 }
 
 .sm-btn-hero-record--halo:active {
-  transform: translateY(1px) scale(0.99) !important;
+  transform: translateY(1px) !important;
 }
 
 .sm-idle-mic-wrap {
@@ -1137,6 +1131,18 @@
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.sm-badge-ai {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  color: #1E40AF;
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  padding: 3px 8px;
+  border-radius: 5px;
+  text-transform: uppercase;
 }
 
 .sm-review-duration {
