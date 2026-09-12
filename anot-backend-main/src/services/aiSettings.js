@@ -44,7 +44,10 @@ function resolveCanonicalAnthropicModel(model) {
   const m = String(model || '').trim()
   if (ANTHROPIC_MODEL_ALIASES[m]) return ANTHROPIC_MODEL_ALIASES[m]
   if (m.startsWith('claude-')) return m
-  return 'claude-sonnet-4-6'
+  // Must match DEFAULTS.anthropic_model below and AI_DEFAULTS.anthropic_model in
+  // settingsController.js — every fallback path has to land on the same (cheapest) model,
+  // never a silent, pricier default that contradicts what Admin Settings shows.
+  return 'claude-haiku-4-5-20251001'
 }
 
 const ANTHROPIC_MODELS = new Set([
@@ -83,7 +86,10 @@ const DEFAULTS = {
   transcribe_auto_transcribe_on_upload: true,
   deepgram_model: 'nova-3-medical',
   anthropic_enabled: true,
-  anthropic_model: 'claude-sonnet-4-6',
+  // Must match settingsController.js's AI_DEFAULTS.anthropic_model — that's what the Admin
+  // Settings UI displays as the default when nothing has been explicitly chosen, so the
+  // pipeline's actual default has to be the same model or the UI is lying about what runs.
+  anthropic_model: 'claude-haiku-4-5',
 
   // FFmpeg preprocessing: enabled by default to strip silence before Deepgram
   // Reads from FFMPEG_ENABLED env if DB hasn't overridden it

@@ -73,19 +73,17 @@ async function loadAnthropicClient(settings) {
  */
 
 async function callAnthropicForNote(anthropic, settings, prompt) {
-  const configuredModel = resolveCanonicalAnthropicModel(settings?.anthropic_model)
-  
-  // Dynamic Model Tiering:
-  // For highly complex multi-morbidity encounters (>5,000 characters), route to Sonnet if model is default Haiku;
-  // otherwise use the cost-efficient Haiku 4.5.
-  const isHighComplexity = (prompt && prompt.length > 5000)
-  let model = configuredModel
-  if (!settings?.anthropic_model && isHighComplexity) {
-    model = 'claude-sonnet-4-6'
-    console.log(`[aiPipeline] High-complexity encounter detected (${prompt.length} chars) -> dynamically escalating to ${model}`)
-  } else {
-    console.log(`[aiPipeline] Calling Anthropic with model: ${model}`)
-  }
+  // The model is ALWAYS whatever is selected in Admin Settings — no silent auto-escalation
+  // to a different (pricier) model. This used to try to auto-route long/complex encounters
+  // to Sonnet, gated on `!settings?.anthropic_model`, but loadAiSettings() always resolves
+  // anthropic_model to a real value (defaulting to Haiku, see aiSettings.js DEFAULTS) —
+  // so that gate could never actually be true, and the escalation branch was dead code.
+  // Net effect in practice: whatever DEFAULTS.anthropic_model was set to is what silently
+  // ran for every note, regardless of length, until an admin explicitly picked a model.
+  // If per-encounter model tiering is wanted again, it needs to be an explicit Admin
+  // Settings toggle a clinic opts into — never an implicit override of their selection.
+  const model = resolveCanonicalAnthropicModel(settings?.anthropic_model)
+  console.log(`[aiPipeline] Calling Anthropic with model: ${model} (per Admin Settings)`)
 
   // Claude Prompt Caching:
   // Ephemeral cache control on static clinical system prompt reduces input token cost by 90% ($0.10/M tokens)

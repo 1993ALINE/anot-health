@@ -72,10 +72,13 @@ describe('resolveCanonicalAnthropicModel', () => {
     expect(resolveCanonicalAnthropicModel('claude-3-7-sonnet-20250219')).toBe('claude-sonnet-4-6')
   })
 
-  test('falls back to claude-sonnet-4-6 for empty or missing model', () => {
-    expect(resolveCanonicalAnthropicModel('')).toBe('claude-sonnet-4-6')
-    expect(resolveCanonicalAnthropicModel(null)).toBe('claude-sonnet-4-6')
-    expect(resolveCanonicalAnthropicModel(undefined)).toBe('claude-sonnet-4-6')
+  // Every fallback path must land on the same (cheapest) default model as
+  // DEFAULTS.anthropic_model / AI_DEFAULTS.anthropic_model — never a silent, pricier
+  // model that contradicts what Admin Settings shows as the default.
+  test('falls back to claude-haiku-4-5-20251001 for empty or missing model', () => {
+    expect(resolveCanonicalAnthropicModel('')).toBe('claude-haiku-4-5-20251001')
+    expect(resolveCanonicalAnthropicModel(null)).toBe('claude-haiku-4-5-20251001')
+    expect(resolveCanonicalAnthropicModel(undefined)).toBe('claude-haiku-4-5-20251001')
   })
 })
 
