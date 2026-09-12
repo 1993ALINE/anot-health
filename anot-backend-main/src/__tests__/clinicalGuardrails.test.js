@@ -1,7 +1,7 @@
 const { applyClinicalGuardrails } = require('../utils/clinicalGuardrails')
 
 describe('clinicalGuardrails', () => {
-  test('replaces fabricated PE with copy-forward placeholder and do-not-sign banner when instruction present', () => {
+  test('replaces fabricated PE with clinical-record-safe copy-forward placeholder when instruction present', () => {
     const transcript = 'Please copy over prior right knee exam. Please insert a left knee, physical exam.'
     const rawNote = `
 CHIEF COMPLAINT:
@@ -16,9 +16,10 @@ ASSESSMENT & PLAN (A&P):
 
     const sanitized = applyClinicalGuardrails(rawNote, transcript)
     expect(sanitized).not.toContain('Positive Lachman test')
-    expect(sanitized).toContain('[COPY FORWARD from prior encounter — per dictation, action pending]')
-    expect(sanitized).toContain('[PENDING — examination to be entered]')
-    expect(sanitized).toContain('*** DO NOT SIGN — exam content outstanding ***')
+    expect(sanitized).toContain('Right Knee: Not documented this encounter.')
+    expect(sanitized).toContain('Left Knee: Not documented this encounter.')
+    expect(sanitized).not.toContain('DO NOT SIGN')
+    expect(sanitized).not.toContain('PENDING')
   })
 
   test('replaces fabricated imaging with standard gap marker when no imaging spoken', () => {

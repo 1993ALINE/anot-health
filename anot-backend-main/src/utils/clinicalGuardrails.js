@@ -39,16 +39,19 @@ function applyClinicalGuardrails(noteText, transcriptText = '', _context = {}) {
 
   // ─── 2. Scribe Instruction & Physical Examination Guardrail ───
   const instructionResult = detectScribeInstructions(transcriptText)
+  // Matches the FIRST "PHYSICAL EXAMINATION" header through to the next header that is not
+  // itself another PHYSICAL EXAMINATION variant — this collapses any duplicate/echoed PE
+  // header blocks the model may have produced into a single span so they can be replaced
+  // with one canonical section instead of leaving extra copies behind.
+  const peHeaderRegex = /(PHYSICAL EXAMINATION(?:\s*\(PE\))?:?)([\s\S]*?)(?=\n(?!\s*PHYSICAL EXAMINATION)[A-Z0-9\s&()\-]{3,40}:|$)/i
   if (instructionResult.hasPendingActions && instructionResult.formattedExamPlaceholder) {
     // If clinician dictated copy-forward or insertion instructions, the note MUST NOT
     // contain fabricated exam findings. Replace the physical exam section body with placeholders.
-    const peHeaderRegex = /(PHYSICAL EXAMINATION(?:\s*\(PE\))?:)([\s\S]*?)(?=\n[A-Z0-9\s&()\-]{3,40}:|$)/i
     const peMatch = text.match(peHeaderRegex)
     if (peMatch) {
-      const header = peMatch[1]
       text = text.replace(
         peHeaderRegex,
-        `${header}\n${instructionResult.formattedExamPlaceholder}\n`
+        `PHYSICAL EXAMINATION (PE):\n${instructionResult.formattedExamPlaceholder}\n`
       )
     } else {
       // If PE header was missing, insert before Assessment & Plan
@@ -59,7 +62,6 @@ function applyClinicalGuardrails(noteText, transcriptText = '', _context = {}) {
     }
   } else {
     // If no exam was dictated or performed at all, ensure we don't fabricate positive findings
-    const peHeaderRegex = /(PHYSICAL EXAMINATION(?:\s*\(PE\))?:)([\s\S]*?)(?=\n[A-Z0-9\s&()\-]{3,40}:|$)/i
     const peMatch = text.match(peHeaderRegex)
     if (peMatch) {
       const examBody = peMatch[2].trim()

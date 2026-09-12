@@ -9,10 +9,14 @@ describe('instructionDetector', () => {
     expect(result.copyForwardRequested).toBe(true)
     expect(result.insertRequested).toBe(true)
     expect(result.hasPendingActions).toBe(true)
-    expect(result.formattedExamPlaceholder).toContain('[COPY FORWARD from prior encounter — per dictation, action pending]')
-    expect(result.formattedExamPlaceholder).toContain('[PENDING — examination to be entered]')
-    expect(result.formattedExamPlaceholder).toContain('*** DO NOT SIGN — exam content outstanding ***')
-    expect(result.doNotSignBanner).toBe('*** DO NOT SIGN — exam content outstanding ***')
+    // Placeholder text is written verbatim into the clinical record, so it must read as
+    // documentation ("Not documented this encounter"), never as an internal workflow
+    // reminder like a "DO NOT SIGN" banner.
+    expect(result.formattedExamPlaceholder).toContain('Right Knee: Not documented this encounter.')
+    expect(result.formattedExamPlaceholder).toContain('Left Knee: Not documented this encounter.')
+    expect(result.formattedExamPlaceholder).not.toContain('DO NOT SIGN')
+    expect(result.formattedExamPlaceholder).not.toContain('PENDING')
+    expect(result.doNotSignBanner).toBeUndefined()
   })
 
   test('detects recrelated unresolvable token and queries physician', () => {

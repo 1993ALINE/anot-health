@@ -101,9 +101,10 @@ function buildAnthropicNotePrompt(patientInfo, combinedTranscription, templateSe
   let instructionDirective = ''
   if (instructionInfo.hasPendingActions && instructionInfo.formattedExamPlaceholder) {
     instructionDirective = `\nEMBEDDED SCRIBE COMMANDS DETECTED IN TRANSCRIPT:
-The clinician dictated direct workflow commands to the scribe:
-${instructionInfo.formattedExamPlaceholder}
-Under PHYSICAL EXAMINATION (PE), you MUST output EXACTLY this placeholder block:
+The clinician dictated a copy-forward or exam-insertion command that cannot be fulfilled from
+this transcript alone. Under PHYSICAL EXAMINATION (PE), write EXACTLY the following lines, once
+each, verbatim, and nothing else for those body parts (no "Normal:", no bracketed placeholder
+text, no reminder/banner sentence — this is the clinical documentation itself, not a note-to-self):
 ${instructionInfo.formattedExamPlaceholder}
 CRITICAL SAFETY RULE: Under NO circumstances should you fabricate, assume, or infer any physical exam findings (e.g. do NOT invent Lachman tests, tenderness, range of motion, or joint line findings).\n`
   }
@@ -140,7 +141,7 @@ INSTRUCTIONS:
 4. Under VITAL SIGNS, ONLY document vital signs (BP, HR, Temp, RR, SpO2) that were explicitly dictated or spoken in the encounter. If vitals were not dictated, write "Not documented this encounter." NEVER invent or assume normal baseline numbers (e.g. do NOT invent 120/80, 72 bpm, 98.6°F, 16/min, or 99%).
 5. The transcript may include speaker-labeled dialogue (e.g. Speaker 0, Speaker 1). Determine who is the clinician and who is the patient based on context.
 6. Distinguish carefully between what the patient reports (Subjective / HPI) and what the clinician finds, measures, or observes (Objective / Exam).
-7. Under PHYSICAL EXAMINATION (PE), ONLY document physical exam findings explicitly dictated. If the clinician commanded to copy forward or insert prior exams, output the designated placeholder. If no physical exam was performed or dictated, write "Not documented this encounter." NEVER fabricate normal organ systems or positive physical exam findings.
+7. Under PHYSICAL EXAMINATION (PE), ONLY document physical exam findings explicitly dictated. If no physical exam was performed or dictated for a body part, write "Not documented this encounter." for that item, exactly once. NEVER fabricate normal organ systems or positive physical exam findings, and NEVER write "Normal:" in front of something that was not actually examined.
 8. Generate clinical documentation as per the visit encounter. Do NOT include an IMAGING section unless imaging was explicitly ordered, performed, or reviewed during the visit. NEVER fabricate imaging findings.
 9. Under ASSESSMENT & PLAN (A&P), document the assessment based on reported symptoms. Distinguish clearly between physician ORDERS/REQUESTS and mere discussions. If the clinician dictates an order (e.g. "request bilateral hyaluronic acid injections"), document this under PLAN as an ORDER / REQUEST, with laterality (bilateral) and medical necessity rationale intact. Preserve severity modifiers ("bone-on-bone", "severe", "worse with stepping down") verbatim without dilution.
 10. LOW-CONFIDENCE & CORRUPTED AUDIO: If a word is garbled, unintelligible, or a non-word (e.g. "recrelated"), do NOT guess a fact. Output an in-line query placeholder: "[UNCLEAR: recreational vs. work-related — query physician]".
@@ -150,7 +151,10 @@ INSTRUCTIONS:
     - Remote surgical history (e.g. 1981 MCL repair) must use postprocedural status Z98.890 (Other specified postprocedural states / personal history of musculoskeletal surgery), NEVER an acute injury sprain code with 7th character A.
     - Service-Gated CPT: Only assign procedural or radiology CPT codes if an explicit order or performed service exists in the transcript. Retired codes like 71020 (deleted in 2019) and ankle codes on knee encounters are strictly forbidden.
     - Base E&M level strictly on documented MDM complexity (99214 is "moderate complexity MDM") — do not upcode.
-13. PERSONAL INFORMATION & ADMINISTRATIVE INTAKE:
+13. MEDICATIONS, VACCINES & LAB VALUES — UNITS AND FRAMING MUST MATCH WHAT WAS ACTUALLY DICTATED:
+    - Never invent a unit or quantity that doesn't match what was said. A vaccine/injection is documented by dose and route (e.g. "0.5 mL IM"), NEVER as a count of "tablets" — tablets/capsules apply only to oral medications. If the clinician dictated a refill or administration without a specific dose/route, write only what was said (e.g. "Flu vaccine administered" or "Metformin refilled") rather than guessing units.
+    - When reporting lab values (e.g. CBC, lipid panel), state each value's direction individually and accurately — do NOT lump distinct analytes together as uniformly "above normal limits" when they are not (e.g. an elevated HDL is not an abnormal finding the way an elevated LDL or total cholesterol is). Report each abnormal value with its actual number and reference direction (high/low) rather than a blanket descriptor.
+14. PERSONAL INFORMATION & ADMINISTRATIVE INTAKE:
     If the dictation or transcription contains personal, demographic, administrative, or social information (e.g. patient name, DOB, age, address, phone number, occupation, family status) without acute clinical symptoms or medical complaints:
     - Under CHIEF COMPLAINT, write: "Patient Intake & Personal Information Documentation" (or specific administrative reason dictated).
     - Under HISTORY OF PRESENT ILLNESS (HPI), document all dictated personal details (demographics, contact info, occupational/social history) and state: "No acute medical symptoms, active complaints, or physical distress were dictated during this encounter. Patient presents for administrative profile registration and personal health information intake."

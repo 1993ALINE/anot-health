@@ -4,7 +4,8 @@
  * Identifies direct physician commands to the documentation system
  * (e.g. copy-forward requests, manual exam insertion instructions, and
  * unresolvable ASR corruption tokens) that must never be answered with
- * hallucinated content. Generates QA-compliant placeholders and signature blocks.
+ * hallucinated content. Generates QA-compliant placeholders — clinical-record-safe text
+ * only; any "do not sign" style reminder belongs in the review workflow UI, not the note body.
  */
 
 /**
@@ -16,8 +17,7 @@
  *   insertRequested: boolean,
  *   hasPendingActions: boolean,
  *   formattedExamPlaceholder: string | null,
- *   unclearTokens: Array<{ token: string, query: string }>,
- *   doNotSignBanner: string | null
+ *   unclearTokens: Array<{ token: string, query: string }>
  * }}
  */
 function detectScribeInstructions(transcript) {
@@ -29,7 +29,6 @@ function detectScribeInstructions(transcript) {
       hasPendingActions: false,
       formattedExamPlaceholder: null,
       unclearTokens: [],
-      doNotSignBanner: null,
     }
   }
 
@@ -60,7 +59,7 @@ function detectScribeInstructions(transcript) {
     examItems.push({
       target: label,
       type: 'copy_forward',
-      text: `  ${label}: [COPY FORWARD from prior encounter — per dictation, action pending]`,
+      text: `  ${label}: Not documented this encounter.`,
     })
   }
 
@@ -89,7 +88,7 @@ function detectScribeInstructions(transcript) {
       examItems.push({
         target: label,
         type: 'insert',
-        text: `  ${label}: [PENDING — examination to be entered]`,
+        text: `  ${label}: Not documented this encounter.`,
       })
     }
   }
@@ -100,7 +99,7 @@ function detectScribeInstructions(transcript) {
     examItems.push({
       target: 'Exam',
       type: 'copy_forward',
-      text: '  [COPY FORWARD from prior encounter — per dictation, action pending]',
+      text: '  Not documented this encounter.',
     })
   }
 
@@ -110,7 +109,7 @@ function detectScribeInstructions(transcript) {
     examItems.push({
       target: 'Exam',
       type: 'insert',
-      text: '  [PENDING — examination to be entered]',
+      text: '  Not documented this encounter.',
     })
   }
 
@@ -124,14 +123,23 @@ function detectScribeInstructions(transcript) {
   }
 
   const hasPendingActions = copyForwardRequested || insertRequested
-  const doNotSignBanner = hasPendingActions ? '*** DO NOT SIGN — exam content outstanding ***' : null
 
+  // De-duplicate identical placeholder lines (e.g. the same body part matched by both the
+  // primary and fallback regexes) so the final note never repeats the same exam line twice.
+  const seenLines = new Set()
+  const dedupedItems = examItems.filter((it) => {
+    if (seenLines.has(it.text)) return false
+    seenLines.add(it.text)
+    return true
+  })
+
+  // NOTE: this placeholder text is written verbatim into the clinical note body, so it must
+  // read as clinical documentation ("Not documented this encounter"), never as an internal
+  // workflow instruction (e.g. a "DO NOT SIGN" banner) — that kind of reminder belongs in the
+  // review UI/workflow layer, not the permanent record.
   let formattedExamPlaceholder = null
-  if (examItems.length > 0) {
-    formattedExamPlaceholder = [
-      ...examItems.map((it) => it.text),
-      `  ${doNotSignBanner}`,
-    ].join('\n')
+  if (dedupedItems.length > 0) {
+    formattedExamPlaceholder = dedupedItems.map((it) => it.text).join('\n')
   }
 
   return {
@@ -141,7 +149,6 @@ function detectScribeInstructions(transcript) {
     hasPendingActions,
     formattedExamPlaceholder,
     unclearTokens,
-    doNotSignBanner,
   }
 }
 

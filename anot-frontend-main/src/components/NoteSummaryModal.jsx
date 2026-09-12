@@ -1,5 +1,39 @@
 import { useState, useMemo, useEffect } from 'react'
+import { parseNote } from '../utils/noteParser'
 import './NoteSummaryModal.css'
+
+// Groups of header labels (as they come back from parseNote, case-insensitive, brackets
+// like "(A&P)"/"(PE)" stripped) that map onto each field of the summary. Using the shared,
+// dictionary-driven parseNote() here — instead of ad hoc regexes — avoids two bugs that
+// regexes kept re-introducing: (1) matching "ASSESSMENT" as a substring of the combined
+// "ASSESSMENT & PLAN" header and leaving "& PLAN" stuck onto the captured text, and (2) a
+// header-boundary lookahead that didn't allow digits, so it ran straight through headers
+// like "ICD-10 CODES" and swallowed the Plan/ICD-10/CPT sections into the diagnoses list —
+// which is why the Plan items were showing up twice (once mislabeled as diagnoses, once
+// correctly under Plan).
+const CC_LABELS = ['CHIEF COMPLAINT', 'CC', 'REASON FOR VISIT', 'CHIEF CONCERN']
+const VITALS_LABELS = ['VITAL SIGNS', 'VITALS']
+const EXAM_LABELS = ['PHYSICAL EXAMINATION', 'PHYSICAL EXAM', 'PE']
+const MEDS_LABELS = ['MEDICATIONS', 'CURRENT MEDICATIONS', 'MEDICATION LIST', 'MEDS']
+const PLAN_LABELS = ['PLAN', 'TREATMENT PLAN', 'RECOMMENDATIONS']
+
+function normalizeLabel(label) {
+  return String(label || '').trim().toUpperCase().replace(/\s*\([^)]*\)\s*$/, '').trim()
+}
+
+function bodyForLabels(sections, labels) {
+  const match = sections.find((s) => labels.includes(normalizeLabel(s.label)))
+  return match ? match.body.trim() : ''
+}
+
+function bodyLinesAsList(body, { dropIfContains } = {}) {
+  if (!body) return []
+  return body
+    .split('\n')
+    .map((line) => line.trim().replace(/^(?:[0-9]+[.)]|[-•*])\s*/, '').trim())
+    .filter((line) => line.length > 2)
+    .filter((line) => !dropIfContains || !line.toLowerCase().includes(dropIfContains))
+}
 
 /**
  * Intelligent parser to extract key clinical sections from note text
@@ -18,69 +52,36 @@ function extractSummarySections(noteText = '') {
   }
 
   const clean = String(noteText).trim()
+  const sections = parseNote(clean)
 
-  // 1. Chief Complaint
-  let chiefComplaint = ''
-  const ccMatch = clean.match(/(?:CHIEF\s+COMPLAINT|REASON\s+FOR\s+VISIT|PRESENTING\s+COMPLAINT)[\s:]*([^\n]+(?:\n(?![A-Z\s]{3,}:)[^\n]+)?)/i)
-  if (ccMatch && ccMatch[1]) {
-    chiefComplaint = ccMatch[1].trim().replace(/^[•\-\*.\s]+/, '')
+  // Chief Complaint — first line or two of its own body only
+  const ccBody = bodyForLabels(sections, CC_LABELS)
+  const chiefComplaint = ccBody.split('\n').slice(0, 2).join(' ').trim().replace(/^[•\-\*.\s]+/, '')
+
+  // Assessment / Diagnoses — the "ASSESSMENT & PLAN" header's own body is usually empty
+  // (its Assessment/Plan sub-lines are recognized as their own header lines by parseNote),
+  // so fall back to the combined section when no distinct ASSESSMENT sub-section exists.
+  let diagnoses = bodyLinesAsList(bodyForLabels(sections, ['ASSESSMENT', 'IMPRESSION', 'DIAGNOSIS', 'DIAGNOSES']))
+  if (diagnoses.length === 0) {
+    diagnoses = bodyLinesAsList(bodyForLabels(sections, ['ASSESSMENT & PLAN', 'ASSESSMENT AND PLAN', 'A&P']))
   }
 
-  // 2. Assessment / Diagnoses
-  const diagnoses = []
-  const assessMatch = clean.match(/(?:ASSESSMENT|IMPRESSION|DIAGNOSIS|DIAGNOSES|A&P)[\s:]*([\s\S]*?)(?=(?:\n[A-Z\s/&()\-–—]{3,}:|$))/i)
-  if (assessMatch && assessMatch[1]) {
-    const rawLines = assessMatch[1].trim().split('\n')
-    for (const line of rawLines) {
-      const trimmed = line.trim().replace(/^(?:[0-9]+[.)]|[-•*])\s*/, '').replace(/^Assessment:\s*/i, '').trim()
-      if (trimmed && trimmed.length > 2 && !trimmed.toUpperCase().startsWith('PLAN')) {
-        diagnoses.push(trimmed)
-      }
-    }
-  }
+  // Vitals
+  const vitals = bodyLinesAsList(bodyForLabels(sections, VITALS_LABELS)).join(' · ')
 
-  // 3. Vitals
-  let vitals = ''
-  const vitalsMatch = clean.match(/(?:VITAL\s+SIGNS|VITALS)[\s:]*([\s\S]*?)(?=(?:\n[A-Z\s/&()\-–—]{3,}:|$))/i)
-  if (vitalsMatch && vitalsMatch[1]) {
-    vitals = vitalsMatch[1].trim()
-      .split('\n')
-      .map(l => l.trim())
-      .filter(Boolean)
-      .join(' · ')
-  }
+  // Physical Exam
+  const exam = bodyForLabels(sections, EXAM_LABELS)
 
-  // 4. Physical Exam
-  let exam = ''
-  const peMatch = clean.match(/(?:PHYSICAL\s+EXAM(?:INATION)?|PE)[\s:]*([\s\S]*?)(?=(?:\n[A-Z\s/&()\-–—]{3,}:|$))/i)
-  if (peMatch && peMatch[1]) {
-    exam = peMatch[1].trim()
-  }
+  // Medications
+  const medications = bodyLinesAsList(bodyForLabels(sections, MEDS_LABELS), { dropIfContains: 'none documented' })
 
-  // 5. Medications
-  const medications = []
-  const medsMatch = clean.match(/(?:CURRENT\s+MEDICATIONS?|MEDICATIONS?|MEDS)[\s:]*([\s\S]*?)(?=(?:\n[A-Z\s/&()\-–—]{3,}:|$))/i)
-  if (medsMatch && medsMatch[1]) {
-    const medLines = medsMatch[1].trim().split('\n')
-    for (const line of medLines) {
-      const trimmed = line.trim().replace(/^[•\-\*.\s]+/, '')
-      if (trimmed && trimmed.length > 2 && !trimmed.toLowerCase().includes('none documented')) {
-        medications.push(trimmed)
-      }
-    }
-  }
-
-  // 6. Plan / Treatment directives
-  const plan = []
-  const planMatch = clean.match(/(?:PLAN|TREATMENT\s+PLAN|RECOMMENDATIONS)[\s:]*([\s\S]*?)(?=(?:\n[A-Z\s/&()\-–—]{3,}:|$))/i)
-  if (planMatch && planMatch[1]) {
-    const pLines = planMatch[1].trim().split('\n')
-    for (const line of pLines) {
-      const trimmed = line.trim().replace(/^(?:[0-9]+[.)]|[-•*])\s*/, '').trim()
-      if (trimmed && trimmed.length > 2) {
-        plan.push(trimmed)
-      }
-    }
+  // Plan / Treatment directives — distinct PLAN sub-section takes priority; only fall back
+  // to the combined ASSESSMENT & PLAN body when there's no separate Plan section (and even
+  // then, skip lines already captured as diagnoses so nothing is duplicated).
+  let plan = bodyLinesAsList(bodyForLabels(sections, PLAN_LABELS))
+  if (plan.length === 0) {
+    const combined = bodyLinesAsList(bodyForLabels(sections, ['ASSESSMENT & PLAN', 'ASSESSMENT AND PLAN', 'A&P']))
+    plan = combined.filter((line) => !diagnoses.includes(line))
   }
 
   return {

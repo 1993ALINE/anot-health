@@ -41,22 +41,24 @@ describe('Audit Encounter Remediation (Anot vs Knowtex)', () => {
     expect(normalized).toContain('[UNCLEAR: recreational vs. work-related — query physician]')
   })
 
-  test('A-01 & A-12 & K-01 & K-02: instruction detection layer creates labeled placeholders and DO NOT SIGN banner', () => {
+  test('A-01 & A-12 & K-01 & K-02: instruction detection layer creates labeled, clinical-record-safe placeholders', () => {
     const instructions = detectScribeInstructions(AUDIT_TRANSCRIPT)
     expect(instructions.copyForwardRequested).toBe(true)
     expect(instructions.insertRequested).toBe(true)
     expect(instructions.hasPendingActions).toBe(true)
-    expect(instructions.formattedExamPlaceholder).toContain('Right Knee: [COPY FORWARD from prior encounter — per dictation, action pending]')
-    expect(instructions.formattedExamPlaceholder).toContain('Left Knee:')
-    expect(instructions.formattedExamPlaceholder).toContain('[PENDING — examination to be entered]')
-    expect(instructions.formattedExamPlaceholder).toContain('*** DO NOT SIGN — exam content outstanding ***')
+    // Placeholder text is written verbatim into the note body, so it must read as clinical
+    // documentation, never as an internal workflow reminder (no "DO NOT SIGN", no brackets).
+    expect(instructions.formattedExamPlaceholder).toContain('Right Knee: Not documented this encounter.')
+    expect(instructions.formattedExamPlaceholder).toContain('Left Knee: Not documented this encounter.')
+    expect(instructions.formattedExamPlaceholder).not.toContain('DO NOT SIGN')
+    expect(instructions.formattedExamPlaceholder).not.toContain('PENDING')
   })
 
   test('Prompt includes embedded scribe command directives and coding rules', () => {
     const patientInfo = { patient_name: 'John Doe', mrn: '12345', visit_type: 'Follow-up', visit_date: '2026-09-08' }
     const prompt = buildAnthropicNotePrompt(patientInfo, AUDIT_TRANSCRIPT)
     expect(prompt).toContain('EMBEDDED SCRIBE COMMANDS DETECTED IN TRANSCRIPT:')
-    expect(prompt).toContain('Under PHYSICAL EXAMINATION (PE), you MUST output EXACTLY this placeholder block:')
+    expect(prompt).toContain('write EXACTLY the following lines, once')
     expect(prompt).toContain('CRITICAL SAFETY RULE: Under NO circumstances should you fabricate')
     expect(prompt).toContain('M17.0 (Bilateral primary osteoarthritis of knee)')
     expect(prompt).toContain('Z98.890')
@@ -104,13 +106,15 @@ CPT CODES:
 
     const sanitized = applyClinicalGuardrails(flawedNoteFromAudit, AUDIT_TRANSCRIPT)
 
-    // A-01: Zero fabricated Lachman or tenderness; placeholders and DO NOT SIGN present
+    // A-01: Zero fabricated Lachman or tenderness; clinical-record-safe placeholders present
     expect(sanitized).not.toContain('Positive Lachman test')
     expect(sanitized).not.toContain('tenderness to palpation over the MCL joint')
-    expect(sanitized).toContain('Right Knee: [COPY FORWARD from prior encounter — per dictation, action pending]')
-    expect(sanitized).toContain('Left Knee:')
-    expect(sanitized).toContain('[PENDING — examination to be entered]')
-    expect(sanitized).toContain('*** DO NOT SIGN — exam content outstanding ***')
+    expect(sanitized).toContain('Right Knee: Not documented this encounter.')
+    expect(sanitized).toContain('Left Knee: Not documented this encounter.')
+    expect(sanitized).not.toContain('DO NOT SIGN')
+    expect(sanitized).not.toContain('PENDING')
+    // The guardrail must collapse to a single PHYSICAL EXAMINATION section, not repeat it
+    expect((sanitized.match(/PHYSICAL EXAMINATION/gi) || []).length).toBe(1)
 
     // A-02: Zero fabricated X-ray results
     expect(sanitized).not.toContain('Right knee X-ray shows mild degenerative changes')
@@ -150,9 +154,10 @@ CPT CODES:
 
     expect(offlineNote).toContain('M17.0 — Bilateral primary osteoarthritis of knee')
     expect(offlineNote).toContain('ORDER: Bilateral hyaluronic acid knee injections requested')
-    expect(offlineNote).toContain('[COPY FORWARD from prior encounter — per dictation, action pending]')
-    expect(offlineNote).toContain('[PENDING — examination to be entered]')
-    expect(offlineNote).toContain('*** DO NOT SIGN — exam content outstanding ***')
+    expect(offlineNote).toContain('Right Knee: Not documented this encounter.')
+    expect(offlineNote).toContain('Left Knee: Not documented this encounter.')
+    expect(offlineNote).not.toContain('DO NOT SIGN')
+    expect(offlineNote).not.toContain('PENDING')
     expect(offlineNote).not.toContain('71020')
   })
 })

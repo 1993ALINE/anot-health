@@ -723,14 +723,23 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
   } else if (isPersonalOrDemographicOnly) {
     examText = 'Not documented this encounter / deferred for administrative intake.'
   } else {
-    const copyForwardRequested = /(?:copy\s+(?:over|forward)|pull\s+forward|carry\s+forward|same\s+as\s+before)\s+(?:the\s+)?(?:prior|previous|last)?\s*([a-z0-9\s\-]+?)\s*(?:exam|examination|physical\s+exam)/i.test(normalized)
-    const insertRequested = /(?:insert|add)\s+(?:a\s+)?([a-z0-9\s\-]+?)(?:,\s*)?(?:physical\s+exam|exam|examination)/i.test(normalized)
+    const copyForwardMatch = normalized.match(/(?:copy\s+(?:over|forward)|pull\s+forward|carry\s+forward|same\s+as\s+before)\s+(?:the\s+)?(?:prior|previous|last)?\s*([a-z0-9\s\-]+?)\s*(?:exam|examination|physical\s+exam)/i)
+    const insertMatch = normalized.match(/(?:insert|add)\s+(?:a\s+)?([a-z0-9\s\-]+?)(?:,\s*)?(?:physical\s+exam|exam|examination)/i)
+    const copyForwardRequested = !!copyForwardMatch
+    const insertRequested = !!insertMatch
 
     const examLines = []
     if (copyForwardRequested || insertRequested) {
-      examLines.push('  Right Knee: [COPY FORWARD from prior encounter — per dictation, action pending]')
-      examLines.push('  Left Knee:  [PENDING — examination to be entered]')
-      examLines.push('  *** DO NOT SIGN — exam content outstanding ***')
+      // Label each placeholder with the body part actually dictated (falling back to "Exam"
+      // when none was named) — never a hardcoded anatomical region. This text is written
+      // verbatim into the clinical record, so it must read as documentation ("Not documented
+      // this encounter"), not as an internal workflow reminder.
+      const titleCase = (s) => (s || '').trim().replace(/\b(?:prior|the|last|previous|a|an)\b/gi, '').trim()
+        .split(/\s+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
+      const targets = new Set()
+      if (copyForwardMatch) { targets.add(titleCase(copyForwardMatch[1]) || 'Exam') }
+      if (insertMatch) { targets.add(titleCase(insertMatch[1]) || 'Exam') }
+      targets.forEach((label) => examLines.push(`  ${label}: Not documented this encounter.`))
     } else if (/exam|palpat|tender|swelling|inspect|rom|range of motion/i.test(normalized)) {
       if (/swelling/i.test(normalized)) {
         examLines.push(/no\s+swelling/i.test(normalized) ? '• Inspection: No visible swelling or acute deformity.' : '• Inspection: Swelling observed as noted in encounter.')

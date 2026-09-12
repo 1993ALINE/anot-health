@@ -140,9 +140,9 @@ describe('buildAnthropicNotePrompt', () => {
     const transcript = 'Please copy over prior right knee exam. Please insert a left knee, physical exam.'
     const prompt = buildAnthropicNotePrompt(patientInfo, transcript)
     expect(prompt).toContain('EMBEDDED SCRIBE COMMANDS DETECTED IN TRANSCRIPT:')
-    expect(prompt).toContain('[COPY FORWARD from prior encounter — per dictation, action pending]')
-    expect(prompt).toContain('[PENDING — examination to be entered]')
-    expect(prompt).toContain('*** DO NOT SIGN — exam content outstanding ***')
+    expect(prompt).toContain('Right Knee: Not documented this encounter.')
+    expect(prompt).toContain('Left Knee: Not documented this encounter.')
+    expect(prompt).not.toContain('DO NOT SIGN')
   })
 })
 
