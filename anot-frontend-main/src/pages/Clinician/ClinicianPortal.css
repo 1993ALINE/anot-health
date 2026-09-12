@@ -5978,4 +5978,72 @@
   }
 }
 
+/* ─── TEMPLATE STUDIO MODAL: MOBILE ────────────────────────────────────── */
+/* This modal had no responsive treatment at all — .sm-tmpl-sidebar carried a
+   hard 340px min/max width inside a two-column flex row, so on any phone
+   width the sidebar alone consumed more space than the entire modal had,
+   forcing the editor panel into an unusable sliver (or real horizontal
+   overflow of the modal itself). Stack sidebar above editor instead. */
+@media (max-width: 768px) {
+  .sm-template-manager-modal {
+    width: 96vw !important;
+    min-width: unset !important;
+    max-width: 96vw !important;
+    height: 92vh !important;
+    max-height: 92vh !important;
+  }
+
+  .sm-tmpl-header {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 14px;
+  }
+
+  .sm-tmpl-badge-title {
+    flex-wrap: wrap;
+  }
+
+  .sm-tmpl-subhead {
+    display: none; /* explanatory copy, safe to drop when space is this tight */
+  }
+
+  .sm-tmpl-body {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .sm-tmpl-sidebar {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    max-height: 220px;
+    border-right: none;
+    border-bottom: 1px solid var(--sm-slate-200);
+  }
+
+  .sm-tmpl-roster {
+    overflow-y: auto;
+  }
+
+  .sm-tmpl-editor-panel {
+    min-width: 0;
+  }
+
+  .sm-tmpl-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sm-tmpl-footer {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .sm-tmpl-footer-left,
+  .sm-tmpl-footer-right {
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+}
+
 
