@@ -907,7 +907,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
   const [copiedSectionIndex, setCopiedSectionIndex] = useState(null)
   const [copiedFullNote, setCopiedFullNote] = useState(false)
   const [_selectedAssignPatientId, setSelectedAssignPatientId] = useState('')
-  const [noteViewTab, setNoteViewTab] = useState('clinical') // 'clinical' | 'full'
+  const [noteViewTab] = useState('full') // 'full' is now the only note view
   const [workNoteModalOpen, setWorkNoteModalOpen] = useState(false)
   const [summaryModalOpen, setSummaryModalOpen] = useState(false)
 
@@ -2613,38 +2613,12 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                     </button>
 
                     <div className="sm-review-top-meta">
-                      <div className="sm-note-view-switcher" role="tablist" aria-label="Note View Selection">
-                        <button
-                          type="button"
-                          role="tab"
-                          aria-selected={noteViewTab === 'clinical'}
-                          className={`sm-note-view-tab ${noteViewTab === 'clinical' ? 'sm-note-view-tab--active' : ''}`}
-                          onClick={() => setNoteViewTab('clinical')}
-                          title="View structured clinical note sections"
-                        >
-                          📋 Clinical Note
-                        </button>
-                        <button
-                          type="button"
-                          role="tab"
-                          aria-selected={noteViewTab === 'full'}
-                          className={`sm-note-view-tab ${noteViewTab === 'full' ? 'sm-note-view-tab--active' : ''}`}
-                          onClick={() => setNoteViewTab('full')}
-                          title="View complete unified encounter note"
-                        >
+                      <div className="sm-note-view-switcher" role="group" aria-label="Note View">
+                        <span className="sm-note-view-tab sm-note-view-tab--active" title="Complete unified encounter note">
                           📄 Full Note
-                        </button>
-                        <button
-                          type="button"
-                          className="sm-note-view-tab sm-note-view-tab--summary"
-                          onClick={() => setSummaryModalOpen(true)}
-                          title="Generate concise clinical & patient-friendly summary of full note"
-                        >
-                          ✨ Summarize Note
-                        </button>
+                        </span>
                       </div>
                       <span className="sm-review-duration">{recordedDuration || '04:12'} recording</span>
-                      <span className="sm-review-template">{selectedTemplate || 'SOAP Note — Adult'}</span>
                     </div>
                   </div>
 
