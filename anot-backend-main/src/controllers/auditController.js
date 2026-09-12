@@ -397,7 +397,7 @@ async function auditLogSafe(user, action, et, eid, det, opts) {
     try {
         const { auditLog } = require('../utils/auditLogger')
         await auditLog(user, action, et, eid, det, opts)
-    } catch (_) { /* ignore */ }
+    } catch { /* ignore */ }
 }
 
 const applyRetention = async (req, res) => {

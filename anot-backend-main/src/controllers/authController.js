@@ -247,35 +247,6 @@ async function buildPostPasswordLoginResponse(user, req, res) {
     }
 }
 
-/** Issue full session: HttpOnly cookie + user payload (with unique session_id). */
-async function respondFullSession(res, user, extra = {}, req = null) {
-    const deviceType = req ? getDeviceTypeFromRequest(req) : (user.device_type || 'desktop')
-    const isMobile = deviceType === 'mobile'
-    const sessionId = crypto.randomUUID()
-    if (isMobile) {
-        await pool.query(
-            'UPDATE users SET active_mobile_session_id = $1, last_mobile_active_at = NOW() WHERE id = $2',
-            [sessionId, user.id]
-        )
-        user.active_mobile_session_id = sessionId
-    } else {
-        await pool.query(
-            'UPDATE users SET active_session_id = $1, last_active_at = NOW() WHERE id = $2',
-            [sessionId, user.id]
-        )
-        user.active_session_id = sessionId
-    }
-    invalidateUserAuthCache(user.id)
-    const token = generateToken(user, { session_id: sessionId, device_type: deviceType })
-    setSessionCookie(res, token)
-    return res.status(200).json({
-        message: extra.message || 'Login successful',
-        user: toAuthUser(user),
-        token,
-        ...extra,
-    })
-}
-
 // Shape of the user object returned to the client on a successful session start.
 const toAuthUser = (user) => ({
     id:        user.id,
@@ -388,7 +359,7 @@ const acknowledgePhiTraining = async (req, res) => {
         let decoded
         try {
             decoded = jwt.verify(temporaryToken, process.env.JWT_SECRET)
-        } catch (_) {
+        } catch {
             return res.status(401).json({ error: 'Your session expired. Please sign in again.' })
         }
 
@@ -708,7 +679,7 @@ const changePassword = async (req, res) => {
                                 targetUserId = expiredId
                             }
                         }
-                    } catch (_) {}
+                    } catch { /* ignore */ }
                 }
             }
         }
@@ -807,7 +778,7 @@ const verifyMfaLogin = async (req, res) => {
         let decoded
         try {
             decoded = jwt.verify(temporaryToken, process.env.JWT_SECRET)
-        } catch (_) {
+        } catch {
             return res.status(401).json({ error: 'Your session expired. Please sign in again.' })
         }
 

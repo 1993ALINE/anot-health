@@ -1,4 +1,3 @@
-const pool = require('../config/db')
 const { addColumnIfMissing } = require('./schemaDdl')
 
 let done = false

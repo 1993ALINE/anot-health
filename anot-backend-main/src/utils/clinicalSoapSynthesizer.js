@@ -1,4 +1,4 @@
-const { detectScribeInstructions, normalizeUnresolvableTokens } = require('./instructionDetector')
+const { detectScribeInstructions } = require('./instructionDetector')
 
 const ICD10_RULES = [
   { match: /migraine/i, code: 'G43.909 — Migraine, unspecified, not intractable, without status migrainosus' },
@@ -423,7 +423,6 @@ function formatClinicalDictationToSOAP(dictation = '', scratchpad = '', visitTyp
   const isFemale = personalDetails?.gender === 'female' || /\b(she|her|hers|woman|lady|girl|female)\b/i.test(fullText)
   const genderTerm = isMale ? 'male' : (isFemale ? 'female' : 'patient')
   const pronoun = isMale ? 'He' : (isFemale ? 'She' : 'The patient')
-  const possessive = isMale ? 'His' : (isFemale ? 'Her' : 'Their')
 
   // Check whether encounter has explicit clinical symptoms vs primarily personal/demographic intake
   const hasClinicalSymptoms = /pain|ache|headache|migraine|fever|cough|chills|nausea|vomit|diarrhea|dyspnea|shortness of breath|swelling|fracture|sprain|rash|lesion|bleed|injury|trauma|fall|fell|wound|infection|hypertension|high\s+bp|high\s+blood\s+pressure|diabetes|asthma|copd|palpitation|dizziness|syncope|weakness|numbness|mcl|knee|shoulder|back|chest|abdominal/i.test(normalized)
@@ -537,7 +536,6 @@ function formatClinicalDictationToSOAP(dictation = '', scratchpad = '', visitTyp
   } else if (isKneePain) {
     const isRight = /\bright\b/i.test(normalized)
     const isLeft = /\bleft\b/i.test(normalized)
-    const isBilateral = /bilateral/i.test(normalized) || (!isRight && !isLeft)
     const sideTerm = isRight && !isLeft ? 'right' : (isLeft && !isRight ? 'left' : 'bilateral')
     const isFollowUp = /follow.?up|follow\s+up|established|return(?:ing)\s+(?:for|to\s+clinic)|returning/i.test(normalized)
     const painScore = normalized.match(/([0-9]|10)\s*(?:out\s+of\s*10|\/10|on\s+(?:a\s+)?(?:pain\s+)?(?:scale|score))/i)

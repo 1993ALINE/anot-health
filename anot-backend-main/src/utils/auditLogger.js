@@ -13,7 +13,7 @@ function reportAuditFailure(err) {
     console.error('Audit log failed:', err)
     try {
         Sentry.captureException(err)
-    } catch (_) {
+    } catch {
         /* Sentry not initialized (e.g. tests) — console.error already happened */
     }
 }

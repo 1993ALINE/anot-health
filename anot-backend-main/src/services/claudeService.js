@@ -118,7 +118,7 @@ async function trackCost(visitId, inputTokens, outputTokens, cacheCreationTokens
         console.warn('[Claude] Failed to log usage to database:', err.message);
       }
     });
-  } catch (err) {
+  } catch {
     // Silent fail - don't break note generation if logging fails
   }
 }
@@ -335,7 +335,7 @@ async function generateMedicalNotes(transcript, visitId) {
 }
 
 // Batch generation (50% cheaper with Batch API - optional future optimization)
-async function generateBatch(transcripts) {
+async function generateBatch(_transcripts) {
   // For later: use Claude Batch API for further cost reduction
   // Not needed for Saturday launch
   console.warn('[Claude] Batch generation not yet implemented');

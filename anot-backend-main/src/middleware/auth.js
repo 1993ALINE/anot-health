@@ -67,7 +67,7 @@ function extractAuthToken(req) {
             )) {
                 return bearer
             }
-        } catch (_) {}
+        } catch { /* ignore */ }
     }
     const fromCookie = readSessionCookieToken(req)
     if (fromCookie) return fromCookie
@@ -249,7 +249,7 @@ const protect = async (req, res, next) => {
         }
 
         next()
-    } catch (err) {
+    } catch {
         return res.status(401).json({ error: 'Not authorized. Invalid token.' })
     }
 }

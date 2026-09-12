@@ -2,7 +2,6 @@
 import { getCurrentUser as readStoredUser } from '../utils/getCurrentUser'
 import { fetchCsrfToken, getCsrfToken, getCsrfHeaders, clearCsrfToken } from '../utils/csrf'
 import {
-  getToken,
   setSession,
   clearSession,
   setStoredUser,
@@ -88,7 +87,7 @@ export function getClientDeviceType() {
     const urlDevice = params.get('device') || params.get('deviceType')
     if (urlDevice === 'mobile' || urlDevice === 'desktop') return urlDevice
     if (params.get('mobile') === '1' || params.get('mobile') === 'true') return 'mobile'
-  } catch (_) {}
+  } catch {}
 
   // 2. Modern Client Hints API
   if (navigator.userAgentData?.mobile === true) {

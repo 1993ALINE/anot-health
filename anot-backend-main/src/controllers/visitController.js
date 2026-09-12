@@ -3,7 +3,6 @@ const pool = require('../config/db')
 const { withTransaction } = require('../config/db')
 const { auditLog, reportAuditFailure } = require('../utils/auditLogger')
 const cloudWatchAudit = require('../utils/logger')
-const { runAIPipeline } = require('../utils/aiPipeline')
 const { enqueueTranscription } = require('../services/transcriptionQueue')
 const {
   visitDurationSelect,

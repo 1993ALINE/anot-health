@@ -570,18 +570,6 @@ function formatEncounterDateTime(visitDate, visitTime) {
   return formattedTime
 }
 
-function getNoteSnippet(visit) {
-  const raw = visit?.final_note || visit?.ai_draft || visit?.transcription || ''
-  if (!raw) {return 'Ambient consultation — no note recorded yet.'}
-  const clean = cleanAiDraftForDisplay(raw)
-    .replace(/^#+\s+/gm, '')
-    .replace(/^(?:\[?[A-Z0-9\s/&()\-–—]+\]?|[A-Z\s/&()\-–—]+):\s*/gm, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-  if (!clean) {return 'Clinical note recorded.'}
-  return clean.length > 110 ? `${clean.slice(0, 110)}…` : clean
-}
-
 function isUnassignedPatient(v) {
   if (!v) {return false}
   const name = String(v.patient_name || '').trim()
@@ -882,7 +870,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
   const [activeVisit, setActiveVisit] = useState(null)
   const [isPaused, setIsPaused] = useState(false)
   const [timerSeconds, setTimerSeconds] = useState(0)
-  const [uploading, setUploading] = useState(false)
+  const [_uploading, setUploading] = useState(false)
   const [_uploadStatus, setUploadStatus] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState('SOAP Note — Adult (Standard / Episodic)')
   const [providerTemplates, setProviderTemplates] = useState(CLINICAL_TEMPLATES)
@@ -904,10 +892,8 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
 
   // Note detail modal & copy feedback
   const [selectedNoteModal, setSelectedNoteModal] = useState(null)
-  const [copiedSectionIndex, setCopiedSectionIndex] = useState(null)
   const [copiedFullNote, setCopiedFullNote] = useState(false)
   const [_selectedAssignPatientId, setSelectedAssignPatientId] = useState('')
-  const [noteViewTab] = useState('full') // 'full' is now the only note view
   const [workNoteModalOpen, setWorkNoteModalOpen] = useState(false)
   const [summaryModalOpen, setSummaryModalOpen] = useState(false)
 
@@ -1563,15 +1549,6 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
     }
   }
 
-  const handleDeleteClick = (e, visit) => {
-    e.stopPropagation()
-    setDeleteDialog({
-      open: true,
-      visit,
-      deletePatientAlso: false,
-    })
-  }
-
   const handleConfirmDelete = async () => {
     const { visit, deletePatientAlso } = deleteDialog
     if (!visit) {return}
@@ -1836,31 +1813,6 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
     })
   }
 
-  const handleCopySection = (content, index) => {
-    if (!content) {return}
-    navigator.clipboard.writeText(cleanAiDraftForDisplay(content)).then(() => {
-      setCopiedSectionIndex(index)
-      showToast('✓ Section copied to clipboard!')
-      setTimeout(() => setCopiedSectionIndex(null), 2000)
-    })
-  }
-
-  const handleSaveEditedNote = async () => {
-    if (!activeDraftNote?.note_id) {
-      showToast('No note record found to save.', 'warn')
-      return
-    }
-    try {
-      await notesAPI.updateNote(activeDraftNote.note_id, editedNoteText)
-      setActiveDraftNote((prev) => ({ ...prev, final_note: editedNoteText, ai_draft: editedNoteText }))
-      setIsEditingNote(false)
-      showToast('✓ Clinical note changes saved successfully!')
-      await loadData()
-    } catch (err) {
-      showToast(err?.message || 'Failed to save note edits.', 'error')
-    }
-  }
-
   const handleReviewAndSign = async (visit) => {
     const target = visit || activeDraftNote
     if (!target?.id) {
@@ -2111,17 +2063,11 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
   const isReviewState = Boolean(!activeVisit && activeDraftNote && (activeDraftNote.final_note || activeDraftNote.ai_draft))
   const isIdleState = !isRecordingState && !isReviewState && !isLoadingNote
 
-  const activeNoteSections = isReviewState
-    ? parseNoteSections(activeDraftNote.final_note || activeDraftNote.ai_draft)
-    : []
-
   // Filter today's visits vs past encounters
   const todayStr = getLocalDateStr()
   const yesterdayStr = getYesterdayDateStr()
 
   const countToday = visits.filter((v) => normalizeVisitDate(v.visit_date) === todayStr).length
-  const countYesterday = visits.filter((v) => normalizeVisitDate(v.visit_date) === yesterdayStr).length
-  const countAll = visits.length
 
   const dateFilteredVisits = visits.filter((v) => {
     const vDate = normalizeVisitDate(v.visit_date)
@@ -2693,7 +2639,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                         rows={18}
                       />
                     </div>
-                  ) : noteViewTab === 'full' ? (
+                  ) : (
                     <div className="sm-doc-full-container">
                       <div className="sm-doc-section sm-doc-section--full">
                         <div className="sm-doc-section__header-row">
@@ -2713,25 +2659,6 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                           </pre>
                         </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="sm-doc-body">
-                      {activeNoteSections.map((sec, idx) => (
-                        <div key={idx} className="sm-doc-section">
-                          <div className="sm-doc-section__header-row">
-                            <span className="sm-doc-section__title">{sec.header}</span>
-                            <button
-                              type="button"
-                              className="sm-btn-copy-sec"
-                              onClick={() => handleCopySection(sec.content, idx)}
-                              title="Copy this section"
-                            >
-                              {copiedSectionIndex === idx ? '✓ Copied' : 'Copy'}
-                            </button>
-                          </div>
-                          <div className="sm-doc-section__content">{sec.content}</div>
-                        </div>
-                      ))}
                     </div>
                   )}
 

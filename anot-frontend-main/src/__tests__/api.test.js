@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import { isAbortError, isLikelyNetworkFailure, getClientDeviceType } from '../services/api'
 
 describe('api helpers', () => {

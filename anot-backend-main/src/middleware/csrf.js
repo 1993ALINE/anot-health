@@ -143,14 +143,6 @@ function csrfDebugLog(req, { headerToken, cookieTokens, matched }) {
   })
 }
 
-function resolveCookieToken(req) {
-  const tokens = readCsrfCookieTokens(req)
-  if (tokens.length === 0) {
-    return { token: null, cookieName: getTokenCookieName() }
-  }
-  return { token: tokens[0].token, cookieName: tokens[0].name }
-}
-
 function validateCsrf(req) {
   const headerToken = readHeaderToken(req)
   const cookieTokens = readCsrfCookieTokens(req)

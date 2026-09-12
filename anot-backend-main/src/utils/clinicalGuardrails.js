@@ -20,7 +20,7 @@ const { detectScribeInstructions } = require('./instructionDetector')
  * @param {object} [context]
  * @returns {string}
  */
-function applyClinicalGuardrails(noteText, transcriptText = '', context = {}) {
+function applyClinicalGuardrails(noteText, transcriptText = '', _context = {}) {
   if (!noteText || typeof noteText !== 'string') return noteText || ''
 
   let text = noteText.replace(/\r\n/g, '\n')

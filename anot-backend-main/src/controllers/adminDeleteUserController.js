@@ -4,7 +4,6 @@ const pool = require('../config/db')
 const { withTransaction } = require('../config/db')
 const { auditLog } = require('../utils/auditLogger')
 const { sendHttpError } = require('../utils/errorMessages')
-const { isSuperAdmin } = require('../utils/roles')
 const { invalidateUserAuthCache } = require('../middleware/auth')
 const { SUPER_ADMIN_EMAIL } = require('./adminResetController')
 

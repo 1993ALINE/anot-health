@@ -61,7 +61,7 @@ async function resolveForced(rawToken) {
       // Decode without verification so we can still read the payload
       try {
         decoded = jwt.decode(rawToken)
-      } catch (_) {
+      } catch {
         return null
       }
     } else {
@@ -92,7 +92,7 @@ async function resolveForced(rawToken) {
     if (row && row.force_password_change === true) {
       return { userId: row.id, decoded, isForced: true }
     }
-  } catch (_) {}
+  } catch { /* ignore */ }
 
   return null
 }
@@ -116,7 +116,7 @@ async function changePasswordGate(req, res, next) {
         }
         return next()
       }
-    } catch (_) {}
+    } catch { /* ignore */ }
   }
 
   // Fall back to standard protect (self-service change inside the portal,

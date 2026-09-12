@@ -76,3 +76,6 @@ Thumbs.db
 *_SUMMARY.md
 SESSION_*.md
 CLEANUP_TASKS.md
+
+# Local Claude Code tool config (machine/session-specific)
+.claude/

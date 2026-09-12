@@ -79,7 +79,7 @@ router.get('/events', protect, restrict('clinician', 'scribe', 'admin', 'super_a
 router.get('/', protect, restrict('clinician', 'scribe', 'qps', 'admin', 'super_admin'), getAllVisits)
 
 const pool = require('../config/db')
-const { runAIPipeline, generateAINote } = require('../utils/aiPipeline')
+const { generateAINote } = require('../utils/aiPipeline')
 const { enqueueTranscription } = require('../services/transcriptionQueue')
 const { getVisitForUser } = require('../utils/visitAccess')
 const { setVisitTranscriptionStatus } = require('../utils/visitSchemaCompat')

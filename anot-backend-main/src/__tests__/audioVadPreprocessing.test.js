@@ -1,4 +1,4 @@
-const { buildFfmpegPreprocessArgs, resolveTargetFormat } = require('../services/audioProcessingService')
+const { buildFfmpegPreprocessArgs } = require('../services/audioProcessingService')
 
 describe('Enhanced Clinical Audio Preprocessing (VAD & Bandpass)', () => {
   test('builds enhanced speech bandpass filter and adaptive silence removal arguments with defaults', () => {
