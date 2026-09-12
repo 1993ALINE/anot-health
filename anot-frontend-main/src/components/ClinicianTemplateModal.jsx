@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 
 const DEFAULT_CATEGORIES = [
   'All',
@@ -62,6 +62,15 @@ export default function ClinicianTemplateModal({
   const selectedTemplate = useMemo(() => {
     return templateList.find((t) => t.id === selectedId) || templateList[0] || null
   }, [templateList, selectedId])
+
+  useEffect(() => {
+    if (!isOpen) { return undefined }
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') { onClose() }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isOpen, onClose])
 
   const filteredTemplates = useMemo(() => {
     return templateList.filter((t) => {
@@ -177,14 +186,20 @@ export default function ClinicianTemplateModal({
   const detectedSections = detectHeaders(selectedTemplate?.content || '')
 
   return (
-    <div className="sm-modal-overlay" onClick={onClose}>
+    <div
+      className="sm-modal-overlay"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="sm-tmpl-modal-title"
+    >
       <div className="sm-template-manager-modal" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="sm-modal__header sm-tmpl-header">
           <div className="sm-modal__title-group">
             <div className="sm-tmpl-badge-title">
               <span className="sm-tmpl-main-icon">📋</span>
-              <h3>Clinical Note Template Studio</h3>
+              <h3 id="sm-tmpl-modal-title">Clinical Note Template Studio</h3>
               <span className="sm-tmpl-provider-pill">Dr. {currentDoctorName}</span>
             </div>
             <p className="sm-tmpl-subhead">
@@ -233,6 +248,7 @@ export default function ClinicianTemplateModal({
                   type="button"
                   className="sm-tmpl-search-clear"
                   onClick={() => setSearchQuery('')}
+                  aria-label="Clear search"
                 >
                   ✕
                 </button>
@@ -266,6 +282,16 @@ export default function ClinicianTemplateModal({
                       key={t.id}
                       className={`sm-tmpl-item ${isSelected ? 'sm-tmpl-item--active' : ''}`}
                       onClick={() => setSelectedId(t.id)}
+                      role="button"
+                      tabIndex={0}
+                      aria-pressed={isSelected}
+                      aria-label={`Select template ${t.name}`}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          setSelectedId(t.id)
+                        }
+                      }}
                     >
                       <div className="sm-tmpl-item__icon">{t.icon || '📄'}</div>
                       <div className="sm-tmpl-item__content">
@@ -284,6 +310,7 @@ export default function ClinicianTemplateModal({
                             handleDelete(t.id)
                           }}
                           title="Delete custom template"
+                          aria-label={`Delete template "${t.name}"`}
                         >
                           🗑
                         </button>

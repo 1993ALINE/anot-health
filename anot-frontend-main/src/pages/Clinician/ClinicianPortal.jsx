@@ -883,8 +883,15 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
   const [activeVisit, setActiveVisit] = useState(null)
   const [isPaused, setIsPaused] = useState(false)
   const [timerSeconds, setTimerSeconds] = useState(0)
-  const [_uploading, setUploading] = useState(false)
-  const [_uploadStatus, setUploadStatus] = useState('')
+  // Processing overlay shown while ending a visit (upload -> finalize -> synthesize note).
+  // Previously tracked but never rendered anywhere — a clinician clicking "End Visit" saw
+  // no feedback at all during this multi-second, multi-step async sequence.
+  const [uploading, setUploading] = useState(false)
+  const [uploadStatus, setUploadStatus] = useState('')
+  // Separate, non-blocking indicator: the fast template-based draft is shown immediately,
+  // then Claude's real note generation refines it in the background. Without this, a
+  // clinician has no way to know the note they're looking at is still being improved.
+  const [isEnhancingNote, setIsEnhancingNote] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState('SOAP Note — Adult (Standard / Episodic)')
   const [providerTemplates, setProviderTemplates] = useState(CLINICAL_TEMPLATES)
   const [templateModalOpen, setTemplateModalOpen] = useState(false)
@@ -1267,6 +1274,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
       silenceStartRef.current = null
       isAutoPausedRef.current = false
       setIsAutoPaused(false)
+      setIsEnhancingNote(false)
       mediaRecorderRef.current = rec
       setAudioStream(stream)
 
@@ -1695,7 +1703,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
     }
 
     setUploading(true)
-    setUploadStatus('Synthesizing structured SOAP documentation & medical coding...')
+    setUploadStatus('Uploading recording...')
 
     const currentActive = { ...activeVisit }
     const capturedSpeech = (liveTranscriptRef.current || liveTranscript || '').trim()
@@ -1753,12 +1761,14 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
           }
         }
 
+        setUploadStatus('Finalizing encounter...')
         try {
           await visitsAPI.endVisit(currentActive.id, duration)
         } catch {
           await visitsAPI.updateStatus(currentActive.id, 'recording-uploaded').catch(() => {})
         }
 
+        setUploadStatus('Synthesizing structured SOAP documentation & medical coding...')
         const generatedSOAP = formatClinicalDictationToSOAP(
           combinedClinicalText,
           scratch,
@@ -1804,7 +1814,10 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
           setSelectedAssignPatientId(currentActive.patient_id ? String(currentActive.patient_id) : '')
           showToast(`✓ Clinical SOAP Note & ICD-10 Codes generated!`)
 
-          // Background Claude enhancement
+          // Background Claude enhancement — the clinician already has a usable template
+          // draft on screen at this point, so this refines it rather than blocking on it.
+          // isEnhancingNote is the only signal that tells them a better version is coming.
+          setIsEnhancingNote(true)
           visitsAPI.generateDraft(currentActive.id, { template: selectedTemplate }).then(async (dRes) => {
             const isUnavailable = !dRes?.ai_draft || dRes.ai_draft.includes('unavailable')
 
@@ -1823,7 +1836,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
             } else if (dRes?.ai_used === false) {
               showToast('⚠ Note generation failed — check Anthropic API key in Admin → Settings.', 'error')
             }
-          }).catch(() => {})
+          }).catch(() => {}).finally(() => setIsEnhancingNote(false))
         } catch (noteErr) {
           console.error('Note formulation error:', noteErr)
         }
@@ -2542,7 +2555,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
 
                       <div className="sm-status-line">
                         <span className={`sm-status-dot ${isPaused ? 'sm-status-dot--paused' : 'sm-status-dot--live'}`} />
-                        <span className="sm-status-text">
+                        <span className="sm-status-text" role="status" aria-live="polite">
                           {isPaused
                             ? (isAutoPaused ? 'Auto-paused · no speech detected' : 'Consultation paused')
                             : 'Listening · Ambient recording active'}
@@ -2579,6 +2592,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                         type="button"
                         className="sm-btn-action sm-btn-action--pause"
                         onClick={handlePauseResume}
+                        aria-label={isPaused ? 'Resume recording' : 'Pause recording'}
                       >
                         {isPaused ? '▶ Resume' : '⏸ Pause'}
                       </button>
@@ -2587,6 +2601,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                         type="button"
                         className="sm-btn-action sm-btn-action--stop"
                         onClick={handleEndVisit}
+                        aria-label="Finish consultation and generate clinical note"
                       >
                         <span>✓ Finish & Generate Note</span>
                       </button>
@@ -2596,6 +2611,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                         className="sm-btn-action sm-btn-action--cancel"
                         onClick={handleCancelRecording}
                         title="Cancel recording"
+                        aria-label="Cancel recording and discard this encounter"
                       >
                         ✕ Cancel
                       </button>
@@ -2660,6 +2676,12 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                           📄 Full Note
                         </span>
                       </div>
+                      {isEnhancingNote && (
+                        <span className="sm-note-enhancing-badge" role="status" aria-live="polite">
+                          <span className="sm-note-enhancing-spinner" aria-hidden="true" />
+                          AI refining note...
+                        </span>
+                      )}
                       <span className="sm-review-duration">{recordedDuration || '04:12'} recording</span>
                     </div>
                   </div>
@@ -3185,6 +3207,18 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
           onSignNote={handleReviewAndSign}
           showToast={showToast}
         />
+      )}
+
+      {/* Processing overlay: shown while ending a visit (upload -> finalize -> synthesize
+          note). Previously this multi-second sequence had zero visual feedback at all —
+          a clinician clicking "End Visit" saw nothing change until it was already done. */}
+      {uploading && (
+        <div className="sm-processing-overlay" role="status" aria-live="polite" aria-busy="true">
+          <div className="sm-processing-overlay__card">
+            <span className="sm-processing-overlay__spinner" aria-hidden="true" />
+            <span className="sm-processing-overlay__text">{uploadStatus || 'Processing encounter...'}</span>
+          </div>
+        </div>
       )}
 
       {/* Work / School Excuse Note Generator Modal */}

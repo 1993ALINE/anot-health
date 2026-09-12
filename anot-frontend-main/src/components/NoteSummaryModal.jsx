@@ -263,14 +263,20 @@ export default function NoteSummaryModal({
   }
 
   return (
-    <div className="sm-summary-modal-backdrop" onClick={onClose}>
+    <div
+      className="sm-summary-modal-backdrop"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="sm-summary-modal-title"
+    >
       <div className="sm-summary-modal-box" onClick={(e) => e.stopPropagation()}>
         {/* Modal Header */}
         <div className="sm-summary-modal-header">
           <div className="sm-summary-modal-title-group">
             <div className="sm-summary-icon-badge">✨</div>
             <div>
-              <h3>Encounter Summary</h3>
+              <h3 id="sm-summary-modal-title">Encounter Summary</h3>
               <p className="sm-summary-subtitle">
                 {patient?.patient_name || 'Patient'} · {patient?.mrn ? `MRN: ${patient.mrn} · ` : ''}{patient?.visit_type || 'Consultation'}
               </p>
@@ -305,6 +311,7 @@ export default function NoteSummaryModal({
               className="sm-summary-close-btn"
               onClick={onClose}
               title="Close (Esc)"
+              aria-label="Close encounter summary"
             >
               ✕
             </button>
