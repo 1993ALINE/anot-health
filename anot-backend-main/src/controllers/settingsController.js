@@ -51,7 +51,7 @@ const AI_DEFAULTS = {
   deepgram_model: 'nova-3-medical',
   anthropic_enabled: true,
   anthropic_model: 'claude-haiku-4-5',
-  ffmpeg_enabled: false,
+  ffmpeg_enabled: true,
   ffmpeg_target_format: 'mp3',
   ffmpeg_compression: 5,
   ffmpeg_max_upload_mb: 500,

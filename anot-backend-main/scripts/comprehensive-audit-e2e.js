@@ -5,6 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
 const https = require('https');
 const { Pool } = require('pg');
 const FormData = require('form-data');
@@ -19,13 +20,34 @@ const REPORT = {
   errors: [],
 };
 
+const args = process.argv.slice(2);
+const isLocal = args.includes('--local') || process.env.ANOT_ENV === 'local';
+const argUrl = args.find((a) => a.startsWith('--url='))?.split('=')[1];
+const argAudioMin = args.find((a) => a.startsWith('--audio-minutes='))?.split('=')[1];
+const isQuick = args.includes('--quick');
+
+const defaultBaseURL = isLocal ? 'http://localhost:5000' : 'https://app.anot.health';
+const defaultAudioMin = isQuick ? 1 : (parseInt(argAudioMin || process.env.AUDIO_MINUTES || '2', 10));
+
 const CONFIG = {
-  apiBaseURL: 'https://app.anot.health',
-  admin: { email: 'atiqurrahmanaline@gmail.com', password: '#1Knowtex2026' },
-  clinician: { email: 'celina@anot.health', password: 'Password@2026' },
-  scribe: { email: 'shahib@anot.health', password: '#1Knowtex2026' },
-  qps: { email: 'farhan@anot.health', password: '#1Knowtex2026' },
-  audioDurationMinutes: 10,
+  apiBaseURL: process.env.API_BASE_URL || argUrl || defaultBaseURL,
+  admin: {
+    email: process.env.ADMIN_EMAIL || (isLocal ? 'admin@dev.anot.local' : 'atiqurrahmanaline@gmail.com'),
+    password: process.env.ADMIN_PASSWORD || (isLocal ? 'DevAdmin!2026' : '#1Knowtex2026'),
+  },
+  clinician: {
+    email: process.env.CLINICIAN_EMAIL || (isLocal ? 'clinician@dev.anot.local' : 'celina@anot.health'),
+    password: process.env.CLINICIAN_PASSWORD || (isLocal ? 'DevClinician!2026' : 'Password@2026'),
+  },
+  scribe: {
+    email: process.env.SCRIBE_EMAIL || (isLocal ? 'scribe@dev.anot.local' : 'shahib@anot.health'),
+    password: process.env.SCRIBE_PASSWORD || (isLocal ? 'DevScribe!2026' : '#1Knowtex2026'),
+  },
+  qps: {
+    email: process.env.QPS_EMAIL || (isLocal ? 'qps@dev.anot.local' : 'farhan@anot.health'),
+    password: process.env.QPS_PASSWORD || (isLocal ? 'DevQps!2026' : '#1Knowtex2026'),
+  },
+  audioDurationMinutes: defaultAudioMin,
   patientName: `Audit Test Patient ${TIMESTAMP}`,
   patientMrn: `AUDIT-${TIMESTAMP}`,
 };
@@ -48,10 +70,14 @@ function record(phase, status, data = {}) {
 async function apiRequest(method, endpoint, data = null, token = null, isFormData = false) {
   return new Promise((resolve, reject) => {
     const url = new URL(endpoint, CONFIG.apiBaseURL);
+    const isHttps = url.protocol === 'https:';
+    const client = isHttps ? https : http;
+    const defaultPort = isHttps ? 443 : 80;
+
     const options = {
       method,
       hostname: url.hostname,
-      port: 443,
+      port: url.port ? parseInt(url.port, 10) : defaultPort,
       path: url.pathname + url.search,
       headers: {
         'User-Agent': 'ANOT-Audit-E2E/1.0',
@@ -80,7 +106,7 @@ async function apiRequest(method, endpoint, data = null, token = null, isFormDat
       }
     }
 
-    const req = https.request(options, (res) => {
+    const req = client.request(options, (res) => {
       let responseData = '';
       const setCookies = res.headers['set-cookie'];
       if (setCookies) {

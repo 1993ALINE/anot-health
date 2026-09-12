@@ -251,4 +251,40 @@ PLAN:
     expect(plan.content).toContain('2. Treatment plan: start Sumatriptan 50mg PRN');
     expect(plan.content).toContain('3. Follow-up: return in 4 weeks.');
   });
+
+  it('correctly parses clinical sections without colons on line headers (Image 1 & 2)', () => {
+    const colonFreeNote = `CHIEF COMPLAINT
+Annual physical examination.
+
+HISTORY OF PRESENT ILLNESS
+Patient presenting for routine annual physical examination and medication review. Reports regular exercise and healthy diet.
+
+CURRENT MEDICATIONS
+Antihypertensive medication.
+
+VITAL SIGNS
+Height: 168 cm, weight 68 kg (BMI 24.1). Vital signs within normal limits.
+
+PHYSICAL EXAMINATION
+General: Well-appearing, alert and oriented x3.
+Respiratory: Clear to auscultation bilaterally.
+
+ASSESSMENT & PLAN
+Completed annual physical examination. Counseled on healthy lifestyle.`;
+
+    const sections = parseNoteSections(colonFreeNote);
+    expect(sections.length).toBe(6);
+    expect(sections[0].header).toBe('CHIEF COMPLAINT');
+    expect(sections[0].content).toContain('Annual physical examination');
+    expect(sections[1].header).toBe('HISTORY OF PRESENT ILLNESS');
+    expect(sections[1].content).toContain('routine annual physical examination');
+    expect(sections[2].header).toBe('CURRENT MEDICATIONS');
+    expect(sections[2].content).toContain('Antihypertensive medication');
+    expect(sections[3].header).toBe('VITAL SIGNS');
+    expect(sections[3].content).toContain('Height: 168 cm');
+    expect(sections[4].header).toBe('PHYSICAL EXAMINATION');
+    expect(sections[4].content).toContain('Well-appearing');
+    expect(sections[5].header).toBe('ASSESSMENT & PLAN');
+    expect(sections[5].content).toContain('Completed annual physical examination');
+  });
 });

@@ -134,9 +134,9 @@ const AI_DRAFT_UNAVAILABLE =
 async function loadVisitDetailForDraft(visitId) {
   const detail = await pool.query(
     `
-      SELECT v.visit_type, v.visit_date, v.clinician_id, p.name AS patient_name, p.mrn
+      SELECT v.visit_type, v.visit_date, v.clinician_id, COALESCE(p.name, 'Patient') AS patient_name, COALESCE(p.mrn, 'Auto-generated') AS mrn
       FROM visits v
-      JOIN patients p ON p.id = v.patient_id
+      LEFT JOIN patients p ON p.id = v.patient_id
       WHERE v.id = $1
     `,
     [visitId],

@@ -20,7 +20,7 @@ const MEDIA_COLUMNS = [
     { table: 'system_settings', name: 'deepgram_language', ddl: `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS deepgram_language VARCHAR(32) NOT NULL DEFAULT 'en-US'` },
     { table: 'system_settings', name: 'deepgram_webhook_url', ddl: `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS deepgram_webhook_url TEXT NOT NULL DEFAULT ''` },
     { table: 'system_settings', name: 'deepgram_auto_transcribe_on_upload', ddl: `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS deepgram_auto_transcribe_on_upload BOOLEAN NOT NULL DEFAULT false` },
-    { table: 'system_settings', name: 'ffmpeg_enabled', ddl: `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS ffmpeg_enabled BOOLEAN NOT NULL DEFAULT false` },
+    { table: 'system_settings', name: 'ffmpeg_enabled', ddl: `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS ffmpeg_enabled BOOLEAN NOT NULL DEFAULT true` },
     { table: 'system_settings', name: 'ffmpeg_target_format', ddl: `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS ffmpeg_target_format VARCHAR(8) NOT NULL DEFAULT 'mp3'` },
     { table: 'system_settings', name: 'ffmpeg_compression', ddl: `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS ffmpeg_compression INTEGER NOT NULL DEFAULT 5` },
     { table: 'system_settings', name: 'ffmpeg_max_upload_mb', ddl: `ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS ffmpeg_max_upload_mb INTEGER NOT NULL DEFAULT 500` },

@@ -22,7 +22,10 @@
         "claude:costs": "node scripts/monitor-claude-costs.js",
         "claude:watch": "node scripts/monitor-claude-costs.js --watch",
         "claude:alert": "node scripts/monitor-claude-costs.js --watch --alert",
-        "claude:verify": "node scripts/verify-claude-cost-tracking.js"
+        "claude:verify": "node scripts/verify-claude-cost-tracking.js",
+        "audit:full": "node scripts/comprehensive-audit-e2e.js",
+        "audit:quick": "node scripts/comprehensive-audit-e2e.js --quick",
+        "audit:local": "node scripts/comprehensive-audit-e2e.js --local --quick"
     },
     "keywords": [],
     "author": "",

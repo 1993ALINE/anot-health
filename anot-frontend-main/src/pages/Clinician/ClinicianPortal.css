@@ -1543,6 +1543,209 @@
   background: #FFFFFF;
 }
 
+/* ─── Note View Switcher (Clinical Note vs Full Note) ─── */
+.sm-note-view-switcher {
+  display: inline-flex;
+  align-items: center;
+  background: #F1F5F9;
+  padding: 3px;
+  border-radius: 8px;
+  border: 1px solid #E2E8F0;
+  gap: 2px;
+}
+
+.sm-note-view-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748B;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.sm-note-view-tab:hover {
+  color: #0F172A;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.sm-note-view-tab--active {
+  color: #0369A1;
+  background: #FFFFFF;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.1);
+}
+
+/* ─── Full Note Continuous View ─── */
+.sm-doc-full-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.sm-doc-section--full {
+  border-left: 4px solid #0284C7;
+}
+
+.sm-doc-full-pre {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.75;
+  color: #1E293B;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+
+/* ─── Bottom Note Action Bar ─── */
+.sm-note-bottom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 20px;
+  padding: 16px 20px;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.sm-note-bottom-bar__left,
+.sm-note-bottom-bar__right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sm-btn-bottom-work-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0369A1;
+  background: #F0F9FF;
+  border: 1px solid #BAE6FD;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(2, 132, 199, 0.08);
+}
+
+.sm-btn-bottom-work-note:hover {
+  background: #E0F2FE;
+  border-color: #7DD3FC;
+  color: #0284C7;
+  transform: translateY(-1px);
+}
+
+.sm-btn-bottom-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #4338CA;
+  background: #EEF2FF;
+  border: 1px solid #C7D2FE;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(79, 70, 229, 0.08);
+}
+
+.sm-btn-bottom-summary:hover {
+  background: #E0E7FF;
+  border-color: #A5B4FC;
+  color: #3730A3;
+  transform: translateY(-1px);
+}
+
+.sm-btn-bottom-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1E293B;
+  background: #F8FAFC;
+  border: 1px solid #CBD5E1;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sm-btn-bottom-copy:hover {
+  background: #F1F5F9;
+  border-color: #94A3B8;
+  color: #0F172A;
+  transform: translateY(-1px);
+}
+
+.sm-btn-bottom-sign {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #FFFFFF;
+  background: #0F172A;
+  border: 1px solid #0F172A;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sm-btn-bottom-sign:hover {
+  background: #1E293B;
+  border-color: #1E293B;
+  transform: translateY(-1px);
+}
+
+.sm-btn-bottom-sign--signed {
+  background: #10B981;
+  border-color: #10B981;
+}
+
+.sm-btn-bottom-sign--signed:hover {
+  background: #059669;
+  border-color: #059669;
+}
+
+.sm-btn-bottom-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1D4ED8;
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sm-btn-bottom-new:hover {
+  background: #DBEAFE;
+  border-color: #93C5FD;
+  color: #1E40AF;
+  transform: translateY(-1px);
+}
+
 /* ─── QUICK DICTATE & HISTORY ─────────────────────────────────────────── */
 .sm-quick-dictate-panel,
 .sm-history-panel {

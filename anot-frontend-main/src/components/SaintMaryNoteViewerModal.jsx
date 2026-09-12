@@ -3,6 +3,8 @@ import { parseNote } from '../utils/noteParser'
 import { cleanAiDraftForDisplay } from '../utils/aiDraftFormat'
 import { notesAPI, visitsAPI } from '../services/api'
 import { formatEncounterDate } from '../utils/visitEncounterUtils'
+import WorkNoteModal from './WorkNoteModal'
+import NoteSummaryModal from './NoteSummaryModal'
 import './SaintMaryNoteViewerModal.css'
 
 export default function SaintMaryNoteViewerModal({ noteData, onClose, onNoteUpdated, onSignNote, showToast }) {
@@ -12,6 +14,8 @@ export default function SaintMaryNoteViewerModal({ noteData, onClose, onNoteUpda
   const [saving, setSaving] = useState(false)
   const [signing, setSigning] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [workNoteModalOpen, setWorkNoteModalOpen] = useState(false)
+  const [summaryModalOpen, setSummaryModalOpen] = useState(false)
 
   if (!noteData) {return null}
 
@@ -319,6 +323,30 @@ export default function SaintMaryNoteViewerModal({ noteData, onClose, onNoteUpda
             🏥 {noteData.clinic_name || 'Anot Health'} · HIPAA &amp; PIPEDA Compliant
           </span>
           <div className="sm-note-modal__footer-actions">
+            <button
+              type="button"
+              className="sm-note-btn sm-note-btn--secondary"
+              onClick={() => setWorkNoteModalOpen(true)}
+              title="Generate work or school excuse note"
+            >
+              📄 Generate Work Note
+            </button>
+            <button
+              type="button"
+              className="sm-note-btn sm-note-btn--secondary"
+              onClick={() => setSummaryModalOpen(true)}
+              title="Generate concise clinical & patient-friendly summary"
+            >
+              ✨ Summarize Note
+            </button>
+            <button
+              type="button"
+              className={`sm-note-btn sm-note-btn--secondary ${copied ? 'sm-note-btn--copied' : ''}`}
+              onClick={() => handleCopy(isEditing ? editText : displayText)}
+              title="Copy note to clipboard"
+            >
+              {copied ? '✓ Copied!' : '📋 Copy Note'}
+            </button>
             {!isSigned && (
               <button
                 type="button"
@@ -339,6 +367,35 @@ export default function SaintMaryNoteViewerModal({ noteData, onClose, onNoteUpda
           </div>
         </div>
       </div>
+
+      {workNoteModalOpen && (
+        <WorkNoteModal
+          isOpen={workNoteModalOpen}
+          onClose={() => setWorkNoteModalOpen(false)}
+          patient={{
+            ...noteData,
+            patient_name: noteData.patient_name || noteData.name || 'Patient',
+            visit_date: noteData.visit_date || (noteData.created_at ? String(noteData.created_at).slice(0, 10) : new Date().toISOString().slice(0, 10)),
+          }}
+          clinician={{ name: noteData.clinician_name || noteData.doctor_name || 'Dr. A. McKnight, MD' }}
+          noteText={displayText}
+          clinicName={noteData.clinic_name || 'Anot Health Family Practice'}
+        />
+      )}
+
+      {summaryModalOpen && (
+        <NoteSummaryModal
+          isOpen={summaryModalOpen}
+          onClose={() => setSummaryModalOpen(false)}
+          patient={{
+            ...noteData,
+            patient_name: noteData.patient_name || noteData.name || 'Patient',
+            visit_date: noteData.visit_date || (noteData.created_at ? String(noteData.created_at).slice(0, 10) : new Date().toISOString().slice(0, 10)),
+          }}
+          clinician={{ name: noteData.clinician_name || noteData.doctor_name || 'Dr. A. McKnight, MD', clinic_name: noteData.clinic_name }}
+          noteText={displayText}
+        />
+      )}
     </div>
   )
 }

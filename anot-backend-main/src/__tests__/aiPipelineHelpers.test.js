@@ -1,4 +1,4 @@
-const { buildAnthropicNotePrompt, extractDictatedPatientDetails } = require('../utils/aiPipelineHelpers')
+const { buildAnthropicNotePrompt, extractDictatedPatientDetails, cleanTranscriptForClinicalPrompt } = require('../utils/aiPipelineHelpers')
 
 const patientInfo = {
   patient_name: 'Jane Doe',
@@ -42,11 +42,11 @@ describe('buildAnthropicNotePrompt', () => {
     expect(prompt).toContain('HISTORY OF PRESENT ILLNESS (HPI):')
     expect(prompt).toContain('VITAL SIGNS:')
     expect(prompt).toContain('PHYSICAL EXAMINATION (PE):')
-    expect(prompt).toContain('IMAGING:')
+    expect(prompt).not.toContain('IMAGING:')
     expect(prompt).toContain('ASSESSMENT & PLAN (A&P):')
     expect(prompt).toContain('ICD-10 CODES:')
     expect(prompt).toContain('CPT CODES:')
-    expect(prompt).toContain('Use EXACTLY these 8 plain-text section headers')
+    expect(prompt).toContain('Use EXACTLY these 7 plain-text section headers')
   })
 
   test('falls back to the default format when given an empty template sections array', () => {
@@ -55,7 +55,7 @@ describe('buildAnthropicNotePrompt', () => {
     expect(prompt).toContain('VITAL SIGNS:')
     expect(prompt).toContain('ICD-10 CODES:')
     expect(prompt).toContain('CPT CODES:')
-    expect(prompt).toContain('Use EXACTLY these 8 plain-text section headers')
+    expect(prompt).toContain('Use EXACTLY these 7 plain-text section headers')
   })
 
   test('uses the clinician template sections, in order, and appends coding sections at the end', () => {
@@ -115,5 +115,27 @@ describe('buildAnthropicNotePrompt', () => {
     expect(prompt).toContain('[COPY FORWARD from prior encounter — per dictation, action pending]')
     expect(prompt).toContain('[PENDING — examination to be entered]')
     expect(prompt).toContain('*** DO NOT SIGN — exam content outstanding ***')
+  })
+})
+
+describe('cleanTranscriptForClinicalPrompt', () => {
+  test('strips verbal fillers and acoustic tags while preserving all medical data and dosages', () => {
+    const raw = 'Speaker 0: Speaker 0: [laughter] um, patient has severe right knee osteoarthritis, uh, BP is 128/82. [cough] Prescribed Meloxicam 15mg PO daily.'
+    const cleaned = cleanTranscriptForClinicalPrompt(raw)
+
+    expect(cleaned).not.toContain('[laughter]')
+    expect(cleaned).not.toContain('[cough]')
+    expect(cleaned).not.toContain('um,')
+    expect(cleaned).not.toContain('uh,')
+    expect(cleaned).toContain('Speaker 0:')
+    expect(cleaned).not.toContain('Speaker 0: Speaker 0:')
+    expect(cleaned).toContain('patient has severe right knee osteoarthritis')
+    expect(cleaned).toContain('BP is 128/82')
+    expect(cleaned).toContain('Prescribed Meloxicam 15mg PO daily')
+  })
+
+  test('handles empty or null transcripts safely', () => {
+    expect(cleanTranscriptForClinicalPrompt('')).toBe('')
+    expect(cleanTranscriptForClinicalPrompt(null)).toBe('')
   })
 })

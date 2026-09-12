@@ -27,7 +27,7 @@ const AI_DRAFT_UNAVAILABLE =
   '[AI draft unavailable — add an Anthropic API key in Admin → Settings or ANTHROPIC_API_KEY to the server .env file, then click Transcribe audio or Refresh.]'
 
 const CLINICAL_SYSTEM_PROMPT =
-  'You are an expert board-certified medical scribe and clinical documentation specialist. Generate structured, clinically precise clinical notes from visit transcriptions. Use plain text only — do NOT use markdown symbols, do NOT use bold markers or asterisks, do NOT use # headers, and do NOT use separator lines. Be thorough, professional, and clinically accurate. Distinguish clearly between patient symptoms/history (Subjective) and clinician findings/vitals/exam (Objective). Document specific medications with dosages, routes, frequencies, and durations if stated. Never fabricate or assume clinical details, vital signs, physical exam findings, or treatment plans that were not dictated. If the clinician commanded to copy forward or insert prior exams, output the designated placeholder; NEVER fabricate physical exam findings. Under VITAL SIGNS, write "Not documented this encounter." if none were dictated; never supply default/normal vitals. Under PHYSICAL EXAMINATION (PE), write "Not documented this encounter." if none was performed. Under IMAGING, write "None documented or ordered this encounter." if no imaging was ordered or performed; never fabricate imaging results. Distinguish clearly between physician orders and mere discussions: if an order is dictated (e.g. for injections), document it as an order under the Plan with laterality and medical necessity intact. Never invent quotes or emit internal coder deliberations. For ICD-10 and CPT coding, assign standard codes strictly supported by the documented diagnoses and care delivered. For bilateral knee osteoarthritis, assign M17.0. Never assign acute injury codes to remote surgical history.'
+  'You are an expert board-certified medical scribe and clinical documentation specialist. Generate structured, clinically precise clinical notes from visit transcriptions as per the visit encounter. Use plain text only — do NOT use markdown symbols, do NOT use bold markers or asterisks, do NOT use # headers, and do NOT use separator lines. Be thorough, professional, and clinically accurate. Distinguish clearly between patient symptoms/history (Subjective) and clinician findings/vitals/exam (Objective). Document specific medications with dosages, routes, frequencies, and durations if stated. Never fabricate or assume clinical details, vital signs, physical exam findings, or treatment plans that were not dictated. If the clinician commanded to copy forward or insert prior exams, output the designated placeholder; NEVER fabricate physical exam findings. Under VITAL SIGNS, write "Not documented this encounter." if none were dictated; never supply default/normal vitals. Under PHYSICAL EXAMINATION (PE), write "Not documented this encounter." if none was performed. Do not include an IMAGING section unless imaging was explicitly ordered, performed, or reviewed. Distinguish clearly between physician orders and mere discussions: if an order is dictated (e.g. for injections), document it as an order under the Plan with laterality and medical necessity intact. Never invent quotes or emit internal coder deliberations. For ICD-10 and CPT coding, assign standard codes strictly supported by the documented diagnoses and care delivered. For bilateral knee osteoarthritis, assign M17.0. Never assign acute injury codes to remote surgical history.'
 
 /**
 
@@ -100,11 +100,13 @@ async function callAnthropicForNote(anthropic, settings, prompt) {
     },
   ]
 
+  const maxTokens = Math.max(500, Math.min(parseInt(process.env.CLAUDE_MAX_TOKENS || '1800', 10), 3000))
+
   try {
     const response = await withRetry(
       () => anthropic.messages.create({
         model,
-        max_tokens: 3000,
+        max_tokens: maxTokens,
         system: systemPromptBlock,
         messages: [{ role: 'user', content: prompt }],
       }),
@@ -126,7 +128,7 @@ async function callAnthropicForNote(anthropic, settings, prompt) {
       console.warn(`[aiPipeline] Model ${model} failed (${err.message}). Retrying with fallback model: ${fallbackModel}`)
       return anthropic.messages.create({
         model: fallbackModel,
-        max_tokens: 3000,
+        max_tokens: maxTokens,
         system: systemPromptBlock,
         messages: [{ role: 'user', content: prompt }],
       })
@@ -274,7 +276,9 @@ async function upsertNoteWithDraft(id, transcriptionData, aiNote) {
 
   const existingNote = await pool.query('SELECT id, status FROM notes WHERE visit_id = $1', [id])
 
-
+  // Determine target status: if we have an AI draft, the note is ready for scribe review → 'draft'
+  // If no draft was generated (e.g. empty transcription, AI unavailable), keep/set 'pending'
+  const nextStatus = aiNote ? 'draft' : 'pending'
 
   if (existingNote.rows.length > 0) {
 
@@ -293,14 +297,15 @@ async function upsertNoteWithDraft(id, transcriptionData, aiNote) {
        SET transcription = $1, 
            ai_draft = $2, 
            final_note = CASE WHEN final_note IS NULL OR final_note = '' OR final_note = ai_draft THEN $2 ELSE final_note END,
+           status = $3,
            updated_at = NOW() 
-       WHERE visit_id = $3`,
-      [transcriptionData, aiNote, id]
+       WHERE visit_id = $4`,
+      [transcriptionData, aiNote, nextStatus, id]
     )
   } else {
     await pool.query(
-      `INSERT INTO notes (visit_id, transcription, ai_draft, final_note, status) VALUES ($1, $2, $3, $3, 'pending')`,
-      [id, transcriptionData, aiNote]
+      `INSERT INTO notes (visit_id, transcription, ai_draft, final_note, status) VALUES ($1, $2, $3, $3, $4)`,
+      [id, transcriptionData, aiNote, nextStatus]
     )
   }
 

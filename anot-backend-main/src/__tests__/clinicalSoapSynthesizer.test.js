@@ -88,4 +88,37 @@ Plan:
     // Assessment must be properly grouped
     expect(soap).toMatch(/1\. Headache, unspecified\.\s*\n2\. Digital \/ optical eye strain/)
   })
+
+  describe('Personal Information & Non-Clinical Dictation Synthesis', () => {
+    test('synthesizes a complete administrative intake note when only personal information is dictated', () => {
+      const personalDictation = 'Patient name is Robert Miller, 54 years old, born August 12 1970, lives at 45 Elm Street, phone number 555-1234, married with two children, works as an accountant.'
+
+      const note = formatClinicalDictationToSOAP(personalDictation, '', 'Follow-up')
+
+      // Chief complaint must indicate intake & personal information documentation
+      expect(note).toContain('CHIEF COMPLAINT:\nPatient Intake & Personal Information Documentation')
+
+      // HPI must contain all personal details
+      expect(note).toContain('Robert Miller')
+      expect(note).toContain('54-year-old')
+      expect(note).toContain('August 12 1970')
+      expect(note).toContain('45 Elm Street')
+      expect(note).toContain('555-1234')
+      expect(note).toContain('accountant')
+      expect(note).toContain('married with two children')
+      expect(note).toContain('No acute medical symptoms, active complaints, or physical distress were dictated')
+
+      // Physical examination deferred for administrative intake
+      expect(note).toContain('Not documented this encounter / deferred for administrative intake.')
+
+      // Assessment & Plan for administrative documentation
+      expect(note).toContain('Encounter for administrative intake and personal demographic record documentation (Z02.89).')
+      expect(note).toContain('Personal demographic profile and registration record updated in EHR.')
+
+      // ICD-10 and CPT codes
+      expect(note).toContain('Z02.89')
+      expect(note).toContain('99212')
+    })
+  })
 })
+

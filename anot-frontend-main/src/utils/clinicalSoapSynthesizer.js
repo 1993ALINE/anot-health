@@ -60,10 +60,16 @@ export function extractVitals(text) {
   let rr = null
   let spo2 = null
 
-  // 1. Blood Pressure: e.g. "BP 120/80", "BP: 130/85 mmHg", "blood pressure is 125/82", "120 over 80", "140/90"
-  const bpMatch = str.match(/\b(?:bp|blood\s+pressure)(?::\s*|\s+(?:is|was|of|at)\s+|\s+)?(\d{2,3}\s*\/\s*\d{2,3})(?:\s*mm\s*hg)?\b/i) ||
-                  str.match(/\b(\d{2,3}\s*\/\s*\d{2,3})\s*(?:mm\s*hg)\b/i) ||
-                  str.match(/\b(?:bp|blood\s+pressure)(?::\s*|\s+(?:is|was|of|at)\s+|\s+)?(\d{2,3})\s+over\s+(\d{2,3})\b/i)
+  // 1. Blood Pressure: e.g. "BP 120/80", "BP: 130/85 mmHg", "blood pressure is 125/82",
+  //    "120 over 80", "140/90", "blood pressure today is 138 over 86 millimeters of mercury"
+  const bpMatch =
+    // Numeric slash format: "BP 120/80" or "130/85 mmHg" alone
+    str.match(/\b(?:bp|blood\s+pressure)(?::\s*|\s+(?:is|was|of|at|today|now|currently|this\s+(?:visit|morning|afternoon|evening))(?:[\s\w]+)?\s+|\s+)?(\d{2,3}\s*\/\s*\d{2,3})(?:\s*(?:mm\s*hg|mmhg|millimeters?\s+of\s+mercury))?\b/i) ||
+    str.match(/\b(\d{2,3}\s*\/\s*\d{2,3})\s*(?:mm\s*hg|mmhg|millimeters?\s+of\s+mercury)\b/i) ||
+    // "blood pressure today is 138 over 86 millimeters of mercury" — allow any words between label and digits
+    str.match(/\b(?:bp|blood\s+pressure)(?:[^.\n]{0,30}?)(\d{2,3})\s+over\s+(\d{2,3})(?:\s*(?:mm\s*hg|mmhg|millimeters?\s+of\s+mercury))?\b/i) ||
+    // Standalone "138 over 86" with mmHg unit
+    str.match(/\b(\d{2,3})\s+over\s+(\d{2,3})\s+(?:mm\s*hg|mmhg|millimeters?\s+of\s+mercury)\b/i)
   if (bpMatch) {
     if (bpMatch[2] && !bpMatch[1].includes('/')) {
       bp = `${bpMatch[1]}/${bpMatch[2]} mmHg`
@@ -261,11 +267,16 @@ export function extractMedications(text) {
   }
 
   // 2. Scan entire text for discrete drug name + dosage patterns
-  const drugDoseRegex = /\b(?:(?:refill|prescribe|order|start|continue|discontinue|hold|stop|take|taking|trial|give|inject)\s+)?([A-Z][a-zA-Z]{2,}(?:\s+[A-Z][a-zA-Z]+)?)\s+(\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml|units?|mEq|puff(?:s)?))\b(?:\s+(?:oral|orally|po|topical|sublingual|subcutaneously|inhaled|by\s+mouth))?(?:\s+(once\s+daily|twice\s+daily|three\s+times\s+daily|daily|at\s+bedtime|in\s+the\s+morning|every\s+\d+\s+hours|bid|tid|qid|qhs|prn|as\s+needed(?:\s+for\s+[a-z]+)?))?/gi
+  //    Handles both abbreviated (20mg) and spoken (20 milligrams) units.
+  //    e.g. "Lisinopril 20mg daily", "Atorvastatin 20 milligrams at bedtime", "Tylenol 500mg PRN"
+  const drugDoseRegex = /\b(?:(?:refill|prescribe|order|start|continue|discontinue|hold|stop|take|taking|trial|give|inject)\s+)?([A-Z][a-zA-Z]{2,}(?:\s+[A-Z][a-zA-Z]+)?)\s+(\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml|units?|mEq|puff(?:s)?|milligrams?|micrograms?|grams?|milliliters?|milliequivalents?|international\s+units?|iu))\b(?:\s+(?:oral|orally|po|topical|sublingual|subcutaneously|inhaled|by\s+mouth))?(?:\s+(once\s+daily|twice\s+daily|three\s+times\s+daily|daily|at\s+bedtime|in\s+the\s+morning|every\s+\d+\s+hours|bid|tid|qid|qhs|prn|as\s+needed(?:\s+for\s+[a-z]+)?))?/gi
   let dMatch
   while ((dMatch = drugDoseRegex.exec(str)) !== null) {
     const rawDrugName = dMatch[1].trim()
-    const drugName = rawDrugName.replace(/^(?:refill|prescribe|order|start|continue|discontinue|hold|stop|take|taking|trial|give|inject)\s+/i, '').trim()
+    const drugName = rawDrugName
+      .replace(/^(?:refill|prescribe|order|start|continue|discontinue|hold|stop|take|taking|trial|give|inject)\s+/i, '')
+      .replace(/^(?:and|or|the|also|plus|with|as well as)\s+/i, '')
+      .trim()
     if (!/^(?:Range|Pain|Temp|HR|RR|BP|Vitals|SpO2|Oxygen|Normal|Patient|Right|Left|Bilateral|Physical|Chief|History|Follow|Year|Years|Level|Score)/i.test(drugName)) {
       const key = drugName.toLowerCase()
       let already = false
@@ -276,6 +287,7 @@ export function extractMedications(text) {
         }
       }
       if (!already) {
+        // Construct clean phrase without the action verb
         const cleanPhrase = `${drugName} ${dMatch[2]}${dMatch[3] ? ' ' + dMatch[3] : ''}`.trim()
         meds.set(key, cleanPhrase)
       }
@@ -321,6 +333,101 @@ export function normalizeAsrErrors(text) {
     .replace(/\b(?:uh|um|er|ah)\b/gi, '')
     .replace(/\s{2,}/g, ' ')
     .trim()
+}
+
+/**
+ * Extracts personal, demographic, and administrative details from dictated speech or text.
+ */
+export function extractDictatedPersonalDetails(text) {
+  if (!text || typeof text !== 'string') return null
+  const clean = text.replace(/\r\n/g, '\n').trim()
+  const details = {}
+
+  // 1. Patient Name matching
+  const nameMatch = clean.match(/(?:patient(?:'s)?(?:\s+name)?\s+(?:is|:)?\s*|dictation\s+(?:for|on)\s+|(?:^|\.\s+|;\s+)name\s+(?:is|:)\s*)([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/i)
+  if (nameMatch && nameMatch[1]) {
+    const rawName = nameMatch[1].trim()
+    const skipTerms = ['a male', 'a female', 'the patient', 'this patient', 'an established', 'a new', 'follow up', 'clinical consultation', 'quick dictation']
+    if (!skipTerms.includes(rawName.toLowerCase())) {
+      details.name = rawName
+    }
+  }
+
+  // 2. MRN / Health Card Number / Chart ID
+  const mrnMatch = clean.match(/(?:mrn|medical\s+record\s+number|chart\s+(?:number|id)|record\s+number|health\s+card(?:\s+number)?)(?:\s+is|\s*:)?\s*([A-Za-z0-9\-]+)/i)
+  if (mrnMatch && mrnMatch[1] && mrnMatch[1].length >= 3 && mrnMatch[1].length <= 20) {
+    details.mrn = mrnMatch[1].trim().toUpperCase()
+  }
+
+  // 3. Date of birth matching
+  const dobMatch = clean.match(/(?:dob|date\s+of\s+birth|born(?:\s+on)?)(?:\s+is|\s*:)?\s*([A-Za-z0-9\s,\/\-]+?(?=\.|\n|,|\s+who|\s+is|\s+presents|\s+lives|\s+address|\s+phone|$))/i)
+  if (dobMatch && dobMatch[1]) {
+    const rawDob = dobMatch[1].trim()
+    details.date_of_birth = rawDob
+  }
+
+  // 4. Age & Gender matching
+  const ageGenderMatches = [...clean.matchAll(/(\d{1,3})(?:\s*|-)(?:year|yo|y\.o\.)(?:\s*|-)(?:old)?\s*(male|female|man|woman|boy|girl)?/gi)]
+  if (ageGenderMatches.length > 0) {
+    const adultMatch = ageGenderMatches.find((m) => parseInt(m[1], 10) >= 18)
+    const bestMatch = adultMatch || ageGenderMatches[0]
+    details.age = parseInt(bestMatch[1], 10)
+    if (bestMatch[2]) {
+      details.gender = bestMatch[2].toLowerCase()
+    }
+  } else {
+    const ageOnlyMatch = clean.match(/\bage\s*(?:is|:)?\s*(\d{1,3})\b/i)
+    if (ageOnlyMatch) {
+      details.age = parseInt(ageOnlyMatch[1], 10)
+    }
+  }
+
+  // 5. Contact, Address & Emergency Contact
+  const addressMatch = clean.match(/(?:lives\s+(?:at|in)|address(?:\s+is|\s*:)?\s*|residing\s+at)\s+([A-Za-z0-9\s,\.\-]+?(?=\.|\n|phone|tel|email|emergency|works|married|$))/i)
+  if (addressMatch && addressMatch[1] && addressMatch[1].trim().length > 3) {
+    details.address = addressMatch[1].trim().replace(/,\s*$/, '')
+  }
+
+  const phoneMatch = clean.match(/(?:phone(?:\s+number)?|telephone|cell|mobile|contact(?:\s+number)?)(?:\s+is|\s*:)?\s*([\d\-\(\)\s\.\+]{7,20})/i)
+  if (phoneMatch && phoneMatch[1]) {
+    details.phone = phoneMatch[1].trim()
+  }
+
+  const emergMatch = clean.match(/(?:emergency\s+contact(?:\s+is|\s*:)?\s*)([A-Za-z0-9\s,\.\-\(\)]+?(?=\.|\n|$))/i)
+  if (emergMatch && emergMatch[1]) {
+    details.emergencyContact = emergMatch[1].trim()
+  }
+
+  // 6. Social, Occupation, Marital, Lifestyle
+  const occMatch = clean.match(/(?:works\s+as\s+(?:an?|the)?|occupation(?:\s+is|\s*:)?\s*|employed\s+as\s+(?:an?|the)?|job(?:\s+is|\s*:)?\s*)([A-Za-z0-9\s,\-]+?(?=\.|\n|,|\s+lives|\s+married|\s+with|$))/i)
+  if (occMatch && occMatch[1] && occMatch[1].trim().length > 2) {
+    details.occupation = occMatch[1].trim()
+  } else if (/\b(retired|student|unemployed|self-employed)\b/i.test(clean)) {
+    const m = clean.match(/\b(retired|student|unemployed|self-employed)\b/i)
+    details.occupation = m[1].charAt(0).toUpperCase() + m[1].slice(1)
+  }
+
+  const maritalMatch = clean.match(/\b(married(?:\s+with\s+[a-zA-Z0-9\s]+)?|single|divorced|widowed|lives\s+with\s+[a-zA-Z\s]+)\b/i)
+  if (maritalMatch && maritalMatch[1]) {
+    details.maritalFamily = maritalMatch[1].trim()
+  }
+
+  const habits = []
+  if (/non-smoker|denies\s+smoking|does\s+not\s+smoke/i.test(clean)) {
+    habits.push('Non-smoker')
+  } else if (/smoker|smokes/i.test(clean)) {
+    habits.push('Smoker')
+  }
+  if (/no\s+alcohol|denies\s+alcohol|does\s+not\s+drink/i.test(clean)) {
+    habits.push('Denies alcohol use')
+  } else if (/alcohol|drinks/i.test(clean)) {
+    habits.push('Alcohol use documented')
+  }
+  if (habits.length > 0) {
+    details.habits = habits.join('; ')
+  }
+
+  return Object.keys(details).length > 0 ? details : null
 }
 
 /**
@@ -391,11 +498,21 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
     return result
   }
 
-  const patientAge = meta?.patientAge ? String(meta.patientAge).replace(/[^0-9]/g, '') : ''
-  const patientName = meta?.patientName || ''
-  const isFemale = /\b(?:she|her|female|woman|lady|girl)\b/i.test(normalized)
-  const pronoun = isFemale ? 'She' : 'He'
-  const possessive = isFemale ? 'her' : 'his'
+  const personalDetails = extractDictatedPersonalDetails(combined)
+  const patientAge = personalDetails?.age ? String(personalDetails.age) : (meta?.patientAge ? String(meta.patientAge).replace(/[^0-9]/g, '') : '')
+  const patientName = personalDetails?.name || meta?.patientName || ''
+  const isFemale = personalDetails?.gender === 'female' || /\b(?:she|her|female|woman|lady|girl)\b/i.test(normalized)
+  const isMale = personalDetails?.gender === 'male' || /\b(?:he|him|his|gentleman|man|boy)\b/i.test(normalized)
+  const pronoun = isFemale ? 'She' : (isMale ? 'He' : 'The patient')
+  const possessive = isFemale ? 'her' : (isMale ? 'his' : 'their')
+
+  // Check whether encounter has explicit clinical symptoms vs primarily personal/demographic intake
+  const hasClinicalSymptoms = /pain|ache|headache|migraine|fever|cough|chills|nausea|vomit|diarrhea|dyspnea|shortness of breath|swelling|fracture|sprain|rash|lesion|bleed|injury|trauma|fall|fell|wound|infection|hypertension|high\s+blood\s+pressure|diabetes|asthma|copd|palpitation|dizziness|syncope|weakness|numbness|mcl|knee|shoulder|back|chest|abdominal/i.test(normalized)
+
+  const isPersonalOrDemographicOnly = !hasClinicalSymptoms && (
+    Boolean(personalDetails) ||
+    /(?:personal\s+(?:info|information)|demographic|registration|intake|address|phone|born|dob|lives\s+(?:at|in)|residing|works\s+as|occupation|retired|married|emergency\s+contact)/i.test(normalized)
+  )
 
   // 1. Identify primary anatomical region and symptom
   let primaryComplaint
@@ -418,7 +535,7 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
   } else if (/left\s+knee/i.test(normalized)) {
     anatomicalRegion = 'left knee'
   } else if (/knee/i.test(normalized)) {
-    anatomicalRegion = 'knee'
+    anatomicalRegion = /bilateral/i.test(normalized) || (!/right/i.test(normalized) && !/left/i.test(normalized)) ? 'bilateral knee' : 'knee'
   } else if (/right\s+shoulder/i.test(normalized)) {
     anatomicalRegion = 'right shoulder'
   } else if (/left\s+shoulder/i.test(normalized)) {
@@ -450,7 +567,9 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
   }
 
   if (!primaryComplaint) {
-    if (isHeadache) {
+    if (isPersonalOrDemographicOnly) {
+      primaryComplaint = 'Patient Intake & Personal Information Documentation'
+    } else if (isHeadache) {
       if (/migraine/i.test(normalized) || /migraine/i.test(String(visitType || ''))) {
         primaryComplaint = 'Acute migraine evaluation'
       } else if (/tension/i.test(normalized)) {
@@ -470,11 +589,45 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
     }
   }
 
+  const isHypertension = /hypertension|high\s+bp|high\s+blood\s+pressure/i.test(normalized)
+
   // 2. Synthesize HPI
   const explicitHpi = extractSectionContent(normalizedBreaks, /(?:history\s+of\s+present\s+illness|hpi):\s*/i)
   let hpiText = ''
   if (explicitHpi && explicitHpi.length > 10) {
     hpiText = explicitHpi
+  } else if (isPersonalOrDemographicOnly) {
+    const resolvedName = personalDetails?.name || patientName || (isFemale ? 'The patient (female)' : (isMale ? 'The patient (male)' : 'The patient'))
+    const cleanAge = (patientAge || personalDetails?.age ? String(patientAge || personalDetails?.age).replace(/[^0-9]/g, '') : '')
+    const ageTerm = cleanAge ? `${cleanAge}-year-old ` : ''
+    const genderWord = personalDetails?.gender || (isFemale ? 'female' : (isMale ? 'male' : 'patient'))
+
+    const intro = `${resolvedName}, a ${ageTerm}${genderWord}, presented for administrative profile registration, demographic review, and personal health intake documentation.`
+
+    const detailsList = []
+    if (personalDetails?.name && personalDetails.name !== resolvedName) detailsList.push(`• Dictated Name: ${personalDetails.name}`)
+    if (personalDetails?.date_of_birth) detailsList.push(`• Date of Birth: ${personalDetails.date_of_birth}`)
+    if (personalDetails?.mrn) detailsList.push(`• Medical Record Number / ID: ${personalDetails.mrn}`)
+    if (personalDetails?.address) detailsList.push(`• Address / Residence: ${personalDetails.address}`)
+    if (personalDetails?.phone) detailsList.push(`• Contact Phone: ${personalDetails.phone}`)
+    if (personalDetails?.emergencyContact) detailsList.push(`• Emergency Contact: ${personalDetails.emergencyContact}`)
+    if (personalDetails?.occupation) detailsList.push(`• Occupation: ${personalDetails.occupation}`)
+    if (personalDetails?.maritalFamily) detailsList.push(`• Social / Living Situation: ${personalDetails.maritalFamily}`)
+    if (personalDetails?.habits) detailsList.push(`• Lifestyle / Habits: ${personalDetails.habits}`)
+
+    const clinicalStatus = 'No acute medical symptoms, active complaints, or physical distress were dictated during this encounter. Patient presents for administrative profile registration and personal health information intake.'
+
+    // Ensure entire raw dictation is preserved so zero spoken content is missed
+    const rawSentences = combined.trim()
+    const isRedundant = detailsList.length > 0 && detailsList.some(d => d.toLowerCase().includes(rawSentences.toLowerCase()))
+
+    hpiText = [
+      intro,
+      ...(detailsList.length > 0 ? ['', 'DEMOGRAPHIC & SOCIAL PROFILE:', ...detailsList] : []),
+      '',
+      clinicalStatus,
+      ...(!isRedundant && rawSentences.length > 0 ? ['', `ADDITIONAL DICTATED DETAILS:\n${rawSentences}`] : [])
+    ].filter(Boolean).join('\n')
   } else {
     const hpiParagraphs = []
     const patientDesc = patientAge
@@ -483,13 +636,31 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
       ? `${patientName}`
       : 'The patient'
 
-    let openingHpi = `${patientDesc} presenting for evaluation of ${primaryComplaint.toLowerCase()}.`
-    if (/fell\s+from\s+(?:his|her)?\s*bike|bicycle/i.test(normalized)) {
-      openingHpi += ` Symptoms started acute onset after ${pronoun.toLowerCase()} fell from ${possessive} bicycle last night.`
-    } else if (mechanism) {
-      openingHpi += ` Symptoms began acutely ${mechanism}.`
+    const isFollowUp = /follow.?up|follow\s+up|established|return(?:ing)\s+(?:for|to\s+clinic)|returning/i.test(normalized)
+
+    let openingHpi = isFollowUp
+      ? `${patientDesc} presenting for follow-up evaluation of ${primaryComplaint.toLowerCase()}${isHypertension ? ' and hypertension' : ''}.`
+      : `${patientDesc} presenting for evaluation of ${primaryComplaint.toLowerCase()}.`
+
+    if (isFollowUp) {
+      hpiParagraphs.push(openingHpi)
+      const cleanNarrative = combined
+        .replace(/^\s*Patient\s+is\s+a\s+[^.]+\.\s*/i, '')
+        .split(/\.\s+/)
+        .filter(s => s.trim().length > 10 && !/^\s*(?:bp|blood pressure|vitals?|temp|pulse|hr)\b/i.test(s))
+        .slice(0, 6)
+        .join('. ').trim()
+      if (cleanNarrative) {
+        hpiParagraphs.push(cleanNarrative + (cleanNarrative.endsWith('.') ? '' : '.'))
+      }
+    } else {
+      if (/fell\s+from\s+(?:his|her)?\s*bike|bicycle/i.test(normalized)) {
+        openingHpi += ` Symptoms started acute onset after ${pronoun.toLowerCase()} fell from ${possessive} bicycle last night.`
+      } else if (mechanism) {
+        openingHpi += ` Symptoms began acutely ${mechanism}.`
+      }
+      hpiParagraphs.push(openingHpi)
     }
-    hpiParagraphs.push(openingHpi)
 
     // Severity & Medication History
     let painDesc = ''
@@ -536,6 +707,11 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
       hpiParagraphs.push(functionalImpact)
     }
 
+    // Zero-loss fallback: if text was dictated but no keyword matched, preserve the actual dictation
+    if (combined && combined.length > 10 && hpiParagraphs.length === 1) {
+      hpiParagraphs.push(`Dictated details: ${combined.trim()}`)
+    }
+
     hpiText = hpiParagraphs.join(' ')
   }
 
@@ -544,6 +720,8 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
   const explicitPe = extractSectionContent(normalizedBreaks, /(?:physical\s+examination|physical\s+exam|pe):\s*/i)
   if (explicitPe && explicitPe.length > 5) {
     examText = formatExamFindings(explicitPe)
+  } else if (isPersonalOrDemographicOnly) {
+    examText = 'Not documented this encounter / deferred for administrative intake.'
   } else {
     const copyForwardRequested = /(?:copy\s+(?:over|forward)|pull\s+forward|carry\s+forward|same\s+as\s+before)\s+(?:the\s+)?(?:prior|previous|last)?\s*([a-z0-9\s\-]+?)\s*(?:exam|examination|physical\s+exam)/i.test(normalized)
     const insertRequested = /(?:insert|add)\s+(?:a\s+)?([a-z0-9\s\-]+?)(?:,\s*)?(?:physical\s+exam|exam|examination)/i.test(normalized)
@@ -585,6 +763,9 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
   const explicitAss = extractSectionContent(normalizedBreaks, /(?:assessment|impression):\s*/i)
   if (explicitAss && explicitAss.length > 3) {
     assessmentLines.push(formatNumberedList(explicitAss))
+  } else if (isPersonalOrDemographicOnly) {
+    assessmentLines.push('1. Encounter for administrative intake and personal demographic record documentation (Z02.89).')
+    assessmentLines.push('2. General adult health status review without acute complaints (Z00.00).')
   } else if (isHeadache) {
     if (/migraine/i.test(normalized) || /migraine/i.test(String(visitType || ''))) {
       assessmentLines.push('1. Acute migraine, unspecified, not intractable, without status migrainosus (G43.909).')
@@ -595,8 +776,11 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
       assessmentLines.push('1. Headache, unspecified (R51.9).')
       assessmentLines.push('2. Rule out secondary headache disorder; no focal neurological signs on examination.')
     }
-  } else if (/bilateral.*(?:knee|osteoarthritis)|bilodoniaoster/i.test(normalized)) {
-    assessmentLines.push('1. Bilateral primary osteoarthritis of knee (M17.0).')
+  } else if (/bilateral.*(?:knee|osteoarthritis)|bilodoniaoster/i.test(normalized) || (/knee/i.test(normalized) && (/bilateral/i.test(normalized) || (!/right\s+knee/i.test(normalized) && !/left\s+knee/i.test(normalized))))) {
+    const isOa = /osteoarthritis|oa\b/i.test(normalized)
+    const isFollowUp = /follow.?up|follow\s+up|established|return(?:ing)/i.test(normalized)
+    const statusNote = isFollowUp ? ' — improving with conservative management' : ''
+    assessmentLines.push(`1. Bilateral knee pain${isOa ? ' secondary to primary osteoarthritis' : ''} (M17.0)${statusNote}.`)
     if (/mcl/i.test(normalized) && /1981|prior|remote|repair/i.test(normalized)) {
       assessmentLines.push('2. Status post remote right MCL surgical repair (1981) (Z98.890).')
     }
@@ -607,7 +791,8 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
       assessmentLines.push('3. Primary osteoarthritis / degenerative joint disease of right knee (M17.11).')
     }
   } else if (/knee/i.test(normalized)) {
-    assessmentLines.push('1. Acute knee pain secondary to trauma (M25.569).')
+    const isTrauma = /fell|fall|bike|bicycle|trauma|injury/i.test(normalized)
+    assessmentLines.push(isTrauma ? '1. Acute knee pain secondary to trauma (M25.569).' : '1. Knee pain, unspecified (M25.569).')
     assessmentLines.push('2. Knee ligamentous sprain / strain (S83.91XA).')
   } else if (/shoulder/i.test(normalized)) {
     assessmentLines.push('1. Shoulder pain, unspecified (M25.511).')
@@ -618,11 +803,19 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
     assessmentLines.push(`1. Clinical evaluation for ${primaryComplaint.toLowerCase()}.`)
   }
 
+  if (isHypertension && !assessmentLines.some(a => /hypertension/i.test(a))) {
+    const htControl = /well.?control|stable|managed|controlled/i.test(normalized) ? ', well-controlled on current therapy' : ''
+    assessmentLines.push(`${assessmentLines.length + 1}. Essential hypertension (I10)${htControl}.`)
+  }
+
   // 6. Plan (distinguish orders from discussions)
   const planLines = []
   const explicitPlan = extractSectionContent(normalizedBreaks, /plan:\s*/i)
   if (explicitPlan && explicitPlan.length > 3) {
     planLines.push(formatNumberedList(explicitPlan))
+  } else if (isPersonalOrDemographicOnly) {
+    planLines.push('1. Personal demographic profile and registration record updated in EHR.')
+    planLines.push('2. Routine preventive care and clinical follow-up as scheduled or PRN if new symptoms develop.')
   } else {
     if (/(?:request|order)\s+(?:for\s+)?(?:a\s+)?bilateral\s+hyaluronic\s+acid/i.test(normalized)) {
       planLines.push('1. ORDER: Bilateral hyaluronic acid knee injections requested to address osteoarthritic changes and provide cushioning for physical therapy participation.')
@@ -687,8 +880,9 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
   }
 
   // 8. ICD-10 & CPT Codes
-  const icdCodes = deriveIcd10Codes(normalized)
-  const cptCodes = deriveCptCodes(normalized, visitType)
+  const codingInput = isPersonalOrDemographicOnly ? `personal info administrative intake ${normalized}` : normalized
+  const icdCodes = deriveIcd10Codes(codingInput)
+  const cptCodes = deriveCptCodes(codingInput, visitType)
 
   const fullNote = [
     'CHIEF COMPLAINT:',
@@ -726,6 +920,12 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
 
 export function deriveIcd10Codes(text) {
   const matched = []
+  if (/personal\s+info|demographic|registration|intake|administrative/i.test(text) && !/pain|headache|cough|fracture|sprain|mcl/i.test(text)) {
+    matched.push('Z02.89 — Encounter for other administrative examinations')
+    matched.push('Z00.00 — Encounter for general adult medical examination without abnormal findings')
+    return matched
+  }
+
   for (const rule of ICD10_RULES) {
     if (rule.match.test(text) && !matched.includes(rule.code)) {
       matched.push(rule.code)
@@ -738,6 +938,10 @@ export function deriveIcd10Codes(text) {
 }
 
 export function deriveCptCodes(text, visitType = 'Follow-up') {
+  if (/personal\s+info|demographic|registration|intake|administrative/i.test(text) && !/pain|headache|cough|fracture|sprain|mcl/i.test(text)) {
+    return ['99212 — Office or other outpatient visit for evaluation and management of established patient (straightforward MDM)']
+  }
+
   const matched = []
   const isNew = String(visitType).toLowerCase().includes('new')
   matched.push(isNew 

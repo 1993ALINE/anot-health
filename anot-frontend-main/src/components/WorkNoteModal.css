@@ -1,0 +1,537 @@
+/* Work & School Excuse Note Generator Modal */
+
+.sm-work-note-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 20px;
+  animation: smWnFadeIn 0.2s ease-out;
+}
+
+@keyframes smWnFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.sm-work-note-modal {
+  background: #FFFFFF;
+  border-radius: 16px;
+  box-shadow: 0 20px 40px -10px rgba(15, 23, 42, 0.25), 0 0 0 1px rgba(15, 23, 42, 0.08);
+  width: 100%;
+  max-width: 1020px;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: smWnScaleUp 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes smWnScaleUp {
+  from { transform: scale(0.96); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* Header */
+.sm-work-note-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid #E2E8F0;
+  background: #F8FAFC;
+}
+
+.sm-work-note-modal__title-group {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.sm-work-note-modal__icon {
+  font-size: 26px;
+}
+
+.sm-work-note-modal__title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0F172A;
+  margin: 0;
+}
+
+.sm-work-note-modal__subtitle {
+  font-size: 13px;
+  color: #64748B;
+  margin: 2px 0 0 0;
+}
+
+.sm-work-note-modal__close-btn {
+  background: transparent;
+  border: none;
+  font-size: 20px;
+  color: #64748B;
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 8px;
+  transition: all 0.15s;
+}
+
+.sm-work-note-modal__close-btn:hover {
+  background: #E2E8F0;
+  color: #0F172A;
+}
+
+/* Content Area */
+.sm-work-note-modal__content {
+  display: grid;
+  grid-template-columns: 440px 1fr;
+  flex: 1;
+  overflow-y: auto;
+  min-height: 480px;
+}
+
+/* Controls Column */
+.sm-work-note-controls {
+  padding: 24px;
+  border-right: 1px solid #E2E8F0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background: #FFFFFF;
+}
+
+.sm-wn-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sm-wn-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #475569;
+}
+
+.sm-wn-label--sub {
+  font-size: 11px;
+  color: #64748B;
+  margin-top: 2px;
+}
+
+.sm-wn-status-pills {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.sm-wn-pill {
+  padding: 8px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 8px;
+  border: 1px solid #CBD5E1;
+  background: #F8FAFC;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+}
+
+.sm-wn-pill:hover {
+  background: #F1F5F9;
+  border-color: #94A3B8;
+}
+
+.sm-wn-pill--active.sm-wn-pill--danger {
+  background: #FEE2E2;
+  border-color: #EF4444;
+  color: #991B1B;
+}
+
+.sm-wn-pill--active.sm-wn-pill--warn {
+  background: #FEF3C7;
+  border-color: #F59E0B;
+  color: #92400E;
+}
+
+.sm-wn-pill--active.sm-wn-pill--success {
+  background: #DCFCE7;
+  border-color: #10B981;
+  color: #065F46;
+}
+
+.sm-wn-dates-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.sm-wn-input,
+.sm-wn-textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #CBD5E1;
+  font-size: 13px;
+  color: #0F172A;
+  background: #FFFFFF;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  box-sizing: border-box;
+}
+
+.sm-wn-input:focus,
+.sm-wn-textarea:focus {
+  outline: none;
+  border-color: #0284C7;
+  box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15);
+}
+
+.sm-wn-input--diag {
+  margin-top: 6px;
+}
+
+.sm-wn-textarea {
+  resize: vertical;
+  line-height: 1.4;
+  font-family: inherit;
+}
+
+.sm-wn-quick-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sm-wn-btn-tag {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid #E2E8F0;
+  background: #F1F5F9;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.sm-wn-btn-tag:hover {
+  background: #E2E8F0;
+  color: #0F172A;
+  border-color: #CBD5E1;
+}
+
+.sm-wn-checkbox-row {
+  margin-top: 4px;
+}
+
+.sm-wn-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #334155;
+  cursor: pointer;
+}
+
+/* Preview Pane */
+.sm-work-note-preview-pane {
+  background: #F1F5F9;
+  padding: 24px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.sm-wn-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sm-wn-preview-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #64748B;
+}
+
+.sm-wn-preview-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: #E2E8F0;
+  color: #334155;
+}
+
+/* Paper Certificate */
+.sm-wn-certificate {
+  background: #FFFFFF;
+  border-radius: 10px;
+  padding: 32px 36px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
+  border: 1px solid #E2E8F0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  color: #0F172A;
+}
+
+.sm-wn-cert-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.sm-wn-cert-logo-mark {
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, #0284C7, #0369A1);
+  color: #FFFFFF;
+  font-weight: 900;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.25);
+}
+
+.sm-wn-cert-clinic-name {
+  font-size: 16px;
+  font-weight: 800;
+  color: #0F172A;
+  margin: 0;
+}
+
+.sm-wn-cert-clinic-meta p {
+  font-size: 11px;
+  color: #64748B;
+  margin: 1px 0 0 0;
+}
+
+.sm-wn-cert-divider {
+  height: 2px;
+  background: linear-gradient(90deg, #0284C7, #E2E8F0);
+  margin: 18px 0;
+}
+
+.sm-wn-cert-title-badge {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #0369A1;
+  background: #F0F9FF;
+  border: 1px solid #BAE6FD;
+  padding: 6px 12px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+}
+
+.sm-wn-cert-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+  font-size: 12px;
+  background: #F8FAFC;
+  padding: 10px 14px;
+  border-radius: 6px;
+  border: 1px solid #E2E8F0;
+  margin-bottom: 18px;
+}
+
+.sm-wn-cert-meta-grid strong {
+  color: #475569;
+}
+
+.sm-wn-cert-body {
+  font-size: 13px;
+  line-height: 1.65;
+  color: #1E293B;
+}
+
+.sm-wn-cert-salutation {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.sm-wn-cert-callout {
+  margin: 14px 0;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.sm-wn-cert-callout--off {
+  background: #FEF2F2;
+  border-left: 4px solid #EF4444;
+  color: #7F1D1D;
+}
+
+.sm-wn-cert-callout--mod {
+  background: #FFFBEB;
+  border-left: 4px solid #F59E0B;
+  color: #78350F;
+}
+
+.sm-wn-cert-callout--clear {
+  background: #F0FDF4;
+  border-left: 4px solid #10B981;
+  color: #14532D;
+}
+
+.sm-wn-cert-restrictions {
+  margin-top: 6px;
+  font-size: 12px;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 6px;
+}
+
+.sm-wn-cert-custom-note {
+  font-size: 12px;
+  color: #334155;
+  background: #F8FAFC;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px dashed #CBD5E1;
+  margin: 12px 0;
+}
+
+.sm-wn-cert-contact-sub {
+  font-size: 11px;
+  color: #64748B;
+  margin-top: 14px;
+}
+
+.sm-wn-cert-signature-area {
+  margin-top: 24px;
+  padding-top: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.sm-wn-cert-sig-line {
+  width: 200px;
+  height: 1px;
+  background: #94A3B8;
+  margin-bottom: 6px;
+}
+
+.sm-wn-cert-dr-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0F172A;
+}
+
+.sm-wn-cert-dr-role {
+  font-size: 11px;
+  color: #64748B;
+}
+
+.sm-wn-cert-timestamp {
+  font-size: 10px;
+  color: #94A3B8;
+  margin-top: 4px;
+}
+
+/* Modal Footer */
+.sm-work-note-modal__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-top: 1px solid #E2E8F0;
+  background: #F8FAFC;
+}
+
+.sm-work-note-modal__footer-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sm-btn-wn-secondary {
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  background: #FFFFFF;
+  border: 1px solid #CBD5E1;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.sm-btn-wn-secondary:hover {
+  background: #F1F5F9;
+  border-color: #94A3B8;
+  color: #0F172A;
+}
+
+.sm-btn-wn-primary {
+  padding: 9px 22px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #FFFFFF;
+  background: #0284C7;
+  border: 1px solid #0284C7;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s;
+  box-shadow: 0 1px 3px rgba(2, 132, 199, 0.3);
+}
+
+.sm-btn-wn-primary:hover {
+  background: #0369A1;
+  border-color: #0369A1;
+}
+
+.sm-btn-wn-primary--copied {
+  background: #10B981;
+  border-color: #10B981;
+}
+
+/* Print Rules */
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+  #printable-work-note,
+  #printable-work-note * {
+    visibility: visible !important;
+  }
+  #printable-work-note {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100% !important;
+    padding: 30px !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+}
+
+/* Responsive */
+@media (max-width: 860px) {
+  .sm-work-note-modal__content {
+    grid-template-columns: 1fr;
+  }
+  .sm-work-note-controls {
+    border-right: none;
+    border-bottom: 1px solid #E2E8F0;
+  }
+}

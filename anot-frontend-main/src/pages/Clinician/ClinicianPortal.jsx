@@ -3,11 +3,13 @@ import { visitsAPI, notesAPI, patientsAPI, consentAPI, settingsAPI } from '../..
 import RecordingVisualizer from '../../components/RecordingVisualizer'
 import { startRecordingKeepAlive, stopRecordingKeepAlive } from '../../utils/recordingKeepAlive'
 import { cleanAiDraftForDisplay } from '../../utils/aiDraftFormat'
-import { formatClinicalDictationToSOAP } from '../../utils/clinicalSoapSynthesizer'
+import { formatClinicalDictationToSOAP, extractDictatedPersonalDetails } from '../../utils/clinicalSoapSynthesizer'
 import * as offlineAudioQueue from '../../utils/offlineAudioQueue'
 import { formatEncounterDate } from '../../utils/visitEncounterUtils'
 import SaintMaryNoteViewerModal from '../../components/SaintMaryNoteViewerModal'
 import ClinicianTemplateModal from '../../components/ClinicianTemplateModal'
+import WorkNoteModal from '../../components/WorkNoteModal'
+import NoteSummaryModal from '../../components/NoteSummaryModal'
 import './ClinicianPortal.css'
 
 const CLINICAL_TEMPLATES = [
@@ -342,8 +344,9 @@ const CLINICAL_HEADER_ALT = SORTED_CLINICAL_HEADERS.map((h) => h.replace(/[.*+?^
 // 1) Start of text or newlines
 // 2) After a real sentence ending (non-numeric word followed by . ! ? or ;)
 // 3) After multiple spaces
+// Matches with trailing colon or at line boundaries
 const BOUNDARY_REGEX = new RegExp(
-  `(?:^|[\\r\\n]+|(?<!\\b\\d+)[.!?][ \\t]+|;[ \\t]+|[ \\t]{2,})(?:\\[?\\b(${CLINICAL_HEADER_ALT})\\b\\]?(?:[ \\t]*\\([^)]*\\))?)[ \\t]*:`,
+  `(?:^|[\\r\\n]+|(?<!\\b\\d+)[.!?][ \\t]+|;[ \\t]+|[ \\t]{2,})(?:\\[?\\b(${CLINICAL_HEADER_ALT})\\b\\]?(?:[ \\t]*\\([^)]*\\))?)[ \\t]*(?::[ \\t]*|(?=[\\r\\n]|$))`,
   'gi'
 )
 
@@ -430,10 +433,13 @@ export function parseNoteSections(noteText) {
   // Preserve any preamble text before the first section header
   if (matches[0].index > 0) {
     const preamble = text.slice(0, matches[0].index).trim()
-    if (preamble) {
+    const cleanedPreamble = preamble
+      .replace(/^(?:CLINICAL NOTE|SOAP NOTE|FINAL NOTE|ENCOUNTER NOTE|PROGRESS NOTE|VISIT NOTE)[ \t]*:?[ \t]*/i, '')
+      .trim()
+    if (cleanedPreamble) {
       sections.push({
         header: 'OVERVIEW',
-        content: preamble,
+        content: cleanedPreamble,
       })
     }
   }
@@ -901,6 +907,9 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
   const [copiedSectionIndex, setCopiedSectionIndex] = useState(null)
   const [copiedFullNote, setCopiedFullNote] = useState(false)
   const [_selectedAssignPatientId, setSelectedAssignPatientId] = useState('')
+  const [noteViewTab, setNoteViewTab] = useState('clinical') // 'clinical' | 'full'
+  const [workNoteModalOpen, setWorkNoteModalOpen] = useState(false)
+  const [summaryModalOpen, setSummaryModalOpen] = useState(false)
 
   // Real-time mobile activity & live sync state
   const [liveSyncConnected, setLiveSyncConnected] = useState(false)
@@ -1119,12 +1128,27 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                 text: `Audio uploaded from mobile for ${pName} — generating clinical note...`,
               })
             } else if (eventData.action === 'draft_ready' || eventData.type === 'AI_DRAFT_READY') {
-              showToast(`✨ Mobile clinical note ready for ${pName}!`, 'success')
+              showToast(`✨ Clinical note ready for ${pName}!`, 'success')
+              if (targetVisit?.final_note || targetVisit?.ai_draft) {
+                const refreshed = targetVisit.final_note || targetVisit.ai_draft
+                setActiveDraftNote((prev) => {
+                  if (prev && String(prev.id) === String(eventData.visitId)) {
+                    return { ...prev, final_note: refreshed, ai_draft: targetVisit.ai_draft || refreshed }
+                  }
+                  return prev
+                })
+                setEditedNoteText((prevText) => {
+                  if (!prevText || prevText.includes('No specific acute history was dictated') || prevText === 'Clinical Consultation') {
+                    return refreshed
+                  }
+                  return prevText
+                })
+              }
               setMobileActivityBanner({
                 visitId: eventData.visitId,
                 patientName: pName,
                 status: 'ready',
-                text: `Clinical note ready for ${pName} from mobile dictation`,
+                text: `Clinical note ready for ${pName}`,
                 actionable: true,
                 visit: targetVisit,
               })
@@ -1628,6 +1652,42 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
     const scratch = dictationNotes.trim()
     const combinedClinicalText = [capturedSpeech, scratch].filter(Boolean).join('\n\n')
 
+    // Automatically detect dictated personal/patient info
+    const personalInfo = extractDictatedPersonalDetails(combinedClinicalText)
+    if (personalInfo?.name && (!currentActive.patient_name || isUnassignedPatient(currentActive))) {
+      currentActive.patient_name = personalInfo.name
+      if (personalInfo.mrn) currentActive.mrn = personalInfo.mrn
+      if (personalInfo.age) currentActive.age = String(personalInfo.age)
+      try {
+        if (currentActive.patient_id) {
+          patientsAPI.update(currentActive.patient_id, {
+            name: personalInfo.name,
+            mrn: personalInfo.mrn || undefined,
+            age: personalInfo.age ? String(personalInfo.age) : undefined,
+          }).catch(() => {})
+          visitsAPI.updateVisit(currentActive.id, {
+            patient_name: personalInfo.name,
+            mrn: personalInfo.mrn || undefined,
+          }).catch(() => {})
+        } else {
+          patientsAPI.create({
+            name: personalInfo.name,
+            mrn: personalInfo.mrn || `MRN-${Date.now().toString().slice(-6)}`,
+            age: personalInfo.age ? String(personalInfo.age) : undefined,
+          }).then((pRes) => {
+            if (pRes?.patient?.id) {
+              currentActive.patient_id = pRes.patient.id
+              visitsAPI.updateVisit(currentActive.id, {
+                patient_id: pRes.patient.id,
+                patient_name: personalInfo.name,
+                mrn: personalInfo.mrn || undefined,
+              }).catch(() => {})
+            }
+          }).catch(() => {})
+        }
+      } catch { /* ignore */ }
+    }
+
     rec.onstop = async () => {
       try {
         const audioBlob = new Blob(audioChunksRef.current, { type: rec.mimeType || 'audio/webm' })
@@ -1654,9 +1714,9 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
           scratch,
           currentActive.visit_type,
           {
-            patientName: currentActive.patient_name || patientNameInput,
-            patientAge: patientAgeInput || getPatientDisplayAge(currentActive, patientList),
-            mrn: currentActive.mrn || patientMrnInput,
+            patientName: currentActive.patient_name || personalInfo?.name || patientNameInput,
+            patientAge: personalInfo?.age ? String(personalInfo.age) : (patientAgeInput || getPatientDisplayAge(currentActive, patientList)),
+            mrn: currentActive.mrn || personalInfo?.mrn || patientMrnInput,
             template: selectedTemplate,
           }
         )
@@ -1676,8 +1736,9 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
             id: currentActive.id,
             visit_id: currentActive.id,
             note_id: nRes?.note?.id,
-            patient_name: currentActive.patient_name,
-            mrn: currentActive.mrn || 'Auto-generated',
+            patient_name: currentActive.patient_name || personalInfo?.name || patientNameInput || 'Patient',
+            mrn: currentActive.mrn || personalInfo?.mrn || 'Auto-generated',
+            age: currentActive.age || personalInfo?.age || patientAgeInput,
             visit_type: currentActive.visit_type,
             visit_date: currentActive.visit_date,
             visit_time: currentActive.visit_time,
@@ -2552,7 +2613,36 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                     </button>
 
                     <div className="sm-review-top-meta">
-                      <span className="sm-badge-ai">CLINICAL NOTE</span>
+                      <div className="sm-note-view-switcher" role="tablist" aria-label="Note View Selection">
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={noteViewTab === 'clinical'}
+                          className={`sm-note-view-tab ${noteViewTab === 'clinical' ? 'sm-note-view-tab--active' : ''}`}
+                          onClick={() => setNoteViewTab('clinical')}
+                          title="View structured clinical note sections"
+                        >
+                          📋 Clinical Note
+                        </button>
+                        <button
+                          type="button"
+                          role="tab"
+                          aria-selected={noteViewTab === 'full'}
+                          className={`sm-note-view-tab ${noteViewTab === 'full' ? 'sm-note-view-tab--active' : ''}`}
+                          onClick={() => setNoteViewTab('full')}
+                          title="View complete unified encounter note"
+                        >
+                          📄 Full Note
+                        </button>
+                        <button
+                          type="button"
+                          className="sm-note-view-tab sm-note-view-tab--summary"
+                          onClick={() => setSummaryModalOpen(true)}
+                          title="Generate concise clinical & patient-friendly summary of full note"
+                        >
+                          ✨ Summarize Note
+                        </button>
+                      </div>
                       <span className="sm-review-duration">{recordedDuration || '04:12'} recording</span>
                       <span className="sm-review-template">{selectedTemplate || 'SOAP Note — Adult'}</span>
                     </div>
@@ -2617,44 +2707,9 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                         </div>
                       </div>
                     </div>
-
-                    <div className="sm-patient-actions-group">
-                      <button
-                        type="button"
-                        className="sm-btn-doc sm-btn-doc--copy"
-                        onClick={handleCopyFullNote}
-                      >
-                        {copiedFullNote ? '✓ Copied to EMR!' : '📋 Copy to EMR'}
-                      </button>
-
-                      {(() => {
-                        const isNoteSigned = isCompletedVisit(activeDraftNote)
-                        return (
-                          <button
-                            type="button"
-                            className={`sm-btn-doc sm-btn-doc--sign ${isNoteSigned ? 'sm-btn-doc--disabled' : ''}`}
-                            onClick={() => {
-                              setSelectedNoteModal(activeDraftNote)
-                            }}
-                            title={isNoteSigned ? 'View locked & signed note' : 'Review, edit & sign note'}
-                          >
-                            {isNoteSigned ? '✓ Signed & Locked' : '✍️ Review & Sign'}
-                          </button>
-                        )
-                      })()}
-
-                      <button
-                        type="button"
-                        className="sm-btn-doc sm-btn-doc--new"
-                        onClick={handleStartNewConsultation}
-                        title="Start another patient consultation"
-                      >
-                        + New Consultation
-                      </button>
-                    </div>
                   </div>
 
-                  {/* Note Body: Structured Medical Document View */}
+                  {/* Note Body: Structured Medical Document View or Full Note View */}
                   {isEditingNote ? (
                     <div className="sm-edit-note-box">
                       <textarea
@@ -2663,6 +2718,27 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                         onChange={(e) => setEditedNoteText(e.target.value)}
                         rows={18}
                       />
+                    </div>
+                  ) : noteViewTab === 'full' ? (
+                    <div className="sm-doc-full-container">
+                      <div className="sm-doc-section sm-doc-section--full">
+                        <div className="sm-doc-section__header-row">
+                          <span className="sm-doc-section__title">FULL CLINICAL NOTE</span>
+                          <button
+                            type="button"
+                            className="sm-btn-copy-sec"
+                            onClick={handleCopyFullNote}
+                            title="Copy full note"
+                          >
+                            {copiedFullNote ? '✓ Copied to EMR!' : 'Copy'}
+                          </button>
+                        </div>
+                        <div className="sm-doc-section__content sm-doc-section__content--full">
+                          <pre className="sm-doc-full-pre">
+                            {cleanAiDraftForDisplay(activeDraftNote?.final_note || activeDraftNote?.ai_draft || '')}
+                          </pre>
+                        </div>
+                      </div>
                     </div>
                   ) : (
                     <div className="sm-doc-body">
@@ -2684,6 +2760,67 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                       ))}
                     </div>
                   )}
+
+                  {/* Bottom Action Bar: Generate Work Note, Summarize Note, Copy Note, Sign, New Consultation */}
+                  <div className="sm-note-bottom-bar">
+                    <div className="sm-note-bottom-bar__left">
+                      <button
+                        type="button"
+                        className="sm-btn-bottom-work-note"
+                        onClick={() => setWorkNoteModalOpen(true)}
+                        title="Generate official work/school excuse note or return-to-work certificate"
+                      >
+                        <span className="sm-btn-icon">📄</span>
+                        <span>Generate Work Note</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="sm-btn-bottom-summary"
+                        onClick={() => setSummaryModalOpen(true)}
+                        title="Generate a concise clinical & patient-friendly summary of the full note"
+                      >
+                        <span className="sm-btn-icon">✨</span>
+                        <span>Summarize Full Note</span>
+                      </button>
+                    </div>
+
+                    <div className="sm-note-bottom-bar__right">
+                      <button
+                        type="button"
+                        className="sm-btn-bottom-copy"
+                        onClick={handleCopyFullNote}
+                        title="Copy entire note to clipboard for EMR"
+                      >
+                        <span className="sm-btn-icon">{copiedFullNote ? '✓' : '📋'}</span>
+                        <span>{copiedFullNote ? 'Copied to EMR!' : 'Copy to EMR'}</span>
+                      </button>
+
+                      {(() => {
+                        const isNoteSigned = isCompletedVisit(activeDraftNote)
+                        return (
+                          <button
+                            type="button"
+                            className={`sm-btn-bottom-sign ${isNoteSigned ? 'sm-btn-bottom-sign--signed' : ''}`}
+                            onClick={() => setSelectedNoteModal(activeDraftNote)}
+                            title={isNoteSigned ? 'View locked & signed note' : 'Review, edit & sign note'}
+                          >
+                            <span>{isNoteSigned ? '✓ Signed & Locked' : '✍️ Review & Sign'}</span>
+                          </button>
+                        )
+                      })()}
+
+                      <button
+                        type="button"
+                        className="sm-btn-bottom-new"
+                        onClick={handleStartNewConsultation}
+                        title="Start another patient consultation"
+                      >
+                        <span className="sm-btn-icon">+</span>
+                        <span>New Consultation</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </>
@@ -3050,6 +3187,40 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
           onNoteUpdated={loadData}
           onSignNote={handleReviewAndSign}
           showToast={showToast}
+        />
+      )}
+
+      {/* Work / School Excuse Note Generator Modal */}
+      {workNoteModalOpen && (
+        <WorkNoteModal
+          isOpen={workNoteModalOpen}
+          onClose={() => setWorkNoteModalOpen(false)}
+          patient={{
+            ...(activeDraftNote || selectedNoteModal || activeVisit || {}),
+            patient_name: (activeDraftNote || selectedNoteModal || activeVisit)?.patient_name || patientNameInput || 'Patient',
+            visit_date: (activeDraftNote || selectedNoteModal || activeVisit)?.visit_date || new Date().toISOString().slice(0, 10),
+            mrn: (activeDraftNote || selectedNoteModal || activeVisit)?.mrn || patientMrnInput || undefined,
+          }}
+          clinician={currentUser}
+          noteText={(activeDraftNote || selectedNoteModal)?.final_note || (activeDraftNote || selectedNoteModal)?.ai_draft || ''}
+          clinicName={currentUser?.clinic_name || 'Anot Health Family Practice'}
+        />
+      )}
+
+      {/* Note Summary Generator Modal */}
+      {summaryModalOpen && (
+        <NoteSummaryModal
+          isOpen={summaryModalOpen}
+          onClose={() => setSummaryModalOpen(false)}
+          patient={{
+            ...(activeDraftNote || selectedNoteModal || activeVisit || {}),
+            patient_name: (activeDraftNote || selectedNoteModal || activeVisit)?.patient_name || patientNameInput || 'Patient',
+            visit_date: (activeDraftNote || selectedNoteModal || activeVisit)?.visit_date || new Date().toISOString().slice(0, 10),
+            mrn: (activeDraftNote || selectedNoteModal || activeVisit)?.mrn || patientMrnInput || undefined,
+            visit_type: (activeDraftNote || selectedNoteModal || activeVisit)?.visit_type || selectedTemplate,
+          }}
+          clinician={currentUser}
+          noteText={(activeDraftNote || selectedNoteModal)?.final_note || (activeDraftNote || selectedNoteModal)?.ai_draft || ''}
         />
       )}
 

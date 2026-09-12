@@ -1,9 +1,15 @@
 {
   "Rules": [
     {
-      "ID": "expire-encounter-audio-after-90-days",
+      "ID": "tier-encounter-audio-to-glacier-after-30-days",
       "Filter": { "Prefix": "uploads/" },
       "Status": "Enabled",
+      "Transitions": [
+        {
+          "Days": 30,
+          "StorageClass": "GLACIER_IR"
+        }
+      ],
       "Expiration": { "Days": 90 },
       "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 }
     }

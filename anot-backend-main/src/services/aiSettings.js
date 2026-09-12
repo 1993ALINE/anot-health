@@ -87,7 +87,7 @@ const DEFAULTS = {
 
   // FFmpeg preprocessing: enabled by default to strip silence before Deepgram
   // Reads from FFMPEG_ENABLED env if DB hasn't overridden it
-  ffmpeg_enabled: String(process.env.FFMPEG_ENABLED || '').toLowerCase() === 'true',
+  ffmpeg_enabled: String(process.env.FFMPEG_ENABLED || 'true').toLowerCase() !== 'false',
   ffmpeg_target_format: process.env.FFMPEG_TARGET_FORMAT || 'mp3',
   // compression 7 = ~64kbps MP3 mono — great for speech, reduces file size
   ffmpeg_compression: parseInt(process.env.FFMPEG_COMPRESSION || '7', 10),
