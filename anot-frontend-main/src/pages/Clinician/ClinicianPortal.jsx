@@ -843,6 +843,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
   const [selectedPatientIdForEncounter, setSelectedPatientIdForEncounter] = useState('')
   const [patientNameInput, setPatientNameInput] = useState('')
   const [patientAgeInput, setPatientAgeInput] = useState('')
+  const [patientDobInput, setPatientDobInput] = useState('')
   const [patientMrnInput, setPatientMrnInput] = useState('')
   const [patientDateInput, setPatientDateInput] = useState(() => getLocalDateStr())
   const [patientTimeInput, setPatientTimeInput] = useState(() => {
@@ -1335,6 +1336,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
       setPatientNameInput('')
       setPatientMrnInput('')
       setPatientAgeInput('')
+      setPatientDobInput('')
       return
     }
 
@@ -1405,6 +1407,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
           const pRes = await patientsAPI.create({
             name: patientName,
             mrn: patientMrn,
+            date_of_birth: patientDobInput || null,
           })
           if (pRes?.patient?.id) {
             patientId = pRes.patient.id
@@ -1456,6 +1459,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
     setSelectedPatientIdForEncounter('')
     setPatientNameInput('')
     setPatientAgeInput('')
+    setPatientDobInput('')
     setPatientMrnInput('')
     setPatientDateInput(getLocalDateStr())
     const d = new Date()
@@ -1570,6 +1574,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
         setSelectedPatientIdForEncounter('')
         setPatientNameInput('')
         setPatientAgeInput('')
+        setPatientDobInput('')
         setPatientMrnInput('')
       }
 
@@ -1848,6 +1853,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
         setPatientNameInput('')
         setPatientMrnInput('')
         setPatientAgeInput('')
+        setPatientDobInput('')
         setActiveDraftNote(null)
         setIsEditingNote(false)
         setEditedNoteText('')
@@ -2268,6 +2274,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                                 setSelectedPatientIdForEncounter('')
                                 setPatientNameInput('')
                                 setPatientAgeInput('')
+                                setPatientDobInput('')
                                 setPatientMrnInput('')
                               }}
                               title="Clear patient / start new encounter"
@@ -2313,13 +2320,24 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                       </div>
 
                       <div className="sm-intake-field sm-intake-field--age">
-                        <label className="sm-intake-label">Age / DOB</label>
+                        <label className="sm-intake-label">Age (optional)</label>
                         <input
                           type="text"
                           className="sm-intake-input"
                           placeholder="e.g. 36 yrs"
                           value={patientAgeInput}
                           onChange={(e) => setPatientAgeInput(e.target.value)}
+                        />
+                      </div>
+
+                      <div className="sm-intake-field sm-intake-field--dob">
+                        <label className="sm-intake-label">Date of Birth</label>
+                        <input
+                          type="date"
+                          className="sm-intake-input"
+                          value={patientDobInput}
+                          onChange={(e) => setPatientDobInput(e.target.value)}
+                          title="Saved to the patient record so age is available in the note and demographic header"
                         />
                       </div>
 
@@ -3199,6 +3217,7 @@ function ScheduleVisitModal({ isOpen, onClose, patientList, onVisitCreated, show
   const [selectedPatientId, setSelectedPatientId] = useState(patientList[0]?.id ? String(patientList[0].id) : '')
   const [newName, setNewName] = useState('')
   const [newAge, setNewAge] = useState('')
+  const [newDob, setNewDob] = useState('')
   const [newMrn, setNewMrn] = useState('')
   const [modalError, setModalError] = useState(null)
   const [visitTime, setVisitTime] = useState(() => {
@@ -3230,6 +3249,7 @@ function ScheduleVisitModal({ isOpen, onClose, patientList, onVisitCreated, show
         const pRes = await patientsAPI.create({
           name: finalName,
           mrn: finalMrn,
+          date_of_birth: newDob || null,
         })
         patientId = pRes?.patient?.id
       }
@@ -3366,7 +3386,7 @@ function ScheduleVisitModal({ isOpen, onClose, patientList, onVisitCreated, show
                   />
                 </div>
                 <div className="sm-form-group">
-                  <label className="sm-form-label">Age / DOB</label>
+                  <label className="sm-form-label">Age (optional)</label>
                   <input
                     type="text"
                     className="sm-form-input"
@@ -3376,6 +3396,19 @@ function ScheduleVisitModal({ isOpen, onClose, patientList, onVisitCreated, show
                       setNewAge(e.target.value)
                       setModalError(null)
                     }}
+                  />
+                </div>
+                <div className="sm-form-group">
+                  <label className="sm-form-label">Date of Birth</label>
+                  <input
+                    type="date"
+                    className="sm-form-input"
+                    value={newDob}
+                    onChange={(e) => {
+                      setNewDob(e.target.value)
+                      setModalError(null)
+                    }}
+                    title="Saved to the patient record so age is available in the note and demographic header"
                   />
                 </div>
                 <div className="sm-form-group">

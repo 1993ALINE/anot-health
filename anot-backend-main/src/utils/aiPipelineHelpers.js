@@ -64,6 +64,23 @@ function withCodingHeaders(headers) {
 const { detectScribeInstructions } = require('./instructionDetector')
 
 /**
+ * Compute a whole-years age from a date_of_birth (YYYY-MM-DD or any Date-parseable
+ * string). Returns null when dob is missing/invalid rather than guessing.
+ */
+function calculateAgeFromDob(dob) {
+  if (!dob) return null
+  const birth = new Date(dob)
+  if (Number.isNaN(birth.getTime())) return null
+  const today = new Date()
+  let age = today.getFullYear() - birth.getFullYear()
+  const monthDiff = today.getMonth() - birth.getMonth()
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+    age -= 1
+  }
+  return age >= 0 && age < 130 ? age : null
+}
+
+/**
  * Build Anthropic user prompt for clinical note generation.
  * @param {object} patientInfo
  * @param {string} combinedTranscription
@@ -94,11 +111,22 @@ CRITICAL SAFETY RULE: Under NO circumstances should you fabricate, assume, or in
   // Pre-clean non-clinical verbal filler & noise to reduce token spend by 15-20%
   const cleanTranscription = cleanTranscriptForClinicalPrompt(combinedTranscription)
 
+  // A dictated age ("63-year-old male...") reflects what the clinician actually said in
+  // THIS encounter, so it takes priority over the on-file date_of_birth when both exist.
+  const dobAge = calculateAgeFromDob(patientInfo.date_of_birth)
+  const hasDictatedAge = patientInfo.dictated_age != null && !Number.isNaN(Number(patientInfo.dictated_age))
+  const patientAge = hasDictatedAge ? Number(patientInfo.dictated_age) : dobAge
+  const ageSource = hasDictatedAge ? 'as stated by the clinician during this visit' : 'calculated from date of birth on file'
+  const ageLine = patientAge != null
+    ? `Age: ${patientAge} years (${ageSource} — state this age when introducing the patient; do NOT recalculate or guess a different age)`
+    : `Age: not on file and not mentioned in this visit — do NOT state or guess an age; refer to the patient by name only`
+
   return `Generate a structured clinical note from the visit transcription below.
 ${instructionDirective}
-Context (do NOT repeat in the note — patient details are shown elsewhere in the UI):
+Patient Reference (use this to introduce and refer to the patient within the note — e.g. "Ms. ${patientInfo.patient_name}, a ${patientAge != null ? patientAge : '[age not on file]'}-year-old..." in the opening of the first narrative section):
 Patient: ${patientInfo.patient_name}
-MRN: ${patientInfo.mrn}
+${ageLine}
+MRN: ${patientInfo.mrn} (do NOT repeat the MRN inside the note body — it is shown elsewhere in the UI)
 Visit Type: ${patientInfo.visit_type}
 Date: ${patientInfo.visit_date}
 
@@ -280,4 +308,5 @@ module.exports = {
   transcribeAllAudioFiles,
   extractDictatedPatientDetails,
   cleanTranscriptForClinicalPrompt,
+  calculateAgeFromDob,
 }

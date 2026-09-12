@@ -236,6 +236,12 @@ async function resolveAiDraft(transcriptions, visit) {
 
     patient_name: visit.patient_name,
 
+    date_of_birth: visit.date_of_birth,
+
+    dictated_age: visit.dictated_age,
+
+    dictated_gender: visit.dictated_gender,
+
     mrn: visit.mrn,
 
     visit_type: visit.visit_type,
@@ -337,11 +343,11 @@ async function persistTranscriptionAndDraft(id, transcriptions, visit, options =
 
       if (dictated.name && (isPlaceholder || dictated.name.length > 3)) {
         await pool.query(
-          `UPDATE patients SET 
-             name = COALESCE($1, name), 
-             mrn = COALESCE($2, mrn), 
+          `UPDATE patients SET
+             name = COALESCE($1, name),
+             mrn = COALESCE($2, mrn),
              date_of_birth = COALESCE($3, date_of_birth),
-             updated_at = NOW() 
+             updated_at = NOW()
            WHERE id = $4`,
           [dictated.name, dictated.mrn || null, dictated.date_of_birth || null, visit.patient_id]
         )
@@ -350,6 +356,15 @@ async function persistTranscriptionAndDraft(id, transcriptions, visit, options =
         if (dictated.mrn) visit.mrn = dictated.mrn
         console.log(`[aiPipeline] Automatically updated patient #${visit.patient_id} from dictation:`, dictated)
       }
+    }
+    // Age (and gender) dictated in this visit's transcript — independent of whether a
+    // name was also dictated. This is a per-visit signal only: an approximate spoken
+    // age ("63-year-old male") is NOT written back as a fabricated exact date_of_birth
+    // on the permanent patient record. It takes priority over the on-file DOB for THIS
+    // note, since it's what the clinician actually said in the encounter.
+    if (dictated?.age != null) {
+      visit.dictated_age = dictated.age
+      if (dictated.gender) visit.dictated_gender = dictated.gender
     }
   } catch (dictErr) {
     console.warn('[aiPipeline] Dictated patient detail update skipped:', dictErr?.message)
@@ -424,7 +439,7 @@ async function loadVisitForPipeline(id) {
 
     `
 
-      SELECT v.*, p.name AS patient_name, p.mrn, c.name AS clinician_name
+      SELECT v.*, p.name AS patient_name, p.mrn, p.date_of_birth, c.name AS clinician_name
 
       FROM visits v
 

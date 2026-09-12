@@ -1,4 +1,4 @@
-const { buildAnthropicNotePrompt, extractDictatedPatientDetails, cleanTranscriptForClinicalPrompt } = require('../utils/aiPipelineHelpers')
+const { buildAnthropicNotePrompt, extractDictatedPatientDetails, cleanTranscriptForClinicalPrompt, calculateAgeFromDob } = require('../utils/aiPipelineHelpers')
 
 const patientInfo = {
   patient_name: 'Jane Doe',
@@ -99,6 +99,34 @@ describe('buildAnthropicNotePrompt', () => {
     expect(prompt).toContain('Jane Doe')
     expect(prompt).toContain('MRN123')
     expect(prompt).toContain('the transcript body')
+  })
+
+  test('includes a calculated age in the prompt when date_of_birth is known', () => {
+    const withDob = { ...patientInfo, date_of_birth: '1990-01-01' }
+    const prompt = buildAnthropicNotePrompt(withDob, 'transcript text')
+    const expectedAge = calculateAgeFromDob('1990-01-01')
+    expect(prompt).toContain(`Age: ${expectedAge} years`)
+    expect(prompt).toContain('state this age when introducing the patient')
+  })
+
+  test('instructs the model not to guess an age when date_of_birth is unknown', () => {
+    const prompt = buildAnthropicNotePrompt(patientInfo, 'transcript text')
+    expect(prompt).toContain('Age: not on file')
+    expect(prompt).toContain('do NOT state or guess an age')
+  })
+
+  test('uses the age dictated in this visit when no date_of_birth is on file', () => {
+    const withDictatedAge = { ...patientInfo, dictated_age: 63 }
+    const prompt = buildAnthropicNotePrompt(withDictatedAge, 'transcript text')
+    expect(prompt).toContain('Age: 63 years')
+    expect(prompt).toContain('as stated by the clinician during this visit')
+  })
+
+  test('prefers the dictated age over the on-file date_of_birth when both are present', () => {
+    const both = { ...patientInfo, date_of_birth: '1990-01-01', dictated_age: 63 }
+    const prompt = buildAnthropicNotePrompt(both, 'transcript text')
+    expect(prompt).toContain('Age: 63 years')
+    expect(prompt).toContain('as stated by the clinician during this visit')
   })
 
   test('prioritizes adult age 63 over single digit ASR truncation 6-year-old', () => {

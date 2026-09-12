@@ -80,6 +80,7 @@ router.get('/', protect, restrict('clinician', 'scribe', 'qps', 'admin', 'super_
 
 const pool = require('../config/db')
 const { generateAINote } = require('../utils/aiPipeline')
+const { extractDictatedPatientDetails } = require('../utils/aiPipelineHelpers')
 const { enqueueTranscription } = require('../services/transcriptionQueue')
 const { getVisitForUser } = require('../utils/visitAccess')
 const { setVisitTranscriptionStatus } = require('../utils/visitSchemaCompat')
@@ -134,7 +135,7 @@ const AI_DRAFT_UNAVAILABLE =
 async function loadVisitDetailForDraft(visitId) {
   const detail = await pool.query(
     `
-      SELECT v.visit_type, v.visit_date, v.clinician_id, COALESCE(p.name, 'Patient') AS patient_name, COALESCE(p.mrn, 'Auto-generated') AS mrn
+      SELECT v.visit_type, v.visit_date, v.clinician_id, COALESCE(p.name, 'Patient') AS patient_name, COALESCE(p.mrn, 'Auto-generated') AS mrn, p.date_of_birth
       FROM visits v
       LEFT JOIN patients p ON p.id = v.patient_id
       WHERE v.id = $1
@@ -215,8 +216,15 @@ async function generateDraft(req, res) {
     const requestedTemplate = req.body?.template || req.body?.template_id || req.body?.visit_type || row.visit_type
     const templateSections = await resolveTemplateSections(row.clinician_id, requestedTemplate, 'generate-draft')
 
+    // Age dictated in the transcript itself ("63-year-old male...") takes priority over
+    // the on-file date_of_birth for this note — it's what the clinician actually said.
+    const dictated = extractDictatedPatientDetails(segments.join(' '))
+
     let aiDraft = await generateAINote(segments, {
       patient_name: row.patient_name,
+      date_of_birth: row.date_of_birth,
+      dictated_age: dictated?.age,
+      dictated_gender: dictated?.gender,
       mrn: row.mrn,
       visit_type: row.visit_type,
       visit_date: row.visit_date,
