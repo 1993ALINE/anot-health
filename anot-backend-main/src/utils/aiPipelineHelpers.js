@@ -238,14 +238,19 @@ async function transcribeAudioSegment(audioPath, settings, visitId, idx) {
  * Transcribe all audio files for a visit
  */
 async function transcribeAllAudioFiles(audioFiles, settings, visitId) {
-  const transcriptions = []
-  let successCount = 0
+  // Each segment (download from S3, optional ffmpeg silence-stripping, Deepgram call) is
+  // independent I/O, so run them concurrently instead of one at a time — a visit with
+  // multiple pause/resume recordings was previously paying for each segment's full
+  // download+transcribe latency back to back, multiplying total note-generation time by
+  // the segment count. Promise.all preserves order, and the shared outboundConcurrency
+  // slot (utils/outboundConcurrency.js) already caps how many Deepgram calls run at once
+  // across the whole process, so this can't overwhelm Deepgram or the instance.
+  const results = await Promise.all(
+    audioFiles.map((file, idx) => transcribeAudioSegment(file, settings, visitId, idx))
+  )
 
-  for (let idx = 0; idx < audioFiles.length; idx++) {
-    const result = await transcribeAudioSegment(audioFiles[idx], settings, visitId, idx)
-    transcriptions.push(result.text)
-    if (result.success) successCount++
-  }
+  const transcriptions = results.map((r) => r.text)
+  const successCount = results.filter((r) => r.success).length
 
   return { transcriptions, successCount }
 }

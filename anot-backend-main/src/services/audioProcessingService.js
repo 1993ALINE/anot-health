@@ -45,7 +45,11 @@ function resolveTargetFormat(settings) {
  * Build output path for preprocessed audio
  */
 function buildPreprocessOutputPath(ext) {
-  return path.join(os.tmpdir(), `anot_tx_${Date.now()}.${ext}`)
+  // Random suffix (not just Date.now()) so two segments of the same visit being
+  // preprocessed concurrently — see transcribeAllAudioFiles — never collide on the same
+  // temp filename, which would otherwise let one ffmpeg process overwrite another's output.
+  const unique = `${Date.now()}_${Math.random().toString(36).slice(2)}`
+  return path.join(os.tmpdir(), `anot_tx_${unique}.${ext}`)
 }
 
 /**
