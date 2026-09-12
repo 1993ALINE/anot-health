@@ -10,7 +10,19 @@ import SaintMaryNoteViewerModal from '../../components/SaintMaryNoteViewerModal'
 import ClinicianTemplateModal from '../../components/ClinicianTemplateModal'
 import WorkNoteModal from '../../components/WorkNoteModal'
 import NoteSummaryModal from '../../components/NoteSummaryModal'
+import { evaluateAutoPauseDecision } from '../../utils/autoPauseOnSilence'
 import './ClinicianPortal.css'
+
+// Auto-pause on silence: cuts billed transcription minutes for genuinely dead air (exam
+// performed quietly, doctor stepped out) without risking any lost speech. Deliberately
+// conservative on both axes — a real conversational pause between sentences is well under
+// 5s, so 12s of continuous silence is never mistaken for someone mid-thought, and the
+// volume floor is set well above typical room/mic noise (echoCancellation + noiseSuppression
+// are already on) so actual speech at any normal volume clears it easily. Tune only with
+// real recordings in hand, not guesswork — a threshold set too aggressively risks silently
+// dropping quiet-spoken clinical content, which is worse than any cost saved.
+const AUTO_PAUSE_SILENCE_MS = 12000
+const AUTO_PAUSE_VOLUME_THRESHOLD = 6 // raw 0-255 analyser average; see updateVolume below
 
 const CLINICAL_TEMPLATES = [
   // 1. Core Primary Care
@@ -912,6 +924,16 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
   const audioContextRef = useRef(null)
   const transcriptScrollRef = useRef(null)
 
+  // Auto-pause on silence (dead air): tracks how long the mic has read silent so the
+  // recorder can pause itself during genuinely dead time (exam performed quietly, doctor
+  // stepped out) rather than billing Deepgram for minutes with nothing said. This is
+  // intentionally separate from the existing manual Pause button — silenceStartRef and
+  // isAutoPausedRef let auto-pause/auto-resume happen without ever overriding a pause the
+  // doctor chose deliberately (see updateVolume + handlePauseResume below).
+  const silenceStartRef = useRef(null)
+  const isAutoPausedRef = useRef(false)
+  const [isAutoPaused, setIsAutoPaused] = useState(false)
+
   const showToast = useCallback((msg, type = 'success') => {
     setToast({ msg, type })
     setTimeout(() => setToast(null), 3500)
@@ -1242,6 +1264,9 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
       const rec = new window.MediaRecorder(stream, mime ? { mimeType: mime } : {})
 
       audioChunksRef.current = []
+      silenceStartRef.current = null
+      isAutoPausedRef.current = false
+      setIsAutoPaused(false)
       mediaRecorderRef.current = rec
       setAudioStream(stream)
 
@@ -1258,12 +1283,47 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
           const dataArr = new Uint8Array(analyser.frequencyBinCount)
 
           const updateVolume = () => {
-            if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {return}
+            const activeRec = mediaRecorderRef.current
+            if (!activeRec || activeRec.state === 'inactive') {return}
             analyser.getByteFrequencyData(dataArr)
             let sum = 0
             for (let i = 0; i < dataArr.length; i++) {sum += dataArr[i]}
             const avg = sum / dataArr.length
             setMicLevel(Math.min(100, Math.round((avg / 128) * 100)))
+
+            const decision = evaluateAutoPauseDecision({
+              avgVolume: avg,
+              silenceStartedAt: silenceStartRef.current,
+              now: Date.now(),
+              recorderState: activeRec.state,
+              isAutoPaused: isAutoPausedRef.current,
+              volumeThreshold: AUTO_PAUSE_VOLUME_THRESHOLD,
+              silenceDurationMs: AUTO_PAUSE_SILENCE_MS,
+            })
+            silenceStartRef.current = decision.nextSilenceStartedAt
+
+            if (decision.action === 'autoPause') {
+              activeRec.pause()
+              isAutoPausedRef.current = true
+              setIsAutoPaused(true)
+              setIsPaused(true)
+              clearInterval(timerIntervalRef.current)
+              try { speechRecRef.current?.stop() } catch { /* ignore */ }
+            } else if (decision.action === 'autoResume') {
+              // Speech resumed after a pause THIS logic started — a pause the doctor
+              // triggered manually is never touched here; only their own Resume click
+              // (handlePauseResume) can undo that.
+              activeRec.resume()
+              isAutoPausedRef.current = false
+              setIsAutoPaused(false)
+              setIsPaused(false)
+              clearInterval(timerIntervalRef.current)
+              timerIntervalRef.current = setInterval(() => {
+                setTimerSeconds((prev) => prev + 1)
+              }, 1000)
+              try { speechRecRef.current?.start() } catch { /* ignore */ }
+            }
+
             animFrameRef.current = requestAnimationFrame(updateVolume)
           }
           updateVolume()
@@ -1594,6 +1654,14 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
     const rec = mediaRecorderRef.current
     if (!rec) {return}
 
+    // Manual pause/resume always takes control away from auto-pause — clearing the flag
+    // here means the silence detector in updateVolume will never resume a pause the
+    // doctor is now the one holding, and won't mistake a fresh manual pause for one it
+    // needs to track a silence timer against.
+    isAutoPausedRef.current = false
+    setIsAutoPaused(false)
+    silenceStartRef.current = null
+
     if (isPaused) {
       rec.resume()
       setIsPaused(false)
@@ -1764,6 +1832,9 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
         stopRecordingKeepAlive().catch(() => {})
         audioChunksRef.current = []
         mediaRecorderRef.current = null
+        silenceStartRef.current = null
+        isAutoPausedRef.current = false
+        setIsAutoPaused(false)
         setAudioStream(null)
         setActiveVisit(null)
         setTimerSeconds(0)
@@ -1798,6 +1869,9 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
     stopRecordingKeepAlive().catch(() => {})
     audioChunksRef.current = []
     mediaRecorderRef.current = null
+    silenceStartRef.current = null
+    isAutoPausedRef.current = false
+    setIsAutoPaused(false)
     setAudioStream(null)
     setActiveVisit(null)
     setTimerSeconds(0)
@@ -2468,7 +2542,11 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
 
                       <div className="sm-status-line">
                         <span className={`sm-status-dot ${isPaused ? 'sm-status-dot--paused' : 'sm-status-dot--live'}`} />
-                        <span className="sm-status-text">{isPaused ? 'Consultation paused' : 'Listening · Ambient recording active'}</span>
+                        <span className="sm-status-text">
+                          {isPaused
+                            ? (isAutoPaused ? 'Auto-paused · no speech detected' : 'Consultation paused')
+                            : 'Listening · Ambient recording active'}
+                        </span>
                         <span className="sm-nosleep-pill" title="Screen stays awake during consultation">
                           ☕ Stay Awake Active
                         </span>
