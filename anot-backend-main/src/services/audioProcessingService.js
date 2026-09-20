@@ -24,6 +24,55 @@ async function ffmpegAvailable() {
   })
 }
 
+/**
+ * Duration in seconds via ffprobe (installed alongside ffmpeg — see
+ * .platform/hooks/prebuild/00_install_ffmpeg.sh). Returns null on any failure
+ * (binary missing, unreadable file, etc.) — this is purely for cost-savings
+ * measurement/logging and must never affect the actual transcription path.
+ */
+function getAudioDurationSeconds(filePath) {
+  return new Promise((resolve) => {
+    const p = spawn('ffprobe', [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      filePath,
+    ])
+    let out = ''
+    p.stdout?.on('data', (c) => { out += String(c) })
+    p.on('error', () => resolve(null))
+    p.on('close', (code) => {
+      if (code !== 0) return resolve(null)
+      const seconds = parseFloat(out.trim())
+      resolve(Number.isFinite(seconds) ? seconds : null)
+    })
+  })
+}
+
+/**
+ * Logs the real, measured before/after audio duration for one preprocessed file —
+ * this is the ground-truth number for "what % of billable Deepgram minutes did
+ * FFmpeg actually save", searchable in logs as [audioProcessing][SAVINGS], rather
+ * than waiting on a Deepgram billing cycle to estimate it indirectly. Best-effort:
+ * any failure here is swallowed so measurement never affects real transcription.
+ */
+async function logDurationSavings(originalPath, processedPath) {
+  try {
+    const [before, after] = await Promise.all([
+      getAudioDurationSeconds(originalPath),
+      getAudioDurationSeconds(processedPath),
+    ])
+    if (before == null || after == null || before <= 0) return
+    const savedPct = ((before - after) / before) * 100
+    console.log(
+      `[audioProcessing][SAVINGS] before=${before.toFixed(1)}s after=${after.toFixed(1)}s ` +
+      `saved=${savedPct.toFixed(1)}%`
+    )
+  } catch {
+    // Never let measurement affect the real transcription path.
+  }
+}
+
 const SUPPORTED_FORMATS = ['wav', 'mp3', 'ogg', 'webm', 'flac']
 
 /**
@@ -113,6 +162,8 @@ async function runPreprocessOrFallback(absInPath, outPath, args) {
   try {
     await runFfmpeg(args)
     tempPaths.push(outPath)
+    // Fire-and-forget — never block or delay the actual transcription on this.
+    logDurationSavings(absInPath, outPath)
     return { path: outPath, tempPaths }
   } catch (e) {
     console.warn('[audioProcessing] ffmpeg failed, falling back to source:', e.message)
@@ -153,4 +204,7 @@ module.exports = {
   ffmpegAvailable,
   buildFfmpegPreprocessArgs,
   resolveTargetFormat,
+  /** exposed for tests / manual measurement scripts */
+  getAudioDurationSeconds,
+  logDurationSavings,
 }

@@ -1,6 +1,14 @@
 const Anthropic = require('@anthropic-ai/sdk');
-const pool = require('../config/db');
 const { resolveCanonicalAnthropicModel } = require('./aiSettings');
+const { cleanTranscriptForClinicalPrompt } = require('../utils/aiPipelineHelpers');
+const {
+  checkRateLimit,
+  checkCostLimit,
+  trackCost,
+  getCostStats,
+  resetDailyCost,
+  MODEL_PRICING,
+} = require('./claudeCostTracking');
 
 const anthropic = new Anthropic({
   apiKey: process.env.CLAUDE_API_KEY || process.env.ANTHROPIC_API_KEY
@@ -20,225 +28,43 @@ ICD-10 CODES: [1-3 most relevant codes with descriptions]
 
 Rules: Use only information from the transcript. Document all mentioned medications with exact dosages, routes, and frequencies. Be concise and medically precise. Do not invent findings.`;
 
-// ════════════════════════════════════════════════════════════
-// COST TRACKING & MONITORING
-// ════════════════════════════════════════════════════════════
-
-// Claude Haiku 4.5 pricing (current)
+// Pricing/model constant kept for backward compatibility with anything reading
+// CLAUDE_COSTS directly — cost tracking itself now lives in claudeCostTracking.js
+// (checkRateLimit/checkCostLimit/trackCost/getCostStats/resetDailyCost, imported
+// above), used by both this dead function and the real path in aiPipeline.js.
 const CLAUDE_COSTS = {
-  input: 1.00 / 1_000_000,   // $1.00 per 1M input tokens
-  output: 5.00 / 1_000_000,  // $5.00 per 1M output tokens
-  model: 'claude-haiku-4-5-20251001'
+  ...MODEL_PRICING['claude-haiku-4-5-20251001'],
+  model: 'claude-haiku-4-5-20251001',
 };
 
-// Cost tracking (in-memory, resets on server restart)
-let dailyCost = 0;
-let totalCost = 0;
-let dailyCallCount = 0;
-let totalCallCount = 0;
-let lastResetDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-
-// Cost limits and alerts
-const DAILY_COST_LIMIT = parseFloat(process.env.CLAUDE_DAILY_LIMIT || '50.00');
-const DAILY_WARNING_THRESHOLD = DAILY_COST_LIMIT * 0.8; // 80% warning
-const ENABLE_COST_CAP = process.env.CLAUDE_ENFORCE_CAP === 'true';
-
-// Rate limiting (prevent accidental mass calls)
-const RATE_LIMIT_WINDOW_MS = 60000; // 1 minute
-const RATE_LIMIT_MAX_CALLS = parseInt(process.env.CLAUDE_RATE_LIMIT || '150'); // 150 calls/min max
-let recentCalls = [];
-
 /**
- * Check and reset daily cost if it's a new day
+ * Delegates to the real, tested transcript-cleanup implementation in
+ * aiPipelineHelpers.js (cleanTranscriptForClinicalPrompt) — kept as a thin wrapper
+ * here so nothing below has to change, rather than maintaining a second copy of
+ * the same filler/pleasantry/dedupe logic. See that function for the actual rules.
  */
-function checkDailyReset() {
-  const today = new Date().toISOString().split('T')[0];
-  if (today !== lastResetDate) {
-    console.log(`[CLAUDE-RESET] New day detected. Yesterday's cost: $${dailyCost.toFixed(4)} (${dailyCallCount} calls)`);
-    dailyCost = 0;
-    dailyCallCount = 0;
-    lastResetDate = today;
-  }
-}
-
-/**
- * Track cost for a Claude API call
- */
-async function trackCost(visitId, inputTokens, outputTokens, cacheCreationTokens = 0, cacheReadTokens = 0) {
-  checkDailyReset();
-  
-  // Calculate costs
-  const inputCost = inputTokens * CLAUDE_COSTS.input;
-  const outputCost = outputTokens * CLAUDE_COSTS.output;
-  const cacheCost = cacheCreationTokens * CLAUDE_COSTS.input; // Cache creation charged at input rate
-  // Cache reads are 90% cheaper, but let's be conservative and count them
-  const cacheReadCost = cacheReadTokens * (CLAUDE_COSTS.input * 0.1);
-  
-  const callCost = inputCost + outputCost + cacheCost + cacheReadCost;
-  
-  // Update counters
-  dailyCost += callCost;
-  totalCost += callCost;
-  dailyCallCount++;
-  totalCallCount++;
-  
-  // Log cost
-  console.log(
-    `[CLAUDE-COST] Visit ${visitId} | ` +
-    `Call: $${callCost.toFixed(4)} | ` +
-    `Daily: $${dailyCost.toFixed(4)} (${dailyCallCount} calls) | ` +
-    `Total: $${totalCost.toFixed(4)} (${totalCallCount} calls)`
-  );
-  
-  // Check for cost warnings/limits
-  if (dailyCost >= DAILY_COST_LIMIT) {
-    console.error(
-      `❌ CLAUDE DAILY LIMIT REACHED: $${dailyCost.toFixed(4)} >= $${DAILY_COST_LIMIT.toFixed(2)}\n` +
-      `   Today: ${dailyCallCount} calls\n` +
-      `   URGENT: Review usage immediately!`
-    );
-  } else if (dailyCost >= DAILY_WARNING_THRESHOLD) {
-    console.warn(
-      `⚠️  CLAUDE COST WARNING: $${dailyCost.toFixed(4)} (${(dailyCost/DAILY_COST_LIMIT*100).toFixed(0)}% of $${DAILY_COST_LIMIT.toFixed(2)} daily limit)\n` +
-      `   Calls today: ${dailyCallCount}\n` +
-      `   Remaining budget: $${(DAILY_COST_LIMIT - dailyCost).toFixed(4)}`
-    );
-  }
-  
-  // Store in database for persistence (async, don't block)
-  try {
-    await pool.query(
-      `INSERT INTO claude_usage_log (visit_id, input_tokens, output_tokens, 
-       cache_creation_tokens, cache_read_tokens, cost, model, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
-      [visitId, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens, callCost, resolveCanonicalAnthropicModel(CLAUDE_COSTS.model)]
-    ).catch(err => {
-      // Table might not exist yet - that's ok, just log to console
-      if (!err.message.includes('does not exist')) {
-        console.warn('[Claude] Failed to log usage to database:', err.message);
-      }
-    });
-  } catch {
-    // Silent fail - don't break note generation if logging fails
-  }
-}
-
-/**
- * Check rate limit to prevent accidental mass API calls
- */
-function checkRateLimit() {
-  const now = Date.now();
-  
-  // Remove calls older than the window
-  recentCalls = recentCalls.filter(timestamp => now - timestamp < RATE_LIMIT_WINDOW_MS);
-  
-  if (recentCalls.length >= RATE_LIMIT_MAX_CALLS) {
-    const oldestCall = Math.min(...recentCalls);
-    const waitMs = RATE_LIMIT_WINDOW_MS - (now - oldestCall);
-    throw new Error(
-      `Rate limit exceeded: ${recentCalls.length} calls in last minute. ` +
-      `Max: ${RATE_LIMIT_MAX_CALLS}/min. Wait ${Math.ceil(waitMs/1000)}s.`
-    );
-  }
-  
-  // Add current call
-  recentCalls.push(now);
-}
-
-/**
- * Check if daily cost limit would be exceeded
- */
-function checkCostLimit() {
-  if (ENABLE_COST_CAP && dailyCost >= DAILY_COST_LIMIT) {
-    throw new Error(
-      `Daily cost limit reached: $${dailyCost.toFixed(4)} >= $${DAILY_COST_LIMIT.toFixed(2)}. ` +
-      `Set CLAUDE_DAILY_LIMIT higher or disable with CLAUDE_ENFORCE_CAP=false.`
-    );
-  }
-}
-
-/**
- * Get current cost statistics
- */
-function getCostStats() {
-  checkDailyReset();
-  return {
-    daily: {
-      cost: parseFloat(dailyCost.toFixed(6)),
-      calls: dailyCallCount,
-      limit: DAILY_COST_LIMIT,
-      remaining: parseFloat((DAILY_COST_LIMIT - dailyCost).toFixed(6)),
-      percentUsed: parseFloat((dailyCost / DAILY_COST_LIMIT * 100).toFixed(2))
-    },
-    total: {
-      cost: parseFloat(totalCost.toFixed(6)),
-      calls: totalCallCount
-    },
-    limits: {
-      dailyLimit: DAILY_COST_LIMIT,
-      warningThreshold: DAILY_WARNING_THRESHOLD,
-      enforced: ENABLE_COST_CAP,
-      rateLimit: RATE_LIMIT_MAX_CALLS
-    },
-    model: CLAUDE_COSTS.model,
-    lastReset: lastResetDate
-  };
-}
-
-/**
- * Manually reset daily cost (for testing or manual resets)
- */
-function resetDailyCost() {
-  const yesterday = {
-    cost: dailyCost,
-    calls: dailyCallCount,
-    date: lastResetDate
-  };
-  
-  dailyCost = 0;
-  dailyCallCount = 0;
-  lastResetDate = new Date().toISOString().split('T')[0];
-  
-  console.log(
-    `[CLAUDE-RESET] Manual reset performed\n` +
-    `   Previous period: $${yesterday.cost.toFixed(4)} (${yesterday.calls} calls)\n` +
-    `   Date: ${yesterday.date}`
-  );
-  
-  return yesterday;
-}
-
-// Smart transcript preparation — keeps full content but removes filler
-// A 30-min visit transcript is ~6,000-10,000 chars (1,500-2,500 tokens)
-// Haiku can handle 200k context — sending full transcript is still very cheap
 function extractKeyMedicalInfo(transcript) {
   if (!transcript || transcript.length < 50) {
     return transcript;
   }
-
-  // Remove excessive whitespace/repeated filler words but keep all clinical content
-  const cleaned = transcript
-    .replace(/\b(um|uh|like|you know|so|basically|literally)\b/gi, '')
-    .replace(/\s{3,}/g, '  ')
-    .trim()
-
+  const cleaned = cleanTranscriptForClinicalPrompt(transcript);
   // Hard cap at 80,000 chars (~20,000 tokens) — well within Haiku's 200k context
   // A 30-min visit is ~8,000 chars. This cap only activates for 5+ hour recordings.
   return cleaned.substring(0, 80000);
 }
 
 /**
- * Generate medical notes from transcript using Claude Haiku
- * Cost optimization: ~97% reduction through:
- * - Using Haiku (cheapest model)
- * - Extracting key info only (reduces input tokens)
- * - Limiting output tokens to 512
- * - Caching system prompt
- * 
- * Safety features:
- * - Rate limiting (prevents accidental mass calls)
- * - Cost tracking (monitors daily spending)
- * - Cost caps (optional hard limit)
+ * ⚠ NOT CALLED IN PRODUCTION. The live note-generation path is generateAINote()
+ * in src/utils/aiPipeline.js, called from src/routes/visits.js — it always uses
+ * whatever model is selected in Admin Settings, with no auto-escalation (see the
+ * comment on callAnthropicForNote in aiPipeline.js for why that was removed).
+ * This function's cost tracking (trackCost/checkCostLimit/checkRateLimit below) is
+ * therefore also not exercised in production — the claude_usage_log table has no
+ * rows from real traffic. Kept for now since nothing currently imports it besides
+ * extractKeyMedicalInfo's tests; do not add new callers without first wiring the
+ * cost tracking into the real path in aiPipeline.js instead.
+ *
+ * Generate medical notes from transcript using Claude Haiku.
  */
 async function generateMedicalNotes(transcript, visitId) {
   try {
@@ -265,19 +91,16 @@ async function generateMedicalNotes(transcript, visitId) {
       throw costLimitError;
     }
     
-    // Extract key info (95% token reduction!)
     const keyInfo = extractKeyMedicalInfo(transcript);
-    
+
     const startTime = Date.now();
 
-    // Dynamic Model Tiering:
-    // Default to cost-efficient Haiku 4.5 ($1.00/M input).
-    // Automatically escalate to Claude 3.5 Sonnet for long, highly complex multi-morbidity encounters (>5,000 chars).
-    let activeModel = resolveCanonicalAnthropicModel(CLAUDE_COSTS.model);
-    if (keyInfo && keyInfo.length > 5000) {
-      activeModel = 'claude-sonnet-4-6';
-      console.log(`[Claude] High-complexity encounter detected (${keyInfo.length} chars) -> escalating to ${activeModel}`);
-    }
+    // No auto-escalation to a pricier model on transcript length — that used to
+    // silently switch long-but-simple visits to Sonnet regardless of what was
+    // configured. Removed to match the policy already enforced in the live path
+    // (see callAnthropicForNote in aiPipeline.js): model choice is never an
+    // implicit override, only an explicit Admin Settings selection.
+    const activeModel = resolveCanonicalAnthropicModel(CLAUDE_COSTS.model);
     const response = await anthropic.messages.create({
       model: activeModel,
       max_tokens: 1200, // Enough for a complete structured SOAP note with ICD-10 codes
@@ -302,7 +125,7 @@ async function generateMedicalNotes(transcript, visitId) {
     const cacheReadTokens = response.usage.cache_read_input_tokens || 0;
     
     // Track cost with enhanced metrics
-    await trackCost(visitId, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens);
+    await trackCost(visitId, activeModel, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens);
     
     // Enhanced logging
     const cacheInfo = cacheReadTokens > 0 ? ` | Cache hit: ${cacheReadTokens} tokens` : '';
@@ -346,5 +169,7 @@ module.exports = {
   generateBatch,
   getCostStats,
   resetDailyCost,
-  CLAUDE_COSTS
+  CLAUDE_COSTS,
+  /** exposed for tests only */
+  extractKeyMedicalInfo,
 };

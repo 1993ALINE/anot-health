@@ -584,7 +584,7 @@ function formatEncounterDateTime(visitDate, visitTime) {
 
 function isUnassignedPatient(v) {
   if (!v) {return false}
-  const name = String(v.patient_name || '').trim()
+  const name = String(v.patient_name || v.name || '').trim()
   return !name || name === 'Quick Dictation (Unassigned)' || name === 'Patient Encounter' || name === 'Unnamed Patient'
 }
 
@@ -920,6 +920,8 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
   // Real-time mobile activity & live sync state
   const [liveSyncConnected, setLiveSyncConnected] = useState(false)
   const [mobileActivityBanner, setMobileActivityBanner] = useState(null)
+  const [isStartingConsultation, setIsStartingConsultation] = useState(false)
+  const isStartingConsultationRef = useRef(false)
 
   // MediaRecorder & SpeechRecognition refs
   const mediaRecorderRef = useRef(null)
@@ -1427,6 +1429,11 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
   }
 
   const handleStartInstantDictation = async (customPatientId = null) => {
+    if (isStartingConsultationRef.current || activeVisit) {
+      return
+    }
+    isStartingConsultationRef.current = true
+    setIsStartingConsultation(true)
     try {
       const now = new Date()
       const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
@@ -1469,6 +1476,17 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
         patientAge = ''
       }
 
+      // Check if an existing patient already has this MRN (if not a temporary auto-generated one)
+      if (!patientId && !existingVisitId && patientMrn && !patientMrn.startsWith('TEMP-')) {
+        const matchByMrn = patientList.find((p) => p.mrn && p.mrn.toUpperCase() === patientMrn.toUpperCase())
+        if (matchByMrn) {
+          patientId = matchByMrn.id
+          if (!patientNameInput.trim()) {
+            patientName = matchByMrn.name
+          }
+        }
+      }
+
       // Create or ensure patient record in DB if new name is provided
       if (!patientId && !existingVisitId) {
         try {
@@ -1507,6 +1525,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
         patient_name: patientName,
         mrn: patientMrn,
         age: patientAge,
+        date_of_birth: patientDobInput || null,
         visit_date: getLocalDateStr(now),
         visit_time: timeStr,
         visit_type: dbVisitType,
@@ -1517,6 +1536,9 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
       await loadData()
     } catch (err) {
       showToast(err?.message || 'Failed to initialize consultation.', 'error')
+    } finally {
+      isStartingConsultationRef.current = false
+      setIsStartingConsultation(false)
     }
   }
 
@@ -1538,15 +1560,16 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
 
   const openEditPatientModal = (v) => {
     if (!v) {return}
+    const resolvedPatientId = v.patient_id || visits.find((x) => String(x.id) === String(v.id))?.patient_id || null
     const isUnassigned = isUnassignedPatient(v)
     setPatientFormData({
       visitId: v.id,
-      patientId: v.patient_id || null,
+      patientId: resolvedPatientId,
       name: isUnassigned ? '' : (v.patient_name || ''),
       age: (v.age && v.age !== 'Not specified') ? v.age : '',
       dob: v.date_of_birth || '',
       mrn: (v.mrn && !v.mrn.startsWith('TEMP-')) ? v.mrn : '',
-      selectedExistingId: v.patient_id ? String(v.patient_id) : '',
+      selectedExistingId: resolvedPatientId ? String(resolvedPatientId) : '',
     })
     setPatientModalTab('edit')
     setPatientModalOpen(true)
@@ -1563,6 +1586,15 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
         const chosen = patientList.find((p) => String(p.id) === String(selectedExistingId))
         if (!chosen) {return}
         await visitsAPI.updateVisit(visitId, { patient_id: chosen.id })
+
+        // Clean up temporary placeholder patient if the encounter was attached to one
+        if (patientId && String(patientId) !== String(chosen.id)) {
+          const oldP = patientList.find((p) => String(p.id) === String(patientId))
+          if (oldP && isUnassignedPatient(oldP)) {
+            patientsAPI.delete(patientId).catch(() => {})
+          }
+        }
+
         showToast(`Linked encounter to ${chosen.name}.`, 'success')
       } else {
         const cleanName = name.trim() || 'Patient Encounter'
@@ -1577,6 +1609,37 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
               date_of_birth: dob || null,
             })
           } catch {
+            const conflictPatient = patientList.find((p) => p.mrn && p.mrn.toUpperCase() === cleanMrn.toUpperCase())
+            if (conflictPatient) {
+              targetPatientId = conflictPatient.id
+              await visitsAPI.updateVisit(visitId, { patient_id: targetPatientId })
+              const oldP = patientList.find((p) => String(p.id) === String(patientId))
+              if (oldP && isUnassignedPatient(oldP) && String(oldP.id) !== String(targetPatientId)) {
+                patientsAPI.delete(oldP.id).catch(() => {})
+              }
+            } else {
+              const created = await patientsAPI.create({
+                name: cleanName,
+                mrn: cleanMrn,
+                date_of_birth: dob || null,
+              })
+              if (created?.patient?.id) {
+                const oldPatientId = targetPatientId
+                targetPatientId = created.patient.id
+                await visitsAPI.updateVisit(visitId, { patient_id: targetPatientId })
+                const oldP = patientList.find((p) => String(p.id) === String(oldPatientId))
+                if (oldP && isUnassignedPatient(oldP)) {
+                  patientsAPI.delete(oldPatientId).catch(() => {})
+                }
+              }
+            }
+          }
+        } else {
+          const existingWithMrn = patientList.find((p) => p.mrn && p.mrn.toUpperCase() === cleanMrn.toUpperCase())
+          if (existingWithMrn) {
+            targetPatientId = existingWithMrn.id
+            await visitsAPI.updateVisit(visitId, { patient_id: targetPatientId })
+          } else {
             const created = await patientsAPI.create({
               name: cleanName,
               mrn: cleanMrn,
@@ -1586,16 +1649,6 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
               targetPatientId = created.patient.id
               await visitsAPI.updateVisit(visitId, { patient_id: targetPatientId })
             }
-          }
-        } else {
-          const created = await patientsAPI.create({
-            name: cleanName,
-            mrn: cleanMrn,
-            date_of_birth: dob || null,
-          })
-          if (created?.patient?.id) {
-            targetPatientId = created.patient.id
-            await visitsAPI.updateVisit(visitId, { patient_id: targetPatientId })
           }
         }
         showToast('Patient details saved successfully.', 'success')
@@ -1611,9 +1664,11 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
           : null
         return {
           ...prev,
+          patient_id: patientModalTab === 'link' ? Number(selectedExistingId) : (targetPatientId || prev.patient_id),
           patient_name: chosen?.name || patientFormData.name.trim() || prev.patient_name,
           mrn: chosen?.mrn || patientFormData.mrn.trim() || prev.mrn,
           age: chosen?.age || patientFormData.age.trim() || prev.age,
+          date_of_birth: chosen?.date_of_birth || patientFormData.dob || prev.date_of_birth,
         }
       })
     } catch (err) {
@@ -1795,6 +1850,8 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
           const enriched = {
             id: currentActive.id,
             visit_id: currentActive.id,
+            patient_id: currentActive.patient_id,
+            date_of_birth: currentActive.date_of_birth || null,
             note_id: nRes?.note?.id,
             patient_name: currentActive.patient_name || personalInfo?.name || patientNameInput || 'Patient',
             mrn: currentActive.mrn || personalInfo?.mrn || 'Auto-generated',
@@ -1826,7 +1883,13 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
               if (nRes?.note?.id) {
                 await notesAPI.updateNote(nRes.note.id, refreshedNote).catch(() => {})
               }
-              setActiveDraftNote((prev) => (prev && prev.id === currentActive.id ? { ...prev, final_note: refreshedNote, ai_draft: refreshedNote } : prev))
+              setActiveDraftNote((prev) => (prev && prev.id === currentActive.id ? {
+                ...prev,
+                patient_id: currentActive.patient_id || prev.patient_id,
+                date_of_birth: currentActive.date_of_birth || prev.date_of_birth,
+                final_note: refreshedNote,
+                ai_draft: refreshedNote,
+              } : prev))
               setEditedNoteText(refreshedNote)
               if (dRes.ai_used === false) {
                 showToast('⚠ Note generation failed — note generated from template. Check Admin → Settings → Anthropic API key.', 'error')
@@ -2164,7 +2227,9 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
 
   const dateFilteredVisits = visits.filter((v) => {
     const vDate = normalizeVisitDate(v.visit_date)
-    return vDate === todayStr
+    if (scheduleDateFilter === 'today') return vDate === todayStr
+    if (scheduleDateFilter === 'yesterday') return vDate === yesterdayStr
+    return true // 'all'
   })
 
   // Sort reverse chronologically (newest first)
@@ -2452,8 +2517,9 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                       {/* Central Frosted Glassmorphic Orb with In-Orb Timer */}
                       <button
                         type="button"
-                        className="sm-halo-orb"
+                        className={`sm-halo-orb ${isStartingConsultation ? 'sm-halo-orb--starting' : ''}`}
                         onClick={() => handleStartInstantDictation()}
+                        disabled={isStartingConsultation}
                         title={`Click to start ambient consultation${patientNameInput ? ` for ${patientNameInput}` : ''}`}
                       >
                         <div className="sm-halo-orb__mic-icon">
@@ -2463,7 +2529,9 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                             <line x1="12" y1="19" x2="12" y2="22" />
                           </svg>
                         </div>
-                        <div className="sm-halo-orb__timer">READY</div>
+                        <div className="sm-halo-orb__timer">
+                          {isStartingConsultation ? 'STARTING...' : 'READY'}
+                        </div>
                       </button>
                     </div>
 
@@ -2500,6 +2568,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                       type="button"
                       className="sm-btn-hero-record sm-btn-hero-record--halo"
                       onClick={() => handleStartInstantDictation()}
+                      disabled={isStartingConsultation}
                     >
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
@@ -2507,7 +2576,9 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                         <line x1="12" y1="19" x2="12" y2="22" />
                       </svg>
                       <span>
-                        {patientNameInput ? `Start Recording for ${patientNameInput}` : 'Start Ambient Recording'}
+                        {isStartingConsultation
+                          ? 'Starting Recording...'
+                          : (patientNameInput ? `Start Recording for ${patientNameInput}` : 'Start Ambient Recording')}
                       </span>
                     </button>
                   </div>
@@ -3059,9 +3130,45 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                 </div>
               </div>
 
+              {/* Date Filter Tabs: Today / Yesterday / All */}
+              <div className="sm-date-filter-tabs">
+                <button
+                  type="button"
+                  className={`sm-date-filter-tab ${scheduleDateFilter === 'today' ? 'sm-date-filter-tab--active' : ''}`}
+                  onClick={() => {
+                    hasUserManuallySelectedDateTabRef.current = true
+                    setScheduleDateFilter('today')
+                  }}
+                >
+                  Today
+                </button>
+                <button
+                  type="button"
+                  className={`sm-date-filter-tab ${scheduleDateFilter === 'yesterday' ? 'sm-date-filter-tab--active' : ''}`}
+                  onClick={() => {
+                    hasUserManuallySelectedDateTabRef.current = true
+                    setScheduleDateFilter('yesterday')
+                  }}
+                >
+                  Yesterday
+                </button>
+                <button
+                  type="button"
+                  className={`sm-date-filter-tab ${scheduleDateFilter === 'all' ? 'sm-date-filter-tab--active' : ''}`}
+                  onClick={() => {
+                    hasUserManuallySelectedDateTabRef.current = true
+                    setScheduleDateFilter('all')
+                  }}
+                >
+                  All
+                </button>
+              </div>
+
               {/* Clean Today Schedule Action Bar */}
               <div className="sm-today-action-bar">
-                <span className="sm-today-action-label">Today's Schedule</span>
+                <span className="sm-today-action-label">
+                  {scheduleDateFilter === 'today' ? "Today's Schedule" : scheduleDateFilter === 'yesterday' ? "Yesterday's Schedule" : 'All Encounters'}
+                </span>
                 <button
                   type="button"
                   className="sm-btn-schedule-patient-link"
@@ -3072,6 +3179,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
                   <span>+ Schedule Patient</span>
                 </button>
               </div>
+
 
               {/* Combined Search Bar + Status Dropdown */}
               <div className="sm-side-controls-row">

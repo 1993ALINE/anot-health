@@ -91,7 +91,7 @@ const getVisitsByDate = async (req, res) => {
       { scope: 'by_date', date: localDate, count: result.rows.length }
     )
   } catch (err) {
-        sendHttpError(res, 500, err, { context: 'undefined', req })
+        sendHttpError(res, 500, err, { context: 'visitController.getVisitsByDate', req })
   }
 }
 
@@ -182,7 +182,7 @@ const getAllVisits = async (req, res) => {
       { scope: 'list', count: result.rows.length }
     )
   } catch (err) {
-        sendHttpError(res, 500, err, { context: 'undefined', req })
+        sendHttpError(res, 500, err, { context: 'visitController.getAllVisits', req })
   }
 }
 
@@ -281,7 +281,7 @@ const createVisit = async (req, res) => {
       { patient_id: pid, visit_type: visitTypeStr }
     )
   } catch (err) {
-        sendHttpError(res, 500, err, { context: 'undefined', req })
+        sendHttpError(res, 500, err, { context: 'visitController.createVisit', req })
   }
 }
 
@@ -367,7 +367,7 @@ const updateVisitStatus = async (req, res) => {
       { changes: { status: { from: current, to: status } } }
     )
   } catch (err) {
-        sendHttpError(res, 500, err, { context: 'undefined', req })
+        sendHttpError(res, 500, err, { context: 'visitController.updateVisitStatus', req })
   }
 }
 
@@ -461,7 +461,7 @@ const endVisit = async (req, res) => {
     }
 
   } catch (err) {
-    sendHttpError(res, 500, err, { context: 'undefined', req })
+    sendHttpError(res, 500, err, { context: 'visitController.endVisit', req })
   }
 }
 
@@ -556,7 +556,7 @@ const updateVisit = async (req, res) => {
       { updated_fields: ['visit_time', 'visit_type'] }
     )
   } catch (err) {
-        sendHttpError(res, 500, err, { context: 'undefined', req })
+        sendHttpError(res, 500, err, { context: 'visitController.updateVisit', req })
   }
 }
 
@@ -618,7 +618,7 @@ const deleteVisit = async (req, res) => {
 
     res.status(200).json({ message: 'Visit deleted.' })
   } catch (err) {
-        sendHttpError(res, 500, err, { context: 'undefined', req })
+        sendHttpError(res, 500, err, { context: 'visitController.deleteVisit', req })
   }
 }
 
@@ -676,7 +676,7 @@ const getVisitHistory = async (req, res) => {
       { scope: 'history', count: result.rows.length }
     )
   } catch (err) {
-        sendHttpError(res, 500, err, { context: 'undefined', req })
+        sendHttpError(res, 500, err, { context: 'visitController.getVisitHistory', req })
   }
 }
 
@@ -753,7 +753,7 @@ const lockNote = async (req, res) => {
     if (!result.rows[0]) return res.status(404).json({ error: 'Visit not found.' })
     res.status(200).json({ visit: result.rows[0] })
   } catch (err) {
-        sendHttpError(res, 500, err, { context: 'undefined', req })
+        sendHttpError(res, 500, err, { context: 'visitController.lockNote', req })
   }
 }
 

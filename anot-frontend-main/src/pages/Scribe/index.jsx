@@ -23,6 +23,7 @@ import {
   getPatientVisitTotal,
   visitEncounterShortLabel,
   visitEncounterTabLabel,
+  visitHasAudio,
 } from '../../utils/visitEncounterUtils'
 import { getCurrentUser } from '../../utils/getCurrentUser'
 import { useSessionTimeout } from '../../utils/useSessionTimeout'
@@ -143,7 +144,8 @@ function fmtTime(t) {
   if (!t) {return ''}
   const [h, m] = t.split(':')
   const hour = parseInt(h)
-  return `${hour > 12 ? hour - 12 : hour === 0 ? 12 : hour}:${m} ${hour >= 12 ? 'PM' : 'AM'}`
+  const h12 = hour % 12 || 12
+  return `${h12}:${m} ${hour >= 12 ? 'PM' : 'AM'}`
 }
 
 // Parse transcription stored as JSON array or plain string
@@ -1664,6 +1666,8 @@ function Scribe() {
             ) : null}
             <PortalAudioPlayer
               visitId={selectedRec?.id}
+              hasAudio={visitHasAudio(selectedRec)}
+              audioFile={selectedRec?.audio_file}
               durationSecs={selectedRec?.duration_seconds || 0}
               onTabChange={handleAudioTabChange}
               compact

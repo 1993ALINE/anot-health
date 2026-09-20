@@ -186,18 +186,14 @@ async function bootstrap() {
   // browser reports those as CORS failures instead of the real status.
 
   const allowedOrigins = process.env.CORS_ORIGINS
-    ? process.env.CORS_ORIGINS.split(',').map(origin => origin.trim())
+    ? process.env.CORS_ORIGINS.split(',').map(origin => origin.trim()).filter(Boolean)
     : [
         'http://localhost:3000',
         'http://localhost:5173',
+        'http://127.0.0.1:3000',
+        'http://127.0.0.1:5173',
         process.env.FRONTEND_URL,
       ].filter(Boolean)
-
-  if (process.env.CORS_ORIGINS) {
-    for (const origin of process.env.CORS_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean)) {
-      if (!allowedOrigins.includes(origin)) allowedOrigins.push(origin)
-    }
-  }
 
   const corsOptions = {
     origin(origin, callback) {

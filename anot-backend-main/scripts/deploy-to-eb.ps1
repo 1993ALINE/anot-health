@@ -384,17 +384,19 @@ if (-not (Test-Path $ZipPath)) {
 $zipSizeKb = [math]::Round((Get-Item $ZipPath).Length / 1KB, 1)
 Write-Ok "Created $ZipFileName ($zipSizeKb KB)"
 
-# Verify nginx + platform configs are inside the artifact (413 fix depends on these).
-Write-Step 'Verifying deployment zip includes nginx body-size configs...'
+# Verify nginx/platform configs and the ffmpeg install hook are inside the artifact
+# (the 413 fix and Deepgram-cost audio preprocessing both depend on these).
+Write-Step 'Verifying deployment zip includes required platform files...'
 $zipList = & $tarExe -t -f $ZipPath 2>&1
-$requiredEntries = @(
-    '.ebextensions/01_nginx_bodysize.config',
-    '.platform/nginx/conf.d/01_client_max_body_size.conf'
-)
-foreach ($entry in $requiredEntries) {
+$requiredEntries = @{
+    '.ebextensions/01_nginx_bodysize.config'                = 'nginx 413 fix'
+    '.platform/nginx/conf.d/01_client_max_body_size.conf'   = 'nginx 413 fix'
+    '.platform/hooks/prebuild/00_install_ffmpeg.sh'          = 'ffmpeg audio preprocessing (Deepgram cost savings)'
+}
+foreach ($entry in $requiredEntries.Keys) {
     $found = @($zipList | Where-Object { $_ -eq $entry -or $_ -like "*$entry" }).Count -gt 0
     if (-not $found) {
-        throw "Deployment zip missing required entry: $entry (nginx 413 fix will not deploy)."
+        throw "Deployment zip missing required entry: $entry ($($requiredEntries[$entry]) will not deploy)."
     }
     Write-Ok "Zip contains $entry"
 }

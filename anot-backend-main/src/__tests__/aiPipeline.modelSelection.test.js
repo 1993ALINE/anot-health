@@ -18,6 +18,18 @@ jest.mock('../services/aiSettings', () => {
   }
 })
 
+// This suite tests model selection, not cost tracking — mock it out so trackCost's
+// pool.query never fires (the real pool would otherwise hang trying to reach a
+// database in a unit test with no DB available).
+jest.mock('../services/claudeCostTracking', () => ({
+  checkRateLimit: jest.fn(),
+  checkCostLimit: jest.fn(),
+  trackCost: jest.fn().mockResolvedValue(undefined),
+  getCostStats: jest.fn(),
+  resetDailyCost: jest.fn(),
+  MODEL_PRICING: {},
+}))
+
 const { loadAiSettings } = require('../services/aiSettings')
 const { generateAINote } = require('../utils/aiPipeline')
 

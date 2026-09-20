@@ -249,7 +249,7 @@ router.post('/:visitId/append', protect, restrict('clinician'), upload.single('a
   }
 })
 
-router.get('/:visitId/count', protect, restrict('clinician', 'scribe', 'qps'), async (req, res) => {
+router.get('/:visitId/count', protect, restrict('clinician', 'scribe', 'qps', 'admin', 'super_admin'), async (req, res) => {
   try {
     const visit = await getVisitForUser(req.params.visitId, req.user)
     if (!visit) return res.status(404).json({ error: 'Visit not found.' })
@@ -263,7 +263,7 @@ router.get('/:visitId/count', protect, restrict('clinician', 'scribe', 'qps'), a
   }
 })
 
-router.get('/:visitId', protect, restrict('clinician', 'scribe', 'qps'), async (req, res) => {
+router.get('/:visitId', protect, restrict('clinician', 'scribe', 'qps', 'admin', 'super_admin'), async (req, res) => {
   try {
     const { visitId } = req.params
     const index = parseInt(req.query.index || '0')

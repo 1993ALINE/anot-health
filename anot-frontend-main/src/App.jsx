@@ -4,6 +4,15 @@ import Login from './pages/Login/index'
 import { authAPI } from './services/api'
 import { hasValidSession, getStoredUserRaw, setSession } from './utils/sessionAuth'
 import { getCurrentUser } from './utils/getCurrentUser'
+import { dashboardPathForRole, roleMatchesPortal } from './auth/dashboardPaths'
+import { applyBrandingToDocument, getCachedBranding, refreshBranding } from './services/branding'
+import { SplashGate } from './splash/SplashGate'
+import { useReleaseSplash } from './splash/useReleaseSplash'
+import {
+  startOnlineListener,
+  stopOnlineListener,
+  uploadQueuedAudio,
+} from './utils/offlineSyncManager'
 
 // Code-split each portal so the initial load only ships the login + shell.
 // Each portal is a large bundle (recorder, charts, editors) only needed once
@@ -20,15 +29,6 @@ function PortalLoading() {
     </div>
   )
 }
-import { dashboardPathForRole, roleMatchesPortal } from './auth/dashboardPaths'
-import { applyBrandingToDocument, getCachedBranding, refreshBranding } from './services/branding'
-import { SplashGate } from './splash/SplashGate'
-import { useReleaseSplash } from './splash/useReleaseSplash'
-import {
-  startOnlineListener,
-  stopOnlineListener,
-  uploadQueuedAudio,
-} from './utils/offlineSyncManager'
 
 /** `/` → dashboard if already signed in, otherwise login. */
 function RootHome() {

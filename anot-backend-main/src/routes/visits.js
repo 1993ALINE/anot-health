@@ -228,7 +228,7 @@ async function generateDraft(req, res) {
       mrn: row.mrn,
       visit_type: row.visit_type,
       visit_date: row.visit_date,
-    }, templateSections)
+    }, templateSections, id)
     let aiUsed = true
     if (!aiDraft || aiDraft === AI_DRAFT_UNAVAILABLE) {
       aiUsed = false

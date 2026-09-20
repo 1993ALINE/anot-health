@@ -79,3 +79,5 @@ CLEANUP_TASKS.md
 
 # Local Claude Code tool config (machine/session-specific)
 .claude/
+setup-local-db.ps1
+qa-load-test/

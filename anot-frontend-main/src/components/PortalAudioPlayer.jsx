@@ -6,19 +6,22 @@ import { useRenderRateWarning } from '../utils/useRenderRateWarning'
 const SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 2]
 
 function readDuration(audio) {
-  const dur = audio.duration
+  const dur = audio?.duration
   return dur && Number.isFinite(dur) && dur > 0 ? dur : 0
 }
 
-/** Wait for loadedmetadata; seek trick for formats (e.g. webm) with missing duration. */
-function waitForAudioDuration(audio) {
+/** Wait for loadedmetadata; seek trick for formats (e.g. webm) with missing duration headers. Includes 2.5s safety timeout. */
+function waitForAudioDuration(audio, fallbackSecs = 0) {
   return new Promise((resolve) => {
     let settled = false
+    let timeoutId = null
+
     const finish = (dur) => {
-      if (settled) {return}
+      if (settled) { return }
       settled = true
+      if (timeoutId) { clearTimeout(timeoutId) }
       cleanup()
-      resolve(dur > 0 ? dur : 0)
+      resolve(dur > 0 ? dur : (fallbackSecs > 0 ? fallbackSecs : 0))
     }
 
     const tryRead = () => {
@@ -31,7 +34,7 @@ function waitForAudioDuration(audio) {
     }
 
     const onMeta = () => {
-      if (tryRead()) {return}
+      if (tryRead()) { return }
       try {
         audio.currentTime = 1e101
       } catch {
@@ -60,24 +63,52 @@ function waitForAudioDuration(audio) {
       audio.removeEventListener('error', onError)
     }
 
-    if (tryRead()) {return}
+    if (tryRead()) { return }
 
     audio.addEventListener('loadedmetadata', onMeta)
     audio.addEventListener('durationchange', onMeta)
     audio.addEventListener('seeked', onSeeked)
     audio.addEventListener('error', onError, { once: true })
-    audio.load()
+
+    // Safety timeout: never hang forever on streams where seeked does not fire
+    timeoutId = setTimeout(() => {
+      finish(readDuration(audio) || fallbackSecs || 0)
+    }, 2500)
+
+    try {
+      audio.load()
+    } catch {
+      finish(0)
+    }
   })
 }
 
 const PROGRESS_UI_MIN_MS = 250
 
-function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = true }) {
+function isExplicitNoAudio(hasAudio, audioFile) {
+  if (hasAudio === false) { return true }
+  if (audioFile !== undefined && (audioFile === null || audioFile === '' || audioFile === '[]')) {
+    return true
+  }
+  return false
+}
+
+function PortalAudioPlayer({
+  visitId,
+  durationSecs = 0,
+  onTabChange,
+  compact = true,
+  hasAudio,
+  audioFile,
+}) {
   useRenderRateWarning('PortalAudioPlayer')
 
-  const [count, setCount] = useState(1)
+  const explicitlyEmpty = !visitId || isExplicitNoAudio(hasAudio, audioFile)
+
+  const [count, setCount] = useState(() => (explicitlyEmpty ? 0 : null))
   const [activeIdx, setActiveIdx] = useState(0)
-  const [status, setStatus] = useState('loading')
+  const [status, setStatus] = useState(() => (explicitlyEmpty ? 'empty' : 'loading'))
+  const [errorMessage, setErrorMessage] = useState('')
   const [isPlaying, setPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -85,76 +116,122 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
   const [playbackRate, setPlaybackRate] = useState(1)
   const [, setDurations] = useState({})
   const [scrubHover, setScrubHover] = useState(null)
+  const [reloadTrigger, setReloadTrigger] = useState(0)
 
   const audioRef = useRef(null)
   const blobUrlsRef = useRef({})
   const durationsRef = useRef({})
   const playbackRateRef = useRef(playbackRate)
-  const visitIdRef = useRef(visitId)
+  const activeIdxRef = useRef(activeIdx)
   const lastProgressUiRef = useRef(0)
   const lastProgressSecRef = useRef(-1)
 
   useEffect(() => {
-    visitIdRef.current = visitId
-  }, [visitId])
+    activeIdxRef.current = activeIdx
+  }, [activeIdx])
 
   const storeDuration = useCallback((idx, rawDuration) => {
-    if (!rawDuration || !Number.isFinite(rawDuration) || rawDuration <= 0) {return}
+    if (!rawDuration || !Number.isFinite(rawDuration) || rawDuration <= 0) { return }
     const secs = Math.floor(rawDuration)
     durationsRef.current[idx] = secs
     setDurations((prev) => ({ ...prev, [idx]: secs }))
   }, [])
 
-  const resolvedStatus = visitId ? status : 'error'
-
-  const [reloadTrigger, setReloadTrigger] = useState(0)
-
-  const fetchBlobUrl = useCallback(async (idx) => {
-    if (blobUrlsRef.current[idx]) {return blobUrlsRef.current[idx]}
+  const fetchBlobUrl = useCallback(async (targetVisitId, idx) => {
+    const cacheKey = `${targetVisitId}_${idx}`
+    if (blobUrlsRef.current[cacheKey]) {
+      return blobUrlsRef.current[cacheKey]
+    }
 
     try {
-      const blob = await audioAPI.getBlob(visitIdRef.current, idx)
-      if (!blob?.size) {throw new Error('empty')}
+      const blob = await audioAPI.getBlob(targetVisitId, idx)
+      if (!blob?.size) {
+        throw Object.assign(new Error('Recording blob is empty'), { status: 404 })
+      }
 
       const url = URL.createObjectURL(blob)
-      blobUrlsRef.current[idx] = url
+      blobUrlsRef.current[cacheKey] = url
       return url
     } catch (err) {
-      delete blobUrlsRef.current[idx]
+      delete blobUrlsRef.current[cacheKey]
       throw err
     }
   }, [])
 
-  // Recording count only on visit change or reload.
+  // Check audio availability and recording count on visit change or reload.
   useEffect(() => {
     if (!visitId) {
+      setStatus('empty')
+      setErrorMessage('')
+      setCount(0)
+      return
+    }
+
+    if (isExplicitNoAudio(hasAudio, audioFile)) {
+      setStatus('empty')
+      setErrorMessage('')
+      setCount(0)
+      setDuration(0)
+      setCurrentTime(0)
+      setProgress(0)
       return
     }
 
     let cancelled = false
 
+    // Revoke old blob URLs when visit changes or reloads
     Object.values(blobUrlsRef.current).forEach((url) => URL.revokeObjectURL(url))
     blobUrlsRef.current = {}
+    durationsRef.current = {}
+    setDurations({})
+    setActiveIdx(0)
+    activeIdxRef.current = 0
+    setStatus('loading')
+    setErrorMessage('')
 
     audioAPI.getCount(visitId)
       .then((d) => {
-        if (!cancelled && d.count > 0) {
-          setCount(d.count)
+        if (cancelled) { return }
+        const recCount = typeof d?.count === 'number' ? d.count : 0
+        if (recCount <= 0) {
+          setCount(0)
+          setStatus('empty')
+          setErrorMessage('')
+          setDuration(0)
+        } else {
+          setCount(recCount)
         }
       })
-      .catch(() => {})
+      .catch((err) => {
+        if (cancelled) { return }
+        if (err?.status === 404) {
+          setCount(0)
+          setStatus('empty')
+          setErrorMessage('')
+        } else {
+          console.warn(`[PortalAudioPlayer] Failed to get recording count for visit ${visitId}:`, err?.message)
+          setCount(0)
+          setStatus('error')
+          setErrorMessage('Audio unavailable')
+        }
+      })
 
     return () => {
       cancelled = true
       Object.values(blobUrlsRef.current).forEach((url) => URL.revokeObjectURL(url))
       blobUrlsRef.current = {}
     }
-  }, [visitId, reloadTrigger])
+  }, [visitId, hasAudio, audioFile, reloadTrigger])
 
-  // Load active recording on tab switch: fetch blob, wait for metadata, then ready.
+  // Load active recording on tab switch or when count confirmed > 0
   useEffect(() => {
     const audio = audioRef.current
-    if (!audio || !visitId) {return}
+    if (!audio || !visitId || count === null || count <= 0 || isExplicitNoAudio(hasAudio, audioFile)) {
+      if ((count === 0 || isExplicitNoAudio(hasAudio, audioFile)) && visitId) {
+        setStatus((prev) => (prev !== 'error' ? 'empty' : prev))
+      }
+      return
+    }
 
     let cancelled = false
 
@@ -165,19 +242,20 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
     audio.currentTime = 0
     setDuration(0)
     setStatus('loading')
+    setErrorMessage('')
 
     ;(async () => {
       try {
-        const url = await fetchBlobUrl(activeIdx)
-        if (cancelled) {return}
+        const url = await fetchBlobUrl(visitId, activeIdx)
+        if (cancelled) { return }
 
         audio.pause()
         audio.currentTime = 0
         audio.playbackRate = playbackRateRef.current
         audio.src = url
 
-        let dur = await waitForAudioDuration(audio)
-        if (cancelled) {return}
+        let dur = await waitForAudioDuration(audio, durationSecs)
+        if (cancelled) { return }
 
         if (dur <= 0 && activeIdx === 0 && durationSecs > 0) {
           dur = durationSecs
@@ -194,7 +272,24 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
         setStatus('ready')
       } catch (loadErr) {
         console.warn(`[PortalAudioPlayer] Failed to load recording ${activeIdx + 1} for visit ${visitId}:`, loadErr?.message)
-        if (!cancelled) {setStatus('error')}
+        if (cancelled) { return }
+
+        const errStatus = loadErr?.status || (loadErr?.message?.includes('404') ? 404 : null)
+        const errMsg = loadErr?.message || ''
+
+        if (errStatus === 404 && (errMsg.includes('No audio') || errMsg.includes('empty'))) {
+          setStatus('empty')
+          setErrorMessage('')
+        } else if (errStatus === 403) {
+          setStatus('error')
+          setErrorMessage('Access restricted')
+        } else if (errStatus === 404) {
+          setStatus('error')
+          setErrorMessage('Audio not found in storage')
+        } else {
+          setStatus('error')
+          setErrorMessage('Audio unavailable')
+        }
       }
     })()
 
@@ -202,16 +297,16 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
       cancelled = true
       audio.pause()
     }
-  }, [activeIdx, visitId, durationSecs, fetchBlobUrl, storeDuration, reloadTrigger])
+  }, [activeIdx, visitId, count, durationSecs, hasAudio, audioFile, fetchBlobUrl, storeDuration, reloadTrigger])
 
   // Playback events on the single main audio element.
   useEffect(() => {
     const audio = audioRef.current
-    if (!audio) {return}
+    if (!audio) { return }
 
     const onTimeUpdate = () => {
       const dur = audio.duration
-      if (!dur || !Number.isFinite(dur) || dur <= 0) {return}
+      if (!dur || !Number.isFinite(dur) || dur <= 0) { return }
       const ct = audio.currentTime
       const now = performance.now()
       const sec = Math.floor(ct)
@@ -236,23 +331,33 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
       }
     }
 
+    const onError = () => {
+      const code = audio.error?.code
+      console.warn('[PortalAudioPlayer] Audio element playback error code:', code)
+      setPlaying(false)
+      setStatus('error')
+      setErrorMessage('Playback error')
+    }
+
     audio.addEventListener('timeupdate', onTimeUpdate)
     audio.addEventListener('ended', onEnded)
+    audio.addEventListener('error', onError)
     return () => {
       audio.removeEventListener('timeupdate', onTimeUpdate)
       audio.removeEventListener('ended', onEnded)
+      audio.removeEventListener('error', onError)
     }
   }, [])
 
   useEffect(() => {
     playbackRateRef.current = playbackRate
-    if (audioRef.current) {audioRef.current.playbackRate = playbackRate}
+    if (audioRef.current) { audioRef.current.playbackRate = playbackRate }
   }, [playbackRate])
 
   const handleTabChange = (i) => {
-    if (i === activeIdx) {return}
+    if (i === activeIdx) { return }
     const audio = audioRef.current
-    if (audio) {audio.pause()}
+    if (audio) { audio.pause() }
     setPlaying(false)
     setActiveIdx(i)
     onTabChange?.(i)
@@ -260,7 +365,7 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
 
   const toggle = () => {
     const audio = audioRef.current
-    if (!audio || resolvedStatus !== 'ready') {return}
+    if (!audio || status !== 'ready') { return }
     if (isPlaying) {
       audio.pause()
       setPlaying(false)
@@ -271,9 +376,9 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
 
   const skip = (secs) => {
     const audio = audioRef.current
-    if (!audio || resolvedStatus !== 'ready') {return}
+    if (!audio || status !== 'ready') { return }
     const dur = audio.duration
-    if (!dur || !Number.isFinite(dur) || dur <= 0) {return}
+    if (!dur || !Number.isFinite(dur) || dur <= 0) { return }
     const t = Math.max(0, Math.min(dur, audio.currentTime + secs))
     audio.currentTime = t
     setProgress((t / dur) * 100)
@@ -282,9 +387,9 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
 
   const seekFromClientX = (trackEl, clientX) => {
     const audio = audioRef.current
-    if (!audio || !trackEl) {return null}
+    if (!audio || !trackEl) { return null }
     const dur = audio.duration
-    if (!dur || !Number.isFinite(dur) || dur <= 0) {return null}
+    if (!dur || !Number.isFinite(dur) || dur <= 0) { return null }
     const rect = trackEl.getBoundingClientRect()
     const width = rect.width || 1
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / width))
@@ -293,9 +398,9 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
 
   const seek = (e) => {
     const audio = audioRef.current
-    if (!audio || resolvedStatus !== 'ready') {return}
+    if (!audio || status !== 'ready') { return }
     const hit = seekFromClientX(e.currentTarget, e.clientX)
-    if (!hit) {return}
+    if (!hit) { return }
     audio.currentTime = hit.time
     setProgress(hit.pct)
     setCurrentTime(hit.time)
@@ -303,11 +408,11 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
 
   const seekFromTouch = (e) => {
     const audio = audioRef.current
-    if (!audio || resolvedStatus !== 'ready') {return}
+    if (!audio || status !== 'ready') { return }
     const touch = e.changedTouches?.[0] || e.touches?.[0]
-    if (!touch) {return}
+    if (!touch) { return }
     const hit = seekFromClientX(e.currentTarget, touch.clientX)
-    if (!hit) {return}
+    if (!hit) { return }
     e.preventDefault()
     audio.currentTime = hit.time
     setProgress(hit.pct)
@@ -315,9 +420,9 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
   }
 
   const handleProgressMouseMove = (e) => {
-    if (resolvedStatus !== 'ready') {return}
+    if (status !== 'ready') { return }
     const hit = seekFromClientX(e.currentTarget, e.clientX)
-    if (!hit) {return}
+    if (!hit) { return }
     setScrubHover({ time: hit.time, pct: hit.pct })
   }
 
@@ -326,10 +431,10 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
   const onSpeedChange = (e) => {
     const rate = parseFloat(e.target.value, 10)
     setPlaybackRate(rate)
-    if (audioRef.current) {audioRef.current.playbackRate = rate}
+    if (audioRef.current) { audioRef.current.playbackRate = rate }
   }
 
-  const canPlay = resolvedStatus === 'ready'
+  const canPlay = status === 'ready'
   const displayCurrent = fmtSecsAudio(Math.floor(currentTime))
   const displayTotal = duration > 0 ? fmtSecsAudio(duration) : '--:--'
 
@@ -352,20 +457,34 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
           </div>
         ) : null}
         <span className="sf-audio-bar__label">
-          🎙 Recording {activeIdx + 1}
-          {count > 1 ? ` of ${count}` : ''}
+          {status === 'empty' ? (
+            '🎙 No audio recorded for this encounter'
+          ) : (
+            <>
+              🎙 Recording {activeIdx + 1}
+              {count > 1 ? ` of ${count}` : ''}
+            </>
+          )}
         </span>
-        {resolvedStatus === 'loading' ? <span className="sf-audio-bar__pill">Loading…</span> : null}
-        {resolvedStatus === 'ready' ? <span className="sf-audio-bar__pill sf-audio-bar__pill--ok">Ready</span> : null}
-        {resolvedStatus === 'error' ? (
+        {status === 'empty' ? (
+          <span
+            className="sf-audio-bar__pill"
+            style={{ background: '#F1F5F9', color: '#64748B', border: '1px solid #E2E8F0', fontWeight: 500 }}
+          >
+            No recording
+          </span>
+        ) : null}
+        {status === 'loading' ? <span className="sf-audio-bar__pill">Loading…</span> : null}
+        {status === 'ready' ? <span className="sf-audio-bar__pill sf-audio-bar__pill--ok">Ready</span> : null}
+        {status === 'error' ? (
           <button
             type="button"
             className="sf-audio-bar__pill sf-audio-bar__pill--error"
             style={{ cursor: 'pointer', border: 'none', background: '#FEE2E2', color: '#991B1B', fontWeight: 600 }}
             onClick={() => setReloadTrigger((t) => t + 1)}
-            title="Click to retry loading audio recording"
+            title={errorMessage || 'Click to retry loading audio recording'}
           >
-            Audio unavailable · ⟳ Retry
+            {errorMessage ? `${errorMessage} · ⟳ Retry` : 'Audio unavailable · ⟳ Retry'}
           </button>
         ) : null}
         <span className="sf-audio-timer" aria-live="polite">
@@ -378,7 +497,7 @@ function PortalAudioPlayer({ visitId, durationSecs = 0, onTabChange, compact = t
             −5s
           </button>
           <button type="button" className="sf-play-btn" onClick={toggle} disabled={!canPlay} aria-label={isPlaying ? 'Pause' : 'Play'}>
-            {resolvedStatus === 'loading' ? '⏳' : isPlaying ? '⏸' : '▶'}
+            {status === 'loading' ? '⏳' : isPlaying ? '⏸' : '▶'}
           </button>
           <button type="button" className="sf-skip-btn sf-skip-btn--fwd" onClick={() => skip(5)} disabled={!canPlay}>
             +5s

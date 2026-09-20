@@ -5,6 +5,7 @@ const MAX_RETRIES = 5
 const BASE_BACKOFF_MS = 1000
 
 let onlineListener = null
+let offlineListener = null
 let swMessageListener = null
 let syncing = false
 let onUploadSuccess = null
@@ -63,6 +64,7 @@ export function startOnlineListener(onOnline) {
   window.addEventListener('online', handleOnline)
   window.addEventListener('offline', handleOffline)
   onlineListener = handleOnline
+  offlineListener = handleOffline
 
   if ('serviceWorker' in navigator) {
     swMessageListener = (event) => {
@@ -80,6 +82,10 @@ export function stopOnlineListener() {
   if (onlineListener) {
     window.removeEventListener('online', onlineListener)
     onlineListener = null
+  }
+  if (offlineListener) {
+    window.removeEventListener('offline', offlineListener)
+    offlineListener = null
   }
   if (swMessageListener && 'serviceWorker' in navigator) {
     navigator.serviceWorker.removeEventListener('message', swMessageListener)

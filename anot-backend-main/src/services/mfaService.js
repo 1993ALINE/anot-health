@@ -1,4 +1,4 @@
-﻿const crypto = require('crypto')
+const crypto = require('crypto')
 const { sendMfaEmail, sendMfaSms } = require('./mfaDelivery')
 
 const CODE_TTL_MS = 10 * 60 * 1000
@@ -9,8 +9,8 @@ const PHI_ROLES = new Set(['clinician', 'scribe', 'qps', 'super_admin', 'admin']
 function isMfaDisabled() {
   const raw = process.env.MFA_DISABLED
   const disabled = String(raw || '').trim().toLowerCase() === 'true'
-  if (!disabled) {
-    console.log('[mfaService.isMfaDisabled] MFA_DISABLED:', raw, '→ gates active')
+  if (disabled) {
+    console.log('[mfaService.isMfaDisabled] MFA_DISABLED=true — all MFA gates bypassed')
   }
   return disabled
 }

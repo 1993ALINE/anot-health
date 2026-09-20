@@ -43,10 +43,6 @@ function shouldSkipApiRateLimit(req) {
   const path = (req.path || '').split('?')[0]
   if (PUBLIC_API_PATHS.has(path)) { return true }
   if (path.startsWith('/webhooks')) { return true }
-  // Skip aggressive rate limiting for authenticated user requests
-  if (req.cookies?.session_token || req.headers?.authorization || req.headers?.['x-csrf-token']) {
-    return true
-  }
   return false
 }
 

@@ -11,6 +11,7 @@ import { useSidebar, Overlay, PortalTopbar, usePortalDrawerMode, useSidebarOffCa
 import ErrorBoundary, { PortalCrashFallback } from '../../components/ErrorBoundary'
 import { getCurrentUser } from '../../utils/getCurrentUser'
 import { useSessionTimeout } from '../../utils/useSessionTimeout'
+import { visitHasAudio } from '../../utils/visitEncounterUtils'
 import './qps.css'
 import '../portal-sidebar-indigo.css'
 import '../portalErrorBoundary.css'
@@ -774,6 +775,8 @@ function QPS() {
           <div className="sf-note-workspace__top">
             <PortalAudioPlayer
               visitId={selectedNote?.visit_id}
+              hasAudio={visitHasAudio(selectedNote)}
+              audioFile={selectedNote?.audio_file}
               durationSecs={selectedNote?.duration_seconds || 0}
               compact
             />

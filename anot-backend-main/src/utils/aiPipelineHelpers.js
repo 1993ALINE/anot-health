@@ -4,15 +4,33 @@ const { processAudioForTranscription, unlinkTempPaths } = require('../services/a
 const { transcribeFile } = require('../services/aiTranscriptionService')
 const { downloadAudioToTemp, dbPathToKey } = require('../services/s3Storage')
 
+// Whole-line pleasantries with zero clinical content. Matched only when a line's
+// entire text (after the "Speaker N:" label) equals one of these — never a partial
+// match — so a line that mixes small talk with clinical content is never touched.
+// e.g. "Speaker 0: How are you doing today?" is dropped; "Speaker 0: How are you
+// doing today, any more chest pain?" is kept in full.
+const PURE_PLEASANTRY_LINES = new Set([
+  'hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening',
+  'how are you', 'how are you doing', 'how are you doing today', 'how are you today',
+  "how's it going", 'nice to see you', 'good to see you',
+  'thank you', 'thanks', 'thank you so much', 'okay', 'ok', 'alright', 'all right',
+  'sure', 'yeah', 'yep', 'yes', 'no', 'mm-hmm', 'uh-huh', 'right',
+  'take care', 'have a good day', 'have a great day', 'see you next time',
+  'see you soon', 'bye', 'goodbye', 'bye-bye',
+])
+
 /**
  * Strips non-clinical conversational filler and acoustic noise tags from transcripts
- * before passing to Claude. Reduces input token consumption by 15-20% while sharpening
- * LLM clinical attention on symptoms, vitals, exam findings, and orders without altering
- * any medical facts, diagnoses, medications, or dosages.
+ * before passing to Claude. Reduces input token consumption while sharpening LLM
+ * clinical attention on symptoms, vitals, exam findings, and orders — without
+ * altering any medical facts, diagnoses, medications, or dosages.
  */
 function cleanTranscriptForClinicalPrompt(transcript) {
   if (!transcript || typeof transcript !== 'string') return ''
-  return transcript
+
+  // Steps 1-4: original whole-string cleanup (noise tags, hesitation fillers,
+  // repeated-tag collapsing, whitespace normalization).
+  const stringCleaned = transcript
     // 1. Remove acoustic noise & non-verbal artifact tags
     .replace(/\[(?:laughter|applause|music|groan|sigh|cough|throat-clearing|snicker)\]/gi, '')
     // 2. Remove verbal hesitation fillers (um, uh, erm, er) at word boundaries
@@ -26,6 +44,45 @@ function cleanTranscriptForClinicalPrompt(transcript) {
     .replace(/[ \t]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
+
+  // Steps 5-7 operate line by line, since Deepgram's diarized "Speaker N:" text is
+  // one utterance per line (see extractTranscriptsFromDeepgramBody in
+  // deepgramPayload.js) — a single continuous statement often gets split into
+  // several lines on every pause, each repeating the speaker label.
+  const lines = stringCleaned.split('\n').map((l) => l.trim()).filter(Boolean)
+
+  const merged = []
+  let prevSpeaker = null
+  let prevRawLine = null
+
+  for (const line of lines) {
+    const match = line.match(/^(Speaker \d+:)\s*(.*)$/i)
+    const speakerLabel = match ? match[1] : null
+    const content = match ? match[2].trim() : line
+
+    // 5. Drop exact consecutive duplicates (ASR stutter artifact).
+    if (line === prevRawLine) continue
+
+    // 6. Drop whole-line pure pleasantries (exact match only, punctuation-insensitive).
+    const normalizedContent = content.toLowerCase().replace(/[.!?,]+$/, '').trim()
+    if (normalizedContent && PURE_PLEASANTRY_LINES.has(normalizedContent)) {
+      prevRawLine = line
+      continue
+    }
+
+    // 7. Merge consecutive same-speaker lines into one paragraph instead of
+    // repeating the "Speaker N:" label — removes the redundant label/newline,
+    // not a single word of the actual content.
+    if (speakerLabel && speakerLabel === prevSpeaker && merged.length > 0) {
+      merged[merged.length - 1] += ` ${content}`
+    } else {
+      merged.push(speakerLabel ? `${speakerLabel} ${content}` : content)
+      prevSpeaker = speakerLabel
+    }
+    prevRawLine = line
+  }
+
+  return merged.join('\n').replace(/\s{3,}/g, '  ').trim()
 }
 
 /**

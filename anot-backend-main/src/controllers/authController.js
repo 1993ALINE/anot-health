@@ -105,15 +105,6 @@ async function buildPostPasswordLoginResponse(user, req, res) {
     }
 
     const mfaStatus = loginRequiresMfa(user)
-    console.log('[auth.buildPostPasswordLoginResponse] MFA gate', {
-      MFA_DISABLED: process.env.MFA_DISABLED,
-      mfaBypass: mfaStatus === false && PHI_ROLES.has(user.role),
-      userId: user.id,
-      role: user.role,
-      mfa_enabled: user.mfa_enabled,
-      mfa_method: user.mfa_method,
-      mfaStatus,
-    })
 
     if (mfaStatus === 'ENROLLMENT_REQUIRED') {
         clearSessionCookie(res)
@@ -274,7 +265,6 @@ const needsPhiTraining = (user) =>
 
 const login = async (req, res) => {
     try {
-        console.log('[auth.login] MFA_DISABLED:', process.env.MFA_DISABLED, 'NODE_ENV:', process.env.NODE_ENV)
         await ensureUserProfileSchema()
 
         const { email, password, role } = req.body

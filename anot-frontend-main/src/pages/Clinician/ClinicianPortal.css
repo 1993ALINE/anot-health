@@ -617,6 +617,15 @@
   transform: translateY(1px) !important;
 }
 
+.sm-halo-orb:disabled,
+.sm-halo-orb--starting,
+.sm-btn-hero-record--halo:disabled {
+  opacity: 0.65 !important;
+  cursor: not-allowed !important;
+  pointer-events: none !important;
+  transform: none !important;
+}
+
 .sm-idle-mic-wrap {
   position: relative;
   margin-bottom: 16px;
@@ -3196,6 +3205,42 @@
 .sm-btn-new-scribe:hover {
   background: var(--sm-blue-700, #1d4ed8);
   transform: translateY(-1px);
+}
+
+
+/* ── Date Filter Tabs: Today / Yesterday / All ── */
+.sm-date-filter-tabs {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 0 2px;
+}
+
+.sm-date-filter-tab {
+  flex: 1;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 5px 0;
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  text-align: center;
+}
+
+.sm-date-filter-tab:hover {
+  background: #e8f0fe;
+  color: #3b4fe4;
+  border-color: #c7d2fe;
+}
+
+.sm-date-filter-tab--active {
+  background: #3b4fe4;
+  color: #fff;
+  border-color: #3b4fe4;
+  font-weight: 600;
 }
 
 /* ── Option 2: Today Action Bar & Scheduling Links ── */

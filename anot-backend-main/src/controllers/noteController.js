@@ -156,7 +156,7 @@ const getNoteByVisit = async (req, res) => {
 
     res.status(200).json({ note })
   } catch (err) {
-        sendHttpError(res, 500, err, { context: 'undefined', req })
+        sendHttpError(res, 500, err, { context: 'noteController.getNoteByVisit', req })
   }
 }
 
@@ -185,7 +185,7 @@ const getMyNotes = async (req, res) => {
     await logPhiBulkRead(req, 'note', result.rows.length, { scope: 'scribe_my_notes' })
     res.status(200).json({ notes: result.rows })
   } catch (err) {
-        sendHttpError(res, 500, err, { context: 'undefined', req })
+        sendHttpError(res, 500, err, { context: 'noteController.getMyNotes', req })
   }
 }
 
@@ -232,7 +232,7 @@ const getAllNotes = async (req, res) => {
     })
     res.status(200).json({ notes: result.rows })
   } catch (err) {
-        sendHttpError(res, 500, err, { context: 'undefined', req })
+        sendHttpError(res, 500, err, { context: 'noteController.getAllNotes', req })
   }
 }
 
@@ -260,7 +260,7 @@ const getClinicianNotes = async (req, res) => {
     await logPhiBulkRead(req, 'note', result.rows.length, { scope: 'clinician_review' })
     res.status(200).json({ notes: result.rows })
   } catch (err) {
-        sendHttpError(res, 500, err, { context: 'undefined', req })
+        sendHttpError(res, 500, err, { context: 'noteController.getClinicianNotes', req })
   }
 }
 
@@ -289,7 +289,7 @@ const getMyGrades = async (req, res) => {
     await logPhiBulkRead(req, 'grade', result.rows.length, { scope: 'scribe_my_grades' })
     res.status(200).json({ grades: result.rows })
   } catch (err) {
-        sendHttpError(res, 500, err, { context: 'undefined', req })
+        sendHttpError(res, 500, err, { context: 'noteController.getMyGrades', req })
   }
 }
 
@@ -371,7 +371,7 @@ const saveDraft = async (req, res) => {
       { visit_id: visit_id, stage: 'draft' }
     )
   } catch (err) {
-        sendHttpError(res, 500, err, { context: 'undefined', req })
+        sendHttpError(res, 500, err, { context: 'noteController.saveDraft', req })
   }
 }
 
@@ -461,7 +461,7 @@ const submitNote = async (req, res) => {
 
     res.status(200).json({ message: 'Note submitted successfully.', note: out.note })
   } catch (err) {
-        sendHttpError(res, 500, err, { context: 'undefined', req })
+        sendHttpError(res, 500, err, { context: 'noteController.submitNote', req })
   }
 }
 
@@ -531,7 +531,7 @@ const updateNoteContent = async (req, res) => {
 
     res.status(200).json({ message: 'Note updated successfully.', note: out.note })
   } catch (err) {
-        sendHttpError(res, 500, err, { context: 'undefined', req })
+        sendHttpError(res, 500, err, { context: 'noteController.updateNoteContent', req })
   }
 }
 
@@ -590,7 +590,7 @@ const requestEdit = async (req, res) => {
 
     res.status(200).json({ message: 'Edit requested.' })
   } catch (err) {
-        sendHttpError(res, 500, err, { context: 'undefined', req })
+        sendHttpError(res, 500, err, { context: 'noteController.requestEdit', req })
   }
 }
 
@@ -672,7 +672,7 @@ const uploadToEHR = async (req, res) => {
 
     res.status(200).json({ message: 'Note uploaded to EHR.', note: out.note })
   } catch (err) {
-        sendHttpError(res, 500, err, { context: 'undefined', req })
+        sendHttpError(res, 500, err, { context: 'noteController.uploadToEHR', req })
   }
 }
 
@@ -747,7 +747,7 @@ const submitGrade = async (req, res) => {
 
     res.status(201).json({ message: 'Grade submitted successfully.', grade: out.grade })
   } catch (err) {
-        sendHttpError(res, 500, err, { context: 'undefined', req })
+        sendHttpError(res, 500, err, { context: 'noteController.submitGrade', req })
   }
 }
 

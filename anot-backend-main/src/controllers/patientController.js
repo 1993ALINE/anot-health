@@ -21,7 +21,11 @@ function collectAudioPathsFromVisits(rows) {
 async function purgePatientAudioFromS3(audioPaths, req, patientId) {
     for (const rel of audioPaths) {
         const key = dbPathToKey(rel)
-        await deleteAudio(key)
+        try {
+            await deleteAudio(key)
+        } catch (s3Err) {
+            console.warn(`[patient.purge] S3 delete failed for key ${key}:`, s3Err.message)
+        }
         await auditLog(
             req.user,
             'PHI_AUDIO_DELETED',
@@ -59,8 +63,8 @@ const getAllPatients = async (req, res) => {
         } else if (role === 'clinician') {
             result = await pool.query(
                 `SELECT DISTINCT p.* FROM patients p
-                 LEFT JOIN visits v ON v.patient_id = p.id
-                 WHERE v.clinician_id = $1 OR v.id IS NULL
+                 INNER JOIN visits v ON v.patient_id = p.id
+                 WHERE v.clinician_id = $1
                  ORDER BY p.name ASC`,
                 [id]
             )
