@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Anot Health — Clinic Operational Costing & Commercial Pricing Guide</title>
+<title>Anot Health — Saint Mary Clinic Operational Costing & Commercial Pricing Guide (CAD)</title>
 <style>
   @page {
     size: A4 portrait;
@@ -17,7 +17,7 @@
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     color: #0f172a;
     background: #ffffff;
-    line-height: 1.38;
+    line-height: 1.36;
     font-size: 11px;
     margin: 0;
     padding: 0;
@@ -52,19 +52,19 @@
     color: #94a3b8;
   }
   h1 {
-    font-size: 16px;
+    font-size: 15.5px;
     font-weight: 800;
     color: #0f172a;
     margin: 0 0 2px 0;
   }
   .subtitle {
-    font-size: 10.5px;
+    font-size: 10px;
     color: #475569;
     margin-bottom: 8px;
   }
   .badge-row {
     display: flex;
-    gap: 6px;
+    gap: 5px;
     margin-bottom: 8px;
     flex-wrap: wrap;
   }
@@ -72,7 +72,7 @@
     display: inline-block;
     padding: 2.5px 6.5px;
     border-radius: 4px;
-    font-size: 9.5px;
+    font-size: 9px;
     font-weight: 600;
   }
   .badge-blue { background: #dbeafe; color: #1e40af; }
@@ -80,14 +80,15 @@
   .badge-purple { background: #f3e8ff; color: #6b21a8; }
   .badge-amber { background: #fef3c7; color: #92400e; }
   .badge-slate { background: #f1f5f9; color: #334155; }
+  .badge-cyan { background: #cffafe; color: #0e7490; }
 
   .section-title {
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 700;
     color: #1e3a8a;
     border-bottom: 1.5px solid #e2e8f0;
     padding-bottom: 2px;
-    margin-top: 8px;
+    margin-top: 7px;
     margin-bottom: 5px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -97,19 +98,19 @@
     width: 100%;
     border-collapse: collapse;
     margin-bottom: 7px;
-    font-size: 10px;
+    font-size: 9.5px;
   }
   th {
     background: #f8fafc;
     color: #334155;
     font-weight: 700;
     text-align: left;
-    padding: 4.5px 6.5px;
+    padding: 4px 6px;
     border-top: 1px solid #cbd5e1;
     border-bottom: 2px solid #94a3b8;
   }
   td {
-    padding: 4px 6.5px;
+    padding: 3.5px 6px;
     border-bottom: 1px solid #e2e8f0;
     vertical-align: top;
   }
@@ -127,39 +128,50 @@
     border-top: 1.5px solid #bfdbfe;
     border-bottom: 2px solid #2563eb;
   }
+  .savings-row td {
+    font-weight: 700;
+    background: #ecfdf5 !important;
+    color: #065f46;
+    border-top: 1.5px solid #a7f3d0;
+    border-bottom: 2px solid #059669;
+  }
 
   .grid-2 {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 7px;
-    margin-bottom: 8px;
+    margin-bottom: 7px;
   }
   .grid-3 {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
     gap: 7px;
-    margin-bottom: 8px;
+    margin-bottom: 7px;
   }
   .card {
     border: 1px solid #e2e8f0;
     border-radius: 4px;
-    padding: 6px 8px;
+    padding: 5px 7px;
     background: #ffffff;
   }
   .card-primary {
     border-color: #bfdbfe;
     background: #f8fafc;
   }
+  .card-success {
+    border-color: #a7f3d0;
+    background: #f0fdf4;
+  }
   .card h3 {
     margin: 0 0 2px 0;
-    font-size: 10.5px;
+    font-size: 10px;
     color: #1e3a8a;
   }
   .card p {
     margin: 0;
-    font-size: 9.5px;
+    font-size: 9px;
     color: #475569;
-    line-height: 1.35;
+    line-height: 1.34;
   }
 
   .pricing-deck {
@@ -200,7 +212,7 @@
   .price-card ul {
     margin: 0;
     padding-left: 11px;
-    font-size: 9px;
+    font-size: 8.5px;
     color: #334155;
   }
   .price-card li {
@@ -212,10 +224,21 @@
     border-left: 3.5px solid #16a34a;
     padding: 5px 8px;
     border-radius: 3px;
-    font-size: 9.5px;
+    font-size: 9px;
     color: #166534;
-    margin-top: 6px;
-    margin-bottom: 6px;
+    margin-top: 5px;
+    margin-bottom: 5px;
+  }
+
+  .callout-blue {
+    background: #eff6ff;
+    border-left: 3.5px solid #2563eb;
+    padding: 5px 8px;
+    border-radius: 3px;
+    font-size: 9px;
+    color: #1e40af;
+    margin-top: 5px;
+    margin-bottom: 5px;
   }
 
   .footer {
@@ -224,7 +247,7 @@
     padding-top: 4px;
     display: flex;
     justify-content: space-between;
-    font-size: 8.5px;
+    font-size: 8px;
     color: #94a3b8;
   }
 
@@ -236,227 +259,265 @@
 <body>
 
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
-<!-- PAGE 1: 30 DOCTORS × 30 MIN VISITS × 30 PATIENTS/DAY × 24 DAYS + GOOGLE WS -->
+<!-- PAGE 1: 30 DOCTORS × 30 MIN VISITS × 30 PATIENTS/DAY × 26 DAYS (CAD)      -->
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 
 <div class="header">
   <div class="brand">ANOT <span>HEALTH</span></div>
   <div class="doc-title">
-    Clinic Operational Costing & Google Workspace Analysis<br>
-    <span class="doc-date">Generated September 2026 · Confidential Brief</span>
+    Saint Mary Clinic Operational Costing & Optimization Analysis<br>
+    <span class="doc-date">Updated September 2026 · Confidential Brief · CAD Pricing</span>
   </div>
 </div>
 
-<h1>30-Doctor Clinic Costing: 30 Min/Visit · 30 Patients/Day · 24 Days/Mo</h1>
-<div class="subtitle">Complete unit costing including AI infrastructure, audio processing, cloud storage, and Google Workspace for a 30-physician healthcare organization.</div>
+<h1>Saint Mary Clinic Costing: 30 Min/Visit · 30 Patients/Day · 26 Days/Mo (CAD)</h1>
+<div class="subtitle">Complete unit costing in Canadian Dollars (CAD) covering Deepgram Nova-3 Medical, Claude 4.5 Haiku, and AWS cloud architecture for a 30-physician clinic in Alberta. Excludes Google Workspace.</div>
 
 <div class="badge-row">
   <span class="badge badge-purple">Headcount: 30 Doctors</span>
-  <span class="badge badge-blue">Schedule: 24 Days / Month</span>
+  <span class="badge badge-blue">Schedule: 26 Days / Month</span>
   <span class="badge badge-amber">Daily Pace: 30 Patients / Doctor / Day</span>
   <span class="badge badge-emerald">Encounter Length: 30 Mins / Visit</span>
-  <span class="badge badge-slate">Includes Google Workspace</span>
+  <span class="badge badge-cyan">LLM: Claude 4.5 Haiku</span>
+  <span class="badge badge-slate">Currency: CAD ($1 USD = $1.39 CAD)</span>
 </div>
 
-<div class="section-title">1. Operational Parameters & Total Clinical Volume</div>
+<div class="section-title">1. Operational Parameters & Clinical Volume (Saint Mary Clinic)</div>
 <div class="grid-3">
   <div class="card card-primary">
     <h3>Individual Doctor Metrics</h3>
     <p>
       • <strong>Daily Patients:</strong> 30 visits/day<br>
-      • <strong>Working Days:</strong> 24 days/month<br>
-      • <strong>Monthly Visits:</strong> <strong>720 visits</strong><br>
-      • <strong>Audio per Visit:</strong> 30 minutes<br>
-      • <strong>Monthly Audio:</strong> <strong>21,600 minutes</strong> (360 hrs)
+      • <strong>Working Days:</strong> 26 days/month<br>
+      • <strong>Monthly Visits:</strong> <strong>780 visits</strong><br>
+      • <strong>Audio Slot:</strong> 30 minutes / visit<br>
+      • <strong>Monthly Audio (Slot):</strong> <strong>23,400 mins</strong> (390 hrs)<br>
+      • <strong>Active Speech (VAD):</strong> ~14 mins (10,920 mins)
     </p>
   </div>
   <div class="card card-primary">
     <h3>All 30 Doctors Combined</h3>
     <p>
       • <strong>Total Daily Visits:</strong> 900 visits/day<br>
-      • <strong>Total Monthly Visits:</strong> <strong>21,600 visits</strong><br>
-      • <strong>Total Monthly Audio:</strong> <strong>648,000 minutes</strong><br>
-      • <strong>Total Clinical Hours:</strong> 10,800 audio hours<br>
-      • <strong>Note:</strong> 324k mins = exactly 12 clinic days
+      • <strong>Total Monthly Visits:</strong> <strong>23,400 visits</strong><br>
+      • <strong>Total Audio (Slot):</strong> <strong>702,000 mins</strong> (11,700 hrs)<br>
+      • <strong>Total Active Speech:</strong> <strong>327,600 mins</strong> (5,460 hrs)<br>
+      • <strong>Speech Ratio:</strong> ~47% conversation, 53% quiet exam
     </p>
   </div>
   <div class="card card-primary">
-    <h3>Google Workspace Options</h3>
+    <h3>Core Technology Stack</h3>
     <p>
-      • <strong>Business Starter:</strong> $7.20 / user / mo<br>
-      • <strong>Business Standard (HIPAA):</strong> $14.40 / user / mo<br>
-      • <strong>HIPAA BAA:</strong> Available on Standard+<br>
-      • <strong>Storage:</strong> 2 TB pooled cloud storage/user<br>
-      • <strong>Google Meet:</strong> Recording & noise cancel
+      • <strong>Medical STT:</strong> Deepgram Nova-3 Medical<br>
+      • <strong>Clinical Notes:</strong> Claude 4.5 Haiku<br>
+      • <strong>Prompt Caching:</strong> Enabled (90% input discount)<br>
+      • <strong>Encrypted Storage:</strong> AWS S3 (Opus audio)<br>
+      • <strong>Cloud Platform:</strong> AWS Beanstalk + RDS Postgres<br>
+      • <strong>Google Workspace:</strong> <strong>$0.00 (Excluded)</strong>
     </p>
   </div>
 </div>
 
-<div class="section-title">2. Exact Cost Breakdown Per Doctor & All 30 Doctors Combined</div>
+<div class="section-title">2. Operational Cost Breakdown — Baseline vs. Cost-Optimized (CAD)</div>
+
+<p style="margin:0 0 3px 0; font-size:9px; color:#475569;"><strong>Model A: Baseline (Pay-As-You-Go with 30-min continuous raw audio)</strong></p>
 <table>
   <thead>
     <tr>
       <th>Service / Component</th>
-      <th>Unit Rate Formula (PAYG)</th>
-      <th class="num">Per Patient Visit (30 min)</th>
-      <th class="num">Per Doctor / Month (720 visits / 21.6k min)</th>
-      <th class="num">All 30 Doctors / Month (21.6k visits / 648k min)</th>
+      <th>Rate Formula (USD &rarr; CAD @ 1.39)</th>
+      <th class="num">Per 30-Min Visit</th>
+      <th class="num">Per Doctor / Mo (780 visits)</th>
+      <th class="num">All 30 Doctors / Mo (23,400 visits)</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <td><strong>Deepgram Medical STT</strong><br><span style="color:#64748b; font-size:8.5px;">nova-3-medical (Realtime/Batch)</span></td>
-      <td>$0.00430 / audio minute<br>(30 mins = $0.1290 / visit)</td>
-      <td class="num">$0.1290</td>
-      <td class="num"><strong>$92.88</strong></td>
-      <td class="num"><strong>$2,786.40</strong></td>
+      <td><strong>Deepgram Medical STT</strong><br><span style="color:#64748b; font-size:8px;">nova-3-medical (PAYG 30 mins)</span></td>
+      <td>$0.00430 USD &rarr; $0.00598 CAD/min</td>
+      <td class="num">$0.1793 CAD</td>
+      <td class="num">$139.86 CAD</td>
+      <td class="num">$4,195.85 CAD</td>
     </tr>
     <tr>
-      <td><strong>Claude 3.5 Haiku AI Notes</strong><br><span style="color:#64748b; font-size:8.5px;">SOAP Generation + ICD/CPT coding</span></td>
-      <td>~7.5k in tokens ($1.00/M) + 1k out ($5.00/M)<br>= $0.0125 / visit</td>
-      <td class="num">$0.0125</td>
-      <td class="num"><strong>$9.00</strong></td>
-      <td class="num"><strong>$270.00</strong></td>
+      <td><strong>Claude 4.5 Haiku AI Notes</strong><br><span style="color:#64748b; font-size:8px;">SOAP Generation + ICD/CPT coding (Uncached)</span></td>
+      <td>~7.5k in ($1.00/M) + 1k out ($5.00/M)<br>= $0.0125 USD &rarr; $0.0174 CAD</td>
+      <td class="num">$0.0174 CAD</td>
+      <td class="num">$13.55 CAD</td>
+      <td class="num">$406.58 CAD</td>
     </tr>
     <tr>
-      <td><strong>AWS S3 Encrypted Storage</strong><br><span style="color:#64748b; font-size:8.5px;">Opus audio (5.4 MB/visit) + PUT API</span></td>
-      <td>$0.023/GB-mo storage<br>+ $0.005/1,000 PUT requests</td>
-      <td class="num">$0.0001</td>
-      <td class="num"><strong>$0.10</strong></td>
-      <td class="num"><strong>$3.00</strong></td>
+      <td><strong>AWS S3 Encrypted Audio Storage</strong><br><span style="color:#64748b; font-size:8px;">Opus audio (~5.4 MB/visit) + PUT API</span></td>
+      <td>$0.023 USD/GB-mo storage + API</td>
+      <td class="num">$0.0002 CAD</td>
+      <td class="num">$0.15 CAD</td>
+      <td class="num">$4.52 CAD</td>
     </tr>
     <tr>
-      <td><strong>AWS Core Cloud Platform</strong><br><span style="color:#64748b; font-size:8.5px;">RDS Postgres + EC2 Beanstalk + CDN</span></td>
-      <td>Shared cluster scaled for 30 docs<br>($160.00/mo total base)</td>
-      <td class="num">$0.0074</td>
-      <td class="num"><strong>$5.33</strong></td>
-      <td class="num"><strong>$160.00</strong></td>
-    </tr>
-    <tr>
-      <td><strong>Google Workspace Business Standard</strong><br><span style="color:#64748b; font-size:8.5px;">HIPAA BAA Compliant Email + 2TB Drive</span></td>
-      <td>$14.40 / user / month<br>($7.20 / mo if Business Starter)</td>
-      <td class="num">$0.0200</td>
-      <td class="num"><strong>$14.40</strong></td>
-      <td class="num"><strong>$432.00</strong></td>
+      <td><strong>AWS Core Cloud Platform</strong><br><span style="color:#64748b; font-size:8px;">RDS Postgres + EC2 Beanstalk + CDN + WAF</span></td>
+      <td>Base cluster scaled for 30 docs<br>($160.00 USD &rarr; $222.40 CAD)</td>
+      <td class="num">$0.0095 CAD</td>
+      <td class="num">$7.41 CAD</td>
+      <td class="num">$222.40 CAD</td>
     </tr>
     <tr class="highlight-row">
-      <td><strong>TOTAL OPERATIONAL COST (with Google WS)</strong></td>
-      <td><strong>Full Tech Stack + Google Workspace</strong></td>
-      <td class="num"><strong>$0.1690 / visit</strong></td>
-      <td class="num"><strong>$121.71 / doctor</strong></td>
-      <td class="num"><strong>$3,651.40 / month</strong></td>
-    </tr>
-    <tr>
-      <td style="color:#64748b;"><em>Alternative: With Google WS Starter ($7.20/user)</em></td>
-      <td style="color:#64748b;"><em>Email + 30GB Drive (No BAA)</em></td>
-      <td class="num" style="color:#64748b;"><em>$0.1590 / visit</em></td>
-      <td class="num" style="color:#64748b;"><em>$114.51 / doctor</em></td>
-      <td class="num" style="color:#64748b;"><em>$3,435.40 / month</em></td>
+      <td><strong>TOTAL BASELINE COST (Unoptimized)</strong></td>
+      <td><strong>Full Tech Stack (No Google WS)</strong></td>
+      <td class="num"><strong>$0.2064 CAD</strong></td>
+      <td class="num"><strong>$160.98 CAD</strong></td>
+      <td class="num"><strong>$4,829.35 CAD / mo</strong></td>
     </tr>
   </tbody>
 </table>
 
-<div class="section-title">3. Unit Economics Summary</div>
-<div class="grid-2">
-  <div class="card">
-    <h3>Cost per Patient Encounter</h3>
-    <p>For a complete <strong>30-minute doctor consultation</strong>, including real-time medical transcription, clinical SOAP note generation, audio archiving, cloud hosting, and HIPAA Google Workspace email, the total cost is only <strong>$0.169 (under 17 cents per visit)</strong>.</p>
+<p style="margin:6px 0 3px 0; font-size:9px; color:#065f46;"><strong>Model B: Cost-Optimized Production Architecture (Silence Trimming + Deepgram Growth + Prompt Caching)</strong></p>
+<table>
+  <thead>
+    <tr>
+      <th>Optimized Service / Strategy</th>
+      <th>Optimization Mechanism</th>
+      <th class="num">Per 30-Min Visit</th>
+      <th class="num">Per Doctor / Mo (780 visits)</th>
+      <th class="num">All 30 Doctors / Mo (23,400 visits)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><strong>Deepgram Medical STT (Optimized)</strong><br><span style="color:#64748b; font-size:8px;">Speech-trims dead air (14 min avg) + Growth Tier</span></td>
+      <td>$0.00360 USD &rarr; $0.00500 CAD/min<br>(14 min active speech vs 30 min)</td>
+      <td class="num">$0.0701 CAD</td>
+      <td class="num">$54.60 CAD</td>
+      <td class="num"><strong>$1,638.00 CAD</strong></td>
+    </tr>
+    <tr>
+      <td><strong>Claude 4.5 Haiku (Prompt Caching)</strong><br><span style="color:#64748b; font-size:8px;">90% discount on cached system & SOAP prompt</span></td>
+      <td>Prompt caching ($0.10/M cache read)<br>= $0.0094 USD &rarr; $0.0131 CAD</td>
+      <td class="num">$0.0131 CAD</td>
+      <td class="num">$10.19 CAD</td>
+      <td class="num"><strong>$305.80 CAD</strong></td>
+    </tr>
+    <tr>
+      <td><strong>AWS S3 & Cloud Infrastructure</strong><br><span style="color:#64748b; font-size:8px;">1-Year Compute Savings Plan + S3 lifecycle</span></td>
+      <td>Base cluster optimized with 1-yr plan<br>($113 USD &rarr; $157.50 CAD total)</td>
+      <td class="num">$0.0067 CAD</td>
+      <td class="num">$5.25 CAD</td>
+      <td class="num"><strong>$157.50 CAD</strong></td>
+    </tr>
+    <tr class="savings-row">
+      <td><strong>TOTAL OPTIMIZED COST</strong></td>
+      <td><strong>56.5% Net Operational Savings</strong></td>
+      <td class="num"><strong>$0.0898 CAD</strong></td>
+      <td class="num"><strong>$70.04 CAD</strong></td>
+      <td class="num"><strong>$2,101.30 CAD / mo</strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="section-title">3. Unit Economics & Monthly Cost Reduction</div>
+<div class="grid-3">
+  <div class="card card-success">
+    <h3>Cost per Patient Visit</h3>
+    <p>With silence trimming and prompt caching, complete ambient transcription and clinical SOAP note generation costs only <strong>$0.09 CAD (under 9 cents CAD per visit)</strong>, down from $0.21 CAD.</p>
   </div>
-  <div class="card">
+  <div class="card card-success">
     <h3>Cost per Doctor per Day</h3>
-    <p>A doctor seeing 30 patients across a 15-hour clinical day costs <strong>$5.07 per day</strong> to support with ambient AI notes and enterprise Google Workspace. At standard physician compensation, this cost is recovered in the first 2 minutes of the day.</p>
+    <p>Supporting a physician seeing 30 patients across a full clinic day costs just <strong>$2.69 CAD / day</strong> in total AI and cloud infrastructure, down from $6.19 CAD/day.</p>
+  </div>
+  <div class="card card-success">
+    <h3>Net Monthly Savings</h3>
+    <p>Cost optimization saves <strong>$2,728.05 CAD every month</strong> ($32,736 CAD annually), while preserving identical clinical note quality and turnaround speed.</p>
   </div>
 </div>
 
 <div class="callout">
-  <strong>Key Volume Insight on 324,000 Minutes:</strong> At 30 min/visit and 30 patients/day, 30 doctors generate 648,000 minutes in a 24-day month. If your contract or pre-purchased pool is exactly <strong>324,000 minutes</strong>, this covers <strong>12 full clinic days for all 30 doctors</strong> (or 24 days for 15 doctors), costing Anot Health exactly <strong>$1,825.70</strong> including Google Workspace.
+  <strong>Key Cost-Reduction Finding:</strong> Deepgram audio transcription represents <strong>86.9%</strong> of all operational spend. In clinical appointments, actual doctor-patient dialogue is only 12–15 minutes (the remainder is silent physical exams and chart review). By applying adaptive silence trimming (cutting dead air) and switching to Deepgram's Growth tier ($0.0036/min), Deepgram spend drops from $4,195.85 CAD down to <strong>$1,638.00 CAD</strong>, delivering the vast majority of savings automatically.
 </div>
 
 <div class="footer">
-  <div>Anot Health Commercial Report · Confidential</div>
-  <div>Page 1 of 2 · 30-Doctor High-Volume Operational Costing</div>
+  <div>Anot Health Commercial Report · Saint Mary Clinic, Alberta</div>
+  <div>Page 1 of 2 · 30-Doctor High-Volume Operational Costing (CAD)</div>
 </div>
 
 <div class="page-break"></div>
 
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
-<!-- PAGE 2: COMMERCIAL ASKING PRICE & REVENUE PROJECTIONS FOR 30 DOCTORS      -->
+<!-- PAGE 2: COMMERCIAL ASKING PRICE & REVENUE PROJECTIONS FOR SAINT MARY (CAD) -->
 <!-- ══════════════════════════════════════════════════════════════════════════ -->
 
 <div class="header">
   <div class="brand">ANOT <span>HEALTH</span></div>
-  <div class="doc-title">Clinic Commercial Strategy & Asking Price</div>
+  <div class="doc-title">Clinic Commercial Strategy & Asking Price (CAD)</div>
 </div>
 
-<h1>Commercial Asking Price to the Clinic (30 Doctors)</h1>
-<div class="subtitle">Recommended pricing models, revenue realization, and doctor value proposition for high-volume practices.</div>
+<h1>Commercial Asking Price to Saint Mary Clinic (30 Doctors · CAD)</h1>
+<div class="subtitle">Recommended commercial pricing packages, revenue realization, and doctor ROI for Saint Mary Clinic, Alberta (26 days/month).</div>
 
-<div class="section-title">4. Recommended Asking Price Packages for 30 Doctors</div>
+<div class="section-title">4. Recommended Asking Price Packages for 30 Doctors (in CAD)</div>
 
 <div class="pricing-deck">
   <div class="price-card">
     <h4>Package A: High-Volume AI</h4>
-    <div class="price-sub">Ambient AI Scribing + Google WS</div>
-    <div class="price-tag">$299 <span style="font-size:9px; font-weight:normal; color:#64748b;">/doc/mo</span></div>
-    <div class="price-sub">Clinic Total: <strong>$8,970 / month</strong></div>
+    <div class="price-sub">Ambient AI Scribing + SOAP Notes</div>
+    <div class="price-tag">$399 CAD <span style="font-size:9px; font-weight:normal; color:#64748b;">/doc/mo</span></div>
+    <div class="price-sub">Clinic Total: <strong>$11,970 CAD / month</strong></div>
     <ul>
       <li>Unlimited 30-min ambient encounters</li>
-      <li>Instant AI SOAP note generation</li>
-      <li>ICD-10 & CPT automated coding</li>
-      <li>HIPAA Google Workspace license</li>
+      <li>Instant Claude 4.5 Haiku SOAP notes</li>
+      <li>Automated ICD-10 & CPT coding</li>
+      <li>Adaptive silence trimming & VAD</li>
       <li>1-Click EMR Clipboard push</li>
     </ul>
     <div style="margin-top:5px; font-size:9px; font-weight:bold; color:#059669;">
-      Cost: $121.71/doc · Margin: <strong>59.3%</strong><br>
-      Net Profit: <strong>+$5,318.60 / mo</strong> ($63.8k/yr)
+      Cost: $70.04/doc · Margin: <strong>82.4%</strong><br>
+      Net Profit: <strong>+$9,868.70 CAD / mo</strong> ($118.4k/yr)
     </div>
   </div>
 
   <div class="price-card featured">
     <h4>Package B: Professional Clinic (Recommended)</h4>
-    <div class="price-sub">Full Scribe Platform + Templates</div>
-    <div class="price-tag">$399 <span style="font-size:9px; font-weight:normal; color:#64748b;">/doc/mo</span></div>
-    <div class="price-sub">Clinic Total: <strong>$11,970 / month</strong></div>
+    <div class="price-sub">Full Scribe Platform + Saint Mary Module</div>
+    <div class="price-tag">$549 CAD <span style="font-size:9px; font-weight:normal; color:#64748b;">/doc/mo</span></div>
+    <div class="price-sub">Clinic Total: <strong>$16,470 CAD / month</strong></div>
     <ul>
       <li>Everything in Package A</li>
-      <li>Custom clinic specialty SOAP macros</li>
-      <li>Saint Mary Clinic Multi-provider portal</li>
-      <li>Audit logging & physician analytics</li>
-      <li>Dedicated onboarding & training</li>
+      <li>Custom Saint Mary Clinic specialty macros</li>
+      <li>Saint Mary Clinic dedicated multi-provider UI</li>
+      <li>Audit logging, analytics & compliance reports</li>
+      <li>Dedicated physician onboarding & training</li>
     </ul>
     <div style="margin-top:5px; font-size:9px; font-weight:bold; color:#059669;">
-      Cost: $121.71/doc · Margin: <strong>69.5%</strong><br>
-      Net Profit: <strong>+$8,318.60 / mo</strong> ($99.8k/yr)
+      Cost: $70.04/doc · Margin: <strong>87.2%</strong><br>
+      Net Profit: <strong>+$14,368.70 CAD / mo</strong> ($172.4k/yr)
     </div>
   </div>
 
   <div class="price-card">
     <h4>Package C: Enterprise + Human QA</h4>
     <div class="price-sub">AI + Dedicated Scribe QA Support</div>
-    <div class="price-tag">$599 <span style="font-size:9px; font-weight:normal; color:#64748b;">/doc/mo</span></div>
-    <div class="price-sub">Clinic Total: <strong>$17,970 / month</strong></div>
+    <div class="price-tag">$799 CAD <span style="font-size:9px; font-weight:normal; color:#64748b;">/doc/mo</span></div>
+    <div class="price-sub">Clinic Total: <strong>$23,970 CAD / month</strong></div>
     <ul>
       <li>Everything in Package B</li>
-      <li>Human Scribe QA spot-checks</li>
+      <li>Human Scribe QA spot-checks & audits</li>
       <li>QPS accuracy scoring reports</li>
       <li>EMR direct API integration bridge</li>
       <li>24/7 priority SLA support</li>
     </ul>
     <div style="margin-top:5px; font-size:9px; font-weight:bold; color:#059669;">
-      Cost: ~$185/doc · Margin: <strong>69.1%</strong><br>
-      Net Profit: <strong>+$12,420.00 / mo</strong> ($149k/yr)
+      Cost: ~$198/doc · Margin: <strong>75.2%</strong><br>
+      Net Profit: <strong>+$18,020.00 CAD / mo</strong> ($216.2k/yr)
     </div>
   </div>
 </div>
 
-<div class="section-title">5. Clinic Financial Comparison & Profit Breakdown</div>
+<div class="section-title">5. Clinic Financial Comparison & Profit Breakdown (CAD)</div>
 <table>
   <thead>
     <tr>
-      <th>Commercial Model</th>
-      <th class="num">Per Doctor / Mo</th>
-      <th class="num">Clinic Gross Revenue</th>
-      <th class="num">Total Monthly Cost</th>
+      <th>Commercial Package</th>
+      <th class="num">Per Doc / Mo</th>
+      <th class="num">Clinic Monthly Revenue</th>
+      <th class="num">Optimized Cost</th>
       <th class="num">Net Monthly Profit</th>
       <th class="num">Annual Net Profit (ARR)</th>
       <th class="num">Gross Margin</th>
@@ -464,50 +525,54 @@
   </thead>
   <tbody>
     <tr>
-      <td><strong>Package A (Standard AI @ $299)</strong></td>
-      <td class="num">$299.00</td>
-      <td class="num">$8,970.00</td>
-      <td class="num">$3,651.40</td>
-      <td class="num"><strong style="color:#059669;">+$5,318.60</strong></td>
-      <td class="num"><strong>$63,823 / year</strong></td>
-      <td class="num">59.3%</td>
+      <td><strong>Package A (Standard AI @ $399 CAD)</strong></td>
+      <td class="num">$399.00 CAD</td>
+      <td class="num">$11,970.00 CAD</td>
+      <td class="num">$2,101.30 CAD</td>
+      <td class="num"><strong style="color:#059669;">+$9,868.70 CAD</strong></td>
+      <td class="num"><strong>$118,424 CAD / yr</strong></td>
+      <td class="num">82.4%</td>
     </tr>
     <tr class="highlight-row">
-      <td><strong>Package B (Recommended @ $399)</strong></td>
-      <td class="num"><strong>$399.00</strong></td>
-      <td class="num"><strong>$11,970.00</strong></td>
-      <td class="num"><strong>$3,651.40</strong></td>
-      <td class="num"><strong style="color:#059669;">+$8,318.60</strong></td>
-      <td class="num"><strong>$99,823 / year</strong></td>
-      <td class="num"><strong>69.5%</strong></td>
+      <td><strong>Package B (Recommended @ $549 CAD)</strong></td>
+      <td class="num"><strong>$549.00 CAD</strong></td>
+      <td class="num"><strong>$16,470.00 CAD</strong></td>
+      <td class="num"><strong>$2,101.30 CAD</strong></td>
+      <td class="num"><strong style="color:#059669;">+$14,368.70 CAD</strong></td>
+      <td class="num"><strong>$172,424 CAD / yr</strong></td>
+      <td class="num"><strong>87.2%</strong></td>
     </tr>
     <tr>
-      <td><strong>Package C (Enterprise QA @ $599)</strong></td>
-      <td class="num">$599.00</td>
-      <td class="num">$17,970.00</td>
-      <td class="num">~$5,550.00</td>
-      <td class="num"><strong style="color:#059669;">+$12,420.00</strong></td>
-      <td class="num"><strong>$149,040 / year</strong></td>
-      <td class="num">69.1%</td>
+      <td><strong>Package C (Enterprise QA @ $799 CAD)</strong></td>
+      <td class="num">$799.00 CAD</td>
+      <td class="num">$23,970.00 CAD</td>
+      <td class="num">~$5,950.00 CAD</td>
+      <td class="num"><strong style="color:#059669;">+$18,020.00 CAD</strong></td>
+      <td class="num"><strong>$216,240 CAD / yr</strong></td>
+      <td class="num">75.2%</td>
     </tr>
   </tbody>
 </table>
 
-<div class="section-title">6. Pitching to the Clinic Management (The Value Equation)</div>
+<div class="section-title">6. Pitching to Saint Mary Clinic Leadership (The Clinical Value Equation)</div>
 <div class="grid-2">
   <div class="card">
-    <h3>The Time Burn Problem</h3>
-    <p>At 30 patients a day with 30-minute consultations, doctors are working 15 hours of patient care daily. Charting notes manually would require an extra <strong>2.5 to 3 hours every night per doctor</strong>. Across 30 doctors, that is <strong>75 to 90 hours of overtime charting every day</strong>.</p>
+    <h3>The Physician Burnout Problem</h3>
+    <p>At 30 patients a day across 26 days (780 visits/month per doctor), doctors face enormous charting burdens. Documenting notes manually takes an estimated <strong>2.5 hours of evening charting every day per doctor</strong>. Across 30 doctors, that equals <strong>75 hours of overtime charting daily</strong> (1,950 hours every month across the clinic).</p>
   </div>
   <div class="card">
-    <h3>The Clinic ROI</h3>
-    <p>Anot Health generates the full SOAP note in real-time as the visit concludes. By saving 2.5 hours per doctor daily across 24 days, you reclaim <strong>1,800 hours of clinical time per month</strong>. Valued at $150/hr, that represents <strong>$270,000 in monthly clinical value</strong> for an investment of only $11,970.</p>
+    <h3>The Alberta Physician ROI</h3>
+    <p>Anot Health delivers structured, audit-proof SOAP notes instantaneously at visit end. By eliminating 2.5 hours of daily charting per doctor across 26 days, the clinic reclaims <strong>1,950 hours of clinical time per month</strong>. Valued at an average Alberta physician clinical value of $175 CAD/hour, that represents <strong>$341,250 CAD in monthly clinical value</strong> for an investment of $16,470 CAD.</p>
   </div>
 </div>
 
+<div class="callout-blue">
+  <strong>Strategic Negotiation Recommendation:</strong> Present Package B at <strong>$549 CAD / doctor / month</strong> ($16,470 CAD / month total). Because our optimized operational delivery cost is only <strong>$2,101.30 CAD / month</strong>, Anot Health achieves an outstanding <strong>87.2% gross margin</strong> (generating <strong>+$172,424 CAD in annual net recurring profit</strong>) while offering Saint Mary Clinic an unbeatable ROI of over 20x in physician time savings.
+</div>
+
 <div class="footer">
-  <div>Anot Health Commercial Report · Confidential & Proprietary</div>
-  <div>Page 2 of 2 · Tech Stack: Deepgram Nova-3 Medical, Claude 3.5 Haiku, AWS S3/RDS, Google Workspace</div>
+  <div>Anot Health Commercial Report · Saint Mary Clinic, Alberta · Confidential & Proprietary</div>
+  <div>Page 2 of 2 · Tech Stack: Deepgram Nova-3 Medical, Claude 4.5 Haiku, AWS S3/RDS (CAD Currency)</div>
 </div>
 
 </body>

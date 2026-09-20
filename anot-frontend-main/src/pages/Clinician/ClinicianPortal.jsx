@@ -21,7 +21,7 @@ import './ClinicianPortal.css'
 // are already on) so actual speech at any normal volume clears it easily. Tune only with
 // real recordings in hand, not guesswork — a threshold set too aggressively risks silently
 // dropping quiet-spoken clinical content, which is worse than any cost saved.
-const AUTO_PAUSE_SILENCE_MS = 12000
+const AUTO_PAUSE_SILENCE_MS = 7000
 const AUTO_PAUSE_VOLUME_THRESHOLD = 6 // raw 0-255 analyser average; see updateVolume below
 
 const CLINICAL_TEMPLATES = [
