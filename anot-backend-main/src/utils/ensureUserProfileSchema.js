@@ -29,6 +29,7 @@ const PROFILE_COLUMNS = [
     { name: 'failed_login_attempts', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INT NOT NULL DEFAULT 0' },
     { name: 'locked_until', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ' },
     { name: 'last_failed_login_at', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS last_failed_login_at TIMESTAMPTZ' },
+    { name: 'ai_note_instructions', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_note_instructions TEXT DEFAULT NULL' },
 ]
 
 const PROFILE_INDEXES = [

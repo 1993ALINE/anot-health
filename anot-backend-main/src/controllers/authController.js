@@ -569,7 +569,7 @@ const getMe = async (req, res) => {
     try {
         await ensureUserProfileSchema()
         const result = await pool.query(
-            'SELECT id, name, email, role, specialty, phone, npi, license, status, clinic_code, clinic_name, ui_mode, avatar_data_url, personal_info, admin_modules, created_at FROM users WHERE id = $1',
+            'SELECT id, name, email, role, specialty, phone, npi, license, status, clinic_code, clinic_name, ui_mode, avatar_data_url, personal_info, admin_modules, ai_note_instructions, created_at FROM users WHERE id = $1',
             [req.user.id]
         )
 
@@ -587,7 +587,7 @@ const getMe = async (req, res) => {
 const updateMe = async (req, res) => {
     try {
         await ensureUserProfileSchema()
-        const { name, email, phone, avatar_data_url, personal_info } = req.body
+        const { name, email, phone, avatar_data_url, personal_info, ai_note_instructions } = req.body
         const cleanName = String(name || '').trim()
         const cleanEmail = String(email || '').toLowerCase().trim()
         const cleanPhone = String(phone || '').trim()
@@ -612,16 +612,26 @@ const updateMe = async (req, res) => {
             return res.status(409).json({ error: 'This email is already used by another account.' })
         }
 
+        const cleanInstructions = ai_note_instructions === undefined ? undefined : (ai_note_instructions === '' || ai_note_instructions == null ? null : String(ai_note_instructions).trim() || null)
+        let updateInstructionsClause = ''
+        const params = [cleanName, cleanEmail, cleanPhone || null, cleanAvatar || null, cleanInfo || null]
+        if (cleanInstructions !== undefined) {
+            params.push(cleanInstructions)
+            updateInstructionsClause = `, ai_note_instructions = $${params.length}`
+        }
+        params.push(req.user.id)
+        const idParamIdx = params.length
+
         const result = await pool.query(
             `UPDATE users
              SET name = $1,
                  email = $2,
                  phone = $3,
                  avatar_data_url = $4,
-                 personal_info = $5
-             WHERE id = $6
-             RETURNING id, name, email, role, specialty, phone, npi, license, status, clinic_code, clinic_name, ui_mode, avatar_data_url, personal_info, admin_modules, created_at`,
-            [cleanName, cleanEmail, cleanPhone || null, cleanAvatar || null, cleanInfo || null, req.user.id]
+                 personal_info = $5${updateInstructionsClause}
+             WHERE id = $${idParamIdx}
+             RETURNING id, name, email, role, specialty, phone, npi, license, status, clinic_code, clinic_name, ui_mode, avatar_data_url, personal_info, admin_modules, ai_note_instructions, created_at`,
+            params
         )
         if (!result.rows[0]) {
             return res.status(404).json({ error: 'User not found.' })

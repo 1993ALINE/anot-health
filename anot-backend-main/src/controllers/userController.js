@@ -98,7 +98,7 @@ const updateUser = async (req, res) => {
     try {
         await ensureUserProfileSchema()
         const { id } = req.params
-        const { name, email, role, specialty, phone, npi, license, rate_per_note, admin_modules, ehr_connection_id, ehr_provider_id } = req.body
+        const { name, email, role, specialty, phone, npi, license, rate_per_note, admin_modules, ehr_connection_id, ehr_provider_id, ai_note_instructions } = req.body
 
         if (!name || !email || !role) {
             return res.status(400).json({ error: 'Name, email and role are required.' })
@@ -235,6 +235,12 @@ const updateUser = async (req, res) => {
             await pool.query('UPDATE users SET ehr_connection_id = $1, ehr_provider_id = $2 WHERE id = $3', [connId, provId, id])
             result.rows[0].ehr_connection_id = connId
             result.rows[0].ehr_provider_id = provId
+        }
+
+        if (role === 'clinician' && ai_note_instructions !== undefined) {
+            const instructionsVal = (ai_note_instructions === '' || ai_note_instructions == null) ? null : String(ai_note_instructions).trim() || null
+            await pool.query('UPDATE users SET ai_note_instructions = $1 WHERE id = $2', [instructionsVal, id])
+            result.rows[0].ai_note_instructions = instructionsVal
         }
 
         // A role change must invalidate any cached session so the next request

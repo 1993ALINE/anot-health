@@ -235,7 +235,7 @@ function formatNumberedList(text) {
 }
 
 function formatExamFindings(rawPe) {
-  if (!rawPe) return 'Not documented this encounter.'
+  if (!rawPe) return ''
   if (rawPe.includes('\n') || rawPe.includes('•')) {
     return rawPe.split('\n').map(l => l.trim()).filter(Boolean).join('\n')
   }
@@ -304,7 +304,7 @@ function extractMedications(text) {
   const list = Array.from(meds.values())
   const formattedText = list.length > 0
     ? list.map(m => `• ${m}`).join('\n')
-    : '• No current prescription medications documented this encounter.'
+    : ''
 
   return { list, formattedText }
 }
@@ -591,9 +591,10 @@ function formatClinicalDictationToSOAP(dictation = '', scratchpad = '', visitTyp
   if (instructionInfo.hasPendingActions && instructionInfo.formattedExamPlaceholder) {
     examLines.push(instructionInfo.formattedExamPlaceholder)
   } else if (explicitPe && explicitPe.length > 5) {
-    examLines.push(formatExamFindings(explicitPe))
+    const formatted = formatExamFindings(explicitPe)
+    if (formatted) examLines.push(formatted)
   } else if (isPersonalOrDemographicOnly) {
-    examLines.push('Not documented this encounter / deferred for administrative intake.')
+    examLines.push('Deferred for administrative intake.')
   } else if (/exam|palpat|tender|swelling|inspect|rom|range of motion/i.test(normalized)) {
     if (/swelling/i.test(normalized)) {
       examLines.push(/no\s+swelling/i.test(normalized) ? '• Inspection: No visible swelling or acute deformity.' : '• Inspection: Swelling observed as noted in encounter.')
@@ -604,9 +605,6 @@ function formatClinicalDictationToSOAP(dictation = '', scratchpad = '', visitTyp
     if (/range of motion|rom|flexion|extension/i.test(normalized)) {
       examLines.push('• Range of Motion: Assessed as dictated.')
     }
-  }
-  if (examLines.length === 0) {
-    examLines.push('Not documented this encounter.')
   }
 
   // Build Assessment
@@ -683,30 +681,33 @@ function formatClinicalDictationToSOAP(dictation = '', scratchpad = '', visitTyp
   if (vitals.temp) vitalsLines.push(`• Temperature: ${vitals.temp}`)
   if (vitals.rr) vitalsLines.push(`• Respiratory Rate: ${vitals.rr}`)
   if (vitals.spo2) vitalsLines.push(`• Oxygen Saturation (SpO2): ${vitals.spo2}`)
-  if (vitalsLines.length === 0) {
-    vitalsLines.push('• Vital signs: Not documented this encounter.')
-  }
 
   // Derive Codes
   const codingInput = isPersonalOrDemographicOnly ? `personal info administrative intake ${fullText}` : fullText
   const icdCodes = deriveIcd10Codes(codingInput)
   const cptCodes = deriveCptCodes(codingInput, visitType)
 
-  const fullNote = [
+  const sections = [
     'CHIEF COMPLAINT:',
     chiefComplaint,
     '',
     'HISTORY OF PRESENT ILLNESS (HPI):',
     hpiLines.join(' '),
-    '',
-    'CURRENT MEDICATIONS:',
-    medications.formattedText,
-    '',
-    'VITAL SIGNS:',
-    vitalsLines.join('\n'),
-    '',
-    'PHYSICAL EXAMINATION (PE):',
-    examLines.join('\n'),
+  ]
+
+  if (medications.list.length > 0) {
+    sections.push('', 'CURRENT MEDICATIONS:', medications.formattedText)
+  }
+
+  if (vitalsLines.length > 0) {
+    sections.push('', 'VITAL SIGNS:', vitalsLines.join('\n'))
+  }
+
+  if (examLines.length > 0) {
+    sections.push('', 'PHYSICAL EXAMINATION (PE):', examLines.join('\n'))
+  }
+
+  sections.push(
     '',
     'ASSESSMENT:',
     assessmentLines.join('\n'),
@@ -719,7 +720,9 @@ function formatClinicalDictationToSOAP(dictation = '', scratchpad = '', visitTyp
     '',
     'CPT CODES:',
     cptCodes.join('\n')
-  ].join('\n')
+  )
+
+  const fullNote = sections.join('\n')
 
   return fullNote
 }

@@ -23,9 +23,10 @@ const {
 const { resolveTemplateSections } = require('./noteTemplateSections')
 const { formatClinicalDictationToSOAP } = require('./clinicalSoapSynthesizer')
 const { applyClinicalGuardrails } = require('./clinicalGuardrails')
+const { getClinicianAiInstructions } = require('./clinicianInstructions')
 
 const CLINICAL_SYSTEM_PROMPT =
-  'You are an expert board-certified medical scribe and clinical documentation specialist. Generate structured, clinically precise clinical notes from visit transcriptions as per the visit encounter. Use plain text only — do NOT use markdown symbols, do NOT use bold markers or asterisks, do NOT use # headers, and do NOT use separator lines. Be thorough, professional, and clinically accurate. Distinguish clearly between patient symptoms/history (Subjective) and clinician findings/vitals/exam (Objective). Document specific medications with dosages, routes, frequencies, and durations if stated. Never fabricate or assume clinical details, vital signs, physical exam findings, or treatment plans that were not dictated. If the clinician commanded to copy forward or insert prior exams, output the designated placeholder; NEVER fabricate physical exam findings. Under VITAL SIGNS, write "Not documented this encounter." if none were dictated; never supply default/normal vitals. Under PHYSICAL EXAMINATION (PE), write "Not documented this encounter." if none was performed. Do not include an IMAGING section unless imaging was explicitly ordered, performed, or reviewed. Distinguish clearly between physician orders and mere discussions: if an order is dictated (e.g. for injections), document it as an order under the Plan with laterality and medical necessity intact. Never invent quotes or emit internal coder deliberations. For ICD-10 and CPT coding, assign standard codes strictly supported by the documented diagnoses and care delivered. For bilateral knee osteoarthritis, assign M17.0. Never assign acute injury codes to remote surgical history.'
+  'You are an expert board-certified medical scribe and clinical documentation specialist. Generate structured, clinically precise clinical notes from visit transcriptions as per the visit encounter. Use plain text only — do NOT use markdown symbols, do NOT use bold markers or asterisks, do NOT use # headers, and do NOT use separator lines. Be thorough, professional, and clinically accurate. Distinguish clearly between patient symptoms/history (Subjective) and clinician findings/vitals/exam (Objective). Document specific medications with dosages, routes, frequencies, and durations if stated. Never fabricate or assume clinical details, vital signs, physical exam findings, or treatment plans that were not dictated. If the clinician commanded to copy forward or insert prior exams, output the designated placeholder; NEVER fabricate physical exam findings. Strictly adhere to encounter fidelity: ONLY include sections, organ systems, and findings that were explicitly discussed, dictated, or performed in the encounter. If a section (such as VITAL SIGNS, REVIEW OF SYSTEMS, FAMILY HISTORY, or IMAGING) or an organ system (such as Cardiovascular, Pulmonary, or Abdomen) was not discussed or examined, OMIT IT ENTIRELY. NEVER output "Not documented this encounter", and NEVER output empty headers or boilerplate lines for undictated items. Distinguish clearly between physician orders and mere discussions: if an order is dictated (e.g. for injections), document it as an order under the Plan with laterality and medical necessity intact. Never invent quotes or emit internal coder deliberations. For ICD-10 and CPT coding, assign standard codes strictly supported by the documented diagnoses and care delivered. For bilateral knee osteoarthritis, assign M17.0. Never assign acute injury codes to remote surgical history.'
 
 /**
 
@@ -165,7 +166,7 @@ async function callAnthropicForNote(anthropic, settings, prompt, visitId) {
 
 
 
-async function generateAINote(transcriptions, patientInfo, templateSections, visitId) {
+async function generateAINote(transcriptions, patientInfo, templateSections, visitId, customInstructions) {
 
   try {
 
@@ -175,11 +176,16 @@ async function generateAINote(transcriptions, patientInfo, templateSections, vis
 
     if (!loaded) return null
 
-
+    let resolvedInstructions = customInstructions
+    if (resolvedInstructions === undefined && patientInfo?.clinician_id) {
+      resolvedInstructions = await getClinicianAiInstructions(patientInfo.clinician_id)
+    } else if (resolvedInstructions === undefined && patientInfo?.ai_note_instructions) {
+      resolvedInstructions = patientInfo.ai_note_instructions
+    }
 
     const combinedTranscription = buildCombinedTranscription(transcriptions)
 
-    const prompt = buildAnthropicNotePrompt(patientInfo, combinedTranscription, templateSections)
+    const prompt = buildAnthropicNotePrompt(patientInfo, combinedTranscription, templateSections, resolvedInstructions)
 
 
 
@@ -260,6 +266,7 @@ function auditUserFromOptions(options) {
 async function resolveAiDraft(transcriptions, visit) {
 
   const templateSections = await resolveTemplateSections(visit.clinician_id, visit.visit_type, 'aiPipeline')
+  const clinicianInstructions = await getClinicianAiInstructions(visit.clinician_id)
 
   let aiNote = await generateAINote(transcriptions, {
 
@@ -277,7 +284,9 @@ async function resolveAiDraft(transcriptions, visit) {
 
     visit_date: visit.visit_date,
 
-  }, templateSections, visit.id)
+    clinician_id: visit.clinician_id,
+
+  }, templateSections, visit.id, clinicianInstructions)
 
   if (!aiNote && transcriptions.length > 0) {
     const combinedTx = Array.isArray(transcriptions) ? transcriptions.join('\n\n') : String(transcriptions || '')

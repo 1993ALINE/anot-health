@@ -144,8 +144,9 @@ function calculateAgeFromDob(dob) {
  * @param {string[]} [templateSections] ordered section headers from the clinician's saved
  *   template for this visit type (see utils/noteTemplateSections.js). Falls back to the
  *   default 5-section format when absent/empty.
+ * @param {string} [customClinicianInstructions] clinician-specific commands/directives for Claude
  */
-function buildAnthropicNotePrompt(patientInfo, combinedTranscription, templateSections) {
+function buildAnthropicNotePrompt(patientInfo, combinedTranscription, templateSections, customClinicianInstructions) {
   const baseHeaders = Array.isArray(templateSections) && templateSections.length > 0
     ? templateSections
     : DEFAULT_SECTION_HEADERS
@@ -164,6 +165,16 @@ each, verbatim, and nothing else for those body parts (no "Normal:", no brackete
 text, no reminder/banner sentence — this is the clinical documentation itself, not a note-to-self):
 ${instructionInfo.formattedExamPlaceholder}
 CRITICAL SAFETY RULE: Under NO circumstances should you fabricate, assume, or infer any physical exam findings (e.g. do NOT invent Lachman tests, tenderness, range of motion, or joint line findings).\n`
+  }
+
+  let clinicianDirective = ''
+  if (customClinicianInstructions && typeof customClinicianInstructions === 'string' && customClinicianInstructions.trim()) {
+    clinicianDirective = `\nCLINICIAN-SPECIFIC NOTE DIRECTIVES / COMMANDS:
+The attending clinician has established the following custom commands, instructions, and formatting preferences for generating their clinical notes:
+"""
+${customClinicianInstructions.trim()}
+"""
+`
   }
 
   // Pre-clean non-clinical verbal filler & noise to reduce token spend by 15-20%
@@ -187,18 +198,18 @@ ${ageLine}
 MRN: ${patientInfo.mrn} (do NOT repeat the MRN inside the note body — it is shown elsewhere in the UI)
 Visit Type: ${patientInfo.visit_type}
 Date: ${patientInfo.visit_date}
-
+${clinicianDirective}
 TRANSCRIPTION(S) & CLINICIAN NOTES:
 ${cleanTranscription}
 
 INSTRUCTIONS:
-1. Start directly with the first section header below — no title, no patient header, no markdown. Use EXACTLY these ${headers.length} plain-text section headers ending with a colon, in this exact order.
-2. Under each header, write the concise, professional clinical content expected for that section.
+1. Start directly with the first section header below — no title, no patient header, no markdown. Use EXACTLY these ${headers.length} plain-text section headers ending with a colon, in this exact order, but ONLY include sections that have actual clinical content discussed, dictated, or performed in the encounter. If a section (such as VITAL SIGNS, REVIEW OF SYSTEMS, FAMILY HISTORY, or IMAGING) was not discussed, dictated, or performed, OMIT THAT SECTION ENTIRELY.
+2. Under each included header, write the concise, professional clinical content expected for that section.
 3. Under CHIEF COMPLAINT, state the primary presenting complaint (e.g. "Headache evaluation", "Acute migraine", "Knee pain"). NEVER write generic placeholders like "Clinical Consultation and Evaluation" or "Routine Consultation" when specific symptoms are dictated or discussed.
-4. Under VITAL SIGNS, ONLY document vital signs (BP, HR, Temp, RR, SpO2) that were explicitly dictated or spoken in the encounter. If vitals were not dictated, write "Not documented this encounter." NEVER invent or assume normal baseline numbers (e.g. do NOT invent 120/80, 72 bpm, 98.6°F, 16/min, or 99%).
+4. Under VITAL SIGNS, ONLY document vital signs (BP, HR, Temp, RR, SpO2) that were explicitly dictated or spoken in the encounter. If no vitals were dictated, OMIT the VITAL SIGNS section entirely from the note. NEVER invent or assume normal baseline numbers (e.g. do NOT invent 120/80, 72 bpm, 98.6°F, 16/min, or 99%).
 5. The transcript may include speaker-labeled dialogue (e.g. Speaker 0, Speaker 1). Determine who is the clinician and who is the patient based on context.
 6. Distinguish carefully between what the patient reports (Subjective / HPI) and what the clinician finds, measures, or observes (Objective / Exam).
-7. Under PHYSICAL EXAMINATION (PE), ONLY document physical exam findings explicitly dictated. If no physical exam was performed or dictated for a body part, write "Not documented this encounter." for that item, exactly once. NEVER fabricate normal organ systems or positive physical exam findings, and NEVER write "Normal:" in front of something that was not actually examined.
+7. Under PHYSICAL EXAMINATION (PE), ONLY document physical exam findings explicitly dictated for body parts or systems actually examined. If no physical exam was performed or dictated, OMIT the PHYSICAL EXAMINATION (PE) section entirely. Do NOT list unexamined organ systems or body parts, and NEVER write "Normal:" for anything that was not examined.
 8. Generate clinical documentation as per the visit encounter. Do NOT include an IMAGING section unless imaging was explicitly ordered, performed, or reviewed during the visit. NEVER fabricate imaging findings.
 9. Under ASSESSMENT & PLAN (A&P), document the assessment based on reported symptoms. Distinguish clearly between physician ORDERS/REQUESTS and mere discussions. If the clinician dictates an order (e.g. "request bilateral hyaluronic acid injections"), document this under PLAN as an ORDER / REQUEST, with laterality (bilateral) and medical necessity rationale intact. Preserve severity modifiers ("bone-on-bone", "severe", "worse with stepping down") verbatim without dilution.
 10. LOW-CONFIDENCE & CORRUPTED AUDIO: If a word is garbled, unintelligible, or a non-word (e.g. "recrelated"), do NOT guess a fact. Output an in-line query placeholder: "[UNCLEAR: recreational vs. work-related — query physician]".
@@ -215,9 +226,11 @@ INSTRUCTIONS:
     If the dictation or transcription contains personal, demographic, administrative, or social information (e.g. patient name, DOB, age, address, phone number, occupation, family status) without acute clinical symptoms or medical complaints:
     - Under CHIEF COMPLAINT, write: "Patient Intake & Personal Information Documentation" (or specific administrative reason dictated).
     - Under HISTORY OF PRESENT ILLNESS (HPI), document all dictated personal details (demographics, contact info, occupational/social history) and state: "No acute medical symptoms, active complaints, or physical distress were dictated during this encounter. Patient presents for administrative profile registration and personal health information intake."
-    - Under PHYSICAL EXAMINATION (PE), write: "Not documented this encounter / deferred for administrative intake."
+    - Under PHYSICAL EXAMINATION (PE), omit the section or write: "Deferred for administrative intake."
     - Under ASSESSMENT & PLAN (A&P), document an administrative intake encounter (Z02.89 / Z00.00) with a plan to maintain updated records and schedule routine preventive care PRN.
     - NEVER return an empty response, error, or refusal when only personal or demographic information is provided.
+15. CLINICIAN DIRECTIVES & PREFERENCES:
+    Strictly adhere to the CLINICIAN-SPECIFIC NOTE DIRECTIVES / COMMANDS above provided by the attending clinician, tailoring documentation structure, detail, style, and section emphasis according to their specific orders while maintaining clinical accuracy and truthfulness to the encounter.
 
 ${sectionList}`
 }

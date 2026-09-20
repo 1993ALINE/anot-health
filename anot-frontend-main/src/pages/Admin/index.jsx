@@ -631,7 +631,29 @@ function AdminUserTableRow({
                     <div className="adm-usercell__meta">
                         <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>{u.name}</div>
                         <div className="adm-usercell__sub">
-                            {role === 'clinician' && (u.npi ? `NPI ${u.npi}` : 'Clinician profile')}
+                            {role === 'clinician' && (
+                                <>
+                                    {u.npi ? `NPI ${u.npi}` : 'Clinician profile'}
+                                    {u.ai_note_instructions && (
+                                        <span
+                                            className="adm-badge"
+                                            style={{
+                                                marginLeft: 6,
+                                                background: '#eff6ff',
+                                                color: '#1d4ed8',
+                                                fontSize: 10,
+                                                padding: '1px 6px',
+                                                borderRadius: 4,
+                                                border: '1px solid #bfdbfe',
+                                                fontWeight: 600,
+                                            }}
+                                            title={`Claude Directives: ${u.ai_note_instructions}`}
+                                        >
+                                            🤖 Claude Directives
+                                        </span>
+                                    )}
+                                </>
+                            )}
                             {role === 'scribe' && 'Documentation specialist'}
                             {role === 'qps' && 'Quality review specialist'}
                             {(role === 'admin' || role === 'elevated') && (u.role === 'super_admin' ? 'Super Admin' : 'Platform administration')}
@@ -1446,6 +1468,7 @@ function Admin() {
                 ...(editUser.role === 'clinician' ? {
                     ehr_connection_id: editUser.ehr_connection_id || null,
                     ehr_provider_id: editUser.ehr_provider_id || null,
+                    ai_note_instructions: editUser.ai_note_instructions ? String(editUser.ai_note_instructions).trim() : null,
                 } : {}),
             }
             if (isSuperAdmin(currentUser) && editUser.role === 'admin') {
@@ -2954,6 +2977,29 @@ function Admin() {
                                         </select>
                                         <p className="adm-form-hint" style={{ marginTop: 6, fontSize: 12, color: '#64748b' }}>
                                             Notes this clinician submits push to this EHR. Multiple clinicians can share the same connection (same login credentials) — each just needs their own distinct External Provider ID above, so their schedules and patients stay separate. Configure connections under Settings.
+                                        </p>
+                                    </div>
+                                )}
+                                {editUser.role === 'clinician' && (
+                                    <div className="adm-form-group" style={{ gridColumn: '1 / -1' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                                            <label className="adm-form-label" style={{ marginBottom: 0, fontWeight: 700, color: 'var(--text-main)' }}>
+                                                Claude Note Directives & Custom Commands
+                                            </label>
+                                            <span style={{ fontSize: 11, fontWeight: 700, color: '#1d4ed8', background: '#dbeafe', padding: '2px 8px', borderRadius: 12 }}>
+                                                AI Customization
+                                            </span>
+                                        </div>
+                                        <textarea
+                                            className="adm-input"
+                                            rows={4}
+                                            style={{ resize: 'vertical', minHeight: 90, lineHeight: 1.5, fontFamily: 'inherit', width: '100%', boxSizing: 'border-box' }}
+                                            placeholder="Set custom instructions for Claude when generating notes for this doctor (e.g. Always format Assessment & Plan with numbered problems and specific follow-up plan; keep HPI under 3 sentences; emphasize patient lifestyle education)."
+                                            value={editUser.ai_note_instructions || ''}
+                                            onChange={(e) => setEditUser({ ...editUser, ai_note_instructions: e.target.value })}
+                                        />
+                                        <p className="adm-form-hint" style={{ marginTop: 6, fontSize: 12, color: '#64748b' }}>
+                                            Claude will strictly follow these directives whenever generating clinical notes for encounters with this doctor.
                                         </p>
                                     </div>
                                 )}

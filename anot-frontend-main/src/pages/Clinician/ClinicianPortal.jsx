@@ -968,10 +968,10 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
     return () => { isMounted = false }
   }, [])
 
-  const handleSaveProviderTemplates = async (updatedList) => {
-    const formatted = updatedList.map((t) => ({
-      id: t.id,
-      name: t.name || t.label,
+  const handleSaveProviderTemplates = async (templates, customAiDirectives) => {
+    const formatted = templates.map((t) => ({
+      name: t.name || t.label || 'Custom Clinical Note',
+      type: t.type || normalizeVisitTypeForDb(t.name),
       category: t.category || 'Core Primary Care',
       icon: t.icon || '📋',
       color: t.color || '#E3F2FD',
@@ -987,7 +987,26 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
       category: t.category || 'Core Primary Care',
     }))
     setProviderTemplates(mapped)
-    showToast('✓ Clinical note templates updated for your profile!')
+
+    if (customAiDirectives !== undefined) {
+      try {
+        const cleanedDirectives = customAiDirectives ? String(customAiDirectives).trim() : null
+        await authAPI.updateMe({
+          name: currentUser?.name || 'Clinician',
+          email: currentUser?.email,
+          phone: currentUser?.phone,
+          ai_note_instructions: cleanedDirectives,
+        })
+        setCurrentUser((prev) => ({
+          ...prev,
+          ai_note_instructions: cleanedDirectives,
+        }))
+      } catch (err) {
+        console.warn('Failed to update clinician AI instructions:', err.message)
+      }
+    }
+
+    showToast('✓ Clinical note templates & Claude directives updated for your profile!')
   }
 
   const fmtTime = (secs) => {
@@ -3423,6 +3442,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
         onSaveTemplates={handleSaveProviderTemplates}
         defaultTemplates={CLINICAL_TEMPLATES}
         currentDoctorName={currentUser?.name || 'Doctor'}
+        initialAiInstructions={currentUser?.ai_note_instructions || ''}
       />
     </div>
   )

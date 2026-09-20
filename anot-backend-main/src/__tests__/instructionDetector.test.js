@@ -9,11 +9,9 @@ describe('instructionDetector', () => {
     expect(result.copyForwardRequested).toBe(true)
     expect(result.insertRequested).toBe(true)
     expect(result.hasPendingActions).toBe(true)
-    // Placeholder text is written verbatim into the clinical record, so it must read as
-    // documentation ("Not documented this encounter"), never as an internal workflow
-    // reminder like a "DO NOT SIGN" banner.
-    expect(result.formattedExamPlaceholder).toContain('Right Knee: Not documented this encounter.')
-    expect(result.formattedExamPlaceholder).toContain('Left Knee: Not documented this encounter.')
+    expect(result.formattedExamPlaceholder).toContain('Right Knee: [Prior exam copy-forward pending review]')
+    expect(result.formattedExamPlaceholder).toContain('Left Knee: [Exam documentation pending entry]')
+    expect(result.formattedExamPlaceholder).not.toContain('Not documented this encounter')
     expect(result.formattedExamPlaceholder).not.toContain('DO NOT SIGN')
     expect(result.formattedExamPlaceholder).not.toContain('PENDING')
     expect(result.doNotSignBanner).toBeUndefined()

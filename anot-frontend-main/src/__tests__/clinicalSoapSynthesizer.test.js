@@ -137,7 +137,8 @@ Plan:
       expect(note).toContain('No acute medical symptoms, active complaints, or physical distress were dictated');
 
       // Physical examination deferred for administrative intake
-      expect(note).toContain('Not documented this encounter / deferred for administrative intake.');
+      expect(note).toContain('Deferred for administrative intake.');
+      expect(note).not.toContain('Not documented this encounter');
 
       // Assessment & Plan for administrative documentation
       expect(note).toContain('Encounter for administrative intake and personal demographic record documentation (Z02.89).');

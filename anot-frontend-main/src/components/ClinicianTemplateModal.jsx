@@ -41,13 +41,22 @@ export default function ClinicianTemplateModal({
   onSaveTemplates,
   defaultTemplates = [],
   currentDoctorName = 'Doctor',
+  initialAiInstructions = '',
 }) {
+  const [modalTab, setModalTab] = useState('templates')
+  const [aiInstructions, setAiInstructions] = useState(initialAiInstructions || '')
   const [templateList, setTemplateList] = useState(templates)
   const [selectedId, setSelectedId] = useState(templates[0]?.id || 'soap-adult')
   const [activeCategory, setActiveCategory] = useState('All')
   const [searchQuery, setSearchQuery] = useState('')
   const [saving, setSaving] = useState(false)
   const [feedbackMsg, setFeedbackMsg] = useState(null)
+
+  useEffect(() => {
+    if (initialAiInstructions) {
+      setAiInstructions(initialAiInstructions)
+    }
+  }, [initialAiInstructions])
 
   // Keep templateList synced if templates prop changes
   useMemo(() => {
@@ -171,8 +180,8 @@ export default function ClinicianTemplateModal({
     setSaving(true)
     setFeedbackMsg(null)
     try {
-      await onSaveTemplates(templateList)
-      setFeedbackMsg({ type: 'success', text: '✓ Templates successfully saved to your provider profile!' })
+      await onSaveTemplates(templateList, aiInstructions)
+      setFeedbackMsg({ type: 'success', text: '✓ Templates and Claude directives successfully saved to your provider profile!' })
       setTimeout(() => {
         setFeedbackMsg(null)
       }, 3500)
@@ -219,7 +228,101 @@ export default function ClinicianTemplateModal({
           </div>
         )}
 
-        {/* Body Layout */}
+        {/* Tab Switcher */}
+        <div style={{ display: 'flex', gap: 10, padding: '10px 24px', borderBottom: '1px solid var(--border, #e2e8f0)', background: '#f8fafc' }}>
+          <button
+            type="button"
+            className={`sm-tmpl-cat-pill ${modalTab === 'templates' ? 'sm-tmpl-cat-pill--active' : ''}`}
+            style={{ borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+            onClick={() => setModalTab('templates')}
+          >
+            📋 Note Templates ({templateList.length})
+          </button>
+          <button
+            type="button"
+            className={`sm-tmpl-cat-pill ${modalTab === 'claude_directives' ? 'sm-tmpl-cat-pill--active' : ''}`}
+            style={{ borderRadius: 8, padding: '8px 16px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+            onClick={() => setModalTab('claude_directives')}
+          >
+            🤖 Claude Note Directives {aiInstructions?.trim() ? '✓' : ''}
+          </button>
+        </div>
+
+        {/* Tab 2: Claude Directives View */}
+        {modalTab === 'claude_directives' ? (
+          <div style={{ padding: '24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '16px 20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <span style={{ fontSize: 20 }}>🤖</span>
+                <strong style={{ fontSize: 16, color: '#166534' }}>Attending Clinician Claude Directives</strong>
+                <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, color: '#15803d', background: '#dcfce7', padding: '2px 8px', borderRadius: 12 }}>
+                  Active Prompt Layer
+                </span>
+              </div>
+              <p style={{ margin: 0, fontSize: 13, color: '#166534', lineHeight: 1.5 }}>
+                Instruct Claude on exactly how to formulate and present your clinical notes. These instructions take immediate effect on all draft generations and dictation processing for your visits.
+              </p>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontWeight: 700, fontSize: 14, marginBottom: 8, color: 'var(--text-main, #0f172a)' }}>
+                Your Custom Claude Prompt Directives:
+              </label>
+              <textarea
+                className="sm-tmpl-textarea"
+                rows={10}
+                style={{ width: '100%', minHeight: 180, boxSizing: 'border-box', fontFamily: 'inherit', fontSize: 14, lineHeight: 1.6 }}
+                placeholder="e.g. Always structure the Assessment & Plan by numbered clinical problem with explicit diagnostic reasoning and follow-up timeline. Keep HPI strictly under 3 sentences. Emphasize patient lifestyle counseling."
+                value={aiInstructions}
+                onChange={(e) => setAiInstructions(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#64748b', display: 'block', marginBottom: 8 }}>
+                Quick Add Directive Suggestions:
+              </span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {[
+                  { label: 'Numbered A&P by Problem', text: 'Format Assessment & Plan as numbered clinical problems with distinct diagnostics, therapy, and follow-up plans.' },
+                  { label: 'Concise HPI (under 3 sentences)', text: 'Keep the History of Present Illness (HPI) strictly under 3 concise sentences focusing only on acute onset and primary symptoms.' },
+                  { label: 'Lifestyle Counseling Focus', text: 'Document all patient lifestyle, nutrition, and exercise counseling in detail under the Assessment & Plan.' },
+                  { label: 'Standard Chronic Disease CDM Layout', text: 'For chronic disease follow-up, list each chronic condition with glycemic/BP control status, adherence, and medication titration.' },
+                ].map((s) => (
+                  <button
+                    key={s.label}
+                    type="button"
+                    className="sm-tmpl-section-btn"
+                    style={{ fontSize: 12, padding: '6px 12px' }}
+                    onClick={() => {
+                      setAiInstructions((prev) => {
+                        const trimmed = (prev || '').trim()
+                        return trimmed ? `${trimmed}\n\n${s.text}` : s.text
+                      })
+                    }}
+                  >
+                    + {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 'auto', paddingTop: 16, borderTop: '1px solid var(--border, #e2e8f0)' }}>
+              <button type="button" className="sm-btn-cancel-clean" onClick={onClose}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="sm-btn-save-tmpl"
+                onClick={handleSaveAll}
+                disabled={saving}
+              >
+                {saving ? 'Saving...' : '💾 Save Directives to Profile'}
+              </button>
+            </div>
+          </div>
+        ) : (
+        /* Body Layout */
         <div className="sm-tmpl-body">
           {/* Left Column: Template Roster */}
           <div className="sm-tmpl-sidebar">
@@ -457,6 +560,7 @@ export default function ClinicianTemplateModal({
             </div>
           </div>
         </div>
+        )}
       </div>
     </div>
   )

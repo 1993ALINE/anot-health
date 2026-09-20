@@ -152,7 +152,7 @@ export function formatVitalsSection(vitalsObj) {
     lines.push(`• Oxygen Saturation (SpO2): ${vitalsObj.spo2}`)
   }
   if (lines.length === 0) {
-    return '• Vital signs: Not documented this encounter.'
+    return ''
   }
   return lines.join('\n')
 }
@@ -228,7 +228,7 @@ export function formatNumberedList(text) {
 }
 
 export function formatExamFindings(rawPe) {
-  if (!rawPe) { return 'Not documented this encounter.' }
+  if (!rawPe) { return '' }
   if (rawPe.includes('\n') || rawPe.includes('•')) {
     return rawPe.split('\n').map(l => l.trim()).filter(Boolean).join('\n')
   }
@@ -297,7 +297,7 @@ export function extractMedications(text) {
   const list = Array.from(meds.values())
   const formattedText = list.length > 0
     ? list.map(m => `• ${m}`).join('\n')
-    : '• No current prescription medications documented this encounter.'
+    : ''
 
   return { list, formattedText }
 }
@@ -721,7 +721,7 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
   if (explicitPe && explicitPe.length > 5) {
     examText = formatExamFindings(explicitPe)
   } else if (isPersonalOrDemographicOnly) {
-    examText = 'Not documented this encounter / deferred for administrative intake.'
+    examText = 'Deferred for administrative intake.'
   } else {
     const copyForwardMatch = normalized.match(/(?:copy\s+(?:over|forward)|pull\s+forward|carry\s+forward|same\s+as\s+before)\s+(?:the\s+)?(?:prior|previous|last)?\s*([a-z0-9\s\-]+?)\s*(?:exam|examination|physical\s+exam)/i)
     const insertMatch = normalized.match(/(?:insert|add)\s+(?:a\s+)?([a-z0-9\s\-]+?)(?:,\s*)?(?:physical\s+exam|exam|examination)/i)
@@ -730,16 +730,16 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
 
     const examLines = []
     if (copyForwardRequested || insertRequested) {
-      // Label each placeholder with the body part actually dictated (falling back to "Exam"
-      // when none was named) — never a hardcoded anatomical region. This text is written
-      // verbatim into the clinical record, so it must read as documentation ("Not documented
-      // this encounter"), not as an internal workflow reminder.
       const titleCase = (s) => (s || '').trim().replace(/\b(?:prior|the|last|previous|a|an)\b/gi, '').trim()
         .split(/\s+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ')
-      const targets = new Set()
-      if (copyForwardMatch) { targets.add(titleCase(copyForwardMatch[1]) || 'Exam') }
-      if (insertMatch) { targets.add(titleCase(insertMatch[1]) || 'Exam') }
-      targets.forEach((label) => examLines.push(`  ${label}: Not documented this encounter.`))
+      if (copyForwardMatch) {
+        const label = titleCase(copyForwardMatch[1]) || 'Exam'
+        examLines.push(`  ${label}: [Prior exam copy-forward pending review]`)
+      }
+      if (insertMatch) {
+        const label = titleCase(insertMatch[1]) || 'Exam'
+        examLines.push(`  ${label}: [Exam documentation pending entry]`)
+      }
     } else if (/exam|palpat|tender|swelling|inspect|rom|range of motion/i.test(normalized)) {
       if (/swelling/i.test(normalized)) {
         examLines.push(/no\s+swelling/i.test(normalized) ? '• Inspection: No visible swelling or acute deformity.' : '• Inspection: Swelling observed as noted in encounter.')
@@ -750,9 +750,6 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
       if (/range of motion|rom|flexion|extension/i.test(normalized)) {
         examLines.push('• Range of Motion: Assessed as dictated.')
       }
-    }
-    if (examLines.length === 0) {
-      examLines.push('Focused physical examination not documented this encounter.')
     }
     examText = examLines.join('\n')
   }
@@ -893,23 +890,35 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
   const icdCodes = deriveIcd10Codes(codingInput)
   const cptCodes = deriveCptCodes(codingInput, visitType)
 
-  const fullNote = [
+  const sections = [
     'CHIEF COMPLAINT:',
     primaryComplaint,
     '',
     'HISTORY OF PRESENT ILLNESS (HPI):',
     hpiText,
-    '',
-    'CURRENT MEDICATIONS:',
-    medications.formattedText,
-    '',
-    'VITAL SIGNS:',
-    vitalsText,
-    '',
-    'PHYSICAL EXAMINATION (PE):',
-    examText,
-    ...(specializedSection ? ['', specializedSection.header, specializedSection.content] : []),
-    ...(imagingText ? ['', 'IMAGING & DIAGNOSTICS:', imagingText] : []),
+  ]
+
+  if (medications.list.length > 0) {
+    sections.push('', 'CURRENT MEDICATIONS:', medications.formattedText)
+  }
+
+  if (vitalsText && vitalsText.trim().length > 0) {
+    sections.push('', 'VITAL SIGNS:', vitalsText)
+  }
+
+  if (examText && examText.trim().length > 0) {
+    sections.push('', 'PHYSICAL EXAMINATION (PE):', examText)
+  }
+
+  if (specializedSection) {
+    sections.push('', specializedSection.header, specializedSection.content)
+  }
+
+  if (imagingText) {
+    sections.push('', 'IMAGING & DIAGNOSTICS:', imagingText)
+  }
+
+  sections.push(
     '',
     'ASSESSMENT:',
     assessmentLines.join('\n'),
@@ -922,7 +931,9 @@ export function formatClinicalDictationToSOAP(dictation, scratch = '', visitType
     '',
     'CPT CODES:',
     cptCodes.join('\n')
-  ].join('\n')
+  )
+
+  const fullNote = sections.join('\n')
 
   return fullNote
 }

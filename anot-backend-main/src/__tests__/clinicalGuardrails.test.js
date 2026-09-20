@@ -16,22 +16,26 @@ ASSESSMENT & PLAN (A&P):
 
     const sanitized = applyClinicalGuardrails(rawNote, transcript)
     expect(sanitized).not.toContain('Positive Lachman test')
-    expect(sanitized).toContain('Right Knee: Not documented this encounter.')
-    expect(sanitized).toContain('Left Knee: Not documented this encounter.')
+    expect(sanitized).toContain('Right Knee: [Prior exam copy-forward pending review]')
+    expect(sanitized).toContain('Left Knee: [Exam documentation pending entry]')
+    expect(sanitized).not.toContain('Not documented this encounter')
     expect(sanitized).not.toContain('DO NOT SIGN')
     expect(sanitized).not.toContain('PENDING')
   })
 
-  test('replaces fabricated imaging with standard gap marker when no imaging spoken', () => {
+  test('omits fabricated imaging when no imaging spoken', () => {
     const transcript = 'Patient presents with knee pain. No imaging performed.'
     const rawNote = `
+CHIEF COMPLAINT:
+Bilateral knee pain
+
 IMAGING:
 Right knee X-ray shows mild degenerative changes.
 `.trim()
 
     const sanitized = applyClinicalGuardrails(rawNote, transcript)
     expect(sanitized).not.toContain('shows mild degenerative changes')
-    expect(sanitized).toContain('None documented or ordered this encounter.')
+    expect(sanitized).not.toContain('IMAGING')
   })
 
   test('strips coder deliberations and fake citations', () => {

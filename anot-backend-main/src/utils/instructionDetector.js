@@ -59,7 +59,7 @@ function detectScribeInstructions(transcript) {
     examItems.push({
       target: label,
       type: 'copy_forward',
-      text: `  ${label}: Not documented this encounter.`,
+      text: `  ${label}: [Prior exam copy-forward pending review]`,
     })
   }
 
@@ -88,7 +88,7 @@ function detectScribeInstructions(transcript) {
       examItems.push({
         target: label,
         type: 'insert',
-        text: `  ${label}: Not documented this encounter.`,
+        text: `  ${label}: [Exam documentation pending entry]`,
       })
     }
   }
@@ -99,7 +99,7 @@ function detectScribeInstructions(transcript) {
     examItems.push({
       target: 'Exam',
       type: 'copy_forward',
-      text: '  Not documented this encounter.',
+      text: '  Exam: [Prior exam copy-forward pending review]',
     })
   }
 
@@ -109,7 +109,7 @@ function detectScribeInstructions(transcript) {
     examItems.push({
       target: 'Exam',
       type: 'insert',
-      text: '  Not documented this encounter.',
+      text: '  Exam: [Exam documentation pending entry]',
     })
   }
 
@@ -133,10 +133,8 @@ function detectScribeInstructions(transcript) {
     return true
   })
 
-  // NOTE: this placeholder text is written verbatim into the clinical note body, so it must
-  // read as clinical documentation ("Not documented this encounter"), never as an internal
-  // workflow instruction (e.g. a "DO NOT SIGN" banner) — that kind of reminder belongs in the
-  // review UI/workflow layer, not the permanent record.
+  // NOTE: this placeholder text indicates pending review/entry without using banned filler
+  // phrases like "Not documented this encounter", and avoids workflow banners like "DO NOT SIGN".
   let formattedExamPlaceholder = null
   if (dedupedItems.length > 0) {
     formattedExamPlaceholder = dedupedItems.map((it) => it.text).join('\n')

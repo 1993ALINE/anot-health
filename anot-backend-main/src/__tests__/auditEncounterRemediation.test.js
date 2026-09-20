@@ -46,10 +46,9 @@ describe('Audit Encounter Remediation (Anot vs Knowtex)', () => {
     expect(instructions.copyForwardRequested).toBe(true)
     expect(instructions.insertRequested).toBe(true)
     expect(instructions.hasPendingActions).toBe(true)
-    // Placeholder text is written verbatim into the note body, so it must read as clinical
-    // documentation, never as an internal workflow reminder (no "DO NOT SIGN", no brackets).
-    expect(instructions.formattedExamPlaceholder).toContain('Right Knee: Not documented this encounter.')
-    expect(instructions.formattedExamPlaceholder).toContain('Left Knee: Not documented this encounter.')
+    expect(instructions.formattedExamPlaceholder).toContain('Right Knee: [Prior exam copy-forward pending review]')
+    expect(instructions.formattedExamPlaceholder).toContain('Left Knee: [Exam documentation pending entry]')
+    expect(instructions.formattedExamPlaceholder).not.toContain('Not documented this encounter')
     expect(instructions.formattedExamPlaceholder).not.toContain('DO NOT SIGN')
     expect(instructions.formattedExamPlaceholder).not.toContain('PENDING')
   })
@@ -109,16 +108,17 @@ CPT CODES:
     // A-01: Zero fabricated Lachman or tenderness; clinical-record-safe placeholders present
     expect(sanitized).not.toContain('Positive Lachman test')
     expect(sanitized).not.toContain('tenderness to palpation over the MCL joint')
-    expect(sanitized).toContain('Right Knee: Not documented this encounter.')
-    expect(sanitized).toContain('Left Knee: Not documented this encounter.')
+    expect(sanitized).toContain('Right Knee: [Prior exam copy-forward pending review]')
+    expect(sanitized).toContain('Left Knee: [Exam documentation pending entry]')
+    expect(sanitized).not.toContain('Not documented this encounter')
     expect(sanitized).not.toContain('DO NOT SIGN')
     expect(sanitized).not.toContain('PENDING')
     // The guardrail must collapse to a single PHYSICAL EXAMINATION section, not repeat it
     expect((sanitized.match(/PHYSICAL EXAMINATION/gi) || []).length).toBe(1)
 
-    // A-02: Zero fabricated X-ray results
+    // A-02: Zero fabricated X-ray results (omitted entirely)
     expect(sanitized).not.toContain('Right knee X-ray shows mild degenerative changes')
-    expect(sanitized).toContain('None documented or ordered this encounter.')
+    expect(sanitized).not.toContain('IMAGING')
 
     // A-03 & A-09: Coder query and fabricated citation stripped
     expect(sanitized).not.toContain('transcript indicates')
@@ -142,7 +142,8 @@ CPT CODES:
     // A-18: E&M descriptor 99214 corrected to moderate complexity MDM
     expect(sanitized).toContain('moderate complexity MDM')
 
-    // Terminology: Not documented this encounter
+    // Terminology: Not documented this encounter eliminated
+    expect(sanitized).not.toContain('Not documented this encounter')
     expect(sanitized).not.toContain('Not dictated in this encounter')
   })
 
@@ -154,8 +155,9 @@ CPT CODES:
 
     expect(offlineNote).toContain('M17.0 — Bilateral primary osteoarthritis of knee')
     expect(offlineNote).toContain('ORDER: Bilateral hyaluronic acid knee injections requested')
-    expect(offlineNote).toContain('Right Knee: Not documented this encounter.')
-    expect(offlineNote).toContain('Left Knee: Not documented this encounter.')
+    expect(offlineNote).toContain('Right Knee: [Prior exam copy-forward pending review]')
+    expect(offlineNote).toContain('Left Knee: [Exam documentation pending entry]')
+    expect(offlineNote).not.toContain('Not documented this encounter')
     expect(offlineNote).not.toContain('DO NOT SIGN')
     expect(offlineNote).not.toContain('PENDING')
     expect(offlineNote).not.toContain('71020')

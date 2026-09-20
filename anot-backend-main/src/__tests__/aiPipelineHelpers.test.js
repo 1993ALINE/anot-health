@@ -140,9 +140,26 @@ describe('buildAnthropicNotePrompt', () => {
     const transcript = 'Please copy over prior right knee exam. Please insert a left knee, physical exam.'
     const prompt = buildAnthropicNotePrompt(patientInfo, transcript)
     expect(prompt).toContain('EMBEDDED SCRIBE COMMANDS DETECTED IN TRANSCRIPT:')
-    expect(prompt).toContain('Right Knee: Not documented this encounter.')
-    expect(prompt).toContain('Left Knee: Not documented this encounter.')
+    expect(prompt).toContain('Right Knee: [Prior exam copy-forward pending review]')
+    expect(prompt).toContain('Left Knee: [Exam documentation pending entry]')
+    expect(prompt).not.toContain('Not documented this encounter')
     expect(prompt).not.toContain('DO NOT SIGN')
+  })
+
+  test('injects clinician-specific directives when custom instructions are provided', () => {
+    const customCommand = 'Format Assessment & Plan with numbered problems. Keep HPI strictly under 3 sentences.'
+    const prompt = buildAnthropicNotePrompt(patientInfo, 'Patient reports knee pain.', null, customCommand)
+    expect(prompt).toContain('CLINICIAN-SPECIFIC NOTE DIRECTIVES / COMMANDS:')
+    expect(prompt).toContain(customCommand)
+    expect(prompt).toContain('15. CLINICIAN DIRECTIVES & PREFERENCES:')
+  })
+
+  test('omits clinician directive block when custom instructions are not provided or whitespace', () => {
+    const promptNull = buildAnthropicNotePrompt(patientInfo, 'Patient reports knee pain.', null, null)
+    expect(promptNull).not.toContain('CLINICIAN-SPECIFIC NOTE DIRECTIVES / COMMANDS:')
+
+    const promptEmpty = buildAnthropicNotePrompt(patientInfo, 'Patient reports knee pain.', null, '   ')
+    expect(promptEmpty).not.toContain('CLINICIAN-SPECIFIC NOTE DIRECTIVES / COMMANDS:')
   })
 })
 

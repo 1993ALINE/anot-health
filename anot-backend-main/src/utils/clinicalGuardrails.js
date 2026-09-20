@@ -43,7 +43,7 @@ function applyClinicalGuardrails(noteText, transcriptText = '', _context = {}) {
   // itself another PHYSICAL EXAMINATION variant — this collapses any duplicate/echoed PE
   // header blocks the model may have produced into a single span so they can be replaced
   // with one canonical section instead of leaving extra copies behind.
-  const peHeaderRegex = /(PHYSICAL EXAMINATION(?:\s*\(PE\))?:?)([\s\S]*?)(?=\n(?!\s*PHYSICAL EXAMINATION)[A-Z0-9\s&()\-]{3,40}:|$)/i
+  const peHeaderRegex = /(PHYSICAL EXAMINATION(?:\s*\(PE\))?:?)([\s\S]*?)(?=\n(?!\s*PHYSICAL EXAMINATION)[A-Z][A-Z0-9 &()/\-]{2,40}:|$)/i
   if (instructionResult.hasPendingActions && instructionResult.formattedExamPlaceholder) {
     // If clinician dictated copy-forward or insertion instructions, the note MUST NOT
     // contain fabricated exam findings. Replace the physical exam section body with placeholders.
@@ -67,22 +67,23 @@ function applyClinicalGuardrails(noteText, transcriptText = '', _context = {}) {
       const examBody = peMatch[2].trim()
       const hasSpokenExamInTranscript = /(?:on\s+exam|palpation|inspection|range\s+of\s+motion|rom|tender|swelling|lachman|mcmurray)/i.test(transcriptLower)
       if (!hasSpokenExamInTranscript && /(?:lachman|mcl|lateral\s+joint\s+line|tenderness|positive)/i.test(examBody)) {
-        text = text.replace(peHeaderRegex, `${peMatch[1]}\nNot documented this encounter.\n`)
+        // If fabricated exam was produced but no exam was in transcript, remove PE section
+        text = text.replace(peHeaderRegex, '')
       }
     }
   }
 
-  // ─── 3. Imaging Guardrail (Zero-Fabrication Rule) ───
+  // ─── 3. Imaging Guardrail (Zero-Fabrication & Omission Rule) ───
   const hasImagingOrderOrResult = /(?:order(?:ed|ing)?\s+(?:an?\s+)?(?:x-?ray|radiograph|mri|ct|ultrasound|imaging)|x-?ray\s+(?:shows|showed|reveals|demonstrated|taken)|mri\s+(?:shows|showed|ordered)|repeat\s+x-?ray|(?:knee|chest|ankle|spine)\s+x-?ray)/i.test(transcriptLower) &&
     !/(?:no\s+imaging|no\s+x-?ray|no\s+radiograph|no\s+mri|imaging(?:\s+was)?\s+not\s+performed)/i.test(transcriptLower)
 
-  const imagingHeaderRegex = /(IMAGING(?:\s*&(?:\s*DIAGNOSTICS)?)?:)([\s\S]*?)(?=\n[A-Z0-9\s&()\-]{3,40}:|$)/i
+  const imagingHeaderRegex = /(IMAGING(?:\s*&(?:\s*DIAGNOSTICS)?)?:)([\s\S]*?)(?=\n[A-Z][A-Z0-9 &()/\-]{2,40}:|$)/i
   const imagingMatch = text.match(imagingHeaderRegex)
 
   if (imagingMatch) {
     if (!hasImagingOrderOrResult) {
-      // Transcript mentions zero imaging orders or interpretations -> Replace any fabricated X-ray/MRI with standard gap marker
-      text = text.replace(imagingHeaderRegex, `${imagingMatch[1]}\nNone documented or ordered this encounter.\n`)
+      // Transcript mentions zero imaging orders or interpretations -> Omit IMAGING section entirely
+      text = text.replace(imagingHeaderRegex, '')
     }
   }
 
@@ -137,9 +138,17 @@ function applyClinicalGuardrails(noteText, transcriptText = '', _context = {}) {
     '99214 — Office or other outpatient visit for evaluation and management of established patient (moderate complexity MDM)'
   )
 
-  // ─── 6. Terminology Standardization ───
-  text = text.replace(/Not dictated in this encounter/gi, 'Not documented this encounter')
-  text = text.replace(/Not documented \/ Not dictated in this encounter\.?/gi, 'Not documented this encounter.')
+  // ─── 6. Banned Filler Phrase Removal & Dynamic Empty Section Pruning ───
+  // Strip any line containing "Not documented this encounter" or "Not dictated in this encounter"
+  text = text.replace(/^[ \t]*.*(?:Not documented this encounter|Not dictated in this encounter).*\n?/gmi, '')
+
+  // Prune any section headers that are left completely empty
+  let prevText
+  do {
+    prevText = text
+    text = text.replace(/(?:^|\n)[A-Z][A-Z0-9 &()/\-]{2,40}:[ \t]*(?=\n+[A-Z][A-Z0-9 &()/\-]{2,40}:)/g, '')
+    text = text.replace(/(?:^|\n)[A-Z][A-Z0-9 &()/\-]{2,40}:[ \t\r\n]*$/g, '')
+  } while (text !== prevText)
 
   // ─── 7. Cleanup Empty Lines ───
   text = text.replace(/\n{3,}/g, '\n\n').trim()

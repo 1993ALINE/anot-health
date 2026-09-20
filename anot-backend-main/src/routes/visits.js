@@ -86,6 +86,7 @@ const { getVisitForUser } = require('../utils/visitAccess')
 const { setVisitTranscriptionStatus } = require('../utils/visitSchemaCompat')
 const { resolveTemplateSections } = require('../utils/noteTemplateSections')
 const { formatClinicalDictationToSOAP } = require('../utils/clinicalSoapSynthesizer')
+const { getClinicianAiInstructions } = require('../utils/clinicianInstructions')
 
 const TRANSCRIPTION_UNAVAILABLE_RE = /^\[Recording \d+: transcription unavailable\]$/i
 
@@ -215,6 +216,7 @@ async function generateDraft(req, res) {
 
     const requestedTemplate = req.body?.template || req.body?.template_id || req.body?.visit_type || row.visit_type
     const templateSections = await resolveTemplateSections(row.clinician_id, requestedTemplate, 'generate-draft')
+    const clinicianInstructions = await getClinicianAiInstructions(row.clinician_id)
 
     // Age dictated in the transcript itself ("63-year-old male...") takes priority over
     // the on-file date_of_birth for this note — it's what the clinician actually said.
@@ -228,7 +230,8 @@ async function generateDraft(req, res) {
       mrn: row.mrn,
       visit_type: row.visit_type,
       visit_date: row.visit_date,
-    }, templateSections, id)
+      clinician_id: row.clinician_id,
+    }, templateSections, id, clinicianInstructions)
     let aiUsed = true
     if (!aiDraft || aiDraft === AI_DRAFT_UNAVAILABLE) {
       aiUsed = false

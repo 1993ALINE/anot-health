@@ -1,10 +1,11 @@
 const { formatClinicalDictationToSOAP, extractVitals } = require('../utils/clinicalSoapSynthesizer')
 
 describe('clinicalSoapSynthesizer', () => {
-  test('does not invent vital signs when none are dictated', () => {
+  test('does not invent vital signs when none are dictated and omits section', () => {
     const dictation = 'Patient reports mild knee pain after tripping on a step yesterday. No other complaints.'
     const soap = formatClinicalDictationToSOAP(dictation, '', 'Follow-up', { patientName: 'John Doe', mrn: '123' })
-    expect(soap).toContain('• Vital signs: Not documented this encounter.')
+    expect(soap).not.toContain('VITAL SIGNS:')
+    expect(soap).not.toContain('Not documented this encounter')
     expect(soap).not.toContain('120/80')
     expect(soap).not.toContain('72 bpm')
     expect(soap).not.toContain('98.6')
@@ -24,10 +25,11 @@ describe('clinicalSoapSynthesizer', () => {
     expect(soap).not.toContain('120/80')
   })
 
-  test('does not fabricate physical exams when none are dictated', () => {
+  test('does not fabricate physical exams when none are dictated and omits section', () => {
     const dictation = 'Patient called in reporting mild headache for 2 days. Resting at home.'
     const soap = formatClinicalDictationToSOAP(dictation, '', 'Follow-up')
-    expect(soap).toContain('Not documented this encounter.')
+    expect(soap).not.toContain('PHYSICAL EXAMINATION (PE):')
+    expect(soap).not.toContain('Not documented this encounter')
     expect(soap).not.toContain('PERRLA')
     expect(soap).not.toContain('Cranial nerves II-XII')
     expect(soap).not.toContain('Kernig')
@@ -109,7 +111,8 @@ Plan:
       expect(note).toContain('No acute medical symptoms, active complaints, or physical distress were dictated')
 
       // Physical examination deferred for administrative intake
-      expect(note).toContain('Not documented this encounter / deferred for administrative intake.')
+      expect(note).toContain('Deferred for administrative intake.')
+      expect(note).not.toContain('Not documented this encounter')
 
       // Assessment & Plan for administrative documentation
       expect(note).toContain('Encounter for administrative intake and personal demographic record documentation (Z02.89).')
