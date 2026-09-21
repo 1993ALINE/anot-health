@@ -758,32 +758,71 @@ const lockNote = async (req, res) => {
 }
 
 // ─── GET CLINICIAN PRACTICE STATS ─────────────────────────────────────────────
+// Accepts optional ?period=30d (default) or ?period=all for lifetime totals.
+// Returns computed cancellation_rate and finalization_rate so the frontend
+// never needs to hardcode percentages.
 
 const getClinicianPracticeStats = async (req, res) => {
   try {
     const clinicianId = req.user.id
+    const periodParam = String(req.query?.period || '30d').toLowerCase()
+    const usePeriod = periodParam !== 'all'
+    // Default window: last 30 calendar days (inclusive of today)
+    const windowDays = usePeriod ? (parseInt(periodParam, 10) || 30) : null
+
+    // Build optional date filter clause
+    const dateFilter = usePeriod
+      ? `AND v.visit_date >= (CURRENT_DATE - INTERVAL '${windowDays} days')`
+      : ''
+
     const statsQuery = await pool.query(
       `SELECT
          COUNT(*) FILTER (WHERE v.status IN ('done', 'completed', 'signed', 'uploaded', 'note-ready', 'recording-uploaded')) AS total_patients_seen,
-         COUNT(*) FILTER (WHERE v.status IN ('cancelled', 'canceled')) AS cancelled_visits,
-         COUNT(*) FILTER (WHERE v.status IN ('scheduled', 'pending', 'draft', 'in_progress', 'ready') OR (n.final_note IS NULL AND (n.ai_draft IS NOT NULL OR n.transcription IS NOT NULL))) AS pending_notes,
-         COUNT(*) FILTER (WHERE n.locked_at IS NOT NULL OR v.status = 'signed' OR (n.final_note IS NOT NULL AND n.final_note <> '')) AS signed_notes
+         COUNT(*) FILTER (WHERE v.status IN ('cancelled', 'canceled'))                                                        AS cancelled_visits,
+         COUNT(*) FILTER (WHERE v.status IN ('scheduled', 'pending', 'draft', 'in_progress', 'ready')
+                              OR (n.final_note IS NULL AND (n.ai_draft IS NOT NULL OR n.transcription IS NOT NULL)))          AS pending_notes,
+         COUNT(*) FILTER (WHERE n.locked_at IS NOT NULL OR v.status = 'signed'
+                              OR (n.final_note IS NOT NULL AND n.final_note <> ''))                                           AS signed_notes,
+         COUNT(*)                                                                                                              AS total_visits
        FROM visits v
        LEFT JOIN LATERAL (
          SELECT * FROM notes WHERE visit_id = v.id ORDER BY updated_at DESC, id DESC LIMIT 1
        ) n ON true
-       WHERE v.clinician_id = $1`,
-      [clinicianId]
+       WHERE v.clinician_id = $1
+       ${dateFilter}`,
+      [clinicianId],
     )
 
     const row = statsQuery.rows[0] || {}
+    const totalPatientsSeen  = parseInt(row.total_patients_seen || 0, 10)
+    const cancelledVisits    = parseInt(row.cancelled_visits    || 0, 10)
+    const pendingNotes       = parseInt(row.pending_notes       || 0, 10)
+    const signedNotes        = parseInt(row.signed_notes        || 0, 10)
+    const totalVisits        = parseInt(row.total_visits        || 0, 10)
+
+    // Cancellation rate = cancelled / total scheduled (completed + cancelled)
+    const scheduledTotal = totalPatientsSeen + cancelledVisits
+    const cancellationRate = scheduledTotal > 0
+      ? Math.round((cancelledVisits / scheduledTotal) * 1000) / 10 // 1 decimal
+      : 0
+
+    // Finalization rate = signed / (signed + pending)
+    const noteTotal = signedNotes + pendingNotes
+    const finalizationRate = noteTotal > 0
+      ? Math.round((signedNotes / noteTotal) * 1000) / 10
+      : 100
+
     res.status(200).json({
       stats: {
-        total_patients_seen: parseInt(row.total_patients_seen || 0, 10),
-        cancelled_visits: parseInt(row.cancelled_visits || 0, 10),
-        pending_notes: parseInt(row.pending_notes || 0, 10),
-        signed_notes: parseInt(row.signed_notes || 0, 10),
-      }
+        total_patients_seen: totalPatientsSeen,
+        cancelled_visits:    cancelledVisits,
+        pending_notes:       pendingNotes,
+        signed_notes:        signedNotes,
+        total_visits:        totalVisits,
+        cancellation_rate:   cancellationRate,
+        finalization_rate:   finalizationRate,
+        stats_period:        usePeriod ? `${windowDays}d` : 'all',
+      },
     })
   } catch (err) {
     sendHttpError(res, 500, err, { context: 'visitController.getClinicianPracticeStats', req })

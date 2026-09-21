@@ -420,9 +420,9 @@ export const authAPI = {
     }
     return data
   },
-  updateMe: async ({ name, email, phone, avatar_data_url, personal_info }) => {
+  updateMe: async ({ name, email, phone, avatar_data_url, personal_info, clinic_name, clinic_address, specialty, license, npi, default_template_id, ai_note_instructions }) => {
     const data = await apiMutate('PUT', '/auth/me', {
-      body: { name, email, phone, avatar_data_url, personal_info },
+      body: { name, email, phone, avatar_data_url, personal_info, clinic_name, clinic_address, specialty, license, npi, default_template_id, ai_note_instructions },
     })
     if (data.user) { setStoredUser(data.user) }
     return data
@@ -519,7 +519,7 @@ export const visitsAPI = {
     if (date)       {params.append('date', date)}
     return apiFetch(`/visits?${params.toString()}`, { signal })
   },
-  getPracticeStats: async () => apiFetch('/visits/practice-stats'),
+  getPracticeStats: async (period = '30d') => apiFetch(`/visits/practice-stats?period=${encodeURIComponent(period)}`),
   create: async (visitData) => apiMutate('POST', '/visits', { body: visitData }),
   updateStatus: async (id, status) => apiMutate('PUT', `/visits/${id}/status`, { body: { status } }),
   endVisit: async (id, durationSeconds) => apiMutate('PUT', `/visits/${id}/end`, { body: { duration_seconds: durationSeconds } }),
@@ -673,6 +673,15 @@ export const assignmentsAPI = {
 
 export const supportAPI = {
   sendMessage: async (payload) => apiMutate('POST', '/support/message', { body: payload }),
+}
+
+// ─── RECEIPTS ──────────────────────────────────────────────────────────────────
+
+export const receiptsAPI = {
+  /** Returns all payment receipts for the authenticated clinician, newest first. */
+  getAll: async () => apiFetch('/receipts'),
+  /** Returns a single receipt with full clinician details for printing. */
+  getById: async (id) => apiFetch(`/receipts/${encodeURIComponent(id)}`),
 }
 
 export const consentAPI = {

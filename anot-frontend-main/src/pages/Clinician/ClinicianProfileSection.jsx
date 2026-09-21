@@ -1,265 +1,440 @@
-import { useState, useEffect, useMemo } from 'react'
-import { authAPI, visitsAPI } from '../../services/api'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { authAPI, visitsAPI, receiptsAPI } from '../../services/api'
 import './ClinicianProfile.css'
 
-export default function ClinicianProfileSection({
-  currentUser,
-  onUserUpdated,
-  onShowToast,
-}) {
-  // Practice activity statistics
-  const [stats, setStats] = useState({
-    total_patients_seen: 1428,
-    cancelled_visits: 32,
-    pending_notes: 3,
-    signed_notes: 1393,
-  })
+// ─── Receipt HTML printer ────────────────────────────────────────────────────
+// Opens a new window with a formatted receipt optimised for window.print().
+// No external PDF library required — clinician uses browser "Print → Save as PDF".
 
-  // Edit Profile Modal
+function printReceiptHtml(receipt, clinicianName) {
+  const fmt = (dateStr) => {
+    if (!dateStr) return '—'
+    try {
+      return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+    } catch { return dateStr }
+  }
+  const amount = receipt.amount != null ? `$${Number(receipt.amount).toFixed(2)} USD` : '—'
+  const statusLabel = { paid: 'Paid ✓', pending: 'Pending', failed: 'Failed ✕', refunded: 'Refunded ↩' }[receipt.payment_status] || receipt.payment_status
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Receipt ${receipt.receipt_number}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;color:#0F172A;background:#fff;padding:48px}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:40px;padding-bottom:24px;border-bottom:2px solid #E2E8F0}
+    .brand{font-size:1.5rem;font-weight:800;color:#186DF6;letter-spacing:-0.03em}
+    .brand-sub{font-size:0.8rem;color:#64748B;margin-top:2px}
+    .receipt-title{text-align:right}
+    .receipt-title h2{font-size:1.2rem;font-weight:700;color:#0F172A}
+    .receipt-title .rec-num{font-size:0.82rem;color:#64748B;margin-top:4px}
+    .receipt-title .status-paid{color:#059669;font-weight:700;font-size:0.85rem;margin-top:6px}
+    .receipt-title .status-failed{color:#DC2626;font-weight:700;font-size:0.85rem;margin-top:6px}
+    .receipt-title .status-pending{color:#D97706;font-weight:700;font-size:0.85rem;margin-top:6px}
+    .section{margin-bottom:32px}
+    .section-title{font-size:0.7rem;text-transform:uppercase;letter-spacing:0.1em;color:#94A3B8;font-weight:700;margin-bottom:12px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .field label{font-size:0.75rem;color:#64748B;font-weight:600;display:block;margin-bottom:3px}
+    .field p{font-size:0.95rem;color:#0F172A;font-weight:600}
+    .amount-row{background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:20px 24px;display:flex;justify-content:space-between;align-items:center;margin-bottom:32px}
+    .amount-label{font-size:0.85rem;color:#059669;font-weight:600}
+    .amount-value{font-size:2rem;font-weight:800;color:#059669;letter-spacing:-0.03em}
+    .footer{margin-top:40px;padding-top:24px;border-top:1px solid #E2E8F0;font-size:0.75rem;color:#94A3B8;text-align:center}
+    @media print{body{padding:24px}.header{margin-bottom:24px}}
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="brand">ANOT HEALTH</div>
+      <div class="brand-sub">Ambient AI Clinical Documentation</div>
+    </div>
+    <div class="receipt-title">
+      <h2>Payment Receipt</h2>
+      <div class="rec-num">${receipt.receipt_number || '—'}</div>
+      <div class="status-${receipt.payment_status || 'paid'}">${statusLabel}</div>
+    </div>
+  </div>
+
+  <div class="amount-row">
+    <span class="amount-label">Amount Paid</span>
+    <span class="amount-value">${amount}</span>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Clinician</div>
+    <div class="grid">
+      <div class="field"><label>Name</label><p>${receipt.clinician_name || clinicianName || '—'}</p></div>
+      <div class="field"><label>Email</label><p>${receipt.clinician_email || '—'}</p></div>
+      ${receipt.clinic_name ? `<div class="field"><label>Practice</label><p>${receipt.clinic_name}</p></div>` : ''}
+      ${receipt.npi ? `<div class="field"><label>NPI</label><p>${receipt.npi}</p></div>` : ''}
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Subscription Details</div>
+    <div class="grid">
+      <div class="field"><label>Plan</label><p>${receipt.plan_name || '—'}</p></div>
+      <div class="field"><label>Billing Cycle</label><p>${receipt.billing_period_days || 30} Days</p></div>
+      <div class="field"><label>Period Start</label><p>${fmt(receipt.period_start)}</p></div>
+      <div class="field"><label>Period End</label><p>${fmt(receipt.period_end)}</p></div>
+      <div class="field"><label>Payment Date</label><p>${fmt(receipt.payment_date)}</p></div>
+      ${receipt.transaction_id ? `<div class="field"><label>Transaction ID</label><p>${receipt.transaction_id}</p></div>` : ''}
+    </div>
+  </div>
+
+  <div class="footer">
+    This receipt was generated by ANOT Health. For billing support, contact support@anotHealth.com<br/>
+    Receipt ${receipt.receipt_number} · Generated ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+  </div>
+
+  <script>window.onload = function(){ window.print() }<\/script>
+</body>
+</html>`
+
+  const w = window.open('', '_blank', 'width=800,height=900')
+  if (w) {
+    w.document.write(html)
+    w.document.close()
+  }
+}
+
+// ─── Payment status helpers ───────────────────────────────────────────────────
+
+const PAYMENT_STATUS_META = {
+  paid:     { label: 'Paid',     className: 'doc-pay-status doc-pay-paid' },
+  pending:  { label: 'Pending',  className: 'doc-pay-status doc-pay-pending' },
+  failed:   { label: 'Failed',   className: 'doc-pay-status doc-pay-failed' },
+  refunded: { label: 'Refunded', className: 'doc-pay-status doc-pay-refunded' },
+}
+
+function PaymentStatusBadge({ status }) {
+  const meta = PAYMENT_STATUS_META[status] || { label: status, className: 'doc-pay-status doc-pay-paid' }
+  return <span className={meta.className}>{meta.label}</span>
+}
+
+// ─── Format date strings ──────────────────────────────────────────────────────
+
+function fmtDate(dateStr) {
+  if (!dateStr) return '—'
+  try {
+    return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+  } catch { return dateStr }
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
+export default function ClinicianProfileSection({ currentUser, onUserUpdated, onShowToast }) {
+
+  // ── Practice statistics ──────────────────────────────────────────────────────
+  const [stats, setStats]           = useState(null)   // null = not yet loaded
+  const [statsLoading, setStatsLoading] = useState(true)
+  const [statsError,   setStatsError]   = useState(false)
+
+  // ── Payment receipts ─────────────────────────────────────────────────────────
+  const [receipts, setReceipts]           = useState([])
+  const [receiptsLoading, setReceiptsLoading] = useState(true)
+  const [receiptPrinting, setReceiptPrinting] = useState(null) // receipt id being fetched
+
+  // ── Edit Profile modal ────────────────────────────────────────────────────────
   const [profileModalOpen, setProfileModalOpen] = useState(false)
-  const [profileSaving, setProfileSaving] = useState(false)
+  const [profileSaving,    setProfileSaving]    = useState(false)
   const [profileForm, setProfileForm] = useState({
-    name: '',
-    clinic_name: '',
-    phone: '',
-    email: '',
-    clinic_address: '',
-    specialty: '',
-    license: '',
-    npi: '',
+    name: '', clinic_name: '', phone: '', email: '',
+    clinic_address: '', specialty: '', license: '', npi: '',
   })
 
-  // Load live practice statistics
+  // ── Manage Subscription modal ─────────────────────────────────────────────────
+  const [manageSubOpen, setManageSubOpen] = useState(false)
+
+  // ── Load practice stats (30-day window) ──────────────────────────────────────
   useEffect(() => {
     let cancelled = false
+    setStatsLoading(true)
+    setStatsError(false)
     visitsAPI
-      .getPracticeStats()
+      .getPracticeStats('30d')
       .then((res) => {
         if (!cancelled && res?.stats) {
-          setStats((prev) => ({
-            total_patients_seen: res.stats.total_patients_seen || prev.total_patients_seen,
-            cancelled_visits: res.stats.cancelled_visits || prev.cancelled_visits,
-            pending_notes: res.stats.pending_notes ?? prev.pending_notes,
-            signed_notes: res.stats.signed_notes || prev.signed_notes,
-          }))
+          setStats(res.stats)
+        }
+        if (!cancelled) setStatsLoading(false)
+      })
+      .catch(() => {
+        if (!cancelled) { setStatsLoading(false); setStatsError(true) }
+      })
+    return () => { cancelled = true }
+  }, [])
+
+  // ── Load payment receipts ────────────────────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false
+    setReceiptsLoading(true)
+    receiptsAPI
+      .getAll()
+      .then((res) => {
+        if (!cancelled) {
+          setReceipts(res?.receipts || [])
+          setReceiptsLoading(false)
         }
       })
       .catch(() => {
-        // Keep sensible initial defaults if stats endpoint fails
+        if (!cancelled) setReceiptsLoading(false)
       })
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [])
 
-  // Sync profile form when currentUser changes
+  // ── Sync profile form when currentUser loads ──────────────────────────────────
   useEffect(() => {
     if (currentUser) {
       setProfileForm({
-        name: currentUser.name || 'Dr. Sarah Jenkins, MD',
-        clinic_name: currentUser.clinic_name || 'Metropolitan Health Partners',
-        phone: currentUser.phone || '+1 (416) 555-0192',
-        email: currentUser.email || 'sarah.jenkins@metrohealth.org',
-        clinic_address: currentUser.clinic_address || 'Suite 400, 150 King Street West, Toronto, ON M5H 1J9',
-        specialty: currentUser.specialty || 'Cardiology & Internal Medicine',
-        license: currentUser.license || '#CA-MD-992014',
-        npi: currentUser.npi || '1487829103',
+        name:           currentUser.name           || '',
+        clinic_name:    currentUser.clinic_name    || '',
+        phone:          currentUser.phone          || '',
+        email:          currentUser.email          || '',
+        clinic_address: currentUser.clinic_address || '',
+        specialty:      currentUser.specialty      || '',
+        license:        currentUser.license        || '',
+        npi:            currentUser.npi            || '',
       })
     }
   }, [currentUser])
 
-  // Package Duration & Progress Calculations
+  // ── Package / subscription data from currentUser ──────────────────────────────
   const packageData = useMemo(() => {
-    const name = currentUser?.package_name || '30-Day Clinician Pro'
-    const amountPaid = currentUser?.package_amount_paid ? Number(currentUser.package_amount_paid).toFixed(2) : '199.00'
-    const totalDays = Number(currentUser?.package_duration_days) || 30
-    
-    // Calculate days remaining dynamically from end date or server field
+    const name        = currentUser?.package_name        || 'Clinician Pro'
+    const amountPaid  = currentUser?.package_amount_paid  ? Number(currentUser.package_amount_paid).toFixed(2) : '99.00'
+    const totalDays   = Number(currentUser?.package_duration_days) || 30
+    const status      = (currentUser?.package_status || 'active').toLowerCase()
+    const autoRenew   = status === 'active'
+
+    // Days remaining — prefer server-computed field
     let daysRemaining = totalDays
-    if (currentUser?.package_days_remaining !== null && currentUser?.package_days_remaining !== undefined) {
-      daysRemaining = Number(currentUser.package_days_remaining)
+    if (currentUser?.package_days_remaining != null) {
+      daysRemaining = Math.max(0, Number(currentUser.package_days_remaining))
     } else if (currentUser?.package_end_date) {
       try {
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
-        const end = new Date(currentUser.package_end_date)
-        end.setHours(0, 0, 0, 0)
-        const diff = Math.ceil((end - today) / (1000 * 60 * 60 * 24))
-        daysRemaining = Math.max(0, diff)
-      } catch {
-        daysRemaining = totalDays
-      }
+        const today = new Date(); today.setHours(0, 0, 0, 0)
+        const end   = new Date(currentUser.package_end_date); end.setHours(0, 0, 0, 0)
+        daysRemaining = Math.max(0, Math.ceil((end - today) / 86400000))
+      } catch { /* keep default */ }
     }
 
-    const elapsedDays = Math.max(0, totalDays - daysRemaining)
     const percentRemaining = Math.min(100, Math.max(0, Math.round((daysRemaining / totalDays) * 100)))
 
-    // Expiry date formatting
-    let expiryStr = 'Oct 21, 2026'
+    let expiryStr = '—'
     if (currentUser?.package_end_date) {
-      try {
-        const d = new Date(currentUser.package_end_date)
-        expiryStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-      } catch {
-        // fallback
-      }
+      try { expiryStr = fmtDate(currentUser.package_end_date) } catch { /* fallback */ }
     }
 
-    const status = (currentUser?.package_status || 'active').toLowerCase()
-
-    return {
-      name,
-      amountPaid,
-      totalDays,
-      daysRemaining,
-      elapsedDays,
-      percentRemaining,
-      expiryStr,
-      status,
+    let startStr = '—'
+    if (currentUser?.package_start_date) {
+      try { startStr = fmtDate(currentUser.package_start_date) } catch { /* fallback */ }
     }
+
+    return { name, amountPaid, totalDays, daysRemaining, percentRemaining, expiryStr, startStr, status, autoRenew }
   }, [currentUser])
 
-  // Handle saving profile changes
-  const handleSaveProfile = async (e) => {
+  // ── Computed stats helpers ────────────────────────────────────────────────────
+  const cancellationRate  = stats?.cancellation_rate  ?? null
+  const finalizationRate  = stats?.finalization_rate  ?? null
+
+  // ── Save profile ──────────────────────────────────────────────────────────────
+  const handleSaveProfile = useCallback(async (e) => {
     e.preventDefault()
     setProfileSaving(true)
     try {
       const res = await authAPI.updateMe(profileForm)
-      if (res?.user) {
-        onUserUpdated?.(res.user)
-      }
-      onShowToast?.('✓ Clinician profile details updated successfully!')
+      if (res?.user) onUserUpdated?.(res.user)
+      onShowToast?.('✓ Profile updated successfully!')
       setProfileModalOpen(false)
     } catch (err) {
-      alert(err.message || 'Failed to update profile')
+      onShowToast?.(`❌ ${err.message || 'Failed to update profile'}`)
     } finally {
       setProfileSaving(false)
     }
-  }
+  }, [profileForm, onUserUpdated, onShowToast])
+
+  // ── Print receipt ─────────────────────────────────────────────────────────────
+  const handlePrintReceipt = useCallback(async (receiptId) => {
+    setReceiptPrinting(receiptId)
+    try {
+      const res = await receiptsAPI.getById(receiptId)
+      if (res?.receipt) {
+        printReceiptHtml(res.receipt, currentUser?.name)
+      }
+    } catch (err) {
+      onShowToast?.('❌ Unable to generate receipt. Please try again.')
+    } finally {
+      setReceiptPrinting(null)
+    }
+  }, [currentUser?.name, onShowToast])
+
+  // ── Verified clinician badge status ──────────────────────────────────────────
+  const verificationStatus = currentUser?.status === 'active' ? 'verified'
+    : currentUser?.status === 'pending' ? 'pending'
+    : 'unverified'
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // RENDER
+  // ────────────────────────────────────────────────────────────────────────────
 
   return (
     <div className="doc-profile-root">
-      {/* ─── 1. TOP DOCTOR BANNER (All Personal & Clinic Details) ─── */}
+
+      {/* ─── 1. CLINICIAN PROFILE HEADER ─── */}
       <section className="doc-banner-card">
         <div className="doc-banner-left">
           <div className="doc-avatar-ring">
             {currentUser?.name
-              ? currentUser.name
-                  .split(' ')
-                  .map((n) => n[0])
-                  .join('')
-                  .slice(0, 2)
-                  .toUpperCase()
-              : 'AM'}
+              ? currentUser.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
+              : 'MD'}
           </div>
           <div className="doc-banner-info">
             <div className="doc-title-row">
-              <h2>{profileForm.name}</h2>
-              <span className="doc-verified-pill">✓ Verified Clinician</span>
+              <h2>{profileForm.name || currentUser?.name || 'Clinician'}</h2>
+              {verificationStatus === 'verified' && (
+                <span className="doc-verified-pill" title="License and NPI information have been verified by ANOT Health">
+                  🟢 Verified Clinician
+                </span>
+              )}
+              {verificationStatus === 'pending' && (
+                <span className="doc-verified-pill doc-pill-pending" title="Verification is in progress">
+                  🟡 Verification Pending
+                </span>
+              )}
+              {verificationStatus === 'unverified' && (
+                <span className="doc-verified-pill doc-pill-unverified" title="Please contact support to complete verification">
+                  🔴 Verification Required
+                </span>
+              )}
             </div>
-            <div className="doc-clinic-text">
-              🏥 <strong>{profileForm.clinic_name}</strong>
-              {profileForm.specialty && <span> &nbsp;•&nbsp; {profileForm.specialty}</span>}
-            </div>
+            {(profileForm.clinic_name || profileForm.specialty) && (
+              <div className="doc-clinic-text">
+                🏥 <strong>{profileForm.clinic_name}</strong>
+                {profileForm.specialty && <span>&nbsp;•&nbsp;{profileForm.specialty}</span>}
+              </div>
+            )}
             <div className="doc-contact-chips">
-              <span className="doc-chip">✉ {profileForm.email}</span>
-              <span className="doc-chip">☎ {profileForm.phone}</span>
+              {profileForm.email    && <span className="doc-chip">✉ {profileForm.email}</span>}
+              {profileForm.phone    && <span className="doc-chip">☎ {profileForm.phone}</span>}
               {profileForm.clinic_address && (
                 <span className="doc-chip" title={profileForm.clinic_address}>
                   📍 {profileForm.clinic_address}
                 </span>
               )}
-              {profileForm.license && (
-                <span className="doc-chip">🩺 License: {profileForm.license}</span>
-              )}
-              {profileForm.npi && (
-                <span className="doc-chip">🆔 NPI: {profileForm.npi}</span>
-              )}
             </div>
+            {(profileForm.license || profileForm.npi) && (
+              <div className="doc-credential-row">
+                {profileForm.license && <span className="doc-chip doc-chip-credential">🩺 License: {profileForm.license}</span>}
+                {profileForm.npi     && <span className="doc-chip doc-chip-credential">🆔 NPI: {profileForm.npi}</span>}
+              </div>
+            )}
           </div>
         </div>
-        <button
-          type="button"
-          className="doc-btn doc-btn-outline"
-          onClick={() => setProfileModalOpen(true)}
-        >
+        <button type="button" className="doc-btn doc-btn-outline" onClick={() => setProfileModalOpen(true)}>
           ✏️ Edit Profile
         </button>
       </section>
 
-      {/* ─── 2. 4 ESSENTIAL PRACTICE STATS ─── */}
+      {/* ─── 2. 30-DAY ACTIVITY STATS ─── */}
+      <div className="doc-section-label">30-Day Activity</div>
       <section className="doc-stats-grid">
+
+        {/* Completed Visits */}
         <div className="doc-stat-card">
-          <span className="doc-stat-label">Patients Seen</span>
+          <span className="doc-stat-label">Completed Visits</span>
           <div className="doc-stat-value">
-            {stats.total_patients_seen.toLocaleString()}
+            {statsLoading ? <span className="doc-stat-skeleton"/> : statsError ? '—' : (stats?.total_patients_seen ?? 0).toLocaleString()}
           </div>
-          <span className="doc-stat-sub doc-sub-positive">↑ Completed consultations</span>
+          {!statsLoading && !statsError && stats?.total_patients_seen === 0
+            ? <span className="doc-stat-sub doc-sub-neutral">No completed visits yet</span>
+            : <span className="doc-stat-sub doc-sub-positive">↑ Completed consultations · Last 30 days</span>}
         </div>
 
+        {/* Cancelled Visits */}
         <div className="doc-stat-card">
           <span className="doc-stat-label">Cancelled Visits</span>
           <div className="doc-stat-value">
-            {stats.cancelled_visits.toLocaleString()}
+            {statsLoading ? <span className="doc-stat-skeleton"/> : statsError ? '—' : (stats?.cancelled_visits ?? 0).toLocaleString()}
           </div>
-          <span className="doc-stat-sub doc-sub-neutral">2.2% cancellation rate</span>
+          {statsLoading || statsError || stats == null
+            ? <span className="doc-stat-sub doc-sub-neutral">Last 30 days</span>
+            : stats.cancelled_visits === 0
+              ? <span className="doc-stat-sub doc-sub-positive">✓ No cancellations in the last 30 days</span>
+              : <span className="doc-stat-sub doc-sub-neutral">
+                  {cancellationRate !== null ? `${cancellationRate}% of scheduled visits · ` : ''}Last 30 days
+                </span>}
         </div>
 
+        {/* Pending Notes */}
         <div className="doc-stat-card">
           <span className="doc-stat-label">Pending Notes</span>
-          <div className="doc-stat-value doc-val-alert">
-            {stats.pending_notes}
+          <div className={`doc-stat-value ${!statsLoading && !statsError && stats?.pending_notes > 0 ? 'doc-val-alert' : ''}`}>
+            {statsLoading ? <span className="doc-stat-skeleton"/> : statsError ? '—' : (stats?.pending_notes ?? 0)}
           </div>
-          <span className="doc-stat-sub doc-sub-alert">● Needing sign-off today</span>
+          {!statsLoading && !statsError
+            ? stats?.pending_notes === 0
+              ? <span className="doc-stat-sub doc-sub-positive">✓ No pending notes — you're all caught up</span>
+              : <span className="doc-stat-sub doc-sub-alert">● Awaiting your signature</span>
+            : <span className="doc-stat-sub doc-sub-neutral">Last 30 days</span>}
         </div>
 
+        {/* Signed Notes */}
         <div className="doc-stat-card">
           <span className="doc-stat-label">Signed Notes</span>
-          <div className="doc-stat-value doc-val-success">
-            {stats.signed_notes.toLocaleString()}
+          <div className={`doc-stat-value ${!statsLoading && !statsError && stats?.signed_notes > 0 ? 'doc-val-success' : ''}`}>
+            {statsLoading ? <span className="doc-stat-skeleton"/> : statsError ? '—' : (stats?.signed_notes ?? 0).toLocaleString()}
           </div>
-          <span className="doc-stat-sub doc-sub-positive">✓ 99.8% finalized documentation</span>
+          {statsLoading || statsError || stats == null
+            ? <span className="doc-stat-sub doc-sub-neutral">Last 30 days</span>
+            : stats.signed_notes === 0 && stats.pending_notes === 0
+              ? <span className="doc-stat-sub doc-sub-neutral">No notes in the last 30 days</span>
+              : <span className="doc-stat-sub doc-sub-positive">
+                  ✓ {finalizationRate !== null ? `${finalizationRate}% finalized` : 'Finalized'}&nbsp;·&nbsp;
+                  {stats.pending_notes === 0 ? 'All notes signed' : `${stats.pending_notes} awaiting signature`}
+                </span>}
         </div>
       </section>
 
-      {/* ─── 3. 30-DAY PACKAGE, BILLING & DURATION ─── */}
+      {statsError && (
+        <p className="doc-stats-error">⚠ Unable to load practice stats. Data will refresh on next visit.</p>
+      )}
+
+      {/* ─── 3. SUBSCRIPTION SECTION ─── */}
+      <div className="doc-section-label">Your Subscription</div>
       <section className="doc-card doc-pkg-card">
-        <div className="doc-card-header">
-          <div className="doc-pkg-header-left">
-            <h3>💳 {packageData.name}</h3>
-            <span className="doc-card-subtitle">Active subscription tier and usage duration</span>
-          </div>
-          <span className={`doc-status-pill ${packageData.status === 'active' ? 'doc-pill-active' : 'doc-pill-neutral'}`}>
-            ● {packageData.status.charAt(0).toUpperCase() + packageData.status.slice(1)}
-          </span>
-        </div>
         <div className="doc-card-body">
           <div className="doc-pkg-grid">
-            {/* Left Column: Plan & Progress */}
+
+            {/* Left: Plan info + progress bar + manage button */}
             <div className="doc-pkg-col-main">
-              <div className="doc-pkg-tier-row">
-                <h4 className="doc-pkg-tier-title">{packageData.name}</h4>
-                <p className="doc-pkg-tier-sub">Unlimited ambient AI scribing & automated EHR note generation</p>
+              <div className="doc-pkg-status-row">
+                <span className={`doc-status-pill ${packageData.status === 'active' ? 'doc-pill-active' : 'doc-pill-neutral'}`}>
+                  {packageData.status === 'active' ? '🟢 Active' : `● ${packageData.status.charAt(0).toUpperCase() + packageData.status.slice(1)}`}
+                </span>
               </div>
 
-              {/* Price & Paid Status */}
+              <div className="doc-pkg-tier-row">
+                <h3 className="doc-pkg-tier-title">Clinician Pro</h3>
+                <p className="doc-pkg-tier-sub">Unlimited ambient AI scribing &amp; automated EHR note generation</p>
+              </div>
+
               <div className="doc-pkg-price-row">
                 <span className="doc-pkg-amount">${packageData.amountPaid}</span>
-                <span className="doc-pkg-paid-tag">Paid</span>
-                <span className="doc-pkg-terms">for {packageData.totalDays} Days</span>
+                <span className="doc-pkg-terms">/ {packageData.totalDays}-day billing cycle</span>
               </div>
 
-              {/* Visual Progress Bar */}
               <div className="doc-pkg-meter-box">
                 <div className="doc-meter-track">
-                  <div
-                    className="doc-meter-fill"
-                    style={{ width: `${packageData.percentRemaining}%` }}
-                  />
+                  <div className="doc-meter-fill" style={{ width: `${packageData.percentRemaining}%` }}/>
                 </div>
                 <div className="doc-meter-labels">
                   <span className="doc-meter-highlight">
-                    <strong>{packageData.daysRemaining} of {packageData.totalDays} Days Left</strong> ({packageData.percentRemaining}%)
+                    <strong>{packageData.daysRemaining} of {packageData.totalDays} days remaining</strong>
+                    {' '}({packageData.percentRemaining}%)
                   </span>
                   <span>Expires: {packageData.expiryStr}</span>
                 </div>
@@ -269,22 +444,30 @@ export default function ClinicianProfileSection({
                 <button
                   type="button"
                   className="doc-btn doc-btn-primary"
-                  onClick={() => onShowToast?.(`Your ${packageData.name} is active and renews on ${packageData.expiryStr}`)}
+                  onClick={() => setManageSubOpen(true)}
                 >
-                  ⚡ Renew / Extend Package
+                  ⚙️ Manage Subscription
                 </button>
               </div>
             </div>
 
-            {/* Right Column: Billing Summary & Payment Receipts */}
+            {/* Right: Billing summary + payment history */}
             <div className="doc-pkg-col-side">
+
+              {/* Subscription & Billing */}
               <div className="doc-billing-summary-box">
-                <span className="doc-receipts-title">Subscription & Billing</span>
+                <span className="doc-receipts-title">Subscription &amp; Billing</span>
                 <div className="doc-billing-meta">
                   <div className="doc-billing-row">
-                    <span className="doc-billing-label">Status</span>
+                    <span className="doc-billing-label">Subscription</span>
                     <span className={`doc-billing-val ${packageData.status === 'active' ? 'doc-billing-val-active' : ''}`}>
-                      {packageData.status.charAt(0).toUpperCase() + packageData.status.slice(1)}{packageData.status === 'active' ? ' (Auto-Renewing)' : ''}
+                      {packageData.status === 'active' ? 'Active' : packageData.status.charAt(0).toUpperCase() + packageData.status.slice(1)}
+                    </span>
+                  </div>
+                  <div className="doc-billing-row">
+                    <span className="doc-billing-label">Auto-renewal</span>
+                    <span className={`doc-billing-val ${packageData.autoRenew ? 'doc-billing-val-active' : ''}`}>
+                      {packageData.autoRenew ? 'On' : 'Off'}
                     </span>
                   </div>
                   <div className="doc-billing-row">
@@ -293,135 +476,173 @@ export default function ClinicianProfileSection({
                   </div>
                   <div className="doc-billing-row">
                     <span className="doc-billing-label">Billing Cycle</span>
-                    <span className="doc-billing-val">{packageData.totalDays} Days (${packageData.amountPaid})</span>
+                    <span className="doc-billing-val">{packageData.totalDays} days · ${packageData.amountPaid}</span>
                   </div>
                 </div>
               </div>
 
-              {/* Recent Receipts List */}
+              {/* Payment History */}
               <div className="doc-receipts-list">
-                <span className="doc-receipts-title">Payment Receipts</span>
-                <div className="doc-receipt-item">
-                  <div className="doc-receipt-desc">
-                    <strong>{packageData.name} Subscription</strong>
-                    <small>Billing duration: {packageData.totalDays} Days</small>
+                <span className="doc-receipts-title">Payment History</span>
+
+                {receiptsLoading && (
+                  <div className="doc-receipt-loading">Loading receipts…</div>
+                )}
+
+                {!receiptsLoading && receipts.length === 0 && (
+                  <div className="doc-receipts-empty">No payment receipts yet.</div>
+                )}
+
+                {!receiptsLoading && receipts.map((r) => (
+                  <div key={r.id} className="doc-receipt-item">
+                    <div className="doc-receipt-desc">
+                      <strong>{r.plan_name || 'Clinician Pro'}</strong>
+                      <small>{fmtDate(r.payment_date)} · {r.billing_period_days || 30} days</small>
+                    </div>
+                    <div className="doc-receipt-right">
+                      <PaymentStatusBadge status={r.payment_status}/>
+                      <span className="doc-receipt-amount">${Number(r.amount).toFixed(2)}</span>
+                      <button
+                        type="button"
+                        className="doc-receipt-btn"
+                        disabled={receiptPrinting === r.id}
+                        onClick={() => handlePrintReceipt(r.id)}
+                        title="Open printable receipt (use browser Print → Save as PDF)"
+                      >
+                        {receiptPrinting === r.id ? '…' : 'View Receipt'}
+                      </button>
+                    </div>
                   </div>
-                  <div className="doc-receipt-right">
-                    <strong>${packageData.amountPaid}</strong>
-                    <button
-                      type="button"
-                      className="doc-receipt-btn"
-                      onClick={() => onShowToast?.('Downloading invoice receipt PDF...')}
-                    >
-                      PDF
-                    </button>
-                  </div>
-                </div>
+                ))}
               </div>
+
             </div>
           </div>
         </div>
       </section>
+
+      {/* ─── MODAL: MANAGE SUBSCRIPTION ─── */}
+      {manageSubOpen && (
+        <div className="doc-modal-backdrop" onClick={() => setManageSubOpen(false)}>
+          <div className="doc-modal-box doc-modal-sub" onClick={(e) => e.stopPropagation()}>
+            <div className="doc-modal-header">
+              <h3>⚙️ Manage Subscription</h3>
+              <button type="button" className="doc-modal-close" onClick={() => setManageSubOpen(false)}>✕</button>
+            </div>
+            <div className="doc-modal-body">
+              <div className="doc-sub-modal-plan">
+                <div className="doc-sub-modal-plan-name">Clinician Pro</div>
+                <div className="doc-sub-modal-plan-price">${packageData.amountPaid} <span>/ {packageData.totalDays}-day cycle</span></div>
+                <span className="doc-status-pill doc-pill-active">🟢 Active</span>
+              </div>
+              <div className="doc-billing-meta doc-sub-modal-meta">
+                <div className="doc-billing-row">
+                  <span className="doc-billing-label">Auto-renewal</span>
+                  <span className="doc-billing-val doc-billing-val-active">On</span>
+                </div>
+                <div className="doc-billing-row">
+                  <span className="doc-billing-label">Next renewal date</span>
+                  <span className="doc-billing-val">{packageData.expiryStr}</span>
+                </div>
+                <div className="doc-billing-row">
+                  <span className="doc-billing-label">Days remaining</span>
+                  <span className="doc-billing-val">{packageData.daysRemaining} of {packageData.totalDays}</span>
+                </div>
+                <div className="doc-billing-row">
+                  <span className="doc-billing-label">Plan started</span>
+                  <span className="doc-billing-val">{packageData.startStr}</span>
+                </div>
+              </div>
+              <div className="doc-sub-modal-notice">
+                <p>
+                  Your <strong>Clinician Pro</strong> subscription renews automatically on{' '}
+                  <strong>{packageData.expiryStr}</strong>. To change your plan, update your payment method,
+                  or cancel auto-renewal, please contact our billing team.
+                </p>
+                <a
+                  href="mailto:billing@anotHealth.com?subject=Subscription%20Management%20Request"
+                  className="doc-btn doc-btn-primary doc-sub-contact-btn"
+                >
+                  ✉ Contact Billing Support
+                </a>
+              </div>
+            </div>
+            <div className="doc-modal-footer">
+              <button type="button" className="doc-btn doc-btn-outline" onClick={() => setManageSubOpen(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── MODAL: EDIT PROFILE ─── */}
       {profileModalOpen && (
         <div className="doc-modal-backdrop" onClick={() => setProfileModalOpen(false)}>
           <div className="doc-modal-box" onClick={(e) => e.stopPropagation()}>
             <div className="doc-modal-header">
-              <h3>✏️ Edit Clinician & Clinic Details</h3>
-              <button
-                type="button"
-                className="doc-modal-close"
-                onClick={() => setProfileModalOpen(false)}
-              >
-                ✕
-              </button>
+              <h3>✏️ Edit Profile</h3>
+              <button type="button" className="doc-modal-close" onClick={() => setProfileModalOpen(false)}>✕</button>
             </div>
             <form onSubmit={handleSaveProfile}>
               <div className="doc-modal-body">
                 <div className="doc-modal-grid">
                   <div className="doc-modal-field">
-                    <label>Doctor Full Name</label>
-                    <input
-                      type="text"
-                      required
-                      value={profileForm.name}
-                      onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
-                    />
+                    <label>Full Name *</label>
+                    <input type="text" required value={profileForm.name}
+                      onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}/>
                   </div>
                   <div className="doc-modal-field">
-                    <label>Clinic / Hospital Name</label>
-                    <input
-                      type="text"
-                      required
-                      value={profileForm.clinic_name}
-                      onChange={(e) => setProfileForm({ ...profileForm, clinic_name: e.target.value })}
-                    />
+                    <label>Email Address *</label>
+                    <input type="email" required value={profileForm.email}
+                      onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}/>
                   </div>
                   <div className="doc-modal-field">
-                    <label>Direct Phone Number</label>
-                    <input
-                      type="tel"
-                      value={profileForm.phone}
-                      onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
-                    />
-                  </div>
-                  <div className="doc-modal-field">
-                    <label>Email Address</label>
-                    <input
-                      type="email"
-                      required
-                      value={profileForm.email}
-                      onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
-                    />
+                    <label>Direct Phone</label>
+                    <input type="tel" value={profileForm.phone}
+                      onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}/>
                   </div>
                   <div className="doc-modal-field">
                     <label>Medical Specialty</label>
-                    <input
-                      type="text"
-                      value={profileForm.specialty}
-                      onChange={(e) => setProfileForm({ ...profileForm, specialty: e.target.value })}
-                    />
+                    <input type="text" value={profileForm.specialty}
+                      onChange={(e) => setProfileForm({ ...profileForm, specialty: e.target.value })}/>
                   </div>
                   <div className="doc-modal-field">
-                    <label>Medical License / Registration #</label>
-                    <input
-                      type="text"
-                      value={profileForm.license}
+                    <label>Practice / Clinic Name</label>
+                    <input type="text" value={profileForm.clinic_name}
+                      onChange={(e) => setProfileForm({ ...profileForm, clinic_name: e.target.value })}/>
+                  </div>
+                  <div className="doc-modal-field">
+                    <label>Medical License #</label>
+                    <input type="text" value={profileForm.license}
                       onChange={(e) => setProfileForm({ ...profileForm, license: e.target.value })}
-                    />
+                      placeholder="e.g. #CA-MD-992014"/>
                   </div>
                   <div className="doc-modal-field" style={{ gridColumn: '1 / -1' }}>
-                    <label>Physical Clinic Location / Suite Address</label>
-                    <input
-                      type="text"
-                      value={profileForm.clinic_address}
+                    <label>Practice Address</label>
+                    <input type="text" value={profileForm.clinic_address}
                       onChange={(e) => setProfileForm({ ...profileForm, clinic_address: e.target.value })}
-                      placeholder="e.g. Suite 400, 150 King Street West, Toronto, ON"
-                    />
+                      placeholder="e.g. Suite 400, 150 King Street West, Toronto, ON M5H 1J9"/>
                   </div>
+                </div>
+                <div className="doc-modal-credential-notice">
+                  <span>🔒</span>
+                  <span>License and NPI numbers are used for verification. Changes may require re-verification.</span>
                 </div>
               </div>
               <div className="doc-modal-footer">
-                <button
-                  type="button"
-                  className="doc-btn doc-btn-outline"
-                  onClick={() => setProfileModalOpen(false)}
-                >
+                <button type="button" className="doc-btn doc-btn-outline" onClick={() => setProfileModalOpen(false)}>
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="doc-btn doc-btn-primary"
-                  disabled={profileSaving}
-                >
-                  {profileSaving ? 'Saving...' : 'Save Profile Changes'}
+                <button type="submit" className="doc-btn doc-btn-primary" disabled={profileSaving}>
+                  {profileSaving ? 'Saving…' : '✓ Save Changes'}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
     </div>
   )
 }
