@@ -165,96 +165,78 @@
 .doc-sub-neutral { color: #94A3B8; }
 .doc-sub-alert { color: #D97706; font-weight: 600; }
 
-/* ─── 3. SPLIT ROW (PERSONAL DETAILS & PACKAGE) ─── */
-.doc-split-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
+/* ─── 3. 30-DAY PACKAGE & BILLING CARD ─── */
+.doc-pkg-card {
+  width: 100%;
 }
 
-@media (max-width: 820px) {
-  .doc-split-row {
+.doc-pkg-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.doc-pkg-grid {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 32px;
+  align-items: start;
+}
+
+@media (max-width: 880px) {
+  .doc-pkg-grid {
     grid-template-columns: 1fr;
+    gap: 24px;
   }
 }
 
-.doc-card {
-  background: #FFFFFF;
-  border: 1px solid #E2E8F0;
-  border-radius: 14px;
-  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.doc-card-header {
-  padding: 18px 24px;
-  border-bottom: 1px solid #E2E8F0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: #FCFDFE;
-}
-
-.doc-card-header h3 {
-  font-size: 1.08rem;
-  font-weight: 800;
-  color: #0F172A;
-}
-
-.doc-card-subtitle {
-  font-size: 0.82rem;
-  color: #64748B;
-  margin-top: 2px;
-}
-
-.doc-card-body {
-  padding: 24px;
+.doc-pkg-col-main {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  flex: 1;
 }
 
-/* Personal Details Fields */
-.doc-field-list {
+.doc-pkg-col-side {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
+  background: #F8FAFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 18px 20px;
 }
 
-.doc-field-item {
+.doc-billing-summary-box {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  border-bottom: 1px dashed #F1F5F9;
-  padding-bottom: 8px;
-}
-.doc-field-item:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
+  gap: 10px;
 }
 
-.doc-field-label {
-  font-size: 0.74rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-weight: 700;
-  color: #94A3B8;
+.doc-billing-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-.doc-field-val {
-  font-size: 0.94rem;
-  font-weight: 600;
+.doc-billing-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.84rem;
+}
+
+.doc-billing-label {
+  color: #64748B;
+  font-weight: 500;
+}
+
+.doc-billing-val {
   color: #0F172A;
+  font-weight: 700;
 }
 
-/* Package & Duration Body */
-.doc-pkg-body {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
+.doc-billing-val-active {
+  color: #059669;
 }
 
 .doc-pkg-tier-title {
@@ -360,6 +342,30 @@
   align-items: center;
   font-size: 0.84rem;
   color: #64748B;
+  padding: 6px 0;
+}
+
+.doc-receipt-desc {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.doc-receipt-desc strong {
+  color: #0F172A;
+  font-weight: 600;
+  font-size: 0.84rem;
+}
+
+.doc-receipt-desc small {
+  color: #94A3B8;
+  font-size: 0.74rem;
+}
+
+.doc-receipt-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .doc-receipt-btn {

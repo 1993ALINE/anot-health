@@ -75,12 +75,12 @@ export default function ClinicianProfileSection({
     const totalDays = Number(currentUser?.package_duration_days) || 30
     const daysRemaining = (currentUser?.package_days_remaining !== null && currentUser?.package_days_remaining !== undefined)
       ? Number(currentUser.package_days_remaining)
-      : 18
+      : 30
     const elapsedDays = Math.max(0, totalDays - daysRemaining)
     const percentRemaining = Math.min(100, Math.max(0, Math.round((daysRemaining / totalDays) * 100)))
 
     // Expiry date formatting
-    let expiryStr = 'Oct 15, 2026'
+    let expiryStr = 'Oct 21, 2026'
     if (currentUser?.package_end_date) {
       try {
         const d = new Date(currentUser.package_end_date)
@@ -121,7 +121,7 @@ export default function ClinicianProfileSection({
 
   return (
     <div className="doc-profile-root">
-      {/* ─── 1. TOP DOCTOR BANNER ─── */}
+      {/* ─── 1. TOP DOCTOR BANNER (All Personal & Clinic Details) ─── */}
       <section className="doc-banner-card">
         <div className="doc-banner-left">
           <div className="doc-avatar-ring">
@@ -132,7 +132,7 @@ export default function ClinicianProfileSection({
                   .join('')
                   .slice(0, 2)
                   .toUpperCase()
-              : 'SJ'}
+              : 'AM'}
           </div>
           <div className="doc-banner-info">
             <div className="doc-title-row">
@@ -140,13 +140,23 @@ export default function ClinicianProfileSection({
               <span className="doc-verified-pill">✓ Verified Clinician</span>
             </div>
             <div className="doc-clinic-text">
-              🏥 <strong>{profileForm.clinic_name}</strong> &nbsp;•&nbsp; {profileForm.specialty}
+              🏥 <strong>{profileForm.clinic_name}</strong>
+              {profileForm.specialty && <span> &nbsp;•&nbsp; {profileForm.specialty}</span>}
             </div>
             <div className="doc-contact-chips">
               <span className="doc-chip">✉ {profileForm.email}</span>
               <span className="doc-chip">☎ {profileForm.phone}</span>
-              <span className="doc-chip">📍 {profileForm.clinic_address.split(',')[0]}</span>
-              <span className="doc-chip">🩺 License: {profileForm.license}</span>
+              {profileForm.clinic_address && (
+                <span className="doc-chip" title={profileForm.clinic_address}>
+                  📍 {profileForm.clinic_address}
+                </span>
+              )}
+              {profileForm.license && (
+                <span className="doc-chip">🩺 License: {profileForm.license}</span>
+              )}
+              {profileForm.npi && (
+                <span className="doc-chip">🆔 NPI: {profileForm.npi}</span>
+              )}
             </div>
           </div>
         </div>
@@ -194,118 +204,102 @@ export default function ClinicianProfileSection({
         </div>
       </section>
 
-      {/* ─── 3. 2-COLUMN: PERSONAL DETAILS vs ACTIVE PACKAGE ─── */}
-      <div className="doc-split-row">
-        {/* Left: Personal & Clinic Details */}
-        <section className="doc-card">
-          <div className="doc-card-header">
-            <h3>Personal & Clinic Details</h3>
-            <button
-              type="button"
-              className="doc-btn doc-btn-sm doc-btn-outline"
-              onClick={() => setProfileModalOpen(true)}
-            >
-              Edit
-            </button>
+      {/* ─── 3. 30-DAY PACKAGE, BILLING & DURATION ─── */}
+      <section className="doc-card doc-pkg-card">
+        <div className="doc-card-header">
+          <div className="doc-pkg-header-left">
+            <h3>💳 30-Day Package & Duration</h3>
+            <span className="doc-card-subtitle">Active subscription tier and usage duration</span>
           </div>
-          <div className="doc-card-body">
-            <div className="doc-field-list">
-              <div className="doc-field-item">
-                <span className="doc-field-label">Clinician Full Name</span>
-                <span className="doc-field-val">{profileForm.name}</span>
-              </div>
-              <div className="doc-field-item">
-                <span className="doc-field-label">Clinic / Practice Affiliation</span>
-                <span className="doc-field-val">{profileForm.clinic_name}</span>
-              </div>
-              <div className="doc-field-item">
-                <span className="doc-field-label">Direct Contact Phone</span>
-                <span className="doc-field-val">{profileForm.phone}</span>
-              </div>
-              <div className="doc-field-item">
-                <span className="doc-field-label">Email Address</span>
-                <span className="doc-field-val">{profileForm.email}</span>
-              </div>
-              <div className="doc-field-item">
-                <span className="doc-field-label">Medical License & NPI</span>
-                <span className="doc-field-val">{profileForm.license} &nbsp;•&nbsp; NPI: {profileForm.npi}</span>
-              </div>
-              <div className="doc-field-item">
-                <span className="doc-field-label">Clinic Physical Location</span>
-                <span className="doc-field-val">{profileForm.clinic_address}</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Right: Active Package & Duration */}
-        <section className="doc-card">
-          <div className="doc-card-header">
-            <h3>30-Day Package & Duration</h3>
-            <span className="doc-status-pill doc-pill-active">● Active</span>
-          </div>
-          <div className="doc-card-body doc-pkg-body">
-            <div className="doc-pkg-tier-row">
-              <div>
+          <span className="doc-status-pill doc-pill-active">● Active</span>
+        </div>
+        <div className="doc-card-body">
+          <div className="doc-pkg-grid">
+            {/* Left Column: Plan & Progress */}
+            <div className="doc-pkg-col-main">
+              <div className="doc-pkg-tier-row">
                 <h4 className="doc-pkg-tier-title">{packageData.name}</h4>
                 <p className="doc-pkg-tier-sub">Unlimited ambient AI scribing & automated EHR note generation</p>
               </div>
-            </div>
 
-            {/* Price & Paid Status */}
-            <div className="doc-pkg-price-row">
-              <span className="doc-pkg-amount">${packageData.amountPaid}</span>
-              <span className="doc-pkg-paid-tag">Paid</span>
-              <span className="doc-pkg-terms">for {packageData.totalDays} Days</span>
-            </div>
-
-            {/* Visual Progress Bar */}
-            <div className="doc-pkg-meter-box">
-              <div className="doc-meter-track">
-                <div
-                  className="doc-meter-fill"
-                  style={{ width: `${packageData.percentRemaining}%` }}
-                />
+              {/* Price & Paid Status */}
+              <div className="doc-pkg-price-row">
+                <span className="doc-pkg-amount">${packageData.amountPaid}</span>
+                <span className="doc-pkg-paid-tag">Paid</span>
+                <span className="doc-pkg-terms">for {packageData.totalDays} Days</span>
               </div>
-              <div className="doc-meter-labels">
-                <span className="doc-meter-highlight">
-                  <strong>{packageData.daysRemaining} of {packageData.totalDays} Days Left</strong> ({packageData.percentRemaining}%)
-                </span>
-                <span>Expires: {packageData.expiryStr}</span>
+
+              {/* Visual Progress Bar */}
+              <div className="doc-pkg-meter-box">
+                <div className="doc-meter-track">
+                  <div
+                    className="doc-meter-fill"
+                    style={{ width: `${packageData.percentRemaining}%` }}
+                  />
+                </div>
+                <div className="doc-meter-labels">
+                  <span className="doc-meter-highlight">
+                    <strong>{packageData.daysRemaining} of {packageData.totalDays} Days Left</strong> ({packageData.percentRemaining}%)
+                  </span>
+                  <span>Expires: {packageData.expiryStr}</span>
+                </div>
+              </div>
+
+              <div className="doc-pkg-actions">
+                <button
+                  type="button"
+                  className="doc-btn doc-btn-primary"
+                  onClick={() => onShowToast?.('Your 30-Day Clinician Plan is active and auto-renews smoothly on ' + packageData.expiryStr)}
+                >
+                  ⚡ Renew / Extend Package
+                </button>
               </div>
             </div>
 
-            <div className="doc-pkg-actions">
-              <button
-                type="button"
-                className="doc-btn doc-btn-primary"
-                style={{ flex: 1 }}
-                onClick={() => onShowToast?.('Your 30-Day Clinician Plan is active and auto-renews smoothly on ' + packageData.expiryStr)}
-              >
-                ⚡ Renew / Extend Package
-              </button>
-            </div>
+            {/* Right Column: Billing Summary & Payment Receipts */}
+            <div className="doc-pkg-col-side">
+              <div className="doc-billing-summary-box">
+                <span className="doc-receipts-title">Subscription & Billing</span>
+                <div className="doc-billing-meta">
+                  <div className="doc-billing-row">
+                    <span className="doc-billing-label">Status</span>
+                    <span className="doc-billing-val doc-billing-val-active">Active (Auto-Renewing)</span>
+                  </div>
+                  <div className="doc-billing-row">
+                    <span className="doc-billing-label">Next Renewal</span>
+                    <span className="doc-billing-val">{packageData.expiryStr}</span>
+                  </div>
+                  <div className="doc-billing-row">
+                    <span className="doc-billing-label">Billing Cycle</span>
+                    <span className="doc-billing-val">{packageData.totalDays} Days (${packageData.amountPaid})</span>
+                  </div>
+                </div>
+              </div>
 
-            {/* Recent Receipts Minimal List */}
-            <div className="doc-receipts-list">
-              <span className="doc-receipts-title">Payment Receipts</span>
-              <div className="doc-receipt-item">
-                <span>Recent 30-Day Pro Subscription</span>
-                <div>
-                  <strong>${packageData.amountPaid}</strong>
-                  <button
-                    type="button"
-                    className="doc-receipt-btn"
-                    onClick={() => onShowToast?.('Downloading invoice receipt PDF...')}
-                  >
-                    PDF
-                  </button>
+              {/* Recent Receipts List */}
+              <div className="doc-receipts-list">
+                <span className="doc-receipts-title">Payment Receipts</span>
+                <div className="doc-receipt-item">
+                  <div className="doc-receipt-desc">
+                    <strong>Recent 30-Day Pro Subscription</strong>
+                    <small>Payment processed • Oct 2026</small>
+                  </div>
+                  <div className="doc-receipt-right">
+                    <strong>${packageData.amountPaid}</strong>
+                    <button
+                      type="button"
+                      className="doc-receipt-btn"
+                      onClick={() => onShowToast?.('Downloading invoice receipt PDF...')}
+                    >
+                      PDF
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </section>
-      </div>
+        </div>
+      </section>
 
       {/* ─── MODAL: EDIT PROFILE ─── */}
       {profileModalOpen && (
