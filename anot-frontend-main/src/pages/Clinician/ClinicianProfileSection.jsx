@@ -73,9 +73,24 @@ export default function ClinicianProfileSection({
     const name = currentUser?.package_name || '30-Day Clinician Pro'
     const amountPaid = currentUser?.package_amount_paid ? Number(currentUser.package_amount_paid).toFixed(2) : '199.00'
     const totalDays = Number(currentUser?.package_duration_days) || 30
-    const daysRemaining = (currentUser?.package_days_remaining !== null && currentUser?.package_days_remaining !== undefined)
-      ? Number(currentUser.package_days_remaining)
-      : 30
+    
+    // Calculate days remaining dynamically from end date or server field
+    let daysRemaining = totalDays
+    if (currentUser?.package_days_remaining !== null && currentUser?.package_days_remaining !== undefined) {
+      daysRemaining = Number(currentUser.package_days_remaining)
+    } else if (currentUser?.package_end_date) {
+      try {
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        const end = new Date(currentUser.package_end_date)
+        end.setHours(0, 0, 0, 0)
+        const diff = Math.ceil((end - today) / (1000 * 60 * 60 * 24))
+        daysRemaining = Math.max(0, diff)
+      } catch {
+        daysRemaining = totalDays
+      }
+    }
+
     const elapsedDays = Math.max(0, totalDays - daysRemaining)
     const percentRemaining = Math.min(100, Math.max(0, Math.round((daysRemaining / totalDays) * 100)))
 
@@ -90,6 +105,8 @@ export default function ClinicianProfileSection({
       }
     }
 
+    const status = (currentUser?.package_status || 'active').toLowerCase()
+
     return {
       name,
       amountPaid,
@@ -98,6 +115,7 @@ export default function ClinicianProfileSection({
       elapsedDays,
       percentRemaining,
       expiryStr,
+      status,
     }
   }, [currentUser])
 
@@ -208,10 +226,12 @@ export default function ClinicianProfileSection({
       <section className="doc-card doc-pkg-card">
         <div className="doc-card-header">
           <div className="doc-pkg-header-left">
-            <h3>💳 30-Day Package & Duration</h3>
+            <h3>💳 {packageData.name}</h3>
             <span className="doc-card-subtitle">Active subscription tier and usage duration</span>
           </div>
-          <span className="doc-status-pill doc-pill-active">● Active</span>
+          <span className={`doc-status-pill ${packageData.status === 'active' ? 'doc-pill-active' : 'doc-pill-neutral'}`}>
+            ● {packageData.status.charAt(0).toUpperCase() + packageData.status.slice(1)}
+          </span>
         </div>
         <div className="doc-card-body">
           <div className="doc-pkg-grid">
@@ -249,7 +269,7 @@ export default function ClinicianProfileSection({
                 <button
                   type="button"
                   className="doc-btn doc-btn-primary"
-                  onClick={() => onShowToast?.('Your 30-Day Clinician Plan is active and auto-renews smoothly on ' + packageData.expiryStr)}
+                  onClick={() => onShowToast?.(`Your ${packageData.name} is active and renews on ${packageData.expiryStr}`)}
                 >
                   ⚡ Renew / Extend Package
                 </button>
@@ -263,7 +283,9 @@ export default function ClinicianProfileSection({
                 <div className="doc-billing-meta">
                   <div className="doc-billing-row">
                     <span className="doc-billing-label">Status</span>
-                    <span className="doc-billing-val doc-billing-val-active">Active (Auto-Renewing)</span>
+                    <span className={`doc-billing-val ${packageData.status === 'active' ? 'doc-billing-val-active' : ''}`}>
+                      {packageData.status.charAt(0).toUpperCase() + packageData.status.slice(1)}{packageData.status === 'active' ? ' (Auto-Renewing)' : ''}
+                    </span>
                   </div>
                   <div className="doc-billing-row">
                     <span className="doc-billing-label">Next Renewal</span>
@@ -281,8 +303,8 @@ export default function ClinicianProfileSection({
                 <span className="doc-receipts-title">Payment Receipts</span>
                 <div className="doc-receipt-item">
                   <div className="doc-receipt-desc">
-                    <strong>Recent 30-Day Pro Subscription</strong>
-                    <small>Payment processed • Oct 2026</small>
+                    <strong>{packageData.name} Subscription</strong>
+                    <small>Billing duration: {packageData.totalDays} Days</small>
                   </div>
                   <div className="doc-receipt-right">
                     <strong>${packageData.amountPaid}</strong>

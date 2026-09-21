@@ -98,7 +98,11 @@ const updateUser = async (req, res) => {
     try {
         await ensureUserProfileSchema()
         const { id } = req.params
-        const { name, email, role, specialty, phone, npi, license, rate_per_note, admin_modules, ehr_connection_id, ehr_provider_id, ai_note_instructions } = req.body
+        const {
+            name, email, role, specialty, phone, npi, license, rate_per_note,
+            admin_modules, ehr_connection_id, ehr_provider_id, ai_note_instructions,
+            package_name, package_amount_paid, package_duration_days, package_start_date, package_end_date, package_status,
+        } = req.body
 
         if (!name || !email || !role) {
             return res.status(400).json({ error: 'Name, email and role are required.' })
@@ -241,6 +245,60 @@ const updateUser = async (req, res) => {
             const instructionsVal = (ai_note_instructions === '' || ai_note_instructions == null) ? null : String(ai_note_instructions).trim() || null
             await pool.query('UPDATE users SET ai_note_instructions = $1 WHERE id = $2', [instructionsVal, id])
             result.rows[0].ai_note_instructions = instructionsVal
+        }
+
+        if (role === 'clinician' && (package_name !== undefined || package_amount_paid !== undefined || package_duration_days !== undefined || package_start_date !== undefined || package_end_date !== undefined || package_status !== undefined)) {
+            const updates = []
+            const values = []
+            let idx = 1
+
+            if (package_name !== undefined) {
+                const val = String(package_name).trim() || '30-Day Clinician Pro'
+                updates.push(`package_name = $${idx++}`)
+                values.push(val)
+                result.rows[0].package_name = val
+            }
+            if (package_amount_paid !== undefined) {
+                const val = package_amount_paid !== '' && package_amount_paid != null ? Number(package_amount_paid) : 199.00
+                updates.push(`package_amount_paid = $${idx++}`)
+                values.push(val)
+                result.rows[0].package_amount_paid = val
+            }
+            if (package_duration_days !== undefined) {
+                const val = package_duration_days !== '' && package_duration_days != null ? parseInt(package_duration_days, 10) : 30
+                updates.push(`package_duration_days = $${idx++}`)
+                values.push(val)
+                result.rows[0].package_duration_days = val
+            }
+            if (package_start_date !== undefined) {
+                const val = package_start_date ? String(package_start_date).slice(0, 10) : new Date().toISOString().slice(0, 10)
+                updates.push(`package_start_date = $${idx++}`)
+                values.push(val)
+                result.rows[0].package_start_date = val
+            }
+            if (package_end_date !== undefined) {
+                let val = package_end_date ? String(package_end_date).slice(0, 10) : null
+                if (!val && package_start_date) {
+                    const d = new Date(package_start_date)
+                    const dur = package_duration_days ? parseInt(package_duration_days, 10) : 30
+                    d.setDate(d.getDate() + dur)
+                    val = d.toISOString().slice(0, 10)
+                }
+                updates.push(`package_end_date = $${idx++}`)
+                values.push(val)
+                result.rows[0].package_end_date = val
+            }
+            if (package_status !== undefined) {
+                const val = String(package_status).trim() || 'active'
+                updates.push(`package_status = $${idx++}`)
+                values.push(val)
+                result.rows[0].package_status = val
+            }
+
+            if (updates.length > 0) {
+                values.push(id)
+                await pool.query(`UPDATE users SET ${updates.join(', ')} WHERE id = $${idx}`, values)
+            }
         }
 
         // A role change must invalidate any cached session so the next request

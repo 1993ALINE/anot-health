@@ -1469,6 +1469,12 @@ function Admin() {
                     ehr_connection_id: editUser.ehr_connection_id || null,
                     ehr_provider_id: editUser.ehr_provider_id || null,
                     ai_note_instructions: editUser.ai_note_instructions ? String(editUser.ai_note_instructions).trim() : null,
+                    package_name: editUser.package_name || '30-Day Clinician Pro',
+                    package_amount_paid: editUser.package_amount_paid !== undefined && editUser.package_amount_paid !== '' ? Number(editUser.package_amount_paid) : 199.00,
+                    package_duration_days: editUser.package_duration_days !== undefined && editUser.package_duration_days !== '' ? parseInt(editUser.package_duration_days, 10) : 30,
+                    package_start_date: editUser.package_start_date ? String(editUser.package_start_date).slice(0, 10) : new Date().toISOString().slice(0, 10),
+                    package_end_date: editUser.package_end_date ? String(editUser.package_end_date).slice(0, 10) : null,
+                    package_status: editUser.package_status || 'active',
                 } : {}),
             }
             if (isSuperAdmin(currentUser) && editUser.role === 'admin') {
@@ -3076,12 +3082,120 @@ function Admin() {
                                         </div>
                                     </div>
                                 )}
-                                <div className="adm-form-group">
-                                    <label className="adm-form-label">Rate per note ($)</label>
-                                    <input className="adm-input" type="number" step="0.50" min="0"
-                                           value={editUser.rate_per_note || 2.50}
-                                           onChange={(e) => setEditUser({ ...editUser, rate_per_note: e.target.value })} />
-                                </div>
+                                {editUser.role === 'clinician' ? (
+                                    <div className="adm-form-group" style={{ gridColumn: '1 / -1', background: 'var(--bg-card, #f8fafc)', border: '1px solid var(--border, #e2e8f0)', borderRadius: 12, padding: '16px 18px', marginTop: 4 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                <span style={{ fontSize: 18 }}>💳</span>
+                                                <span style={{ fontWeight: 800, fontSize: 14, color: 'var(--text-main)' }}>Clinician Subscription Package Details</span>
+                                            </div>
+                                            <span style={{ fontSize: 11, fontWeight: 700, color: '#059669', background: '#ecfdf5', border: '1px solid #a7f3d0', padding: '2px 8px', borderRadius: 12 }}>
+                                                Doctor Package
+                                            </span>
+                                        </div>
+
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: 12, marginBottom: 12 }}>
+                                            <div>
+                                                <label className="adm-form-label">Package Plan Name</label>
+                                                <input
+                                                    className="adm-input"
+                                                    type="text"
+                                                    placeholder="e.g. 30-Day Clinician Pro"
+                                                    value={editUser.package_name !== undefined && editUser.package_name !== null ? editUser.package_name : '30-Day Clinician Pro'}
+                                                    onChange={(e) => setEditUser({ ...editUser, package_name: e.target.value })}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="adm-form-label">Amount Paid ($)</label>
+                                                <input
+                                                    className="adm-input"
+                                                    type="number"
+                                                    step="1.00"
+                                                    min="0"
+                                                    placeholder="199.00"
+                                                    value={editUser.package_amount_paid !== undefined && editUser.package_amount_paid !== null ? editUser.package_amount_paid : 199.00}
+                                                    onChange={(e) => setEditUser({ ...editUser, package_amount_paid: e.target.value })}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="adm-form-label">Duration (Days)</label>
+                                                <input
+                                                    className="adm-input"
+                                                    type="number"
+                                                    min="1"
+                                                    placeholder="30"
+                                                    value={editUser.package_duration_days !== undefined && editUser.package_duration_days !== null ? editUser.package_duration_days : 30}
+                                                    onChange={(e) => {
+                                                        const days = parseInt(e.target.value, 10) || 30
+                                                        let newEnd = editUser.package_end_date
+                                                        const baseStart = editUser.package_start_date || new Date().toISOString().slice(0, 10)
+                                                        const d = new Date(baseStart)
+                                                        d.setDate(d.getDate() + days)
+                                                        newEnd = d.toISOString().slice(0, 10)
+                                                        setEditUser({ ...editUser, package_duration_days: days, package_end_date: newEnd })
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                                            <div>
+                                                <label className="adm-form-label">Package Start Date</label>
+                                                <input
+                                                    className="adm-input"
+                                                    type="date"
+                                                    value={editUser.package_start_date ? String(editUser.package_start_date).slice(0, 10) : new Date().toISOString().slice(0, 10)}
+                                                    onChange={(e) => {
+                                                        const start = e.target.value
+                                                        const days = parseInt(editUser.package_duration_days, 10) || 30
+                                                        let newEnd = ''
+                                                        if (start) {
+                                                            const d = new Date(start)
+                                                            d.setDate(d.getDate() + days)
+                                                            newEnd = d.toISOString().slice(0, 10)
+                                                        }
+                                                        setEditUser({ ...editUser, package_start_date: start, package_end_date: newEnd })
+                                                    }}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="adm-form-label">Package End Date</label>
+                                                <input
+                                                    className="adm-input"
+                                                    type="date"
+                                                    value={editUser.package_end_date ? String(editUser.package_end_date).slice(0, 10) : ''}
+                                                    onChange={(e) => setEditUser({ ...editUser, package_end_date: e.target.value })}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="adm-form-label">Package Status</label>
+                                                <select
+                                                    className="adm-input"
+                                                    value={editUser.package_status || 'active'}
+                                                    onChange={(e) => setEditUser({ ...editUser, package_status: e.target.value })}
+                                                >
+                                                    <option value="active">Active</option>
+                                                    <option value="trial">Trial</option>
+                                                    <option value="expired">Expired</option>
+                                                    <option value="suspended">Suspended</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <p className="adm-form-hint" style={{ marginTop: 8, fontSize: 12, color: '#64748b' }}>
+                                            Configures the subscription package for this clinician, shown on their profile page with days remaining and expiry date.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="adm-form-group">
+                                        <label className="adm-form-label">Rate per note ($)</label>
+                                        <input className="adm-input" type="number" step="0.50" min="0"
+                                               value={editUser.rate_per_note || 2.50}
+                                               onChange={(e) => setEditUser({ ...editUser, rate_per_note: e.target.value })} />
+                                        <p className="adm-form-hint" style={{ marginTop: 4, fontSize: 12, color: '#64748b' }}>
+                                            Note payout rate for staff/scribe payroll calculations.
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                             {editError && <div className="adm-err">⚠ {editError}</div>}
                         </div>
