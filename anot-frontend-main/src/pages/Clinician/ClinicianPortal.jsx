@@ -10,6 +10,7 @@ import SaintMaryNoteViewerModal from '../../components/SaintMaryNoteViewerModal'
 import ClinicianTemplateModal from '../../components/ClinicianTemplateModal'
 import WorkNoteModal from '../../components/WorkNoteModal'
 import NoteSummaryModal from '../../components/NoteSummaryModal'
+import ClinicianProfileSection from './ClinicianProfileSection'
 import { evaluateAutoPauseDecision } from '../../utils/autoPauseOnSilence'
 import './ClinicianPortal.css'
 
@@ -802,7 +803,12 @@ Follow-up in clinic in 2 weeks or sooner if symptoms worsen.`,
 ]
 
 export default function ClinicianPortal({ currentUser, onLogout }) {
-  const [tab, setTab] = useState('ambient') // 'ambient' | 'history'
+  const [tab, setTab] = useState('ambient') // 'ambient' | 'history' | 'profile'
+  const [localUser, setLocalUser] = useState(currentUser)
+
+  useEffect(() => {
+    if (currentUser) setLocalUser(currentUser)
+  }, [currentUser])
   const [visits, setVisits] = useState([])
   const [patientList, setPatientList] = useState([])
   const [toast, setToast] = useState(null)
@@ -960,13 +966,18 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
             category: t.category || 'Core Primary Care',
           }))
           setProviderTemplates(mapped)
+          const defId = localUser?.default_template_id || currentUser?.default_template_id
+          if (defId) {
+            const foundDef = mapped.find((t) => t.id === defId || t.template_id === defId)
+            if (foundDef) setSelectedTemplate(foundDef.label || foundDef.name)
+          }
         }
       })
       .catch((err) => {
         console.warn('Could not load custom provider templates, using defaults:', err)
       })
     return () => { isMounted = false }
-  }, [])
+  }, [currentUser, localUser?.default_template_id])
 
   const handleSaveProviderTemplates = async (templates, customAiDirectives) => {
     const formatted = templates.map((t) => ({
@@ -992,12 +1003,12 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
       try {
         const cleanedDirectives = customAiDirectives ? String(customAiDirectives).trim() : null
         await authAPI.updateMe({
-          name: currentUser?.name || 'Clinician',
-          email: currentUser?.email,
-          phone: currentUser?.phone,
+          name: (localUser || currentUser)?.name || 'Clinician',
+          email: (localUser || currentUser)?.email,
+          phone: (localUser || currentUser)?.phone,
           ai_note_instructions: cleanedDirectives,
         })
-        setCurrentUser((prev) => ({
+        setLocalUser((prev) => ({
           ...prev,
           ai_note_instructions: cleanedDirectives,
         }))
@@ -2359,6 +2370,14 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
               <span>Note History</span>
               <span className="sm-nav__count">{visits.length}</span>
             </button>
+            <button
+              type="button"
+              className={`sm-nav__btn ${tab === 'profile' ? 'sm-nav__btn--active' : ''}`}
+              onClick={() => setTab('profile')}
+            >
+              <span className="sm-nav__icon">👤</span>
+              <span>Profile</span>
+            </button>
           </nav>
         </div>
 
@@ -2382,14 +2401,19 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
             </div>
           )}
 
-          <div className="sm-clinician-badge">
+          <div
+            className="sm-clinician-badge"
+            onClick={() => setTab('profile')}
+            style={{ cursor: 'pointer' }}
+            title="View Clinician Profile, Practice Stats & Package"
+          >
             <div className="sm-clinician-avatar">
-              {currentUser?.name ? currentUser.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() : 'MD'}
+              {(localUser || currentUser)?.name ? (localUser || currentUser).name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() : 'MD'}
             </div>
             <div className="sm-clinician-meta">
-              <span className="sm-clinician-name">{currentUser?.name || 'Doctor'}</span>
-              {currentUser?.specialty ? (
-                <span className="sm-clinician-role">{currentUser.specialty}</span>
+              <span className="sm-clinician-name">{(localUser || currentUser)?.name || 'Doctor'}</span>
+              {(localUser || currentUser)?.specialty ? (
+                <span className="sm-clinician-role">{(localUser || currentUser).specialty}</span>
               ) : null}
             </div>
           </div>
@@ -2400,8 +2424,17 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
         </div>
       </header>
 
-      {/* Main 2-Column Clinical Layout */}
-      <main className="sm-workspace">
+      {/* Main Clinical Layout (or Profile Workspace) */}
+      {tab === 'profile' ? (
+        <main className="sm-workspace sm-workspace--profile">
+          <ClinicianProfileSection
+            currentUser={localUser || currentUser}
+            onUserUpdated={(updated) => setLocalUser(updated)}
+            onShowToast={showToast}
+          />
+        </main>
+      ) : (
+        <main className="sm-workspace">
         {/* ─── LEFT COLUMN: CLINICAL WORKSPACE ─── */}
         <section className="sm-canvas">
           {/* TAB 1: AMBIENT SCRIBE */}
@@ -3322,6 +3355,7 @@ export default function ClinicianPortal({ currentUser, onLogout }) {
           </div>
         </aside>
       </main>
+      )}
 
       {/* Note Viewer / Review & Sign Modal */}
       {selectedNoteModal && (

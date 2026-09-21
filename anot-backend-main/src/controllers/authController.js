@@ -569,7 +569,10 @@ const getMe = async (req, res) => {
     try {
         await ensureUserProfileSchema()
         const result = await pool.query(
-            'SELECT id, name, email, role, specialty, phone, npi, license, status, clinic_code, clinic_name, ui_mode, avatar_data_url, personal_info, admin_modules, ai_note_instructions, created_at FROM users WHERE id = $1',
+            `SELECT id, name, email, role, specialty, phone, npi, license, status, clinic_code, clinic_name, clinic_address,
+                    ui_mode, avatar_data_url, personal_info, admin_modules, ai_note_instructions,
+                    package_name, package_amount_paid, package_duration_days, package_start_date, package_end_date, package_status, default_template_id,
+                    created_at FROM users WHERE id = $1`,
             [req.user.id]
         )
 
@@ -577,7 +580,20 @@ const getMe = async (req, res) => {
             return res.status(404).json({ error: 'User not found.' })
         }
 
-        res.status(200).json({ user: { ...result.rows[0], device_type: req.user.device_type || 'desktop' } })
+        const userRow = result.rows[0]
+        let daysRemaining = 18
+        if (userRow.package_end_date) {
+            const msDiff = new Date(userRow.package_end_date).getTime() - Date.now()
+            daysRemaining = Math.max(0, Math.ceil(msDiff / (1000 * 60 * 60 * 24)))
+        }
+
+        res.status(200).json({
+            user: {
+                ...userRow,
+                package_days_remaining: daysRemaining,
+                device_type: req.user.device_type || 'desktop',
+            },
+        })
     } catch (err) {
         sendHttpError(res, 500, err, { context: 'auth.getMe', req })
     }
@@ -587,7 +603,20 @@ const getMe = async (req, res) => {
 const updateMe = async (req, res) => {
     try {
         await ensureUserProfileSchema()
-        const { name, email, phone, avatar_data_url, personal_info, ai_note_instructions } = req.body
+        const {
+            name,
+            email,
+            phone,
+            avatar_data_url,
+            personal_info,
+            ai_note_instructions,
+            clinic_name,
+            clinic_address,
+            specialty,
+            license,
+            npi,
+            default_template_id,
+        } = req.body
         const cleanName = String(name || '').trim()
         const cleanEmail = String(email || '').toLowerCase().trim()
         const cleanPhone = String(phone || '').trim()
@@ -613,30 +642,82 @@ const updateMe = async (req, res) => {
         }
 
         const cleanInstructions = ai_note_instructions === undefined ? undefined : (ai_note_instructions === '' || ai_note_instructions == null ? null : String(ai_note_instructions).trim() || null)
-        let updateInstructionsClause = ''
+        const cleanClinicName = clinic_name === undefined ? undefined : String(clinic_name || '').trim() || null
+        const cleanClinicAddress = clinic_address === undefined ? undefined : String(clinic_address || '').trim() || null
+        const cleanSpecialty = specialty === undefined ? undefined : String(specialty || '').trim() || null
+        const cleanLicense = license === undefined ? undefined : String(license || '').trim() || null
+        const cleanNpi = npi === undefined ? undefined : String(npi || '').trim() || null
+        const cleanDefaultTemplate = default_template_id === undefined ? undefined : String(default_template_id || '').trim() || null
+
+        const sets = [
+            'name = $1',
+            'email = $2',
+            'phone = $3',
+            'avatar_data_url = $4',
+            'personal_info = $5',
+        ]
         const params = [cleanName, cleanEmail, cleanPhone || null, cleanAvatar || null, cleanInfo || null]
+
         if (cleanInstructions !== undefined) {
             params.push(cleanInstructions)
-            updateInstructionsClause = `, ai_note_instructions = $${params.length}`
+            sets.push(`ai_note_instructions = $${params.length}`)
         }
+        if (cleanClinicName !== undefined) {
+            params.push(cleanClinicName)
+            sets.push(`clinic_name = $${params.length}`)
+        }
+        if (cleanClinicAddress !== undefined) {
+            params.push(cleanClinicAddress)
+            sets.push(`clinic_address = $${params.length}`)
+        }
+        if (cleanSpecialty !== undefined) {
+            params.push(cleanSpecialty)
+            sets.push(`specialty = $${params.length}`)
+        }
+        if (cleanLicense !== undefined) {
+            params.push(cleanLicense)
+            sets.push(`license = $${params.length}`)
+        }
+        if (cleanNpi !== undefined) {
+            params.push(cleanNpi)
+            sets.push(`npi = $${params.length}`)
+        }
+        if (cleanDefaultTemplate !== undefined) {
+            params.push(cleanDefaultTemplate)
+            sets.push(`default_template_id = $${params.length}`)
+        }
+
         params.push(req.user.id)
-        const idParamIdx = params.length
+        const idIdx = params.length
 
         const result = await pool.query(
             `UPDATE users
-             SET name = $1,
-                 email = $2,
-                 phone = $3,
-                 avatar_data_url = $4,
-                 personal_info = $5${updateInstructionsClause}
-             WHERE id = $${idParamIdx}
-             RETURNING id, name, email, role, specialty, phone, npi, license, status, clinic_code, clinic_name, ui_mode, avatar_data_url, personal_info, admin_modules, ai_note_instructions, created_at`,
+             SET ${sets.join(', ')}
+             WHERE id = $${idIdx}
+             RETURNING id, name, email, role, specialty, phone, npi, license, status, clinic_code, clinic_name, clinic_address,
+                       ui_mode, avatar_data_url, personal_info, admin_modules, ai_note_instructions,
+                       package_name, package_amount_paid, package_duration_days, package_start_date, package_end_date, package_status, default_template_id,
+                       created_at`,
             params
         )
         if (!result.rows[0]) {
             return res.status(404).json({ error: 'User not found.' })
         }
-        res.status(200).json({ message: 'Profile updated successfully.', user: result.rows[0] })
+
+        const userRow = result.rows[0]
+        let daysRemaining = 18
+        if (userRow.package_end_date) {
+            const msDiff = new Date(userRow.package_end_date).getTime() - Date.now()
+            daysRemaining = Math.max(0, Math.ceil(msDiff / (1000 * 60 * 60 * 24)))
+        }
+
+        res.status(200).json({
+            message: 'Profile updated successfully.',
+            user: {
+                ...userRow,
+                package_days_remaining: daysRemaining,
+            },
+        })
     } catch (err) {
         sendHttpError(res, 500, err, { context: 'auth.updateMe', req })
     }

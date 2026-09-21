@@ -519,6 +519,7 @@ export const visitsAPI = {
     if (date)       {params.append('date', date)}
     return apiFetch(`/visits?${params.toString()}`, { signal })
   },
+  getPracticeStats: async () => apiFetch('/visits/practice-stats'),
   create: async (visitData) => apiMutate('POST', '/visits', { body: visitData }),
   updateStatus: async (id, status) => apiMutate('PUT', `/visits/${id}/status`, { body: { status } }),
   endVisit: async (id, durationSeconds) => apiMutate('PUT', `/visits/${id}/end`, { body: { duration_seconds: durationSeconds } }),
@@ -549,7 +550,7 @@ export const visitsAPI = {
   /** Queue server-side transcription + AI draft (HTTP 202). */
   runTranscription: async (visitId) => apiMutate('POST', `/visits/${visitId}/transcribe`, { body: {} }),
   /** Regenerate AI draft from saved transcriptions (HTTP 200). */
-  generateDraft: async (visitId) => apiMutate('POST', `/visits/${visitId}/generate-draft`, { body: {} }),
+  generateDraft: async (visitId, options = {}) => apiMutate('POST', `/visits/${visitId}/generate-draft`, { body: options }),
   /** Subscribe to real-time visit events via SSE (Server-Sent Events) */
   subscribeToEvents: (onEvent, onError, onOpen) => {
     if (typeof EventSource === 'undefined') {

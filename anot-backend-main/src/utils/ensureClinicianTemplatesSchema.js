@@ -18,6 +18,7 @@ async function ensureClinicianTemplatesSchema() {
             PRIMARY KEY (user_id, template_id)
         );
         ALTER TABLE clinician_templates ADD COLUMN IF NOT EXISTS category VARCHAR(128);
+        ALTER TABLE clinician_templates ADD COLUMN IF NOT EXISTS instructions TEXT;
     `)
     await addIndexIfMissing(
         'idx_clinician_templates_user_id',

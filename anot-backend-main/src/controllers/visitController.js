@@ -757,8 +757,43 @@ const lockNote = async (req, res) => {
   }
 }
 
+// ─── GET CLINICIAN PRACTICE STATS ─────────────────────────────────────────────
+
+const getClinicianPracticeStats = async (req, res) => {
+  try {
+    const clinicianId = req.user.id
+    const statsQuery = await pool.query(
+      `SELECT
+         COUNT(*) FILTER (WHERE v.status IN ('done', 'completed', 'signed', 'uploaded', 'note-ready', 'recording-uploaded')) AS total_patients_seen,
+         COUNT(*) FILTER (WHERE v.status IN ('cancelled', 'canceled')) AS cancelled_visits,
+         COUNT(*) FILTER (WHERE v.status IN ('scheduled', 'pending', 'draft', 'in_progress', 'ready') OR (n.final_note IS NULL AND (n.ai_draft IS NOT NULL OR n.transcription IS NOT NULL))) AS pending_notes,
+         COUNT(*) FILTER (WHERE n.locked_at IS NOT NULL OR v.status = 'signed' OR (n.final_note IS NOT NULL AND n.final_note <> '')) AS signed_notes
+       FROM visits v
+       LEFT JOIN LATERAL (
+         SELECT * FROM notes WHERE visit_id = v.id ORDER BY updated_at DESC, id DESC LIMIT 1
+       ) n ON true
+       WHERE v.clinician_id = $1`,
+      [clinicianId]
+    )
+
+    const row = statsQuery.rows[0] || {}
+    res.status(200).json({
+      stats: {
+        total_patients_seen: parseInt(row.total_patients_seen || 0, 10),
+        cancelled_visits: parseInt(row.cancelled_visits || 0, 10),
+        pending_notes: parseInt(row.pending_notes || 0, 10),
+        signed_notes: parseInt(row.signed_notes || 0, 10),
+      }
+    })
+  } catch (err) {
+    sendHttpError(res, 500, err, { context: 'visitController.getClinicianPracticeStats', req })
+  }
+}
+
 module.exports = {
   getVisitsByDate, getAllVisits, createVisit,
   updateVisitStatus, endVisit, updateVisit,
   deleteVisit, getVisitHistory, lockNote,
+  getClinicianPracticeStats,
 }
+

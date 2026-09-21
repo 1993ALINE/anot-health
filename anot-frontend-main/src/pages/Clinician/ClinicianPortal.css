@@ -401,6 +401,13 @@
   min-height: 0;
 }
 
+.sm-workspace--profile {
+  display: block;
+  grid-template-columns: none;
+  max-width: 1200px;
+  overflow-y: auto;
+}
+
 /* ─── LEFT COLUMN CANVAS ──────────────────────────────────────────────── */
 .sm-canvas {
   background: #FFFFFF;

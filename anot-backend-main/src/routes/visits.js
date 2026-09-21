@@ -10,12 +10,14 @@ const {
   deleteVisit,
   getVisitHistory,
   lockNote,
+  getClinicianPracticeStats,
 } = require('../controllers/visitController')
 const { protect, restrict } = require('../middleware/auth')
 
 // Clinician routes
 router.get('/my', protect, restrict('clinician'), getVisitsByDate)
 router.get('/history', protect, restrict('clinician'), getVisitHistory)
+router.get('/practice-stats', protect, restrict('clinician'), getClinicianPracticeStats)
 router.post('/', protect, restrict('clinician'), createVisit)
 router.put('/:id/end', protect, restrict('clinician'), endVisit)
 router.put('/:id/status', protect, restrict('clinician', 'scribe'), updateVisitStatus)
@@ -216,7 +218,18 @@ async function generateDraft(req, res) {
 
     const requestedTemplate = req.body?.template || req.body?.template_id || req.body?.visit_type || row.visit_type
     const templateSections = await resolveTemplateSections(row.clinician_id, requestedTemplate, 'generate-draft')
-    const clinicianInstructions = await getClinicianAiInstructions(row.clinician_id)
+    let clinicianInstructions = await getClinicianAiInstructions(row.clinician_id)
+    try {
+      const { getTemplateForVisitType } = require('../controllers/clinicianTemplatesController')
+      const matchedTemplate = await getTemplateForVisitType(row.clinician_id, requestedTemplate)
+      if (matchedTemplate?.instructions) {
+        clinicianInstructions = clinicianInstructions
+          ? `${clinicianInstructions}\n\nTEMPLATE DIRECTIVE (${matchedTemplate.name}):\n${matchedTemplate.instructions}`
+          : `TEMPLATE DIRECTIVE (${matchedTemplate.name}):\n${matchedTemplate.instructions}`
+      }
+    } catch {
+      // ignore
+    }
 
     // Age dictated in the transcript itself ("63-year-old male...") takes priority over
     // the on-file date_of_birth for this note — it's what the clinician actually said.

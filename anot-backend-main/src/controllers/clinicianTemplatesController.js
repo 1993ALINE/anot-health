@@ -194,24 +194,25 @@ function mapRow(row) {
         color: row.color || '',
         accent: row.accent || '',
         content: row.content,
+        instructions: row.instructions || '',
     }
 }
 
 async function seedDefaultsForUser(userId) {
     for (const t of DEFAULT_TEMPLATES) {
         await pool.query(
-            `INSERT INTO clinician_templates (user_id, template_id, name, icon, color, accent, content, category)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            `INSERT INTO clinician_templates (user_id, template_id, name, icon, color, accent, content, category, instructions)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
              ON CONFLICT (user_id, template_id) DO UPDATE
              SET category = EXCLUDED.category WHERE clinician_templates.category IS NULL`,
-            [userId, t.id, t.name, t.icon, t.color, t.accent, t.content, t.category || 'Core Primary Care'],
+            [userId, t.id, t.name, t.icon, t.color, t.accent, t.content, t.category || 'Core Primary Care', t.instructions || null],
         )
     }
 }
 
 async function listTemplatesForUser(userId) {
     const { rows } = await pool.query(
-        `SELECT template_id, name, icon, color, accent, content, category
+        `SELECT template_id, name, icon, color, accent, content, category, instructions
          FROM clinician_templates
          WHERE user_id = $1
          ORDER BY template_id`,
@@ -272,8 +273,8 @@ const saveClinicianTemplates = async (req, res) => {
                     return res.status(400).json({ error: 'Each template requires id and name.' })
                 }
                 await client.query(
-                    `INSERT INTO clinician_templates (user_id, template_id, name, icon, color, accent, content, category, updated_at)
-                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())`,
+                    `INSERT INTO clinician_templates (user_id, template_id, name, icon, color, accent, content, category, instructions, updated_at)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())`,
                     [
                         req.user.id,
                         id.slice(0, 64),
@@ -283,6 +284,7 @@ const saveClinicianTemplates = async (req, res) => {
                         String(t.accent || '').slice(0, 32) || null,
                         content,
                         String(t.category || 'Core Primary Care').slice(0, 128) || null,
+                        String(t.instructions || '').slice(0, 4000) || null,
                     ],
                 )
             }

@@ -30,6 +30,14 @@ const PROFILE_COLUMNS = [
     { name: 'locked_until', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ' },
     { name: 'last_failed_login_at', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS last_failed_login_at TIMESTAMPTZ' },
     { name: 'ai_note_instructions', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_note_instructions TEXT DEFAULT NULL' },
+    { name: 'clinic_address', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS clinic_address TEXT DEFAULT NULL' },
+    { name: 'package_name', ddl: "ALTER TABLE users ADD COLUMN IF NOT EXISTS package_name VARCHAR(128) DEFAULT '30-Day Clinician Pro'" },
+    { name: 'package_amount_paid', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS package_amount_paid NUMERIC(10, 2) DEFAULT 199.00' },
+    { name: 'package_duration_days', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS package_duration_days INT DEFAULT 30' },
+    { name: 'package_start_date', ddl: 'ALTER TABLE users ADD COLUMN IF NOT EXISTS package_start_date DATE DEFAULT CURRENT_DATE' },
+    { name: 'package_end_date', ddl: "ALTER TABLE users ADD COLUMN IF NOT EXISTS package_end_date DATE DEFAULT (CURRENT_DATE + INTERVAL '30 days')" },
+    { name: 'package_status', ddl: "ALTER TABLE users ADD COLUMN IF NOT EXISTS package_status VARCHAR(32) DEFAULT 'active'" },
+    { name: 'default_template_id', ddl: "ALTER TABLE users ADD COLUMN IF NOT EXISTS default_template_id VARCHAR(64) DEFAULT 'soap-adult'" },
 ]
 
 const PROFILE_INDEXES = [

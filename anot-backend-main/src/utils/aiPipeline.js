@@ -266,7 +266,18 @@ function auditUserFromOptions(options) {
 async function resolveAiDraft(transcriptions, visit) {
 
   const templateSections = await resolveTemplateSections(visit.clinician_id, visit.visit_type, 'aiPipeline')
-  const clinicianInstructions = await getClinicianAiInstructions(visit.clinician_id)
+  let clinicianInstructions = await getClinicianAiInstructions(visit.clinician_id)
+  try {
+    const { getTemplateForVisitType } = require('../controllers/clinicianTemplatesController')
+    const matchedTemplate = await getTemplateForVisitType(visit.clinician_id, visit.visit_type)
+    if (matchedTemplate?.instructions) {
+      clinicianInstructions = clinicianInstructions
+        ? `${clinicianInstructions}\n\nTEMPLATE DIRECTIVE (${matchedTemplate.name}):\n${matchedTemplate.instructions}`
+        : `TEMPLATE DIRECTIVE (${matchedTemplate.name}):\n${matchedTemplate.instructions}`
+    }
+  } catch {
+    // ignore
+  }
 
   let aiNote = await generateAINote(transcriptions, {
 
